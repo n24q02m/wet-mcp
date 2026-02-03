@@ -288,10 +288,21 @@ async def download_media(
 
     results = []
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    transport = httpx.AsyncHTTPTransport(retries=3)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    async with httpx.AsyncClient(
+        timeout=60, transport=transport, headers=headers
+    ) as client:
         for url in media_urls:
             try:
-                response = await client.get(url)
+                # Handle protocol-relative URLs
+                if url.startswith("//"):
+                    url = f"https:{url}"
+
+                response = await client.get(url, follow_redirects=True)
                 response.raise_for_status()
 
                 filename = url.split("/")[-1].split("?")[0] or "download"
