@@ -106,11 +106,17 @@ async def media(
     media_urls: list[str] | None = None,
     output_dir: str | None = None,
     max_items: int = 10,
+    prompt: str = "Describe this image in detail.",
 ) -> str:
     """Media discovery and download.
     - list: Scan page, return URLs + metadata
     - download: Download specific files to local
-    MCP client decides whether to analyze media.
+    - analyze: Analyze a local media file using configured LLM (requires API_KEYS)
+
+    Note: Downloading is intended for downstream analysis (e.g., passing to an LLM
+    or vision model). The MCP server provides the raw files; the MCP client
+    orchestrates the analysis.
+
     Use `help` tool for full documentation.
     """
     from wet_mcp.sources.crawler import download_media, list_media
@@ -133,8 +139,16 @@ async def media(
                 output_dir=output_dir or settings.download_dir,
             )
 
+        case "analyze":
+            if not url:
+                return "Error: url (local path) is required for analyze action"
+
+            from wet_mcp.llm import analyze_media
+
+            return await analyze_media(media_path=url, prompt=prompt)
+
         case _:
-            return f"Error: Unknown action '{action}'. Valid actions: list, download"
+            return f"Error: Unknown action '{action}'. Valid actions: list, download, analyze"
 
 
 @mcp.tool()
@@ -159,6 +173,9 @@ def main() -> None:
 
     # Run auto-setup on first start (installs Playwright, etc.)
     run_auto_setup()
+
+    # Setup LLM API Keys
+    settings.setup_api_keys()
 
     # Initialize SearXNG container
     searxng_url = _get_searxng_url()

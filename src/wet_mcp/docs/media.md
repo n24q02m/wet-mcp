@@ -31,7 +31,8 @@ Scan a page and return media URLs with metadata.
 ---
 
 ### download
-Download specific media files to local storage.
+Download specific media files to local storage for further analysis or processing.
+Use this when you need to inspect the actual file content (e.g., sending an image to a Vision LLM).
 
 **Parameters:**
 - `media_urls` (required): List of media URLs to download

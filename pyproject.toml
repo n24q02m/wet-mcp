@@ -32,6 +32,8 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     # Logging
     "loguru>=0.7.0",
+    # LLM
+    "litellm>=1.0.0",
 ]
 
 [dependency-groups]
