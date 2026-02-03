@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/n24q02m/wet-mcp/compare/v1.0.0...v1.1.0) (2026-02-03)
+
+
+### Features
+
+* integrate LiteLLM for media analysis (analyze tool) ([fe4d365](https://github.com/n24q02m/wet-mcp/commit/fe4d36571f6d2104f989e60178aac0e01d225002))
+
 # 1.0.0 (2026-02-03)
 
 
