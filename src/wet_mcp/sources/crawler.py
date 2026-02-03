@@ -28,16 +28,17 @@ async def extract(
     browser_config = BrowserConfig(
         headless=True,
         enable_stealth=stealth,
+        verbose=False,
     )
 
     results = []
 
-    async with AsyncWebCrawler(config=browser_config) as crawler:
+    async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         for url in urls:
             try:
                 result = await crawler.arun(
                     url,
-                    config=CrawlerRunConfig(),
+                    config=CrawlerRunConfig(verbose=False),
                 )
 
                 if result.success:
@@ -102,12 +103,13 @@ async def crawl(
     browser_config = BrowserConfig(
         headless=True,
         enable_stealth=stealth,
+        verbose=False,
     )
 
     all_results = []
     visited = set()
 
-    async with AsyncWebCrawler(config=browser_config) as crawler:
+    async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         for root_url in urls:
             to_crawl = [(root_url, 0)]
 
@@ -122,7 +124,7 @@ async def crawl(
                 try:
                     result = await crawler.arun(
                         url,
-                        config=CrawlerRunConfig(),
+                        config=CrawlerRunConfig(verbose=False),
                     )
 
                     if result.success:
@@ -179,12 +181,12 @@ async def sitemap(
 
     logger.info(f"Mapping {len(urls)} URLs")
 
-    browser_config = BrowserConfig(headless=True)
+    browser_config = BrowserConfig(headless=True, verbose=False)
 
     all_urls = []
     visited = set()
 
-    async with AsyncWebCrawler(config=browser_config) as crawler:
+    async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         for root_url in urls:
             to_visit = [(root_url, 0)]
             site_urls = []
@@ -201,7 +203,7 @@ async def sitemap(
                 try:
                     result = await crawler.arun(
                         url,
-                        config=CrawlerRunConfig(),
+                        config=CrawlerRunConfig(verbose=False),
                     )
 
                     if result.success and current_depth < depth:
@@ -237,12 +239,12 @@ async def list_media(
 
     logger.info(f"Listing media from: {url}")
 
-    browser_config = BrowserConfig(headless=True)
+    browser_config = BrowserConfig(headless=True, verbose=False)
 
-    async with AsyncWebCrawler(config=browser_config) as crawler:
+    async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         result = await crawler.arun(
             url,
-            config=CrawlerRunConfig(),
+            config=CrawlerRunConfig(verbose=False),
         )
 
         if not result.success:
