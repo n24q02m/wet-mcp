@@ -41,28 +41,36 @@ async def extract(
                 )
 
                 if result.success:
-                    content = result.markdown if format == "markdown" else result.cleaned_html
-                    results.append({
-                        "url": url,
-                        "title": result.metadata.get("title", ""),
-                        "content": content,
-                        "links": {
-                            "internal": result.links.get("internal", [])[:20],
-                            "external": result.links.get("external", [])[:20],
-                        },
-                    })
+                    content = (
+                        result.markdown if format == "markdown" else result.cleaned_html
+                    )
+                    results.append(
+                        {
+                            "url": url,
+                            "title": result.metadata.get("title", ""),
+                            "content": content,
+                            "links": {
+                                "internal": result.links.get("internal", [])[:20],
+                                "external": result.links.get("external", [])[:20],
+                            },
+                        }
+                    )
                 else:
-                    results.append({
-                        "url": url,
-                        "error": result.error_message or "Failed to extract",
-                    })
+                    results.append(
+                        {
+                            "url": url,
+                            "error": result.error_message or "Failed to extract",
+                        }
+                    )
 
             except Exception as e:
                 logger.error(f"Error extracting {url}: {e}")
-                results.append({
-                    "url": url,
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "url": url,
+                        "error": str(e),
+                    }
+                )
 
     logger.info(f"Extracted {len(results)} pages")
     return json.dumps(results, ensure_ascii=False, indent=2)
@@ -118,20 +126,30 @@ async def crawl(
                     )
 
                     if result.success:
-                        content = result.markdown if format == "markdown" else result.cleaned_html
-                        all_results.append({
-                            "url": url,
-                            "depth": current_depth,
-                            "title": result.metadata.get("title", ""),
-                            "content": content[:5000],  # Limit content size
-                        })
+                        content = (
+                            result.markdown
+                            if format == "markdown"
+                            else result.cleaned_html
+                        )
+                        all_results.append(
+                            {
+                                "url": url,
+                                "depth": current_depth,
+                                "title": result.metadata.get("title", ""),
+                                "content": content[:5000],  # Limit content size
+                            }
+                        )
 
                         # Add internal links for next depth
                         if current_depth < depth:
                             internal_links = result.links.get("internal", [])
                             for link_item in internal_links[:10]:
                                 # Crawl4AI returns dicts with 'href' key
-                                link_url = link_item.get("href", "") if isinstance(link_item, dict) else link_item
+                                link_url = (
+                                    link_item.get("href", "")
+                                    if isinstance(link_item, dict)
+                                    else link_item
+                                )
                                 if link_url and link_url not in visited:
                                     to_crawl.append((link_url, current_depth + 1))
 
@@ -279,18 +297,22 @@ async def download_media(
 
                 filepath.write_bytes(response.content)
 
-                results.append({
-                    "url": url,
-                    "path": str(filepath),
-                    "size": len(response.content),
-                })
+                results.append(
+                    {
+                        "url": url,
+                        "path": str(filepath),
+                        "size": len(response.content),
+                    }
+                )
 
             except Exception as e:
                 logger.error(f"Error downloading {url}: {e}")
-                results.append({
-                    "url": url,
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "url": url,
+                        "error": str(e),
+                    }
+                )
 
     logger.info(f"Downloaded {len([r for r in results if 'path' in r])} files")
     return json.dumps(results, ensure_ascii=False, indent=2)

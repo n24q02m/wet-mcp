@@ -73,7 +73,9 @@ def run_auto_setup() -> bool:
         if result.returncode == 0:
             logger.debug(f"Docker available: v{result.stdout.strip()}")
         else:
-            logger.info("Docker not running, will use external SearXNG URL if configured")
+            logger.info(
+                "Docker not running, will use external SearXNG URL if configured"
+            )
     except FileNotFoundError:
         logger.info("Docker not installed, will use external SearXNG URL if configured")
     except subprocess.TimeoutExpired:

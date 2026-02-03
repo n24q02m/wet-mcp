@@ -45,12 +45,14 @@ async def search(
         # Format results
         formatted = []
         for r in results:
-            formatted.append({
-                "url": r.get("url", ""),
-                "title": r.get("title", ""),
-                "snippet": r.get("content", ""),
-                "source": r.get("engine", ""),
-            })
+            formatted.append(
+                {
+                    "url": r.get("url", ""),
+                    "title": r.get("title", ""),
+                    "snippet": r.get("content", ""),
+                    "source": r.get("engine", ""),
+                }
+            )
 
         output = {
             "results": formatted,

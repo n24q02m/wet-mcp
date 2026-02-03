@@ -2,21 +2,6 @@
   "folders": [
     {
       "path": ".."
-    },
-    {
-      "path": "../../better-mem0-mcp"
-    },
-    {
-      "path": "../../better-notion-mcp"
-    },
-    {
-      "path": "../../EchoVault"
-    },
-    {
-      "path": "../../KnowledgePrism"
-    },
-    {
-      "path": "../../QuikShipping"
     }
   ]
 }

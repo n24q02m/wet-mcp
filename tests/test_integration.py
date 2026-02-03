@@ -155,6 +155,7 @@ async def main():
     # Cleanup
     print("\n[Cleanup] Stopping SearXNG container...")
     from wet_mcp.docker_manager import remove_searxng
+
     remove_searxng()
     print("    Done!")
 

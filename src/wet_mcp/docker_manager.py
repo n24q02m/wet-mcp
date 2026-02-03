@@ -141,6 +141,6 @@ def remove_searxng() -> None:
         container_name = settings.wet_container_name
         if docker.container.exists(container_name):
             logger.info(f"Removing container: {container_name}")
-            docker.container.remove(container_name, force=True)
+            docker.container.remove(container_name, force=True)  # type: ignore
     except Exception as e:
         logger.debug(f"Failed to remove container: {e}")

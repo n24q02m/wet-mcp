@@ -33,7 +33,11 @@ async def test_search_quality():
     test_cases = [
         {
             "query": "Python FastAPI tutorial",
-            "expected_domains": ["fastapi.tiangolo.com", "realpython.com", "python.org"],
+            "expected_domains": [
+                "fastapi.tiangolo.com",
+                "realpython.com",
+                "python.org",
+            ],
             "expected_keywords": ["fastapi", "python", "api"],
         },
         {
@@ -50,14 +54,16 @@ async def test_search_quality():
 
         result = await search(
             searxng_url=searxng_url,
-            query=tc["query"],
+            query=str(tc["query"]),
             max_results=10,
         )
         data = json.loads(result)
 
         if "error" in data:
             print(f"  ERROR: {data['error']}")
-            results_summary.append({"query": tc["query"], "passed": False, "reason": data["error"]})
+            results_summary.append(
+                {"query": tc["query"], "passed": False, "reason": data["error"]}
+            )
             continue
 
         # Check result count
@@ -73,10 +79,12 @@ async def test_search_quality():
                 print(f"  ✓ Found expected domain: {domain}")
 
         # Check for keywords in snippets
-        all_text = " ".join([
-            r.get("title", "") + " " + r.get("snippet", "")
-            for r in data.get("results", [])
-        ]).lower()
+        all_text = " ".join(
+            [
+                r.get("title", "") + " " + r.get("snippet", "")
+                for r in data.get("results", [])
+            ]
+        ).lower()
 
         found_keywords = []
         for kw in tc["expected_keywords"]:
@@ -86,13 +94,15 @@ async def test_search_quality():
 
         # Determine pass/fail
         passed = total > 0 and len(found_keywords) >= len(tc["expected_keywords"]) // 2
-        results_summary.append({
-            "query": tc["query"],
-            "passed": passed,
-            "total_results": total,
-            "domains_found": len(found_domains),
-            "keywords_found": len(found_keywords),
-        })
+        results_summary.append(
+            {
+                "query": tc["query"],
+                "passed": passed,
+                "total_results": total,
+                "domains_found": len(found_domains),
+                "keywords_found": len(found_keywords),
+            }
+        )
 
     return all(r["passed"] for r in results_summary)
 
@@ -150,11 +160,21 @@ async def test_extract_js_heavy():
                     reasons.append("Content too short (<500 chars)")
 
                 # Check for meaningful content (not just boilerplate)
-                meaningful_words = ["python", "programming", "code", "function", "class"]
-                found_words = sum(1 for w in meaningful_words if w.lower() in content.lower())
+                meaningful_words = [
+                    "python",
+                    "programming",
+                    "code",
+                    "function",
+                    "class",
+                ]
+                found_words = sum(
+                    1 for w in meaningful_words if w.lower() in content.lower()
+                )
                 if found_words < 2:
                     passed = False
-                    reasons.append(f"Missing meaningful keywords (found {found_words}/5)")
+                    reasons.append(
+                        f"Missing meaningful keywords (found {found_words}/5)"
+                    )
 
                 # Check for links extracted
                 links = page.get("links", {})
@@ -220,10 +240,14 @@ async def test_antibot_sites():
                     print(f"  Content: {content_len} chars")
                     if content_len > 100:
                         print("  ✓ Successfully extracted!")
-                        results.append({"site": name, "blocked": False, "content_len": content_len})
+                        results.append(
+                            {"site": name, "blocked": False, "content_len": content_len}
+                        )
                     else:
                         print("  ⚠ Minimal content (likely blocked)")
-                        results.append({"site": name, "blocked": True, "content_len": content_len})
+                        results.append(
+                            {"site": name, "blocked": True, "content_len": content_len}
+                        )
 
         except Exception as e:
             print(f"  Exception: {str(e)[:50]}...")
@@ -231,7 +255,9 @@ async def test_antibot_sites():
 
     # Report summary
     blocked_count = sum(1 for r in results if r.get("blocked", True))
-    print(f"\n  Summary: {len(results) - blocked_count}/{len(results)} sites accessible")
+    print(
+        f"\n  Summary: {len(results) - blocked_count}/{len(results)} sites accessible"
+    )
 
     # This test passes if we attempted all sites (anti-bot is expected to block some)
     return True
@@ -316,7 +342,9 @@ async def test_media_detection():
         videos = data.get("videos", [])
         audio = data.get("audio", [])
 
-        print(f"  Found: {len(images)} images, {len(videos)} videos, {len(audio)} audio")
+        print(
+            f"  Found: {len(images)} images, {len(videos)} videos, {len(audio)} audio"
+        )
 
         # Verify image data structure
         if images:
@@ -380,7 +408,9 @@ async def main():
     critical_tests = ["search_quality", "js_extraction", "crawl_depth"]
     critical_passed = all(results.get(t, False) for t in critical_tests)
 
-    print(f"\n{'All critical tests passed!' if critical_passed else 'Some critical tests failed!'}")
+    print(
+        f"\n{'All critical tests passed!' if critical_passed else 'Some critical tests failed!'}"
+    )
     return 0 if critical_passed else 1
 
 

@@ -3,27 +3,27 @@
 [![PyPI version](https://badge.fury.io/py/wet-mcp.svg)](https://badge.fury.io/py/wet-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Open-source MCP Server thay thế Tavily cho web scraping & multimodal extraction**
+> **Open-source MCP Server replacing Tavily for web scraping & multimodal extraction**
 
-Zero-install experience: chỉ cần `uvx wet-mcp` - tự động setup và quản lý SearXNG container.
+Zero-install experience: just `uvx wet-mcp` - automatically setups and manages SearXNG container.
 
 ## Features
 
 | Feature | Description |
 |:--------|:------------|
-| **Web Search** | Tìm kiếm qua SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave) |
-| **Content Extract** | Trích xuất nội dung sạch (Markdown/Text/HTML) |
-| **Deep Crawl** | Đi qua nhiều trang con từ URL gốc với depth control |
-| **Site Map** | Khám phá cấu trúc URL của website |
-| **Media** | List và download images, videos, audio files |
-| **Anti-bot** | Stealth mode bypass Cloudflare, Medium, LinkedIn, Twitter |
+| **Web Search** | Search via SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave) |
+| **Content Extract** | Extract clean content (Markdown/Text/HTML) |
+| **Deep Crawl** | Crawl multiple pages from a root URL with depth control |
+| **Site Map** | Discover website URL structure |
+| **Media** | List and download images, videos, audio files |
+| **Anti-bot** | Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter |
 
 ## Quick Start
 
 ### Prerequisites
 
 - Docker daemon running (for SearXNG)
-- Python 3.13+ (hoặc dùng uvx)
+- Python 3.13+ (or use uvx)
 
 ### MCP Client Configuration
 
@@ -40,11 +40,11 @@ Zero-install experience: chỉ cần `uvx wet-mcp` - tự động setup và qu�
 }
 ```
 
-**Đó là tất cả!** Khi MCP client gọi wet-mcp lần đầu:
-1. Tự động install Playwright chromium
-2. Tự động pull SearXNG Docker image
-3. Start `wet-searxng` container
-4. Chạy MCP server
+**That's it!** When the MCP client calls `wet-mcp` for the first time:
+1. Automatically installs Playwright chromium
+2. Automatically pulls SearXNG Docker image
+3. Starts `wet-searxng` container
+4. Runs the MCP server
 
 ### Without uvx
 
@@ -107,9 +107,9 @@ wet-mcp
 │  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐   │
 │  │   web    │  │  media   │  │        help          │   │
 │  │ (search, │  │ (list,   │  │  (full documentation)│   │
-│  │ extract, │  │ download)│  └──────────────────────┘   │
-│  │ crawl,   │  └────┬─────┘                             │
-│  │ map)     │       │                                   │
+│  │ extract, │  │ crawl,   │  └──────────────────────┘   │
+│  │ crawl,   │  │ download)│                             │
+│  │ map)     │  └────┬─────┘                             │
 │  └────┬─────┘       │                                   │
 │       │             │                                   │
 │       ▼             ▼                                   │
