@@ -1,0 +1,122 @@
+name: CD
+
+on:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Select action"
+        required: true
+        default: "promote-to-stable"
+        type: choice
+        options:
+          - promote-to-stable
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: cd-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote to Stable
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'promote-to-stable'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Check CI/CD status on dev branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          chmod +x .github/scripts/check-ci-cd-status.sh
+          ./.github/scripts/check-ci-cd-status.sh --branch=dev
+
+      - name: Merge dev to main
+        env:
+          AUTO_RESOLVE_FILES: "CHANGELOG.md,pyproject.toml"
+        run: |
+          chmod +x .github/scripts/merge-with-auto-resolve.sh
+          ./.github/scripts/merge-with-auto-resolve.sh --source=dev --target=main --files="$AUTO_RESOLVE_FILES"
+
+  release:
+    name: Semantic Release
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.check.outputs.released }}
+      version: ${{ steps.check.outputs.version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Install uv (for toml-cli)
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Install semantic-release
+        run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/exec
+
+      - name: Run semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      - name: Check release status
+        id: check
+        run: |
+          git fetch --tags
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          CURRENT_COMMIT=$(git rev-parse HEAD)
+          TAG_COMMIT=$(git rev-list -n 1 "$LATEST_TAG" 2>/dev/null || echo "")
+
+          if [ -n "$LATEST_TAG" ] && [ "$CURRENT_COMMIT" = "$TAG_COMMIT" ]; then
+            echo "released=true" >> $GITHUB_OUTPUT
+            echo "version=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
+            echo "New release detected: $LATEST_TAG"
+          else
+            echo "released=false" >> $GITHUB_OUTPUT
+            echo "No new release"
+          fi
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: uv publish

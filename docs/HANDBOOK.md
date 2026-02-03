@@ -360,8 +360,9 @@ uv sync
 # Run tests
 uv run pytest
 
-# Run server locally (cần SearXNG external)
-SEARXNG_URL=https://searx.be uv run python -m wet_mcp
+# Run server locally (Auto-setup runs on first start)
+# Tự động install Playwright và start SearXNG container
+uv run wet-mcp
 ```
 
 ### 7.2. Docker Development
@@ -481,20 +482,11 @@ SEARXNG_IMAGE = "searxng/searxng:latest"
 
 def ensure_searxng() -> str:
     """Start SearXNG container if not running. Returns URL."""
-    try:
-        if not docker.container.exists(CONTAINER_NAME):
-            docker.run(
-                SEARXNG_IMAGE,
-                name=CONTAINER_NAME,
-                detach=True,
-                publish=[(8080, 8080)],
-                envs={"SEARXNG_SECRET": "wet-internal"},
-            )
-        elif not docker.container.inspect(CONTAINER_NAME).state.running:
-            docker.container.start(CONTAINER_NAME)
-        return "http://localhost:8080"
-    except DockerException as e:
-        raise RuntimeError(f"Docker not available: {e}")
+    # 1. Finds available port (avoids 8080 conflict)
+    # 2. Mounts ~/.wet-mcp/searxng_settings.yml (JSON enabled)
+    # 3. Starts container 'wet-searxng'
+    # ...
+    return f"http://localhost:{port}"
 ```
 
 ### 8.5. MCP Client Configuration

@@ -1,0 +1,89 @@
+[project]
+name = "wet-mcp"
+version = "0.1.0"
+description = "Open-source MCP Server thay thế Tavily - Web search, extract, crawl với SearXNG"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "n24q02m", email = "quangminh2422004@gmail.com" }]
+keywords = ["mcp", "web-scraping", "searxng", "crawl4ai", "tavily-alternative"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+requires-python = "==3.13.*"
+dependencies = [
+    # MCP Server
+    "mcp[cli]>=1.0.0",
+    # Docker Management
+    "python-on-whales>=0.73.0",
+    # Web Crawling
+    "crawl4ai>=0.8.0",
+    # HTTP Client
+    "httpx>=0.27.0",
+    # Config
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    # Logging
+    "loguru>=0.7.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "ruff>=0.8.0",
+    "ty>=0.0.1a10",
+    "pre-commit>=4.0.0",
+]
+
+[project.scripts]
+wet-mcp = "wet_mcp:main"
+
+[project.urls]
+Homepage = "https://github.com/n24q02m/wet-mcp"
+Repository = "https://github.com/n24q02m/wet-mcp.git"
+Issues = "https://github.com/n24q02m/wet-mcp/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wet_mcp"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/wet_mcp/**/*.py",
+    "src/wet_mcp/**/*.yml",
+    "src/wet_mcp/**/*.md",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ty]
+rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"

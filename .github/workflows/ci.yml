@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lint-and-check:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run Ruff check
+        run: uv run ruff check .
+
+      - name: Run Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Run ty type check
+        run: uv run ty check
+
+      - name: Run tests (if exist)
+        run: |
+          if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
+            uv run pytest --tb=short
+          else
+            echo "No tests found, skipping..."
+          fi
+
+      - name: Comment PR on success
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **CI Checks Passed**\n\n- Ruff Check: ✓\n- Format: ✓\n- Type Check: ✓\n\nReady for review!'
+            })
+
+      - name: Comment PR on failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **CI Checks Failed**\n\nPlease fix the issues:\n- Run `mise run check` locally\n- Check workflow logs for details'
+            })
+
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: always

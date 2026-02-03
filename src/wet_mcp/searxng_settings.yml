@@ -1,0 +1,30 @@
+# SearXNG settings for WET MCP Server
+# Mounted into container at /etc/searxng/settings.yml
+
+use_default_settings: true
+
+server:
+  secret_key: "wet-mcp-internal-secret"
+  limiter: false
+  method: "GET"
+
+search:
+  formats:
+    - html
+    - json
+
+# Disable rate limiting for local use
+outgoing:
+  request_timeout: 10.0
+  max_request_timeout: 30.0
+
+# Engines to enable
+engines:
+  - name: google
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false

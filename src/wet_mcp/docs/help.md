@@ -1,0 +1,55 @@
+# WET MCP Server - Help
+
+Welcome to **WET** (Web ExTract) MCP Server - an open-source alternative to Tavily.
+
+## Available Tools
+
+| Tool | Description |
+|:-----|:------------|
+| `web` | Web search, content extraction, crawling, site mapping |
+| `media` | Media discovery (images, videos, audio) and download |
+| `help` | Get full documentation for any tool |
+
+## Quick Reference
+
+### web tool
+
+```json
+// Search the web
+{"action": "search", "query": "your search query"}
+
+// Extract content from URLs
+{"action": "extract", "urls": ["https://example.com"]}
+
+// Crawl multiple pages
+{"action": "crawl", "urls": ["https://docs.example.com"], "depth": 2}
+
+// Map site structure
+{"action": "map", "urls": ["https://example.com"]}
+```
+
+### media tool
+
+```json
+// List media on a page
+{"action": "list", "url": "https://example.com"}
+
+// Download specific files
+{"action": "download", "media_urls": ["https://example.com/image.png"]}
+```
+
+## Getting Full Documentation
+
+Call `help` with the tool name:
+
+```json
+{"tool_name": "web"}    // Web tool documentation
+{"tool_name": "media"}  // Media tool documentation
+```
+
+## Features
+
+- **Auto-setup**: First run automatically installs Playwright and configures SearXNG
+- **Anti-bot bypass**: Stealth mode works with Cloudflare, Medium, LinkedIn, etc.
+- **Multimodal**: Extract and download images, videos, audio files
+- **Deep crawling**: Follow links to specified depth with page limits
