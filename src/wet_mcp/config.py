@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # Media Analysis (LiteLLM)
     api_keys: str | None = None  # provider:key,provider:key
-    llm_models: str = "gemini/gemini-2.0-flash-exp"  # provider/model (fallback chain)
+    llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
 
     def setup_api_keys(self) -> dict[str, list[str]]:
         """Parse API_KEYS and set environment variables for LiteLLM."""
