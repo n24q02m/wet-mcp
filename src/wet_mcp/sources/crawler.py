@@ -163,7 +163,11 @@ async def crawl(
 
             while (queue or pending) and len(all_results) < max_pages:
                 # Spawn tasks
-                while queue and len(pending) < concurrency_limit and len(all_results) < max_pages:
+                while (
+                    queue
+                    and len(pending) < concurrency_limit
+                    and len(all_results) < max_pages
+                ):
                     url, current_depth = queue.pop(0)
 
                     if url in visited or current_depth > depth:
@@ -176,7 +180,9 @@ async def crawl(
                 if not pending:
                     break
 
-                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                done, pending = await asyncio.wait(
+                    pending, return_when=asyncio.FIRST_COMPLETED
+                )
 
                 for task in done:
                     try:
