@@ -1,5 +1,6 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -293,39 +294,38 @@ async def download_media(
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
+    async def _download_one(client, url):
+        try:
+            # Handle protocol-relative URLs
+            if url.startswith("//"):
+                url = f"https:{url}"
+
+            response = await client.get(url, follow_redirects=True)
+            response.raise_for_status()
+
+            filename = url.split("/")[-1].split("?")[0] or "download"
+            filepath = output_path / filename
+
+            filepath.write_bytes(response.content)
+
+            return {
+                "url": url,
+                "path": str(filepath),
+                "size": len(response.content),
+            }
+
+        except Exception as e:
+            logger.error(f"Error downloading {url}: {e}")
+            return {
+                "url": url,
+                "error": str(e),
+            }
+
     async with httpx.AsyncClient(
         timeout=60, transport=transport, headers=headers
     ) as client:
-        for url in media_urls:
-            try:
-                # Handle protocol-relative URLs
-                if url.startswith("//"):
-                    url = f"https:{url}"
-
-                response = await client.get(url, follow_redirects=True)
-                response.raise_for_status()
-
-                filename = url.split("/")[-1].split("?")[0] or "download"
-                filepath = output_path / filename
-
-                filepath.write_bytes(response.content)
-
-                results.append(
-                    {
-                        "url": url,
-                        "path": str(filepath),
-                        "size": len(response.content),
-                    }
-                )
-
-            except Exception as e:
-                logger.error(f"Error downloading {url}: {e}")
-                results.append(
-                    {
-                        "url": url,
-                        "error": str(e),
-                    }
-                )
+        tasks = [_download_one(client, url) for url in media_urls]
+        results = await asyncio.gather(*tasks)
 
     logger.info(f"Downloaded {len([r for r in results if 'path' in r])} files")
     return json.dumps(results, ensure_ascii=False, indent=2)
