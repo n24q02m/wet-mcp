@@ -1,3 +1,10 @@
+## [2.1.3](https://github.com/n24q02m/wet-mcp/compare/v2.1.2...v2.1.3) (2026-02-04)
+
+
+### Bug Fixes
+
+* **server:** remove url cache to ensure auto-restart ([36f44d2](https://github.com/n24q02m/wet-mcp/commit/36f44d23b624a2422ef18597b4d855aea07de7b5))
+
 ## [2.1.2](https://github.com/n24q02m/wet-mcp/compare/v2.1.1...v2.1.2) (2026-02-04)
 
 
