@@ -1,3 +1,16 @@
+# [2.0.0](https://github.com/n24q02m/wet-mcp/compare/v1.3.0...v2.0.0) (2026-02-04)
+
+
+### Features
+
+* refactor API_KEYS format and add auto-detect capabilities ([77e277b](https://github.com/n24q02m/wet-mcp/commit/77e277b8989a692cd3ede287ba25f83f949d3f4b))
+
+
+### BREAKING CHANGES
+
+* API_KEYS now expects ENV_VAR:key format
+e.g. GOOGLE_API_KEY:abc instead of gemini:abc
+
 # [1.3.0](https://github.com/n24q02m/wet-mcp/compare/v1.2.1...v1.3.0) (2026-02-03)
 
 
