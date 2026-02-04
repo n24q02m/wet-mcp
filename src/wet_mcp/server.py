@@ -19,17 +19,6 @@ mcp = FastMCP(
     instructions="Web ExTract MCP Server - search, extract, crawl, map with SearXNG",
 )
 
-# Store SearXNG URL after initialization
-_searxng_url: str | None = None
-
-
-def _get_searxng_url() -> str:
-    """Get SearXNG URL, initializing container if needed."""
-    global _searxng_url
-    if _searxng_url is None:
-        _searxng_url = ensure_searxng()
-    return _searxng_url
-
 
 @mcp.tool()
 async def web(
@@ -57,7 +46,7 @@ async def web(
         case "search":
             if not query:
                 return "Error: query is required for search action"
-            searxng_url = _get_searxng_url()
+            searxng_url = ensure_searxng()
             return await searxng_search(
                 searxng_url=searxng_url,
                 query=query,
@@ -178,7 +167,7 @@ def main() -> None:
     settings.setup_api_keys()
 
     # Initialize SearXNG container
-    searxng_url = _get_searxng_url()
+    searxng_url = ensure_searxng()
     logger.info(f"SearXNG URL: {searxng_url}")
 
     # Run MCP server
