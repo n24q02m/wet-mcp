@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/n24q02m/wet-mcp/compare/v2.0.0...v2.1.0) (2026-02-04)
+
+
+### Features
+
+* enable LLM analysis for text files and enhance SearXNG container startup with port readiness checks. ([4fb3f4e](https://github.com/n24q02m/wet-mcp/commit/4fb3f4eb1dc6ed7fd47c29da7e824fc03b8eb146))
+
 # [2.0.0](https://github.com/n24q02m/wet-mcp/compare/v1.3.0...v2.0.0) (2026-02-04)
 
 
