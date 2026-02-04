@@ -1,5 +1,6 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -108,43 +109,42 @@ async def crawl(
 
     all_results = []
     visited = set()
+    concurrency_limit = 5
 
     async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         for root_url in urls:
-            to_crawl = [(root_url, 0)]
+            queue = [(root_url, 0)]
+            pending = set()
 
-            while to_crawl and len(all_results) < max_pages:
-                url, current_depth = to_crawl.pop(0)
-
-                if url in visited or current_depth > depth:
-                    continue
-
-                visited.add(url)
-
+            async def process_url(url, current_depth):
                 try:
                     result = await crawler.arun(
                         url,
                         config=CrawlerRunConfig(verbose=False),
                     )
 
+                    new_links = []
                     if result.success:
                         content = (
                             result.markdown
                             if format == "markdown"
                             else result.cleaned_html
                         )
-                        all_results.append(
-                            {
-                                "url": url,
-                                "depth": current_depth,
-                                "title": result.metadata.get("title", ""),
-                                "content": content[:5000],  # Limit content size
-                            }
-                        )
+
+                        if len(all_results) < max_pages:
+                            all_results.append(
+                                {
+                                    "url": url,
+                                    "depth": current_depth,
+                                    "title": result.metadata.get("title", ""),
+                                    "content": content[:5000],  # Limit content size
+                                }
+                            )
 
                         # Add internal links for next depth
                         if current_depth < depth:
                             internal_links = result.links.get("internal", [])
+                            # Limit to first 10 links as in original code
                             for link_item in internal_links[:10]:
                                 # Crawl4AI returns dicts with 'href' key
                                 link_url = (
@@ -152,11 +152,47 @@ async def crawl(
                                     if isinstance(link_item, dict)
                                     else link_item
                                 )
-                                if link_url and link_url not in visited:
-                                    to_crawl.append((link_url, current_depth + 1))
 
+                                if link_url and link_url not in visited:
+                                    new_links.append((link_url, current_depth + 1))
+
+                    return new_links
                 except Exception as e:
                     logger.error(f"Error crawling {url}: {e}")
+                    return []
+
+            while (queue or pending) and len(all_results) < max_pages:
+                # Spawn tasks
+                while queue and len(pending) < concurrency_limit and len(all_results) < max_pages:
+                    url, current_depth = queue.pop(0)
+
+                    if url in visited or current_depth > depth:
+                        continue
+
+                    visited.add(url)
+                    task = asyncio.create_task(process_url(url, current_depth))
+                    pending.add(task)
+
+                if not pending:
+                    break
+
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+
+                for task in done:
+                    try:
+                        new_links = await task
+                        for link_info in new_links:
+                            if link_info[0] not in visited:
+                                queue.append(link_info)
+                    except Exception as e:
+                        logger.error(f"Error processing task result: {e}")
+
+            # Cancel remaining tasks if we reached limit or finished
+            for task in pending:
+                task.cancel()
+
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
