@@ -12,7 +12,7 @@ os.environ["LITELLM_LOG"] = "ERROR"
 import litellm
 
 litellm.suppress_debug_info = True  # type: ignore[assignment]
-litellm.set_verbose = False  # type: ignore[assignment]
+litellm.set_verbose = False
 
 # Force redirect LiteLLM's logger to null
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)

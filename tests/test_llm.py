@@ -15,7 +15,7 @@ def mock_settings():
     original_keys = settings.api_keys
     original_models = settings.llm_models
 
-    settings.api_keys = "gemini:fake-key"
+    settings.api_keys = "GOOGLE_API_KEY:fake-key"
     settings.llm_models = "gemini/fake-model"
 
     yield
@@ -29,7 +29,7 @@ def test_get_llm_config(mock_settings):
     config = get_llm_config()
     assert config["model"] == "gemini/fake-model"
     assert config["fallbacks"] is None
-    assert config["temperature"] == 0.1
+    assert config["temperature"] is None
 
 
 @patch("wet_mcp.llm.completion")
@@ -44,8 +44,16 @@ def test_analyze_media(mock_completion, mock_settings, tmp_path):
     mock_response.choices[0].message.content = "A nice cat."
     mock_completion.return_value = mock_response
 
-    # Run test
-    result = asyncio.run(analyze_media(str(img_path), "Describe"))
+    # Mock capabilities to support vision
+    with patch("wet_mcp.llm.get_model_capabilities") as mock_caps:
+        mock_caps.return_value = {
+            "vision": True,
+            "audio_input": False,
+            "audio_output": False,
+        }
+
+        # Run test
+        result = asyncio.run(analyze_media(str(img_path), "Describe"))
 
     assert result == "A nice cat."
 
@@ -77,10 +85,33 @@ def test_analyze_media_file_not_found(mock_settings):
     assert "Error: File not found" in result
 
 
-def test_analyze_media_invalid_type(mock_settings, tmp_path):
-    """Test invalid file type."""
+@patch("wet_mcp.llm.completion")
+def test_analyze_media_text_file(mock_completion, mock_settings, tmp_path):
+    """Test text file analysis."""
     txt_path = tmp_path / "test.txt"
     txt_path.write_text("Hello")
 
+    # Mock response
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "Summary of text."
+    mock_completion.return_value = mock_response
+
     result = asyncio.run(analyze_media(str(txt_path)))
-    assert "Error: Only image analysis" in result
+    assert result == "Summary of text."
+
+    # Verify call structure for text
+    mock_completion.assert_called_once()
+    call_args = mock_completion.call_args[1]
+    assert "File Content:\n```\nHello\n```" in str(call_args["messages"][0]["content"])
+
+
+def test_analyze_media_unsupported_type(mock_settings, tmp_path):
+    """Test unsupported file type."""
+    bin_path = tmp_path / "test.bin"
+    bin_path.write_bytes(b"\x00\x01")  # unknown binary
+
+    result = asyncio.run(analyze_media(str(bin_path)))
+    assert (
+        "Error: Cannot determine file type" in result
+        or "Unsupported media type" in result
+    )
