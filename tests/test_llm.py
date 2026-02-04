@@ -32,7 +32,7 @@ def test_get_llm_config(mock_settings):
     assert config["temperature"] is None
 
 
-@patch("wet_mcp.llm.completion")
+@patch("wet_mcp.llm.acompletion")
 def test_analyze_media(mock_completion, mock_settings, tmp_path):
     """Test analyze_media function using real temp file."""
     # Create valid dummy image file
@@ -85,7 +85,7 @@ def test_analyze_media_file_not_found(mock_settings):
     assert "Error: File not found" in result
 
 
-@patch("wet_mcp.llm.completion")
+@patch("wet_mcp.llm.acompletion")
 def test_analyze_media_text_file(mock_completion, mock_settings, tmp_path):
     """Test text file analysis."""
     txt_path = tmp_path / "test.txt"

@@ -18,7 +18,7 @@ litellm.set_verbose = False
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("LiteLLM").handlers = [logging.NullHandler()]
 
-from litellm import completion  # noqa: E402
+from litellm import acompletion, completion  # noqa: E402
 from loguru import logger  # noqa: E402
 
 from wet_mcp.config import settings  # noqa: E402
@@ -103,7 +103,7 @@ async def analyze_media(
                     "content": f"{prompt}\n\nFile Content:\n```\n{content}\n```",
                 }
             ]
-            response = completion(
+            response = await acompletion(
                 model=config["model"],
                 messages=messages,
                 fallbacks=config["fallbacks"],
@@ -147,7 +147,7 @@ async def analyze_media(
             }
         ]
 
-        response = completion(
+        response = await acompletion(
             model=config["model"],
             messages=messages,
             fallbacks=config["fallbacks"],
