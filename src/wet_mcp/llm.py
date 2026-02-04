@@ -18,7 +18,7 @@ litellm.set_verbose = False
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("LiteLLM").handlers = [logging.NullHandler()]
 
-from litellm import acompletion, completion  # noqa: E402
+from litellm import acompletion  # noqa: E402
 from loguru import logger  # noqa: E402
 
 from wet_mcp.config import settings  # noqa: E402
