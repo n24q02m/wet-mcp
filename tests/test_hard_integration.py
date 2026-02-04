@@ -27,7 +27,7 @@ async def test_search_quality():
     print("TEST: Search Quality")
     print("=" * 60)
 
-    searxng_url = ensure_searxng()
+    searxng_url = await ensure_searxng()
     await asyncio.sleep(5)  # Wait for SearXNG to be ready
 
     test_cases = [
