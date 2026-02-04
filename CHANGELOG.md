@@ -1,3 +1,10 @@
+## [2.1.2](https://github.com/n24q02m/wet-mcp/compare/v2.1.1...v2.1.2) (2026-02-04)
+
+
+### Bug Fixes
+
+* **searxng:** robust connection fix ([140eecb](https://github.com/n24q02m/wet-mcp/commit/140eecb5ee064033df30b6ad62da708b990c4427))
+
 ## [2.1.1](https://github.com/n24q02m/wet-mcp/compare/v2.1.0...v2.1.1) (2026-02-04)
 
 
