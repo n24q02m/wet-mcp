@@ -33,9 +33,14 @@ async def search(
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
+            headers = {
+                "X-Real-IP": "127.0.0.1",
+                "X-Forwarded-For": "127.0.0.1",
+            }
             response = await client.get(
                 f"{searxng_url}/search",
                 params=params,
+                headers=headers,
             )
             response.raise_for_status()
             data = response.json()

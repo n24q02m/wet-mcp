@@ -2,6 +2,8 @@
 
 import socket
 import time
+import urllib.error
+import urllib.request
 from importlib.resources import files
 from pathlib import Path
 
@@ -24,15 +26,27 @@ def _find_available_port(start_port: int, max_tries: int = 10) -> int:
     return start_port
 
 
-def _wait_for_port(port: int, host: str = "localhost", timeout: float = 10.0) -> bool:
-    """Wait for port to be open."""
+def _wait_for_service(url: str, timeout: float = 30.0) -> bool:
+    """Wait for service to be healthy via HTTP check."""
     start_time = time.time()
+    logger.debug(f"Waiting for Sevice at {url}...")
     while time.time() - start_time < timeout:
         try:
-            with socket.create_connection((host, port), timeout=1):
-                return True
-        except (OSError, ConnectionRefusedError):
-            time.sleep(0.5)
+            # Check /healthz with bypass headers
+            req = urllib.request.Request(
+                f"{url}/healthz",
+                headers={
+                    "X-Real-IP": "127.0.0.1",
+                    "X-Forwarded-For": "127.0.0.1",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=1) as response:
+                if response.status == 200:
+                    return True
+        except Exception:
+            # connection refused, timeout, or 500
+            pass
+        time.sleep(0.5)
     return False
 
 
@@ -119,12 +133,13 @@ def ensure_searxng() -> str:
 
             logger.info(f"SearXNG container started on port {port}")
 
-        if not _wait_for_port(port):
+        url = f"http://localhost:{port}"
+        if not _wait_for_service(url):
             logger.warning(
-                f"SearXNG container started but port {port} is not reachable yet"
+                f"SearXNG container started but service at {url} is not healthy yet"
             )
 
-        return f"http://localhost:{port}"
+        return url
 
     except DockerException as e:
         logger.warning(f"Docker not available: {e}")
