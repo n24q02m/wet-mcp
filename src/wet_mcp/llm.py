@@ -81,7 +81,39 @@ async def analyze_media(
     if not mime_type:
         return f"Error: Cannot determine file type for {media_path}"
 
-    # Check model capabilities
+    # Handle text files directly
+    if mime_type.startswith("text/") or mime_type in [
+        "application/json",
+        "application/javascript",
+        "application/xml",
+    ]:
+        try:
+            with open(media_path, encoding="utf-8") as f:
+                content = f.read()
+            # Truncate if too long (simple protection)
+            if len(content) > 100000:
+                content = content[:100000] + "\n...[truncated]"
+
+            config = get_llm_config()
+            logger.info(f"Analyzing text file with model: {config['model']}")
+
+            messages = [
+                {
+                    "role": "user",
+                    "content": f"{prompt}\n\nFile Content:\n```\n{content}\n```",
+                }
+            ]
+            response = completion(
+                model=config["model"],
+                messages=messages,
+                fallbacks=config["fallbacks"],
+                temperature=config["temperature"],
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Error analyzing text file: {e}"
+
+    # Check model capabilities for media
     config = get_llm_config()
     caps = get_model_capabilities(config["model"])
 

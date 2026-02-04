@@ -1,6 +1,7 @@
 """Docker container management for SearXNG."""
 
 import socket
+import time
 from importlib.resources import files
 from pathlib import Path
 
@@ -21,6 +22,18 @@ def _find_available_port(start_port: int, max_tries: int = 10) -> int:
             continue
     # Fallback to original port
     return start_port
+
+
+def _wait_for_port(port: int, host: str = "localhost", timeout: float = 10.0) -> bool:
+    """Wait for port to be open."""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                return True
+        except (OSError, ConnectionRefusedError):
+            time.sleep(0.5)
+    return False
 
 
 def _get_settings_path() -> Path:
@@ -69,17 +82,18 @@ def ensure_searxng() -> str:
     try:
         if docker.container.exists(container_name):
             container = docker.container.inspect(container_name)
-            if container.state.running:
-                logger.debug(f"SearXNG container already running: {container_name}")
-                # Extract port from running container
-                ports = container.network_settings.ports
-                if ports and "8080/tcp" in ports and ports["8080/tcp"]:
-                    port = int(ports["8080/tcp"][0].get("HostPort", preferred_port))
-                else:
-                    port = preferred_port
-            else:
+            if not container.state.running:
                 logger.info(f"Starting stopped container: {container_name}")
                 docker.container.start(container_name)
+                # Re-inspect to get updated ports
+                container = docker.container.inspect(container_name)
+
+            logger.debug(f"SearXNG container running: {container_name}")
+            # Extract port from running container
+            ports = container.network_settings.ports
+            if ports and "8080/tcp" in ports and ports["8080/tcp"]:
+                port = int(ports["8080/tcp"][0].get("HostPort", preferred_port))
+            else:
                 port = preferred_port
         else:
             # Find available port to avoid conflicts
@@ -102,6 +116,13 @@ def ensure_searxng() -> str:
                 },
             )
             logger.info(f"SearXNG container started on port {port}")
+
+            logger.info(f"SearXNG container started on port {port}")
+
+        if not _wait_for_port(port):
+            logger.warning(
+                f"SearXNG container started but port {port} is not reachable yet"
+            )
 
         return f"http://localhost:{port}"
 
