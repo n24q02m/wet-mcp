@@ -1,13 +1,27 @@
 """LLM utilities for WET MCP Server using LiteLLM."""
 
 import base64
+import logging
 import mimetypes
+import os
 from pathlib import Path
 
-from litellm import completion
-from loguru import logger
+# Silence LiteLLM completely - must be done BEFORE import
+os.environ["LITELLM_LOG"] = "ERROR"
 
-from wet_mcp.config import settings
+import litellm
+
+litellm.suppress_debug_info = True  # type: ignore[assignment]
+litellm.set_verbose = False  # type: ignore[assignment]
+
+# Force redirect LiteLLM's logger to null
+logging.getLogger("LiteLLM").setLevel(logging.ERROR)
+logging.getLogger("LiteLLM").handlers = [logging.NullHandler()]
+
+from litellm import completion  # noqa: E402
+from loguru import logger  # noqa: E402
+
+from wet_mcp.config import settings  # noqa: E402
 
 
 def get_llm_config() -> dict:
@@ -21,12 +35,27 @@ def get_llm_config() -> dict:
 
     # Temperature adjustment for reasoning models
     # (Gemini 2/3 sometimes needs higher temp, but 1.5 is standard)
-    temperature = 0.1
+    # Temperature adjustment
+    # Use default for Gemini 3 to avoid warnings about infinite loops
+    temperature = None
 
     return {
         "model": primary,
         "fallbacks": fallbacks,
         "temperature": temperature,
+    }
+
+
+def get_model_capabilities(model: str) -> dict:
+    """Check model's media capabilities using LiteLLM.
+
+    Returns:
+        Dict with 'vision', 'audio_input', 'audio_output' booleans.
+    """
+    return {
+        "vision": litellm.supports_vision(model),
+        "audio_input": litellm.supports_audio_input(model),
+        "audio_output": litellm.supports_audio_output(model),
     }
 
 
@@ -37,9 +66,9 @@ def encode_image(image_path: str) -> str:
 
 
 async def analyze_media(
-    media_path: str, prompt: str = "Describe this image in detail."
+    media_path: str, prompt: str = "Describe this media in detail."
 ) -> str:
-    """Analyze media file using configured LLM."""
+    """Analyze media file using configured LLM with auto-capability detection."""
     if not settings.api_keys:
         return "Error: LLM analysis requires API_KEYS to be configured."
 
@@ -49,8 +78,25 @@ async def analyze_media(
 
     # Determine mime type
     mime_type, _ = mimetypes.guess_type(media_path)
-    if not mime_type or not mime_type.startswith("image/"):
-        return f"Error: Only image analysis is currently supported. Got {mime_type}"
+    if not mime_type:
+        return f"Error: Cannot determine file type for {media_path}"
+
+    # Check model capabilities
+    config = get_llm_config()
+    caps = get_model_capabilities(config["model"])
+
+    # Validate capability vs file type
+    if mime_type.startswith("image/"):
+        if not caps["vision"]:
+            return f"Error: Model {config['model']} does not support vision/images."
+    elif mime_type.startswith("audio/"):
+        if not caps["audio_input"]:
+            return f"Error: Model {config['model']} does not support audio input."
+    elif mime_type.startswith("video/"):
+        if not caps["vision"]:
+            return f"Error: Model {config['model']} does not support video (requires vision)."
+    else:
+        return f"Error: Unsupported media type: {mime_type}"
 
     try:
         config = get_llm_config()
