@@ -36,7 +36,7 @@ def is_safe_url(url: str) -> bool:
         results = socket.getaddrinfo(hostname, None)
 
         for res in results:
-            ip_str = res[4][0]
+            ip_str = str(res[4][0])
             try:
                 # Remove scope ID for IPv6 link-local (e.g., fe80::1%eth0)
                 if "%" in ip_str:
