@@ -1,33 +1,29 @@
 # WET - Web ExTract MCP Server
 
-[![PyPI version](https://badge.fury.io/py/wet-mcp.svg)](https://badge.fury.io/py/wet-mcp)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+**Open-source MCP Server for web scraping & multimodal extraction.**
 
-> **Open-source MCP Server replacing Tavily for web scraping & multimodal extraction**
-
-Zero-install experience: just `uvx wet-mcp` - automatically setups and manages SearXNG container.
+[![PyPI](https://img.shields.io/pypi/v/wet-mcp)](https://pypi.org/project/wet-mcp/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
 
-| Feature | Description |
-|:--------|:------------|
-| **Web Search** | Search via SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave) |
-| **Content Extract** | Extract clean content (Markdown/Text/HTML) |
-| **Deep Crawl** | Crawl multiple pages from a root URL with depth control |
-| **Site Map** | Discover website URL structure |
-| **Media** | List and download images, videos, audio files |
-| **Anti-bot** | Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter |
+- **Web Search** - Search via SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave)
+- **Content Extract** - Extract clean content (Markdown/Text)
+- **Deep Crawl** - Crawl multiple pages from a root URL with depth control
+- **Site Map** - Discover website URL structure
+- **Media** - List and download images, videos, audio files
+- **Anti-bot** - Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter
+
+---
 
 ## Quick Start
 
 ### Prerequisites
 
-- Docker daemon running (for SearXNG)
-- Python 3.13+ (or use uvx)
+- **Docker** running (for SearXNG auto-management)
+- **Python 3.13+** (or use `uvx`)
 
-### MCP Client Configuration
-
-**Claude Desktop / Cursor / Windsurf / Antigravity:**
+### Add to mcp.json
 
 ```json
 {
@@ -40,7 +36,7 @@ Zero-install experience: just `uvx wet-mcp` - automatically setups and manages S
 }
 ```
 
-**That's it!** When the MCP client calls `wet-mcp` for the first time:
+**That's it!** On first run:
 1. Automatically installs Playwright chromium
 2. Automatically pulls SearXNG Docker image
 3. Starts `wet-searxng` container
@@ -53,47 +49,51 @@ pip install wet-mcp
 wet-mcp
 ```
 
+---
+
 ## Tools
 
 | Tool | Actions | Description |
 |:-----|:--------|:------------|
 | `web` | search, extract, crawl, map | Web operations |
-| `media` | list, download | Media discovery & download |
+| `media` | list, download, analyze | Media discovery & download |
 | `help` | - | Full documentation |
 
-### Examples
+### Usage Examples
 
-```python
-# Search
+```json
 {"action": "search", "query": "python web scraping", "max_results": 10}
-
-# Extract content
 {"action": "extract", "urls": ["https://example.com"]}
-
-# Crawl with depth
 {"action": "crawl", "urls": ["https://docs.python.org"], "depth": 2}
-
-# Map site structure
 {"action": "map", "urls": ["https://example.com"]}
-
-# List media
 {"action": "list", "url": "https://github.com/python/cpython"}
-
-# Download media
 {"action": "download", "media_urls": ["https://example.com/image.png"]}
 ```
 
-## Tech Stack
+---
 
-| Component | Technology |
-|:----------|:-----------|
-| Language | Python 3.13 |
-| MCP Framework | FastMCP |
-| Web Search | SearXNG (auto-managed Docker) |
-| Web Crawling | Crawl4AI |
-| Docker Management | python-on-whales |
+## Configuration
 
-## How It Works
+| Variable | Default | Description |
+|:---------|:--------|:------------|
+| `WET_AUTO_DOCKER` | `true` | Auto-manage SearXNG container |
+| `WET_SEARXNG_PORT` | `8080` | SearXNG container port |
+| `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL |
+| `API_KEYS` | - | LLM API keys for media analysis |
+| `LOG_LEVEL` | `INFO` | Logging level |
+
+### LLM Configuration (Optional)
+
+For media analysis (images, videos, audio), configure API keys:
+
+```bash
+API_KEYS=GOOGLE_API_KEY:AIza...
+LLM_MODELS=gemini/gemini-3-flash-preview
+```
+
+---
+
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -107,8 +107,8 @@ wet-mcp
 │  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐   │
 │  │   web    │  │  media   │  │        help          │   │
 │  │ (search, │  │ (list,   │  │  (full documentation)│   │
-│  │ extract, │  │ crawl,   │  └──────────────────────┘   │
-│  │ crawl,   │  │ download)│                             │
+│  │ extract, │  │ download,│  └──────────────────────┘   │
+│  │ crawl,   │  │ analyze) │                             │
 │  │ map)     │  └────┬─────┘                             │
 │  └────┬─────┘       │                                   │
 │       │             │                                   │
@@ -120,16 +120,7 @@ wet-mcp
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Configuration
-
-Environment variables:
-
-| Variable | Default | Description |
-|:---------|:--------|:------------|
-| `WET_AUTO_DOCKER` | `true` | Auto-manage SearXNG container |
-| `WET_SEARXNG_PORT` | `8080` | SearXNG container port |
-| `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL |
-| `LOG_LEVEL` | `INFO` | Logging level |
+---
 
 ## Container Management
 
@@ -147,6 +138,29 @@ docker rm wet-searxng
 rm ~/.wet-mcp/.setup-complete
 ```
 
+---
+
+## Build from Source
+
+```bash
+git clone https://github.com/n24q02m/wet-mcp
+cd wet-mcp
+
+# Setup (requires mise: https://mise.jdx.dev/)
+mise run setup
+
+# Run
+uv run wet-mcp
+```
+
+**Requirements:** Python 3.13+, Docker
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md)
+
 ## License
 
-MIT License
+MIT - See [LICENSE](LICENSE)
