@@ -1,3 +1,10 @@
+## [2.1.4-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.1.3...v2.1.4-beta.1) (2026-02-05)
+
+
+### Performance Improvements
+
+* apply async optimizations from merged PRs ([36b3084](https://github.com/n24q02m/wet-mcp/commit/36b3084f6846763b7f06f771fe2754baf14803bf))
+
 ## [2.1.3](https://github.com/n24q02m/wet-mcp/compare/v2.1.2...v2.1.3) (2026-02-04)
 
 
