@@ -36,7 +36,7 @@ jobs:
 
       - name: Check CI/CD status on dev branch
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           chmod +x .github/scripts/check-ci-cd-status.sh
           ./.github/scripts/check-ci-cd-status.sh --branch=dev
@@ -85,6 +85,30 @@ jobs:
 
           ### Latest beta version: $LATEST_TAG"
 
+  restore-dev:
+    name: Restore Dev Branch
+    needs: [release]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Restore dev branch from main
+        run: |
+          if git ls-remote --exit-code --heads origin dev; then
+            echo "Dev branch already exists, skipping"
+            exit 0
+          fi
+
+          git checkout -b dev
+          git push origin dev
+          echo "✅ Dev branch restored from main"
+
   release:
     name: Semantic Release
     if: github.event_name == 'push'
@@ -115,7 +139,11 @@ jobs:
 
       - name: Run semantic-release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
         run: npx semantic-release
 
       - name: Check release status
