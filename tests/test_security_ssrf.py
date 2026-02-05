@@ -26,6 +26,7 @@ def test_ssrf_basic():
     assert not is_safe_url("http://127.0.0.1:8080")
     assert not is_safe_url("http://localhost:5000")
 
+
 def test_ssrf_dns_rebinding_simulation():
     # Simulate a domain resolving to 127.0.0.1
     with patch("socket.getaddrinfo") as mock_dns:
@@ -37,6 +38,7 @@ def test_ssrf_dns_rebinding_simulation():
 
         assert not is_safe_url("http://malicious-rebinding.com")
 
+
 def test_safe_urls():
     # Should allow normal domains (mocking DNS to public IP)
     with patch("socket.getaddrinfo") as mock_dns:
@@ -45,6 +47,7 @@ def test_safe_urls():
         ]
         assert is_safe_url("http://google.com")
         assert is_safe_url("https://example.com/path?q=1")
+
 
 def test_dns_failure_fallback():
     # If DNS fails, we allow it (connection will fail anyway)

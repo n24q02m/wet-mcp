@@ -34,7 +34,7 @@ async def test_download_media_path_traversal(tmp_path):
             assert "Security Alert" in res1 or "error" in res1
 
             # Verify file was NOT written to parent
-            assert not (tmp_path.parent / "content").exists() # Just sanity check
+            assert not (tmp_path.parent / "content").exists()  # Just sanity check
 
             # 2. Traversal attempt with encoded characters?
             # url.split('/')[-1] is naive.
@@ -47,6 +47,7 @@ async def test_download_media_path_traversal(tmp_path):
 
             # However, testing '..' is good enough as it's the main vector if split('/') is used.
             pass
+
 
 @pytest.mark.asyncio
 async def test_download_media_safe(tmp_path):

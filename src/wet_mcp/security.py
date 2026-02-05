@@ -44,8 +44,16 @@ def is_safe_url(url: str) -> bool:
 
                 ip = ipaddress.ip_address(ip_str)
 
-                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-                    logger.warning(f"Blocked private/unsafe IP: {ip} for host {hostname}")
+                if (
+                    ip.is_private
+                    or ip.is_loopback
+                    or ip.is_link_local
+                    or ip.is_reserved
+                    or ip.is_multicast
+                ):
+                    logger.warning(
+                        f"Blocked private/unsafe IP: {ip} for host {hostname}"
+                    )
                     return False
             except ValueError:
                 continue
