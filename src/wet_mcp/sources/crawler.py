@@ -5,6 +5,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from wet_mcp.security import is_safe_url
+
 
 async def extract(
     urls: list[str],
@@ -35,6 +37,13 @@ async def extract(
 
     async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         for url in urls:
+            if not is_safe_url(url):
+                logger.warning(f"Skipping unsafe URL: {url}")
+                results.append(
+                    {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                )
+                continue
+
             try:
                 result = await crawler.arun(
                     url,
@@ -111,6 +120,10 @@ async def crawl(
 
     async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         for root_url in urls:
+            if not is_safe_url(root_url):
+                logger.warning(f"Skipping unsafe URL: {root_url}")
+                continue
+
             to_crawl = [(root_url, 0)]
 
             while to_crawl and len(all_results) < max_pages:
@@ -188,6 +201,10 @@ async def sitemap(
 
     async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         for root_url in urls:
+            if not is_safe_url(root_url):
+                logger.warning(f"Skipping unsafe URL: {root_url}")
+                continue
+
             to_visit = [(root_url, 0)]
             site_urls = []
 
@@ -240,6 +257,9 @@ async def list_media(
     logger.info(f"Listing media from: {url}")
 
     browser_config = BrowserConfig(headless=True, verbose=False)
+
+    if not is_safe_url(url):
+        return json.dumps({"error": "Security Alert: Unsafe URL blocked"})
 
     async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
         result = await crawler.arun(
