@@ -24,7 +24,7 @@ async def test_searxng():
 
     # Start SearXNG container
     print("\n[1] Starting SearXNG container...")
-    searxng_url = ensure_searxng()
+    searxng_url = await ensure_searxng()
     print(f"    URL: {searxng_url}")
 
     # Wait for container to be healthy

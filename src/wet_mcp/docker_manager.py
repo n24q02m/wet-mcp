@@ -1,12 +1,12 @@
 """Docker container management for SearXNG."""
 
+import asyncio
 import socket
 import time
-import urllib.error
-import urllib.request
 from importlib.resources import files
 from pathlib import Path
 
+import httpx
 from loguru import logger
 
 from wet_mcp.config import settings
@@ -26,27 +26,28 @@ def _find_available_port(start_port: int, max_tries: int = 10) -> int:
     return start_port
 
 
-def _wait_for_service(url: str, timeout: float = 30.0) -> bool:
+async def _wait_for_service(url: str, timeout: float = 30.0) -> bool:
     """Wait for service to be healthy via HTTP check."""
     start_time = time.time()
     logger.debug(f"Waiting for Sevice at {url}...")
-    while time.time() - start_time < timeout:
-        try:
-            # Check /healthz with bypass headers
-            req = urllib.request.Request(
-                f"{url}/healthz",
-                headers={
-                    "X-Real-IP": "127.0.0.1",
-                    "X-Forwarded-For": "127.0.0.1",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=1) as response:
-                if response.status == 200:
+    async with httpx.AsyncClient() as client:
+        while time.time() - start_time < timeout:
+            try:
+                # Check /healthz with bypass headers
+                response = await client.get(
+                    f"{url}/healthz",
+                    headers={
+                        "X-Real-IP": "127.0.0.1",
+                        "X-Forwarded-For": "127.0.0.1",
+                    },
+                    timeout=1.0,
+                )
+                if response.status_code == 200:
                     return True
-        except Exception:
-            # connection refused, timeout, or 500
-            pass
-        time.sleep(0.5)
+            except Exception:
+                # connection refused, timeout, or 500
+                pass
+            await asyncio.sleep(0.5)
     return False
 
 
@@ -70,7 +71,7 @@ def _get_settings_path() -> Path:
     return settings_file
 
 
-def ensure_searxng() -> str:
+async def ensure_searxng() -> str:
     """Start SearXNG container if not running. Returns URL.
 
     This function handles:
@@ -94,13 +95,22 @@ def ensure_searxng() -> str:
     preferred_port = settings.wet_searxng_port
 
     try:
-        if docker.container.exists(container_name):
-            container = docker.container.inspect(container_name)
+        # Check existence and inspect in thread to avoid blocking
+        def _get_container():
+            if docker.container.exists(container_name):
+                return docker.container.inspect(container_name)
+            return None
+
+        container = await asyncio.to_thread(_get_container)
+
+        if container:
             if not container.state.running:
                 logger.info(f"Starting stopped container: {container_name}")
-                docker.container.start(container_name)
+                await asyncio.to_thread(docker.container.start, container_name)
                 # Re-inspect to get updated ports
-                container = docker.container.inspect(container_name)
+                container = await asyncio.to_thread(
+                    docker.container.inspect, container_name
+                )
 
             logger.debug(f"SearXNG container running: {container_name}")
             # Extract port from running container
@@ -111,7 +121,7 @@ def ensure_searxng() -> str:
                 port = preferred_port
         else:
             # Find available port to avoid conflicts
-            port = _find_available_port(preferred_port)
+            port = await asyncio.to_thread(_find_available_port, preferred_port)
             if port != preferred_port:
                 logger.info(f"Port {preferred_port} in use, using {port}")
 
@@ -119,22 +129,24 @@ def ensure_searxng() -> str:
             settings_path = _get_settings_path()
 
             logger.info(f"Starting SearXNG container: {container_name}")
-            docker.run(
-                image,
-                name=container_name,
-                detach=True,
-                publish=[(port, 8080)],
-                volumes=[(str(settings_path), "/etc/searxng/settings.yml", "ro")],
-                envs={
-                    "SEARXNG_SECRET": "wet-internal",
-                },
-            )
-            logger.info(f"SearXNG container started on port {port}")
 
+            def _run_container():
+                docker.run(
+                    image,
+                    name=container_name,
+                    detach=True,
+                    publish=[(port, 8080)],
+                    volumes=[(str(settings_path), "/etc/searxng/settings.yml", "ro")],
+                    envs={
+                        "SEARXNG_SECRET": "wet-internal",
+                    },
+                )
+
+            await asyncio.to_thread(_run_container)
             logger.info(f"SearXNG container started on port {port}")
 
         url = f"http://localhost:{port}"
-        if not _wait_for_service(url):
+        if not await _wait_for_service(url):
             logger.warning(
                 f"SearXNG container started but service at {url} is not healthy yet"
             )
