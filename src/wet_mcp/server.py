@@ -1,5 +1,6 @@
 """WET MCP Server - Main server definition."""
 
+import asyncio
 import sys
 from importlib.resources import files
 
@@ -46,7 +47,7 @@ async def web(
         case "search":
             if not query:
                 return "Error: query is required for search action"
-            searxng_url = ensure_searxng()
+            searxng_url = await ensure_searxng()
             return await searxng_search(
                 searxng_url=searxng_url,
                 query=query,
@@ -154,7 +155,7 @@ async def help(tool_name: str = "web") -> str:
         return f"Error loading documentation: {e}"
 
 
-def main() -> None:
+async def main() -> None:
     """Run the MCP server."""
     from wet_mcp.setup import run_auto_setup
 
@@ -167,12 +168,17 @@ def main() -> None:
     settings.setup_api_keys()
 
     # Initialize SearXNG container
-    searxng_url = ensure_searxng()
+    searxng_url = await ensure_searxng()
     logger.info(f"SearXNG URL: {searxng_url}")
 
     # Run MCP server
     mcp.run()
 
 
+def run() -> None:
+    """Entry point for running the MCP server."""
+    asyncio.run(main())
+
+
 if __name__ == "__main__":
-    main()
+    run()
