@@ -1,3 +1,10 @@
+## [2.1.4-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.2...v2.1.4-beta.3) (2026-02-05)
+
+
+### Bug Fixes
+
+* **cd:** checkout main branch for PR merge release ([5247100](https://github.com/n24q02m/wet-mcp/commit/524710028b2b25e6dff0393a0ace067abffc3054))
+
 ## [2.1.4-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.1...v2.1.4-beta.2) (2026-02-05)
 
 
