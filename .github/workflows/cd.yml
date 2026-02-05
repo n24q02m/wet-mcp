@@ -146,13 +146,20 @@ jobs:
         run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/exec
 
       - name: Run semantic-release
+        id: semantic
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
-        run: npx semantic-release
+        run: |
+          npx semantic-release --dry-run > release-output.txt 2>&1 || true
+          if grep -qE "Published release|Release notes for" release-output.txt; then
+            npx semantic-release
+          else
+            echo "No new commits to release"
+          fi
 
       - name: Check release status
         id: check
@@ -170,6 +177,7 @@ jobs:
             echo "released=false" >> $GITHUB_OUTPUT
             echo "No new release"
           fi
+
 
   publish-pypi:
     name: Publish to PyPI
