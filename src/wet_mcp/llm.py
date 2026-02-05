@@ -1,5 +1,6 @@
 """LLM utilities for WET MCP Server using LiteLLM."""
 
+import asyncio
 import base64
 import logging
 import mimetypes
@@ -65,6 +66,15 @@ def encode_image(image_path: str) -> str:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
+def _read_and_truncate(path: str, max_length: int = 100000) -> str:
+    """Read file content and truncate if necessary."""
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+    if len(content) > max_length:
+        content = content[:max_length] + "\n...[truncated]"
+    return content
+
+
 async def analyze_media(
     media_path: str, prompt: str = "Describe this media in detail."
 ) -> str:
@@ -88,11 +98,7 @@ async def analyze_media(
         "application/xml",
     ]:
         try:
-            with open(media_path, encoding="utf-8") as f:
-                content = f.read()
-            # Truncate if too long (simple protection)
-            if len(content) > 100000:
-                content = content[:100000] + "\n...[truncated]"
+            content = await asyncio.to_thread(_read_and_truncate, media_path)
 
             config = get_llm_config()
             logger.info(f"Analyzing text file with model: {config['model']}")
