@@ -1,5 +1,6 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -308,7 +309,10 @@ async def download_media(
                 filename = url.split("/")[-1].split("?")[0] or "download"
                 filepath = output_path / filename
 
-                filepath.write_bytes(response.content)
+                # Run blocking file write in executor to avoid blocking the event loop
+                await asyncio.get_running_loop().run_in_executor(
+                    None, filepath.write_bytes, response.content
+                )
 
                 results.append(
                     {
