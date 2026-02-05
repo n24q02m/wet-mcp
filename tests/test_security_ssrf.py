@@ -1,7 +1,8 @@
-import pytest
-from unittest.mock import patch
 import socket
+from unittest.mock import patch
+
 from wet_mcp.security import is_safe_url
+
 
 def test_ssrf_basic():
     # Loopback

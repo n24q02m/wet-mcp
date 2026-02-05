@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from pathlib import Path
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_path_traversal(tmp_path):
