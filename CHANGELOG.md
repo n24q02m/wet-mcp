@@ -1,3 +1,10 @@
+## [2.1.4-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.1...v2.1.4-beta.2) (2026-02-05)
+
+
+### Bug Fixes
+
+* trigger cd ([b825a4c](https://github.com/n24q02m/wet-mcp/commit/b825a4c63ce521c6e4e3fcf657ff088995e3c6be))
+
 ## [2.1.4-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.1.3...v2.1.4-beta.1) (2026-02-05)
 
 
