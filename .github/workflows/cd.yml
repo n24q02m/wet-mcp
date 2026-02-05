@@ -130,6 +130,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
+          ref: ${{ github.event_name == 'pull_request' && 'main' || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
