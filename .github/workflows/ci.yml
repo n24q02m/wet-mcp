@@ -75,7 +75,8 @@ jobs:
 
   dependency-review:
     name: Dependency Review
-    if: github.event_name == 'pull_request'
+    # Disabled because Dependency Graph is not enabled on this repository
+    if: false && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
 
     steps:
