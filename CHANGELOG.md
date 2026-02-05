@@ -1,3 +1,10 @@
+## [2.1.4-beta.4](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.3...v2.1.4-beta.4) (2026-02-05)
+
+
+### Bug Fixes
+
+* **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
+
 ## [2.1.4-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.2...v2.1.4-beta.3) (2026-02-05)
 
 
