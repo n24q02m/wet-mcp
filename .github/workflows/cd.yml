@@ -3,9 +3,6 @@ name: CD
 on:
   push:
     branches: [dev, main]
-  pull_request:
-    types: [closed]
-    branches: [main]
   workflow_dispatch:
     inputs:
       action:
@@ -18,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
   id-token: write
 
 concurrency:
@@ -25,11 +23,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # ═══════════════════ Manual: Promote dev -> main ═══════════════════
   promote:
     name: Promote to Stable
     if: github.event_name == 'workflow_dispatch' && inputs.action == 'promote-to-stable'
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -37,27 +35,17 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
 
-      - name: Check CI/CD status on dev branch
+      - name: Check CI/CD status on dev
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x .github/scripts/check-ci-cd-status.sh
           ./.github/scripts/check-ci-cd-status.sh --branch=dev
 
-      - name: Sync main into dev (resolve version conflicts)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout dev
-          git fetch origin main
-          git merge origin/main --no-edit -X ours || true
-          git push origin dev
-
-      - name: Create PR to promote dev to main
+      - name: Create PR dev -> main
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          # Check if PR already exists
           EXISTING_PR=$(gh pr list --base main --head dev --json number --jq '.[0].number')
           if [ -n "$EXISTING_PR" ]; then
             echo "PR #$EXISTING_PR already exists for dev -> main"
@@ -65,7 +53,6 @@ jobs:
             exit 0
           fi
 
-          # Get latest release version from dev
           LATEST_TAG=$(git describe --tags --abbrev=0 origin/dev 2>/dev/null || echo "")
           if [ -z "$LATEST_TAG" ]; then
             PR_TITLE="feat: promote dev to main"
@@ -73,7 +60,6 @@ jobs:
             PR_TITLE="feat: promote dev to main ($LATEST_TAG)"
           fi
 
-          # Create PR
           gh pr create \
             --base main \
             --head dev \
@@ -83,108 +69,59 @@ jobs:
           This PR promotes the latest changes from \`dev\` branch to \`main\`.
 
           ### Pre-checks passed:
-          - ✅ CI workflow passed on dev
-          - ✅ CD workflow passed on dev
+          - CI workflow passed on dev
+          - CD workflow passed on dev
 
           ### Latest beta version: $LATEST_TAG"
 
-  restore-dev:
-    name: Restore Dev Branch
-    needs: [release]
-    if: |
-      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout main
-        uses: actions/checkout@v6
-        with:
-          ref: main
-          fetch-depth: 0
-          token: ${{ secrets.GH_PAT }}
-
-      - name: Restore dev branch from main
-        run: |
-          if git ls-remote --exit-code --heads origin dev; then
-            echo "Dev branch already exists, skipping"
-            exit 0
-          fi
-
-          git checkout -b dev
-          git push origin dev
-          echo "✅ Dev branch restored from main"
-
-  release:
-    name: Semantic Release
-    if: |
-      (github.event_name == 'push') ||
-      (github.event_name == 'pull_request' && github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'dev')
+  # ═══════════════════ Release Please (beta on dev) ═══════════════════
+  release-beta:
+    name: Release Please (Beta)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     outputs:
-      released: ${{ steps.check.outputs.released }}
-      version: ${{ steps.check.outputs.version }}
-
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
-          ref: ${{ github.event_name == 'pull_request' && 'main' || github.ref }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: dev
+          prerelease: true
+          prerelease-type: beta
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+  # ═══════════════════ Release Please (stable on main) ═══════════════════
+  release-stable:
+    name: Release Please (Stable)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
         with:
-          node-version: "24"
+          token: ${{ secrets.GH_PAT }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
 
-      - name: Install uv (for toml-cli)
-        uses: astral-sh/setup-uv@v5
-        with:
-          version: "latest"
-
-      - name: Install semantic-release
-        run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git @semantic-release/exec
-
-      - name: Run semantic-release
-        id: semantic
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
-        run: |
-          npx semantic-release --dry-run > release-output.txt 2>&1 || true
-          if grep -qE "Published release|Release notes for" release-output.txt; then
-            npx semantic-release
-          else
-            echo "No new commits to release"
-          fi
-
-      - name: Check release status
-        id: check
-        run: |
-          git fetch --tags
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          CURRENT_COMMIT=$(git rev-parse HEAD)
-          TAG_COMMIT=$(git rev-list -n 1 "$LATEST_TAG" 2>/dev/null || echo "")
-
-          if [ -n "$LATEST_TAG" ] && [ "$CURRENT_COMMIT" = "$TAG_COMMIT" ]; then
-            echo "released=true" >> $GITHUB_OUTPUT
-            echo "version=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
-            echo "New release detected: $LATEST_TAG"
-          else
-            echo "released=false" >> $GITHUB_OUTPUT
-            echo "No new release"
-          fi
-
-
+  # ═══════════════════ Publish to PyPI ═══════════════════
   publish-pypi:
     name: Publish to PyPI
-    needs: release
-    if: needs.release.outputs.released == 'true'
+    needs: [release-beta, release-stable]
+    if: |
+      always() && (
+        needs.release-beta.outputs.release_created == 'true' ||
+        needs.release-stable.outputs.release_created == 'true'
+      )
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -202,4 +139,23 @@ jobs:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: uv publish
 
-# Trigger CD
+  # ═══════════════════ Sync dev from main after stable release ═══════════════════
+  sync-dev:
+    name: Sync Dev Branch
+    needs: [release-stable]
+    if: always() && needs.release-stable.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Recreate dev from main
+        run: |
+          git push origin --delete dev || true
+          git checkout -b dev
+          git push origin dev
+          echo "Dev branch synced from main"

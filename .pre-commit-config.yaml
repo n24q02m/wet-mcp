@@ -21,7 +21,7 @@ repos:
     hooks:
       - id: ruff
         name: ruff lint
-        args: [--fix, --target-version=py312]
+        args: [--fix, --target-version=py313]
       - id: ruff-format
         name: ruff format
 

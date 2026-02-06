@@ -11,8 +11,8 @@ permissions:
   pull-requests: write
 
 jobs:
-  lint-and-check:
-    name: Lint & Type Check
+  lint-and-test:
+    name: Lint & Test
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,7 @@ jobs:
         with:
           version: "latest"
 
-      - name: Setup Python 3.12
+      - name: Setup Python 3.13
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -41,7 +41,7 @@ jobs:
       - name: Run ty type check
         run: uv run ty check
 
-      - name: Run tests (if exist)
+      - name: Run tests
         run: |
           if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
             uv run pytest --tb=short
@@ -49,27 +49,17 @@ jobs:
             echo "No tests found, skipping..."
           fi
 
-      - name: Comment PR on success
-        if: success() && github.event_name == 'pull_request'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ **CI Checks Passed**\n\n- Ruff Check: ✓\n- Format: ✓\n- Type Check: ✓\n\nReady for review!'
-            })
+  dependency-review:
+    name: Dependency Review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
 
-      - name: Comment PR on failure
-        if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v8
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ **CI Checks Failed**\n\nPlease fix the issues:\n- Run `mise run check` locally\n- Check workflow logs for details'
-            })
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: always
