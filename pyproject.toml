@@ -1,6 +1,6 @@
 [project]
 name = "wet-mcp"
-version = "2.1.4-beta.4"
+version = "3.0.0"
 description = "Open-source MCP Server thay thế Tavily - Web search, extract, crawl với SearXNG"
 readme = "README.md"
 license = { text = "MIT" }
