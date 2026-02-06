@@ -88,11 +88,9 @@ jobs:
         id: release
         with:
           token: ${{ secrets.GH_PAT }}
-          config-file: release-please-config.json
+          config-file: release-please-config-beta.json
           manifest-file: .release-please-manifest.json
           target-branch: dev
-          prerelease: true
-          prerelease-type: beta
 
   # ═══════════════════ Release Please (stable on main) ═══════════════════
   release-stable:
