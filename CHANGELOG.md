@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [3.1.0-beta.1](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta...v3.1.0-beta.1) (2026-02-08)
+
+
+### Bug Fixes
+
+* update pip commands to use uv for SearXNG and Playwright installation ([566cfde](https://github.com/n24q02m/wet-mcp/commit/566cfdeacd4cee30681c1b2d954319be1e4e5287))
+
 ## [3.1.0-beta](https://github.com/n24q02m/wet-mcp/compare/v3.0.1-beta...v3.1.0-beta) (2026-02-08)
 
 
