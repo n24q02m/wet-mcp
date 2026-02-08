@@ -21,9 +21,16 @@ COPY src/ ./src/
 RUN uv sync --frozen --no-dev
 
 # Install SearXNG from GitHub (zip archive + no-build-isolation for speed)
+# Then patch version_frozen.py (zip has no .git for version detection)
 RUN uv pip install --quiet msgspec setuptools wheel pyyaml \
     && uv pip install --quiet --no-build-isolation \
-    https://github.com/searxng/searxng/archive/refs/heads/master.zip
+    https://github.com/searxng/searxng/archive/refs/heads/master.zip \
+    && uv run python -c "\
+import importlib.util; from pathlib import Path; \
+spec = importlib.util.find_spec('searx'); \
+vf = Path(spec.submodule_search_locations[0]) / 'version_frozen.py'; \
+vf.write_text('VERSION_STRING = \"0.0.0\"\nVERSION_TAG = \"v0.0.0\"\nDOCKER_TAG = \"\"\nGIT_URL = \"https://github.com/searxng/searxng\"\nGIT_BRANCH = \"master\"\n'); \
+print(f'Created {vf}')"
 
 # Install Playwright chromium browser
 RUN uv run python -m playwright install chromium

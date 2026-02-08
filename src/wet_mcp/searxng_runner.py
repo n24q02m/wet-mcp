@@ -21,6 +21,7 @@ import httpx
 from loguru import logger
 
 from wet_mcp.config import settings
+from wet_mcp.setup import patch_searxng_version
 
 # SearXNG install URL (zip archive avoids git filename issues on Windows)
 _SEARXNG_INSTALL_URL = (
@@ -132,6 +133,7 @@ def _install_searxng() -> bool:
 
         if result.returncode == 0:
             logger.info("SearXNG installed successfully")
+            patch_searxng_version()
             return True
         else:
             logger.error(f"SearXNG installation failed: {result.stderr[:500]}")

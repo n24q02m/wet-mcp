@@ -23,6 +23,32 @@ _SEARXNG_INSTALL_URL = (
 )
 
 
+def patch_searxng_version() -> None:
+    """Create searx.version_frozen module if missing.
+
+    SearXNG build system uses `git describe` to generate version_frozen.py.
+    When installing from a zip archive (no .git directory), this module is
+    not created, causing ImportError at runtime.
+    """
+    try:
+        import importlib.util
+
+        spec = importlib.util.find_spec("searx")
+        if spec and spec.submodule_search_locations:
+            vf = Path(spec.submodule_search_locations[0]) / "version_frozen.py"
+            if not vf.exists():
+                vf.write_text(
+                    'VERSION_STRING = "0.0.0"\n'
+                    'VERSION_TAG = "v0.0.0"\n'
+                    'DOCKER_TAG = ""\n'
+                    'GIT_URL = "https://github.com/searxng/searxng"\n'
+                    'GIT_BRANCH = "master"\n'
+                )
+                logger.debug(f"Created SearXNG version_frozen: {vf}")
+    except Exception as e:
+        logger.warning(f"Failed to patch SearXNG version: {e}")
+
+
 def needs_setup() -> bool:
     """Check if setup needs to run."""
     return not SETUP_MARKER.exists()
@@ -90,6 +116,7 @@ def _install_searxng() -> bool:
         )
         if result.returncode == 0:
             logger.info("SearXNG installed successfully")
+            patch_searxng_version()
             return True
         else:
             logger.error(f"SearXNG install failed: {result.stderr[:300]}")
