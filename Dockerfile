@@ -6,6 +6,10 @@ FROM python:3.13-slim-bookworm AS builder
 
 WORKDIR /app
 
+# Install git (required by SearXNG build system for version detection)
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
