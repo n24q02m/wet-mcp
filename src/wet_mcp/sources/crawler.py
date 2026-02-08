@@ -1,9 +1,28 @@
 """Crawl4AI integration for web crawling and extraction."""
 
 import json
+import os
+import tempfile
 from pathlib import Path
 
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
+
+from wet_mcp.security import is_safe_url
+
+# Per-process browser data directory to prevent Playwright lock deadlock
+# when multiple MCP server instances run simultaneously.
+_BROWSER_DATA_DIR = str(Path(tempfile.gettempdir()) / f"wet-mcp-browser-{os.getpid()}")
+
+
+def _browser_config(stealth: bool = False) -> BrowserConfig:
+    """Create BrowserConfig with per-process isolated data directory."""
+    return BrowserConfig(
+        headless=True,
+        enable_stealth=stealth,
+        verbose=False,
+        user_data_dir=_BROWSER_DATA_DIR,
+    )
 
 
 async def extract(
@@ -21,20 +40,21 @@ async def extract(
     Returns:
         JSON string with extracted content
     """
-    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
-
     logger.info(f"Extracting content from {len(urls)} URLs")
-
-    browser_config = BrowserConfig(
-        headless=True,
-        enable_stealth=stealth,
-        verbose=False,
-    )
 
     results = []
 
-    async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
+    async with AsyncWebCrawler(
+        verbose=False, config=_browser_config(stealth)
+    ) as crawler:
         for url in urls:
+            if not is_safe_url(url):
+                logger.warning(f"Skipping unsafe URL: {url}")
+                results.append(
+                    {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                )
+                continue
+
             try:
                 result = await crawler.arun(
                     url,
@@ -96,21 +116,19 @@ async def crawl(
     Returns:
         JSON string with crawled content
     """
-    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
-
     logger.info(f"Crawling {len(urls)} URLs with depth={depth}")
-
-    browser_config = BrowserConfig(
-        headless=True,
-        enable_stealth=stealth,
-        verbose=False,
-    )
 
     all_results = []
     visited = set()
 
-    async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
+    async with AsyncWebCrawler(
+        verbose=False, config=_browser_config(stealth)
+    ) as crawler:
         for root_url in urls:
+            if not is_safe_url(root_url):
+                logger.warning(f"Skipping unsafe URL: {root_url}")
+                continue
+
             to_crawl = [(root_url, 0)]
 
             while to_crawl and len(all_results) < max_pages:
@@ -177,17 +195,17 @@ async def sitemap(
     Returns:
         JSON string with discovered URLs
     """
-    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
-
     logger.info(f"Mapping {len(urls)} URLs")
-
-    browser_config = BrowserConfig(headless=True, verbose=False)
 
     all_urls = []
     visited = set()
 
-    async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
+    async with AsyncWebCrawler(verbose=False, config=_browser_config()) as crawler:
         for root_url in urls:
+            if not is_safe_url(root_url):
+                logger.warning(f"Skipping unsafe URL: {root_url}")
+                continue
+
             to_visit = [(root_url, 0)]
             site_urls = []
 
@@ -235,13 +253,12 @@ async def list_media(
     Returns:
         JSON string with media list
     """
-    from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
-
     logger.info(f"Listing media from: {url}")
 
-    browser_config = BrowserConfig(headless=True, verbose=False)
+    if not is_safe_url(url):
+        return json.dumps({"error": "Security Alert: Unsafe URL blocked"})
 
-    async with AsyncWebCrawler(verbose=False, config=browser_config) as crawler:
+    async with AsyncWebCrawler(verbose=False, config=_browser_config()) as crawler:
         result = await crawler.arun(
             url,
             config=CrawlerRunConfig(verbose=False),
