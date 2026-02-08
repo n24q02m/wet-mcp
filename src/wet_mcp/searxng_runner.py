@@ -4,8 +4,7 @@ Replaces Docker-based SearXNG with a subprocess running directly from
 the installed SearXNG Python package. SearXNG is auto-installed from
 GitHub on first run if not already available.
 
-Note: SearXNG requires Unix-only modules (pwd) and cannot run on Windows.
-On Windows, falls back to external SearXNG URL.
+On Windows, valkeydb.py is patched to remove Unix-only ``pwd`` dependency.
 """
 
 import asyncio
@@ -21,7 +20,7 @@ import httpx
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.setup import patch_searxng_version
+from wet_mcp.setup import patch_searxng_version, patch_searxng_windows
 
 # SearXNG install URL (zip archive avoids git filename issues on Windows)
 _SEARXNG_INSTALL_URL = (
@@ -30,6 +29,7 @@ _SEARXNG_INSTALL_URL = (
 
 # Module-level process reference for cleanup
 _searxng_process: subprocess.Popen | None = None
+_searxng_port: int | None = None
 
 
 def _find_available_port(start_port: int, max_tries: int = 10) -> int:
@@ -134,6 +134,7 @@ def _install_searxng() -> bool:
         if result.returncode == 0:
             logger.info("SearXNG installed successfully")
             patch_searxng_version()
+            patch_searxng_windows()
             return True
         else:
             logger.error(f"SearXNG installation failed: {result.stderr[:500]}")
@@ -147,25 +148,26 @@ def _install_searxng() -> bool:
         return False
 
 
-def _get_settings_path() -> Path:
+def _get_settings_path(port: int) -> Path:
     """Get path to SearXNG settings file.
 
-    Copies bundled settings.yml to user config directory.
-    Updates port configuration from settings.
+    Uses per-process file to avoid write conflicts when multiple
+    server instances run simultaneously.
     """
     config_dir = Path.home() / ".wet-mcp"
     config_dir.mkdir(parents=True, exist_ok=True)
 
-    settings_file = config_dir / "searxng_settings.yml"
+    # Per-process settings file (avoids race condition between instances)
+    settings_file = config_dir / f"searxng_settings_{os.getpid()}.yml"
 
     # Always write settings to ensure port is up-to-date
     bundled = files("wet_mcp").joinpath("searxng_settings.yml")
     content = bundled.read_text()
 
-    # Inject the configured port
+    # Inject the actual port
     content = content.replace(
         "port: 8080",
-        f"port: {settings.wet_searxng_port}",
+        f"port: {port}",
     )
 
     settings_file.write_text(content)
@@ -175,8 +177,8 @@ def _get_settings_path() -> Path:
 
 
 def _cleanup_process() -> None:
-    """Cleanup SearXNG subprocess on exit."""
-    global _searxng_process
+    """Cleanup SearXNG subprocess and per-process settings file on exit."""
+    global _searxng_process, _searxng_port
     if _searxng_process is not None:
         try:
             logger.debug("Stopping SearXNG subprocess...")
@@ -191,6 +193,15 @@ def _cleanup_process() -> None:
             logger.debug(f"Error stopping SearXNG: {e}")
         finally:
             _searxng_process = None
+            _searxng_port = None
+
+    # Cleanup per-process settings file
+    try:
+        pid_settings = Path.home() / ".wet-mcp" / f"searxng_settings_{os.getpid()}.yml"
+        if pid_settings.exists():
+            pid_settings.unlink()
+    except Exception:
+        pass
 
 
 async def ensure_searxng() -> str:
@@ -203,23 +214,15 @@ async def ensure_searxng() -> str:
     - SearXNG configuration via settings.yml
     - Graceful fallback to external SearXNG URL
     """
-    global _searxng_process
+    global _searxng_process, _searxng_port
 
     if not settings.wet_auto_searxng:
         logger.info("Auto SearXNG disabled, using external URL")
         return settings.searxng_url
 
-    # SearXNG uses Unix-only modules (pwd) - cannot run on Windows
-    if sys.platform == "win32":
-        logger.warning(
-            "SearXNG cannot run natively on Windows (requires Unix modules). "
-            "Using external SearXNG URL. Set WET_SEARXNG_URL or use Docker."
-        )
-        return settings.searxng_url
-
     # Check if SearXNG is already running (from previous call)
     if _searxng_process is not None and _searxng_process.poll() is None:
-        url = f"http://127.0.0.1:{settings.wet_searxng_port}"
+        url = f"http://127.0.0.1:{_searxng_port}"
         logger.debug(f"SearXNG already running at {url}")
         return url
 
@@ -234,9 +237,10 @@ async def ensure_searxng() -> str:
         port = await asyncio.to_thread(_find_available_port, settings.wet_searxng_port)
         if port != settings.wet_searxng_port:
             logger.info(f"Port {settings.wet_searxng_port} in use, using {port}")
+        _searxng_port = port
 
         # Write settings with correct port
-        settings_path = _get_settings_path()
+        settings_path = _get_settings_path(port)
 
         # Build environment for SearXNG
         env = os.environ.copy()

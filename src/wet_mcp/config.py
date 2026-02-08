@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     wet_auto_searxng: bool = True
     wet_searxng_port: int = 8080
 
+    # Tool execution timeout (seconds, 0 = no timeout)
+    tool_timeout: int = 120
+
     # Media
     download_dir: str = "~/.wet-mcp/downloads"
 

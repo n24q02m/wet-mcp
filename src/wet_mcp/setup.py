@@ -23,6 +23,19 @@ _SEARXNG_INSTALL_URL = (
 )
 
 
+def _find_searx_package_dir() -> Path | None:
+    """Find SearXNG package directory via importlib."""
+    try:
+        import importlib.util
+
+        spec = importlib.util.find_spec("searx")
+        if spec and spec.submodule_search_locations:
+            return Path(spec.submodule_search_locations[0])
+    except Exception:
+        pass
+    return None
+
+
 def patch_searxng_version() -> None:
     """Create searx.version_frozen module if missing.
 
@@ -31,22 +44,75 @@ def patch_searxng_version() -> None:
     not created, causing ImportError at runtime.
     """
     try:
-        import importlib.util
+        searx_dir = _find_searx_package_dir()
+        if not searx_dir:
+            return
 
-        spec = importlib.util.find_spec("searx")
-        if spec and spec.submodule_search_locations:
-            vf = Path(spec.submodule_search_locations[0]) / "version_frozen.py"
-            if not vf.exists():
-                vf.write_text(
-                    'VERSION_STRING = "0.0.0"\n'
-                    'VERSION_TAG = "v0.0.0"\n'
-                    'DOCKER_TAG = ""\n'
-                    'GIT_URL = "https://github.com/searxng/searxng"\n'
-                    'GIT_BRANCH = "master"\n'
-                )
-                logger.debug(f"Created SearXNG version_frozen: {vf}")
+        vf = searx_dir / "version_frozen.py"
+        if not vf.exists():
+            vf.write_text(
+                'VERSION_STRING = "0.0.0"\n'
+                'VERSION_TAG = "v0.0.0"\n'
+                'DOCKER_TAG = ""\n'
+                'GIT_URL = "https://github.com/searxng/searxng"\n'
+                'GIT_BRANCH = "master"\n'
+            )
+            logger.debug(f"Created SearXNG version_frozen: {vf}")
     except Exception as e:
         logger.warning(f"Failed to patch SearXNG version: {e}")
+
+
+def patch_searxng_windows() -> None:
+    """Patch SearXNG valkeydb.py for Windows compatibility.
+
+    SearXNG's valkeydb.py imports ``pwd`` (Unix-only) at module level,
+    but only uses it to log the username on Valkey connection errors.
+    This patches it to gracefully handle the missing module on Windows.
+    """
+    if sys.platform != "win32":
+        return
+
+    try:
+        searx_dir = _find_searx_package_dir()
+        if not searx_dir:
+            return
+
+        valkeydb_path = searx_dir / "valkeydb.py"
+        if not valkeydb_path.exists():
+            return
+
+        content = valkeydb_path.read_text(encoding="utf-8")
+
+        # Skip if already patched
+        if "except ImportError" in content and "pwd = None" in content:
+            return
+
+        if "import pwd" not in content:
+            return
+
+        # Patch: wrap `import pwd` in try/except
+        content = content.replace(
+            "import pwd\n",
+            "try:\n    import pwd\nexcept ImportError:\n    pwd = None\n",
+        )
+
+        # Patch: guard pwd.getpwuid usage in error handler
+        content = content.replace(
+            "        _pw = pwd.getpwuid(os.getuid())\n"
+            '        logger.exception("[%s (%s)] can\'t connect valkey DB ...", '
+            "_pw.pw_name, _pw.pw_uid)",
+            "        if pwd and hasattr(os, 'getuid'):\n"
+            "            _pw = pwd.getpwuid(os.getuid())\n"
+            "            logger.exception(\"[%s (%s)] can't connect valkey DB "
+            '...", _pw.pw_name, _pw.pw_uid)\n'
+            "        else:\n"
+            '            logger.exception("can\'t connect valkey DB ...")',
+        )
+
+        valkeydb_path.write_text(content, encoding="utf-8")
+        logger.debug(f"Patched SearXNG valkeydb.py for Windows: {valkeydb_path}")
+    except Exception as e:
+        logger.warning(f"Failed to patch SearXNG for Windows: {e}")
 
 
 def needs_setup() -> bool:
@@ -70,11 +136,6 @@ def _install_searxng() -> bool:
         return True
     except ImportError:
         pass
-
-    # SearXNG uses pwd module (Unix-only) - skip install on Windows
-    if sys.platform == "win32":
-        logger.warning("SearXNG requires Unix modules - skipping install on Windows")
-        return False
 
     logger.info("Installing SearXNG from GitHub...")
     try:
@@ -117,6 +178,7 @@ def _install_searxng() -> bool:
         if result.returncode == 0:
             logger.info("SearXNG installed successfully")
             patch_searxng_version()
+            patch_searxng_windows()
             return True
         else:
             logger.error(f"SearXNG install failed: {result.stderr[:300]}")
