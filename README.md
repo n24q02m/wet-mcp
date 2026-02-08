@@ -3,11 +3,12 @@
 **Open-source MCP Server for web scraping & multimodal extraction.**
 
 [![PyPI](https://img.shields.io/pypi/v/wet-mcp)](https://pypi.org/project/wet-mcp/)
+[![Docker](https://img.shields.io/docker/v/n24q02m/wet-mcp?label=docker)](https://hub.docker.com/r/n24q02m/wet-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## Features
 
-- **Web Search** - Search via SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave)
+- **Web Search** - Search via embedded SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave)
 - **Content Extract** - Extract clean content (Markdown/Text)
 - **Deep Crawl** - Crawl multiple pages from a root URL with depth control
 - **Site Map** - Discover website URL structure
@@ -20,27 +21,47 @@
 
 ### Prerequisites
 
-- **Docker** running (for SearXNG auto-management)
 - **Python 3.13+** (or use `uvx`)
 
 ### Add to mcp.json
+
+#### uvx (Recommended)
 
 ```json
 {
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["wet-mcp"]
+      "args": ["wet-mcp@latest"],
+      "env": {
+        "API_KEYS": "GOOGLE_API_KEY:AIza..."
+      }
     }
   }
 }
 ```
 
 **That's it!** On first run:
-1. Automatically installs Playwright chromium
-2. Automatically pulls SearXNG Docker image
-3. Starts `wet-searxng` container
+1. Automatically installs SearXNG from GitHub
+2. Automatically installs Playwright chromium + system dependencies
+3. Starts embedded SearXNG subprocess
 4. Runs the MCP server
+
+#### Docker
+
+```json
+{
+  "mcpServers": {
+    "wet": {
+      "command": "docker",
+      "args": ["run", "-i", "--rm", "-e", "API_KEYS", "n24q02m/wet-mcp:latest"],
+      "env": {
+        "API_KEYS": "GOOGLE_API_KEY:AIza..."
+      }
+    }
+  }
+}
+```
 
 ### Without uvx
 
@@ -76,9 +97,9 @@ wet-mcp
 
 | Variable | Default | Description |
 |:---------|:--------|:------------|
-| `WET_AUTO_DOCKER` | `true` | Auto-manage SearXNG container |
-| `WET_SEARXNG_PORT` | `8080` | SearXNG container port |
-| `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL |
+| `WET_AUTO_SEARXNG` | `true` | Auto-start embedded SearXNG subprocess |
+| `WET_SEARXNG_PORT` | `8080` | SearXNG port |
+| `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL (when auto disabled) |
 | `API_KEYS` | - | LLM API keys for media analysis |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
@@ -115,27 +136,9 @@ LLM_MODELS=gemini/gemini-3-flash-preview
 │       ▼             ▼                                   │
 │  ┌──────────┐  ┌──────────┐                             │
 │  │ SearXNG  │  │ Crawl4AI │                             │
-│  │ (Docker) │  │(Playwright)│                           │
+│  │(embedded)│  │(Playwright)│                           │
 │  └──────────┘  └──────────┘                             │
 └─────────────────────────────────────────────────────────┘
-```
-
----
-
-## Container Management
-
-```bash
-# View SearXNG logs
-docker logs wet-searxng
-
-# Stop SearXNG
-docker stop wet-searxng
-
-# Remove container (will be recreated on next run)
-docker rm wet-searxng
-
-# Reset auto-setup (forces re-install Playwright)
-rm ~/.wet-mcp/.setup-complete
 ```
 
 ---
@@ -153,7 +156,13 @@ mise run setup
 uv run wet-mcp
 ```
 
-**Requirements:** Python 3.13+, Docker
+### Docker Build
+
+```bash
+docker build -t n24q02m/wet-mcp:latest .
+```
+
+**Requirements:** Python 3.13+
 
 ---
 

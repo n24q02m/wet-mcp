@@ -15,19 +15,19 @@ logger.add(sys.stdout, level="INFO")
 
 async def test_searxng():
     """Test SearXNG search functionality."""
-    from wet_mcp.docker_manager import ensure_searxng
+    from wet_mcp.searxng_runner import ensure_searxng
     from wet_mcp.sources.searxng import search
 
     print("\n" + "=" * 50)
     print("TEST: SearXNG Integration")
     print("=" * 50)
 
-    # Start SearXNG container
-    print("\n[1] Starting SearXNG container...")
+    # Start SearXNG subprocess
+    print("\n[1] Starting SearXNG...")
     searxng_url = await ensure_searxng()
     print(f"    URL: {searxng_url}")
 
-    # Wait for container to be healthy
+    # Wait for SearXNG to be ready
     print("[2] Waiting for SearXNG to be ready...")
     await asyncio.sleep(5)
 
@@ -153,10 +153,10 @@ async def main():
         print(f"  {name}: {status}")
 
     # Cleanup
-    print("\n[Cleanup] Stopping SearXNG container...")
-    from wet_mcp.docker_manager import remove_searxng
+    print("\n[Cleanup] Stopping SearXNG...")
+    from wet_mcp.searxng_runner import stop_searxng
 
-    remove_searxng()
+    stop_searxng()
     print("    Done!")
 
     # Exit code

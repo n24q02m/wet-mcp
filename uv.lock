@@ -1342,19 +1342,6 @@ wheels = [
 ]
 
 [[package]]
-name = "python-on-whales"
-version = "0.80.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pydantic" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/17/8e/0f76b8ccd44d7acaeb2ef15109b039a00cee5df9935249c1aa704e749f4a/python_on_whales-0.80.0.tar.gz", hash = "sha256:0f18dda93a621dc34c5c26d0dbdc20003dca07a02114c4ce60910c4afb12c1ac", size = 114918, upload-time = "2026-01-10T18:00:56.207Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/d9/7dc70cfd792b420ccbdb249be4a43e949b5c151120b7abfdcacd93e37b2b/python_on_whales-0.80.0-py3-none-any.whl", hash = "sha256:3a7207899e5189695e54859a4c49461306c67fe8545a7eb53f884e342550c37d", size = 119194, upload-time = "2026-01-10T18:00:54.776Z" },
-]
-
-[[package]]
 name = "pywin32"
 version = "311"
 source = { registry = "https://pypi.org/simple" }
@@ -1873,7 +1860,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.1.4b4"
+version = "3.0.1b0"
 source = { editable = "." }
 dependencies = [
     { name = "crawl4ai" },
@@ -1883,7 +1870,6 @@ dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "python-on-whales" },
 ]
 
 [package.dev-dependencies]
@@ -1904,7 +1890,6 @@ requires-dist = [
     { name = "mcp", extras = ["cli"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "python-on-whales" },
 ]
 
 [package.metadata.requires-dev]

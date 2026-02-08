@@ -20,7 +20,7 @@ logger.add(sys.stdout, level="INFO")
 
 async def test_search_quality():
     """Test search result quality and relevance."""
-    from wet_mcp.docker_manager import ensure_searxng
+    from wet_mcp.searxng_runner import ensure_searxng
     from wet_mcp.sources.searxng import search
 
     print("\n" + "=" * 60)
@@ -367,7 +367,7 @@ async def test_media_detection():
 
 async def main():
     """Run all harder integration tests."""
-    from wet_mcp.docker_manager import remove_searxng
+    from wet_mcp.searxng_runner import stop_searxng
 
     print("\n" + "#" * 60)
     print("# WET MCP - Harder Integration Tests")
@@ -400,8 +400,8 @@ async def main():
         print(f"  {indicator} {name}: {status}")
 
     # Cleanup
-    print("\n[Cleanup] Stopping SearXNG container...")
-    remove_searxng()
+    print("\n[Cleanup] Stopping SearXNG...")
+    stop_searxng()
     print("  Done!")
 
     # Overall result

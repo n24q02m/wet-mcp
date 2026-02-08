@@ -1,8 +1,8 @@
 """Auto-setup utilities for WET MCP Server.
 
 This module handles automatic first-run setup:
-- Install Playwright browsers (chromium)
-- Verify Docker availability
+- Install SearXNG from GitHub (metasearch engine)
+- Install Playwright browsers + system dependencies (for Crawl4AI)
 - Create configuration directories
 
 Setup runs automatically on first server start.
@@ -17,14 +17,158 @@ from loguru import logger
 # Marker file to track if setup has been run
 SETUP_MARKER = Path.home() / ".wet-mcp" / ".setup-complete"
 
+# SearXNG install URL (zip avoids git clone filename issues)
+_SEARXNG_INSTALL_URL = (
+    "https://github.com/searxng/searxng/archive/refs/heads/master.zip"
+)
+
 
 def needs_setup() -> bool:
     """Check if setup needs to run."""
     return not SETUP_MARKER.exists()
 
 
+def _install_searxng() -> bool:
+    """Install SearXNG Python package from GitHub zip archive.
+
+    Pre-installs build dependencies, then installs SearXNG with
+    --no-build-isolation for reliable builds across platforms.
+
+    Returns:
+        True if installation succeeded or already installed.
+    """
+    try:
+        import searx  # noqa: F401
+
+        logger.debug("SearXNG already installed")
+        return True
+    except ImportError:
+        pass
+
+    # SearXNG uses pwd module (Unix-only) - skip install on Windows
+    if sys.platform == "win32":
+        logger.warning("SearXNG requires Unix modules - skipping install on Windows")
+        return False
+
+    logger.info("Installing SearXNG from GitHub...")
+    try:
+        # Pre-install build dependencies
+        deps_result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--quiet",
+                "msgspec",
+                "setuptools",
+                "wheel",
+                "pyyaml",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if deps_result.returncode != 0:
+            logger.error(f"Build deps install failed: {deps_result.stderr[:300]}")
+            return False
+
+        # Install SearXNG with --no-build-isolation
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--quiet",
+                "--no-build-isolation",
+                _SEARXNG_INSTALL_URL,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode == 0:
+            logger.info("SearXNG installed successfully")
+            return True
+        else:
+            logger.error(f"SearXNG install failed: {result.stderr[:300]}")
+            return False
+    except subprocess.TimeoutExpired:
+        logger.error("SearXNG installation timed out")
+        return False
+    except Exception as e:
+        logger.error(f"SearXNG install error: {e}")
+        return False
+
+
+def _install_playwright() -> bool:
+    """Install Playwright chromium browser and system dependencies.
+
+    On Linux, attempts to install system deps (requires appropriate permissions).
+    Falls back to browser-only install if system deps fail.
+
+    Returns:
+        True if browser installation succeeded.
+    """
+    # Step 1: Try installing system dependencies (Linux only, may need root)
+    if sys.platform == "linux":
+        logger.info("Installing Playwright system dependencies...")
+        try:
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "playwright",
+                    "install-deps",
+                    "chromium",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if result.returncode == 0:
+                logger.info("Playwright system deps installed")
+            else:
+                logger.warning(
+                    "Could not install system deps (may need root): "
+                    f"{result.stderr[:200]}"
+                )
+        except Exception as e:
+            logger.warning(f"System deps install skipped: {e}")
+
+    # Step 2: Install Playwright chromium browser
+    logger.info("Installing Playwright chromium browser...")
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode == 0:
+            logger.info("Playwright chromium installed successfully")
+            return True
+        else:
+            logger.warning(f"Playwright install warning: {result.stderr[:200]}")
+            # Don't fail - might already be installed
+            return True
+    except subprocess.TimeoutExpired:
+        logger.error("Playwright installation timed out")
+        return False
+    except FileNotFoundError:
+        logger.warning(
+            "Playwright command not found, crawl/extract features may not work"
+        )
+        return False
+
+
 def run_auto_setup() -> bool:
     """Run automatic setup on first start.
+
+    Installs all required components:
+    1. SearXNG (metasearch engine, from GitHub)
+    2. Playwright chromium + system deps (for Crawl4AI)
 
     Returns:
         True if setup succeeded or was already done, False on failure.
@@ -42,44 +186,14 @@ def run_auto_setup() -> bool:
     config_dir.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Created config directory: {config_dir}")
 
-    # Step 2: Install Playwright chromium (required for Crawl4AI)
-    logger.info("Installing Playwright chromium browser...")
-    try:
-        result = subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium"],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        if result.returncode == 0:
-            logger.info("Playwright chromium installed successfully")
-        else:
-            logger.warning(f"Playwright install warning: {result.stderr[:200]}")
-            # Don't fail - might already be installed
-    except subprocess.TimeoutExpired:
-        logger.error("Playwright installation timed out")
-        success = False
-    except FileNotFoundError:
-        logger.warning("Playwright command not found, some features may not work")
+    # Step 2: Install SearXNG from GitHub
+    if not _install_searxng():
+        logger.warning("SearXNG not installed, search will use external URL")
+        # Don't fail setup entirely - extract/crawl still works
 
-    # Step 3: Verify Docker (optional, for SearXNG)
-    try:
-        result = subprocess.run(
-            ["docker", "version", "--format", "{{.Server.Version}}"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            logger.debug(f"Docker available: v{result.stdout.strip()}")
-        else:
-            logger.info(
-                "Docker not running, will use external SearXNG URL if configured"
-            )
-    except FileNotFoundError:
-        logger.info("Docker not installed, will use external SearXNG URL if configured")
-    except subprocess.TimeoutExpired:
-        logger.debug("Docker check timed out")
+    # Step 3: Install Playwright chromium + system deps
+    if not _install_playwright():
+        success = False
 
     # Mark setup as complete
     if success:

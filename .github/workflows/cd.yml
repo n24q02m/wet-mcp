@@ -16,7 +16,12 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  packages: write
   id-token: write
+
+env:
+  DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/wet-mcp
+  GHCR_IMAGE: ghcr.io/${{ github.repository }}
 
 concurrency:
   group: cd-${{ github.repository }}
@@ -136,6 +141,178 @@ jobs:
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: uv publish
+
+  # ═══════════════════ Build Docker (multi-arch) ═══════════════════
+  build-docker:
+    name: Build Docker (${{ matrix.platform }})
+    needs: [release-beta, release-stable]
+    if: |
+      always() && (
+        needs.release-beta.outputs.release_created == 'true' ||
+        needs.release-stable.outputs.release_created == 'true'
+      )
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            artifact: linux-amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            artifact: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,"name=${{ env.DOCKERHUB_IMAGE }},${{ env.GHCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ github.ref_name }}-${{ matrix.artifact }}
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-${{ matrix.artifact }}
+
+      - name: Export digest
+        run: |
+          echo "Digest: ${{ steps.build.outputs.digest }}"
+          if [ -z "${{ steps.build.outputs.digest }}" ]; then
+            echo "Error: Digest is empty!"
+            exit 1
+          fi
+          mkdir -p ${{ runner.temp }}/digests
+          echo "${{ steps.build.outputs.digest }}" | sed 's/^sha256://' | xargs -I{} touch "${{ runner.temp }}/digests/{}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/digests/*
+          retention-days: 1
+
+  # ═══════════════════ Merge Docker Manifests ═══════════════════
+  merge-docker:
+    name: Merge Docker Manifests
+    needs: [release-beta, release-stable, build-docker]
+    if: |
+      always() && (
+        needs.release-beta.outputs.release_created == 'true' ||
+        needs.release-stable.outputs.release_created == 'true'
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push manifest (stable)
+        if: github.ref == 'refs/heads/main'
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          VERSION: ${{ needs.release-stable.outputs.version }}
+        run: |
+          MAJOR_MINOR=$(echo "$VERSION" | cut -d. -f1,2)
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+
+          SOURCES_DOCKERHUB=""
+          SOURCES_GHCR=""
+          for digest in *; do
+            SOURCES_DOCKERHUB="$SOURCES_DOCKERHUB ${{ env.DOCKERHUB_IMAGE }}@sha256:$digest"
+            SOURCES_GHCR="$SOURCES_GHCR ${{ env.GHCR_IMAGE }}@sha256:$digest"
+          done
+
+          docker buildx imagetools create \
+            -t ${{ env.DOCKERHUB_IMAGE }}:latest \
+            -t ${{ env.DOCKERHUB_IMAGE }}:$VERSION \
+            -t ${{ env.DOCKERHUB_IMAGE }}:$MAJOR_MINOR \
+            -t ${{ env.DOCKERHUB_IMAGE }}:$MAJOR \
+            $SOURCES_DOCKERHUB
+
+          docker buildx imagetools create \
+            -t ${{ env.GHCR_IMAGE }}:latest \
+            -t ${{ env.GHCR_IMAGE }}:$VERSION \
+            -t ${{ env.GHCR_IMAGE }}:$MAJOR_MINOR \
+            -t ${{ env.GHCR_IMAGE }}:$MAJOR \
+            $SOURCES_GHCR
+
+      - name: Create and push manifest (beta)
+        if: github.ref == 'refs/heads/dev'
+        working-directory: ${{ runner.temp }}/digests
+        env:
+          VERSION: ${{ needs.release-beta.outputs.version }}
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+
+          SOURCES_DOCKERHUB=""
+          SOURCES_GHCR=""
+          for digest in *; do
+            SOURCES_DOCKERHUB="$SOURCES_DOCKERHUB ${{ env.DOCKERHUB_IMAGE }}@sha256:$digest"
+            SOURCES_GHCR="$SOURCES_GHCR ${{ env.GHCR_IMAGE }}@sha256:$digest"
+          done
+
+          docker buildx imagetools create \
+            -t ${{ env.DOCKERHUB_IMAGE }}:beta \
+            -t ${{ env.DOCKERHUB_IMAGE }}:$VERSION \
+            -t ${{ env.DOCKERHUB_IMAGE }}:beta-$SHORT_SHA \
+            $SOURCES_DOCKERHUB
+
+          docker buildx imagetools create \
+            -t ${{ env.GHCR_IMAGE }}:beta \
+            -t ${{ env.GHCR_IMAGE }}:$VERSION \
+            -t ${{ env.GHCR_IMAGE }}:beta-$SHORT_SHA \
+            $SOURCES_GHCR
+
+      - name: Checkout code
+        if: github.ref == 'refs/heads/main'
+        uses: actions/checkout@v6
+
+      - name: Update Docker Hub Description
+        if: github.ref == 'refs/heads/main'
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/wet-mcp
+          short-description: ${{ github.event.repository.description }}
+          readme-filepath: ./README.md
 
   # ═══════════════════ Sync dev from main after stable release ═══════════════════
   sync-dev:

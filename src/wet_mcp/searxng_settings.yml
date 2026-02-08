@@ -1,10 +1,12 @@
 # SearXNG settings for WET MCP Server
-# Mounted into container at /etc/searxng/settings.yml
+# Used by embedded SearXNG subprocess
 
 use_default_settings: true
 
 server:
   secret_key: "wet-mcp-internal-secret"
+  bind_address: "127.0.0.1"
+  port: 8080
   limiter: false
   method: "GET"
 

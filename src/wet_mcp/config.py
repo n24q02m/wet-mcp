@@ -14,10 +14,8 @@ class Settings(BaseSettings):
     crawler_headless: bool = True
     crawler_timeout: int = 60
 
-    # Docker Management
-    wet_auto_docker: bool = True
-    wet_container_name: str = "wet-searxng"
-    wet_searxng_image: str = "searxng/searxng:latest"
+    # SearXNG Management
+    wet_auto_searxng: bool = True
     wet_searxng_port: int = 8080
 
     # Media

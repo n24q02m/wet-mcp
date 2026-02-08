@@ -9,7 +9,6 @@ Thank you for your interest in contributing to wet-mcp! This guide will help you
 - **mise** (recommended) or **Python 3.13+** and **uv**
 - Git
 - A GitHub account
-- Docker (optional, for SearXNG auto-management)
 
 **Recommended:** Use [mise](https://mise.jdx.dev/) to automatically manage Python and uv versions from `.mise.toml`.
 
@@ -50,7 +49,7 @@ uv run ruff format --check .
 ### Running Locally
 
 ```bash
-# Run the server (SearXNG will auto-start if Docker is available)
+# Run the server (SearXNG will auto-start as embedded subprocess)
 uv run wet-mcp
 
 # For LLM-based media analysis, set API keys:
@@ -161,11 +160,13 @@ wet-mcp/
 │       ├── __init__.py
 │       ├── config.py          # Configuration
 │       ├── server.py          # MCP server
-│       ├── docker_manager.py  # SearXNG container management
+│       ├── searxng_runner.py   # Embedded SearXNG subprocess
+│       ├── setup.py           # Auto-setup (SearXNG + Playwright)
 │       ├── llm.py             # LLM utilities (LiteLLM)
 │       ├── security.py        # URL security validation
+│       ├── docs/              # Tool documentation (Markdown)
 │       └── sources/
-│           ├── crawler.py     # Web crawling (crawl4ai)
+│           ├── crawler.py     # Web crawling (Crawl4AI)
 │           └── searxng.py     # Search (SearXNG)
 ├── tests/
 ├── pyproject.toml

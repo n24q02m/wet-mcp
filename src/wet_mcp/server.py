@@ -1,23 +1,43 @@
 """WET MCP Server - Main server definition."""
 
-import asyncio
 import sys
+from contextlib import asynccontextmanager
 from importlib.resources import files
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
 
 from wet_mcp.config import settings
-from wet_mcp.docker_manager import ensure_searxng
+from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 
 # Configure logging
 logger.remove()
 logger.add(sys.stderr, level=settings.log_level)
 
+
+@asynccontextmanager
+async def _lifespan(_server: FastMCP):
+    """Server lifespan: startup SearXNG, cleanup on shutdown."""
+    from wet_mcp.setup import run_auto_setup
+
+    logger.info("Starting WET MCP Server...")
+    run_auto_setup()
+    settings.setup_api_keys()
+
+    searxng_url = await ensure_searxng()
+    logger.info(f"SearXNG URL: {searxng_url}")
+
+    yield
+
+    logger.info("Shutting down WET MCP Server...")
+    stop_searxng()
+
+
 # Initialize MCP server
 mcp = FastMCP(
     name="wet",
     instructions="Web ExTract MCP Server - search, extract, crawl, map with SearXNG",
+    lifespan=_lifespan,
 )
 
 
@@ -155,30 +175,10 @@ async def help(tool_name: str = "web") -> str:
         return f"Error loading documentation: {e}"
 
 
-async def main() -> None:
-    """Run the MCP server."""
-    from wet_mcp.setup import run_auto_setup
-
-    logger.info("Starting WET MCP Server...")
-
-    # Run auto-setup on first start (installs Playwright, etc.)
-    run_auto_setup()
-
-    # Setup LLM API Keys
-    settings.setup_api_keys()
-
-    # Initialize SearXNG container
-    searxng_url = await ensure_searxng()
-    logger.info(f"SearXNG URL: {searxng_url}")
-
-    # Run MCP server
+def main() -> None:
+    """Entry point for the MCP server."""
     mcp.run()
 
 
-def run() -> None:
-    """Entry point for running the MCP server."""
-    asyncio.run(main())
-
-
 if __name__ == "__main__":
-    run()
+    main()
