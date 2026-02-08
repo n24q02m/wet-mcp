@@ -18,7 +18,9 @@ litellm.set_verbose = False
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("LiteLLM").handlers = [logging.NullHandler()]
 
-from litellm import completion  # noqa: E402
+import asyncio  # noqa: E402
+
+from litellm import acompletion  # noqa: E402
 from loguru import logger  # noqa: E402
 
 from wet_mcp.config import settings  # noqa: E402
@@ -87,12 +89,17 @@ async def analyze_media(
         "application/javascript",
         "application/xml",
     ]:
+
+        def _read_and_truncate(path: str) -> str:
+            """Read file and truncate if too long."""
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            if len(text) > 100000:
+                text = text[:100000] + "\n...[truncated]"
+            return text
+
         try:
-            with open(media_path, encoding="utf-8") as f:
-                content = f.read()
-            # Truncate if too long (simple protection)
-            if len(content) > 100000:
-                content = content[:100000] + "\n...[truncated]"
+            content = await asyncio.to_thread(_read_and_truncate, media_path)
 
             config = get_llm_config()
             logger.info(f"Analyzing text file with model: {config['model']}")
@@ -103,13 +110,13 @@ async def analyze_media(
                     "content": f"{prompt}\n\nFile Content:\n```\n{content}\n```",
                 }
             ]
-            response = completion(
+            response = await acompletion(
                 model=config["model"],
                 messages=messages,
                 fallbacks=config["fallbacks"],
                 temperature=config["temperature"],
             )
-            return response.choices[0].message.content
+            return str(response.choices[0].message.content)
         except Exception as e:
             return f"Error analyzing text file: {e}"
 
@@ -147,15 +154,14 @@ async def analyze_media(
             }
         ]
 
-        response = completion(
+        response = await acompletion(
             model=config["model"],
             messages=messages,
             fallbacks=config["fallbacks"],
             temperature=config["temperature"],
         )
 
-        content = response.choices[0].message.content
-        return content
+        return str(response.choices[0].message.content)
 
     except Exception as e:
         logger.error(f"LLM analysis failed: {e}")

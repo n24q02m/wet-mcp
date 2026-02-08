@@ -1,13 +1,13 @@
 [project]
 name = "wet-mcp"
-version = "2.1.3"
-description = "Open-source MCP Server thay thế Tavily - Web search, extract, crawl với SearXNG"
+version = "3.1.0-beta.4"
+description = "Open-source MCP Server for web search, extract, and crawl with embedded SearXNG"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "n24q02m", email = "quangminh2422004@gmail.com" }]
 keywords = ["mcp", "web-scraping", "searxng", "crawl4ai", "tavily-alternative"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
@@ -20,29 +20,27 @@ classifiers = [
 requires-python = "==3.13.*"
 dependencies = [
     # MCP Server
-    "mcp[cli]>=1.0.0",
-    # Docker Management
-    "python-on-whales>=0.73.0",
+    "mcp[cli]",
     # Web Crawling
-    "crawl4ai>=0.8.0",
+    "crawl4ai",
     # HTTP Client
-    "httpx>=0.27.0",
+    "httpx",
     # Config
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
+    "pydantic",
+    "pydantic-settings",
     # Logging
-    "loguru>=0.7.0",
+    "loguru",
     # LLM
-    "litellm>=1.0.0",
+    "litellm",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0.0",
-    "pytest-asyncio>=0.25.0",
-    "ruff>=0.8.0",
-    "ty>=0.0.1a10",
-    "pre-commit>=4.0.0",
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "ty",
+    "pre-commit",
 ]
 
 [project.scripts]

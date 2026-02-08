@@ -24,7 +24,7 @@ run = [
   "echo 'Setup complete!'"
 ]
 
-[tasks.check]
+[tasks.lint]
 description = "Run all quality checks (ruff + ty)"
 run = [
   "uv run ruff check .",

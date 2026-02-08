@@ -2,5 +2,5 @@
 
 from wet_mcp.server import main, mcp
 
-__version__ = "0.1.0"
+__version__ = "3.1.0-beta.1"
 __all__ = ["mcp", "main", "__version__"]
