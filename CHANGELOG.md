@@ -5,6 +5,32 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [4.0.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.4...v4.0.0-beta.4) (2026-02-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* API_KEYS now expects ENV_VAR:key format e.g. GOOGLE_API_KEY:abc instead of gemini:abc
+
+### Features
+
+* add initial project documentation including README, developer handbook, and agent context files ([f39cfab](https://github.com/n24q02m/wet-mcp/commit/f39cfabc2ccea02678a39acac9812c8c35832fe9))
+* enable LLM analysis for text files and enhance SearXNG container startup with port readiness checks. ([4fb3f4e](https://github.com/n24q02m/wet-mcp/commit/4fb3f4eb1dc6ed7fd47c29da7e824fc03b8eb146))
+* Enhance crawler with retries, user-agent, redirect following, and protocol-relative URL handling. ([ab1ecea](https://github.com/n24q02m/wet-mcp/commit/ab1ecead5ae0fbbd4e7f33cd6d82e0a6e2215ea2))
+* Establish initial project structure with SearXNG integration, Docker management, and CI/CD. ([57fcc33](https://github.com/n24q02m/wet-mcp/commit/57fcc330e94b4590955458b727999b81ca3cf39a))
+* integrate LiteLLM for media analysis (analyze tool) ([77003ce](https://github.com/n24q02m/wet-mcp/commit/77003ce43c3641a1d755398a03806826720a343c))
+* integrate LiteLLM for media analysis (analyze tool) ([fe4d365](https://github.com/n24q02m/wet-mcp/commit/fe4d36571f6d2104f989e60178aac0e01d225002))
+* promote dev to main (v3.1.0-beta.4) ([#17](https://github.com/n24q02m/wet-mcp/issues/17)) ([fd54513](https://github.com/n24q02m/wet-mcp/commit/fd545134a2cc338051c0e2dc4dfc8c91d5a00d16))
+* refactor API_KEYS format and add auto-detect capabilities ([77e277b](https://github.com/n24q02m/wet-mcp/commit/77e277b8989a692cd3ede287ba25f83f949d3f4b))
+
+
+### Bug Fixes
+
+* **searxng:** robust connection fix ([140eecb](https://github.com/n24q02m/wet-mcp/commit/140eecb5ee064033df30b6ad62da708b990c4427))
+* **server:** remove url cache to ensure auto-restart ([36f44d2](https://github.com/n24q02m/wet-mcp/commit/36f44d23b624a2422ef18597b4d855aea07de7b5))
+* silence Crawl4AI verbose output to prevent JSON parse errors ([62d5f92](https://github.com/n24q02m/wet-mcp/commit/62d5f92a1a398fef7e4c1c9bd88cb52e2c63a2e0))
+* update tests and formatting ([17906f3](https://github.com/n24q02m/wet-mcp/commit/17906f3641b80ae2fa267923cadd9b0169e411fa))
+
 ## [3.1.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.3...v3.1.0-beta.4) (2026-02-08)
 
 
