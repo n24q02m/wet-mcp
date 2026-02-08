@@ -5,6 +5,14 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [3.1.0-beta](https://github.com/n24q02m/wet-mcp/compare/v3.0.1-beta...v3.1.0-beta) (2026-02-08)
+
+
+### Features
+
+* transition from Docker-based SearXNG to embedded subprocess management ([b4b468e](https://github.com/n24q02m/wet-mcp/commit/b4b468ee600db9d5f1c674424dda04e4404d8a48))
+* update CI configuration and add pytest hook to pre-commit ([543d2e4](https://github.com/n24q02m/wet-mcp/commit/543d2e42f33b4d21190bb195682f885bb82800b9))
+
 ## [3.0.1-beta](https://github.com/n24q02m/wet-mcp/compare/v3.0.0...v3.0.1-beta) (2026-02-06)
 
 
