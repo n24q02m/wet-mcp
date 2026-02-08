@@ -17,12 +17,12 @@ COPY src/ ./src/
 RUN uv sync --frozen --no-dev
 
 # Install SearXNG from GitHub (zip archive + no-build-isolation for speed)
-RUN /app/.venv/bin/pip install --quiet msgspec setuptools wheel pyyaml \
-    && /app/.venv/bin/pip install --quiet --no-build-isolation \
+RUN uv pip install --quiet msgspec setuptools wheel pyyaml \
+    && uv pip install --quiet --no-build-isolation \
     https://github.com/searxng/searxng/archive/refs/heads/master.zip
 
 # Install Playwright chromium browser
-RUN /app/.venv/bin/python -m playwright install chromium
+RUN uv run python -m playwright install chromium
 
 FROM python:3.13-slim-bookworm
 
