@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [3.1.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.2...v3.1.0-beta.3) (2026-02-08)
+
+
+### Features
+
+* implement version patching for SearXNG installation from zip archive ([18e678a](https://github.com/n24q02m/wet-mcp/commit/18e678a504f4fe091a933fded9665682bcdb5288))
+
 ## [3.1.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.1...v3.1.0-beta.2) (2026-02-08)
 
 
