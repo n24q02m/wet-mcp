@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [3.1.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.3...v3.1.0-beta.4) (2026-02-08)
+
+
+### Features
+
+* add tool timeout setting and improve SearXNG compatibility on Windows ([2f42fb7](https://github.com/n24q02m/wet-mcp/commit/2f42fb72cf0fffe4c00607dfc9b946aa4da63170))
+
 ## [3.1.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.2...v3.1.0-beta.3) (2026-02-08)
 
 
