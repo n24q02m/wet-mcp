@@ -35,6 +35,16 @@ repos:
         types: [python]
         pass_filenames: false
 
+  # Pytest: Run tests
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest (Python)
+        entry: mise exec -- uv run pytest --tb=short -q
+        language: system
+        types: [python]
+        pass_filenames: false
+
   # ============================================================================
   # Common Checks
   # ============================================================================
