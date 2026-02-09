@@ -66,8 +66,6 @@ async def _wait_for_service(url: str, timeout: float = 60.0) -> bool:
     return False
 
 
-
-
 def _get_settings_path(port: int) -> Path:
     """Get path to SearXNG settings file.
 
