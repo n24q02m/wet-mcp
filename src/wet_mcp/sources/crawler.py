@@ -226,8 +226,10 @@ async def sitemap(
 
                     if result.success and current_depth < depth:
                         for link in result.links.get("internal", [])[:20]:
-                            if link not in visited:
-                                to_visit.append((link, current_depth + 1))
+                            # Extract URL from dict if necessary
+                            link_url = link.get("href", "") if isinstance(link, dict) else link
+                            if link_url and link_url not in visited:
+                                to_visit.append((link_url, current_depth + 1))
 
                 except Exception as e:
                     logger.debug(f"Error mapping {url}: {e}")
