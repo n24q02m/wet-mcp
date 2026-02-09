@@ -1,7 +1,10 @@
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from wet_mcp.sources.crawler import download_media
 import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_ssrf_protection():
