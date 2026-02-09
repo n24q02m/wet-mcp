@@ -10,6 +10,7 @@ On Windows, valkeydb.py is patched to remove Unix-only ``pwd`` dependency.
 import asyncio
 import atexit
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -21,6 +22,29 @@ from loguru import logger
 
 from wet_mcp.config import settings
 from wet_mcp.setup import patch_searxng_version, patch_searxng_windows
+
+
+def _get_pip_command() -> list[str]:
+    """Get cross-platform pip install command.
+
+    Priority:
+    1. uv pip (for uv environments - no pip module)
+    2. pip (for traditional venvs)
+    3. python -m pip (fallback)
+    """
+    # Check uv first (cross-platform, works in uv venvs without pip)
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return [uv_path, "pip", "install"]
+
+    # Check pip executable
+    pip_path = shutil.which("pip")
+    if pip_path:
+        return [pip_path, "install"]
+
+    # Fallback to python -m pip
+    return [sys.executable, "-m", "pip", "install"]
+
 
 # SearXNG install URL (zip archive avoids git filename issues on Windows)
 _SEARXNG_INSTALL_URL = (
@@ -93,14 +117,14 @@ def _install_searxng() -> bool:
     logger.info("Installing SearXNG from GitHub (first run)...")
 
     try:
+        pip_cmd = _get_pip_command()
+        logger.debug(f"Using pip command: {pip_cmd}")
+
         # Pre-install build dependencies required by SearXNG
         logger.debug("Installing SearXNG build dependencies...")
         deps_result = subprocess.run(
             [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
+                *pip_cmd,
                 "--quiet",
                 "msgspec",
                 "setuptools",
@@ -118,10 +142,7 @@ def _install_searxng() -> bool:
         # Install SearXNG with --no-build-isolation (uses pre-installed deps)
         result = subprocess.run(
             [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
+                *pip_cmd,
                 "--quiet",
                 "--no-build-isolation",
                 _SEARXNG_INSTALL_URL,
