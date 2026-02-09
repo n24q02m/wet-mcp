@@ -1,5 +1,6 @@
 """Configuration settings for WET MCP Server."""
 
+import os
 from pydantic_settings import BaseSettings
 
 
@@ -40,7 +41,6 @@ class Settings(BaseSettings):
         if not self.api_keys:
             return {}
 
-        import os
 
         keys_by_env: dict[str, list[str]] = {}
 
