@@ -1,16 +1,19 @@
 """Tests for src/wet_mcp/server.py."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from wet_mcp.server import web
+
 
 @pytest.mark.asyncio
 async def test_web_search_success():
     """Test web search action success path."""
-    with patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure, \
-         patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search:
-
+    with (
+        patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+    ):
         mock_ensure.return_value = "http://localhost:8080"
         mock_search.return_value = "Search Results"
 
@@ -25,11 +28,13 @@ async def test_web_search_success():
             max_results=10,
         )
 
+
 @pytest.mark.asyncio
 async def test_web_search_missing_query():
     """Test web search action missing query."""
     result = await web(action="search", query=None)
     assert "Error: query is required" in result
+
 
 @pytest.mark.asyncio
 async def test_web_extract_success():
@@ -47,6 +52,7 @@ async def test_web_extract_success():
             stealth=True,
         )
 
+
 @pytest.mark.asyncio
 async def test_web_extract_with_options():
     """Test web extract action with custom options."""
@@ -54,10 +60,7 @@ async def test_web_extract_with_options():
         mock_extract.return_value = "Extracted Content"
 
         result = await web(
-            action="extract",
-            urls=["https://example.com"],
-            format="json",
-            stealth=False
+            action="extract", urls=["https://example.com"], format="json", stealth=False
         )
 
         assert result == "Extracted Content"
@@ -67,11 +70,13 @@ async def test_web_extract_with_options():
             stealth=False,
         )
 
+
 @pytest.mark.asyncio
 async def test_web_extract_missing_urls():
     """Test web extract action missing urls."""
     result = await web(action="extract", urls=None)
     assert "Error: urls is required" in result
+
 
 @pytest.mark.asyncio
 async def test_web_crawl_success():
@@ -86,7 +91,7 @@ async def test_web_crawl_success():
             depth=3,
             max_pages=50,
             format="json",
-            stealth=False
+            stealth=False,
         )
 
         assert result == "Crawl Results"
@@ -97,6 +102,7 @@ async def test_web_crawl_success():
             format="json",
             stealth=False,
         )
+
 
 @pytest.mark.asyncio
 async def test_web_crawl_defaults():
@@ -115,11 +121,13 @@ async def test_web_crawl_defaults():
             stealth=True,
         )
 
+
 @pytest.mark.asyncio
 async def test_web_crawl_missing_urls():
     """Test web crawl action missing urls."""
     result = await web(action="crawl", urls=None)
     assert "Error: urls is required" in result
+
 
 @pytest.mark.asyncio
 async def test_web_map_success():
@@ -128,10 +136,7 @@ async def test_web_map_success():
         mock_sitemap.return_value = "Sitemap Content"
 
         result = await web(
-            action="map",
-            urls=["https://example.com"],
-            depth=3,
-            max_pages=50
+            action="map", urls=["https://example.com"], depth=3, max_pages=50
         )
 
         assert result == "Sitemap Content"
@@ -140,6 +145,7 @@ async def test_web_map_success():
             depth=3,
             max_pages=50,
         )
+
 
 @pytest.mark.asyncio
 async def test_web_map_defaults():
@@ -156,11 +162,13 @@ async def test_web_map_defaults():
             max_pages=20,
         )
 
+
 @pytest.mark.asyncio
 async def test_web_map_missing_urls():
     """Test web map action missing urls."""
     result = await web(action="map", urls=None)
     assert "Error: urls is required" in result
+
 
 @pytest.mark.asyncio
 async def test_web_invalid_action():
