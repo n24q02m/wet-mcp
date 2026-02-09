@@ -5,6 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 
+import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
@@ -296,7 +297,6 @@ async def download_media(
     Returns:
         JSON string with download results
     """
-    import httpx
 
     logger.info(f"Downloading {len(media_urls)} media files")
 
