@@ -1,8 +1,10 @@
 import json
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from wet_mcp.sources.crawler import extract
+
 
 @pytest.mark.asyncio
 async def test_extract_success():
@@ -38,6 +40,7 @@ async def test_extract_success():
         assert results[0]["links"]["internal"] == ["/about"]
         assert results[0]["links"]["external"] == ["https://google.com"]
 
+
 @pytest.mark.asyncio
 async def test_extract_failure():
     """Test failed content extraction."""
@@ -56,6 +59,7 @@ async def test_extract_failure():
         assert len(results) == 1
         assert results[0]["url"] == "https://example.com"
         assert results[0]["error"] == "Page not found"
+
 
 @pytest.mark.asyncio
 async def test_extract_unsafe_url():
@@ -79,6 +83,7 @@ async def test_extract_unsafe_url():
         # Verify arun was NOT called
         mock_crawler_instance.arun.assert_not_called()
 
+
 @pytest.mark.asyncio
 async def test_extract_exception():
     """Test extraction when crawler raises exception."""
@@ -86,7 +91,9 @@ async def test_extract_exception():
         mock_crawler_instance = MockCrawler.return_value
         mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
         # Simulate an exception during crawl
-        mock_crawler_instance.arun = AsyncMock(side_effect=Exception("Connection error"))
+        mock_crawler_instance.arun = AsyncMock(
+            side_effect=Exception("Connection error")
+        )
 
         result_json = await extract(["https://example.com"])
         results = json.loads(result_json)
@@ -94,6 +101,7 @@ async def test_extract_exception():
         assert len(results) == 1
         assert results[0]["url"] == "https://example.com"
         assert "Connection error" in results[0]["error"]
+
 
 @pytest.mark.asyncio
 async def test_extract_html_format():
@@ -114,6 +122,7 @@ async def test_extract_html_format():
         results = json.loads(result_json)
 
         assert results[0]["content"] == "<p>HTML</p>"
+
 
 @pytest.mark.asyncio
 async def test_extract_stealth_param():
@@ -147,6 +156,7 @@ async def test_extract_stealth_param():
         args, kwargs = MockCrawler.call_args_list[1]
         config = kwargs.get("config")
         assert config.enable_stealth is False
+
 
 @pytest.mark.asyncio
 async def test_extract_empty_list():
