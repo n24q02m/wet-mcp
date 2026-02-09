@@ -196,9 +196,7 @@ async def crawl(
 
                 if result and result.success:
                     content = (
-                        result.markdown
-                        if format == "markdown"
-                        else result.cleaned_html
+                        result.markdown if format == "markdown" else result.cleaned_html
                     )
                     all_results.append(
                         {
