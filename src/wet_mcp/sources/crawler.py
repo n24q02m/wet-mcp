@@ -314,11 +314,18 @@ async def download_media(
         timeout=60, transport=transport, headers=headers
     ) as client:
         for url in media_urls:
-            try:
-                # Handle protocol-relative URLs
-                if url.startswith("//"):
-                    url = f"https:{url}"
+            # Handle protocol-relative URLs
+            if url.startswith("//"):
+                url = f"https:{url}"
 
+            if not is_safe_url(url):
+                logger.warning(f"Skipping unsafe media URL: {url}")
+                results.append(
+                    {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                )
+                continue
+
+            try:
                 response = await client.get(url, follow_redirects=True)
                 response.raise_for_status()
 
