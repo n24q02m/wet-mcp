@@ -63,5 +63,6 @@
   ],
   "packages": {
     ".": {}
-  }
+  },
+  "prerelease": false
 }
