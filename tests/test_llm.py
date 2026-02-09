@@ -35,7 +35,6 @@ def test_get_llm_config(mock_settings):
     assert config["temperature"] is None
 
 
-
 def test_get_llm_config_with_temperature(mock_settings):
     """Test LLM config with temperature."""
     settings.llm_temperature = 0.7
