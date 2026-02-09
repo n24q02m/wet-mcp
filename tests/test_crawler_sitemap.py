@@ -15,6 +15,7 @@ def mock_crawler():
     mock_context.__aexit__.return_value = None
     return mock_context, mock_instance
 
+
 @pytest.mark.asyncio
 async def test_sitemap_basic(mock_crawler):
     """Test basic sitemap generation."""
@@ -33,6 +34,7 @@ async def test_sitemap_basic(mock_crawler):
     assert len(data) == 2
     assert data[0]["url"] == "https://example.com"
     assert data[1]["url"] == "https://example.com/page1"
+
 
 @pytest.mark.asyncio
 async def test_sitemap_dict_links(mock_crawler):
@@ -55,6 +57,7 @@ async def test_sitemap_dict_links(mock_crawler):
     assert len(data) == 2
     assert data[0]["url"] == "https://example.com"
     assert data[1]["url"] == "https://example.com/page1"
+
 
 @pytest.mark.asyncio
 async def test_sitemap_depth_limit(mock_crawler):
@@ -86,6 +89,7 @@ async def test_sitemap_depth_limit(mock_crawler):
     assert "https://example.com/page2" not in urls
     assert len(data) == 2
 
+
 @pytest.mark.asyncio
 async def test_sitemap_max_pages(mock_crawler):
     """Test sitemap max pages limit."""
@@ -105,6 +109,7 @@ async def test_sitemap_max_pages(mock_crawler):
 
     data = json.loads(result)
     assert len(data) <= 5
+
 
 @pytest.mark.asyncio
 async def test_sitemap_error_handling(mock_crawler):
