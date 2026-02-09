@@ -1,8 +1,10 @@
-import pytest
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from wet_mcp.sources.crawler import sitemap
+
 
 @pytest.fixture
 def mock_crawler():
