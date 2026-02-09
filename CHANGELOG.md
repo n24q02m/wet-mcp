@@ -5,6 +5,19 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.3.0](https://github.com/n24q02m/wet-mcp/compare/v2.2.0...v2.3.0) (2026-02-09)
+
+
+### Features
+
+* promote dev to main (v2.3.0-beta) ([#48](https://github.com/n24q02m/wet-mcp/issues/48)) ([a6de42f](https://github.com/n24q02m/wet-mcp/commit/a6de42fe0bd58f65c3e086d71fa20976f32b6eca))
+* promote dev to main (v2.3.0-beta) ([#51](https://github.com/n24q02m/wet-mcp/issues/51)) ([f0404cb](https://github.com/n24q02m/wet-mcp/commit/f0404cb886113fbc3f6e9370ae5fedcf183944fc))
+
+
+### Bug Fixes
+
+* **release:** reset manifest to stable version for proper stable release ([0a72c67](https://github.com/n24q02m/wet-mcp/commit/0a72c67422df750b98f1cac26569f14b0701b8b8))
+
 ## [2.3.0-beta](https://github.com/n24q02m/wet-mcp/compare/v2.2.0...v2.3.0-beta) (2026-02-09)
 
 
