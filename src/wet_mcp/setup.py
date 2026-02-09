@@ -62,59 +62,6 @@ def patch_searxng_version() -> None:
         logger.warning(f"Failed to patch SearXNG version: {e}")
 
 
-def patch_searxng_windows() -> None:
-    """Patch SearXNG valkeydb.py for Windows compatibility.
-
-    SearXNG's valkeydb.py imports ``pwd`` (Unix-only) at module level,
-    but only uses it to log the username on Valkey connection errors.
-    This patches it to gracefully handle the missing module on Windows.
-    """
-    if sys.platform != "win32":
-        return
-
-    try:
-        searx_dir = _find_searx_package_dir()
-        if not searx_dir:
-            return
-
-        valkeydb_path = searx_dir / "valkeydb.py"
-        if not valkeydb_path.exists():
-            return
-
-        content = valkeydb_path.read_text(encoding="utf-8")
-
-        # Skip if already patched
-        if "except ImportError" in content and "pwd = None" in content:
-            return
-
-        if "import pwd" not in content:
-            return
-
-        # Patch: wrap `import pwd` in try/except
-        content = content.replace(
-            "import pwd\n",
-            "try:\n    import pwd\nexcept ImportError:\n    pwd = None\n",
-        )
-
-        # Patch: guard pwd.getpwuid usage in error handler
-        content = content.replace(
-            "        _pw = pwd.getpwuid(os.getuid())\n"
-            '        logger.exception("[%s (%s)] can\'t connect valkey DB ...", '
-            "_pw.pw_name, _pw.pw_uid)",
-            "        if pwd and hasattr(os, 'getuid'):\n"
-            "            _pw = pwd.getpwuid(os.getuid())\n"
-            "            logger.exception(\"[%s (%s)] can't connect valkey DB "
-            '...", _pw.pw_name, _pw.pw_uid)\n'
-            "        else:\n"
-            '            logger.exception("can\'t connect valkey DB ...")',
-        )
-
-        valkeydb_path.write_text(content, encoding="utf-8")
-        logger.debug(f"Patched SearXNG valkeydb.py for Windows: {valkeydb_path}")
-    except Exception as e:
-        logger.warning(f"Failed to patch SearXNG for Windows: {e}")
-
-
 def needs_setup() -> bool:
     """Check if setup needs to run."""
     return not SETUP_MARKER.exists()
@@ -178,7 +125,6 @@ def _install_searxng() -> bool:
         if result.returncode == 0:
             logger.info("SearXNG installed successfully")
             patch_searxng_version()
-            patch_searxng_windows()
             return True
         else:
             logger.error(f"SearXNG install failed: {result.stderr[:300]}")
