@@ -300,7 +300,7 @@ async def download_media(
 
     logger.info(f"Downloading {len(media_urls)} media files")
 
-    output_path = Path(output_dir).expanduser()
+    output_path = Path(output_dir).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
 
     results = []
@@ -323,7 +323,12 @@ async def download_media(
                 response.raise_for_status()
 
                 filename = url.split("/")[-1].split("?")[0] or "download"
-                filepath = output_path / filename
+                # Create the filepath and resolve it to handle relative paths like '..'
+                filepath = (output_path / filename).resolve()
+
+                # Security check: Ensure the resolved path is still within the output directory
+                if not filepath.is_relative_to(output_path):
+                    raise ValueError(f"Security Alert: Path traversal attempt detected for {filename}")
 
                 filepath.write_bytes(response.content)
 
