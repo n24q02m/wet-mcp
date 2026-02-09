@@ -1,6 +1,7 @@
 import os
-import pytest
+
 from wet_mcp.config import Settings
+
 
 def test_setup_api_keys_sets_env_vars(monkeypatch):
     """Test that setup_api_keys parses the string and sets environment variables."""
