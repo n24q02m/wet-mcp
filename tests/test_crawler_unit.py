@@ -15,6 +15,7 @@ def mock_crawler():
     mock_instance.__aexit__.return_value = None
     return mock_instance
 
+
 @pytest.mark.asyncio
 async def test_crawl_basic_success(mock_crawler):
     """Test basic crawling functionality."""
@@ -38,6 +39,7 @@ async def test_crawl_basic_success(mock_crawler):
     assert results[0]["title"] == "Mock Title"
     assert results[0]["depth"] == 0
 
+
 @pytest.mark.asyncio
 async def test_crawl_depth_limit(mock_crawler):
     """Test that crawling respects the depth limit."""
@@ -51,10 +53,16 @@ async def test_crawl_depth_limit(mock_crawler):
 
         if url == "https://example.com":
             # Depth 0 -> 1
-            result.links = {"internal": [{"href": "https://example.com/page2"}], "external": []}
+            result.links = {
+                "internal": [{"href": "https://example.com/page2"}],
+                "external": [],
+            }
         elif url == "https://example.com/page2":
             # Depth 1 -> 2
-            result.links = {"internal": [{"href": "https://example.com/page3"}], "external": []}
+            result.links = {
+                "internal": [{"href": "https://example.com/page3"}],
+                "external": [],
+            }
         else:
             result.links = {"internal": [], "external": []}
 
@@ -73,6 +81,7 @@ async def test_crawl_depth_limit(mock_crawler):
     assert "https://example.com/page2" in urls_crawled
     assert "https://example.com/page3" not in urls_crawled
     assert len(results) == 2
+
 
 @pytest.mark.asyncio
 async def test_crawl_max_pages(mock_crawler):
@@ -101,7 +110,9 @@ async def test_crawl_max_pages(mock_crawler):
     with patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler):
         # Max pages = 3
         # Depth is high enough to allow 3 pages
-        result_json = await crawl(urls=["https://example.com/page1"], depth=10, max_pages=3)
+        result_json = await crawl(
+            urls=["https://example.com/page1"], depth=10, max_pages=3
+        )
 
     results = json.loads(result_json)
     assert len(results) == 3
@@ -111,18 +122,24 @@ async def test_crawl_max_pages(mock_crawler):
     assert "https://example.com/page3" in urls
     assert "https://example.com/page4" not in urls
 
+
 @pytest.mark.asyncio
 async def test_crawl_unsafe_url(mock_crawler):
     """Test that unsafe URLs are skipped."""
 
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),          patch("wet_mcp.sources.crawler.is_safe_url", return_value=False) as mock_is_safe:
-
+    with (
+        patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch(
+            "wet_mcp.sources.crawler.is_safe_url", return_value=False
+        ) as mock_is_safe,
+    ):
         result_json = await crawl(urls=["https://unsafe.com"])
 
     results = json.loads(result_json)
     assert len(results) == 0
     mock_crawler.arun.assert_not_called()
     mock_is_safe.assert_called_with("https://unsafe.com")
+
 
 @pytest.mark.asyncio
 async def test_crawl_error_handling(mock_crawler):
@@ -135,6 +152,7 @@ async def test_crawl_error_handling(mock_crawler):
     results = json.loads(result_json)
     # The current implementation logs the error but does NOT append to all_results
     assert len(results) == 0
+
 
 @pytest.mark.asyncio
 async def test_crawl_already_visited(mock_crawler):
@@ -150,9 +168,15 @@ async def test_crawl_already_visited(mock_crawler):
         result.metadata = {"title": f"Title for {url}"}
 
         if url == "https://example.com/a":
-            result.links = {"internal": [{"href": "https://example.com/b"}], "external": []}
+            result.links = {
+                "internal": [{"href": "https://example.com/b"}],
+                "external": [],
+            }
         elif url == "https://example.com/b":
-            result.links = {"internal": [{"href": "https://example.com/a"}], "external": []}
+            result.links = {
+                "internal": [{"href": "https://example.com/a"}],
+                "external": [],
+            }
         else:
             result.links = {"internal": [], "external": []}
 
