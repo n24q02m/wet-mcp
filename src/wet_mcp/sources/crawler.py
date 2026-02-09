@@ -1,5 +1,6 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 import os
 import tempfile
@@ -325,7 +326,7 @@ async def download_media(
                 filename = url.split("/")[-1].split("?")[0] or "download"
                 filepath = output_path / filename
 
-                filepath.write_bytes(response.content)
+                await asyncio.to_thread(filepath.write_bytes, response.content)
 
                 results.append(
                     {
