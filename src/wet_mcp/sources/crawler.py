@@ -1,7 +1,7 @@
 """Crawl4AI integration for web crawling and extraction."""
 
-import json
 import asyncio
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -46,43 +46,48 @@ async def extract(
     async with AsyncWebCrawler(
         verbose=False, config=_browser_config(stealth)
     ) as crawler:
+        # Limit concurrency to avoid overloading the browser
+        semaphore = asyncio.Semaphore(10)
 
         async def process_url(url: str):
-            if not is_safe_url(url):
-                logger.warning(f"Skipping unsafe URL: {url}")
-                return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+            async with semaphore:
+                if not is_safe_url(url):
+                    logger.warning(f"Skipping unsafe URL: {url}")
+                    return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-            try:
-                result = await crawler.arun(
-                    url,
-                    config=CrawlerRunConfig(verbose=False),
-                )
-
-                if result.success:
-                    content = (
-                        result.markdown if format == "markdown" else result.cleaned_html
+                try:
+                    result = await crawler.arun(
+                        url,
+                        config=CrawlerRunConfig(verbose=False),
                     )
-                    return {
-                        "url": url,
-                        "title": result.metadata.get("title", ""),
-                        "content": content,
-                        "links": {
-                            "internal": result.links.get("internal", [])[:20],
-                            "external": result.links.get("external", [])[:20],
-                        },
-                    }
-                else:
-                    return {
-                        "url": url,
-                        "error": result.error_message or "Failed to extract",
-                    }
 
-            except Exception as e:
-                logger.error(f"Error extracting {url}: {e}")
-                return {
-                    "url": url,
-                    "error": str(e),
-                }
+                    if result.success:
+                        content = (
+                            result.markdown
+                            if format == "markdown"
+                            else result.cleaned_html
+                        )
+                        return {
+                            "url": url,
+                            "title": result.metadata.get("title", ""),
+                            "content": content,
+                            "links": {
+                                "internal": result.links.get("internal", [])[:20],
+                                "external": result.links.get("external", [])[:20],
+                            },
+                        }
+                    else:
+                        return {
+                            "url": url,
+                            "error": result.error_message or "Failed to extract",
+                        }
+
+                except Exception as e:
+                    logger.error(f"Error extracting {url}: {e}")
+                    return {
+                        "url": url,
+                        "error": str(e),
+                    }
 
         tasks = [process_url(url) for url in urls]
         results = await asyncio.gather(*tasks)
