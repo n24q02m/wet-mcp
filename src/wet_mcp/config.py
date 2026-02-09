@@ -42,7 +42,6 @@ class Settings(BaseSettings):
         if not self.api_keys:
             return {}
 
-
         keys_by_env: dict[str, list[str]] = {}
 
         for pair in self.api_keys.split(","):

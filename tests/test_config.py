@@ -25,10 +25,12 @@ def test_setup_api_keys_sets_env_vars(monkeypatch):
     assert os.environ.get("TEST_KEY_1") == "val1"
     assert os.environ.get("TEST_KEY_2") == "val2"
 
+
 def test_setup_api_keys_handles_empty():
     """Test setup_api_keys with empty input."""
     settings = Settings(api_keys="")
     assert settings.setup_api_keys() == {}
+
 
 def test_setup_api_keys_handles_multiple_keys_for_same_env(monkeypatch):
     """Test setup_api_keys with multiple keys for the same environment variable."""
@@ -39,9 +41,7 @@ def test_setup_api_keys_handles_multiple_keys_for_same_env(monkeypatch):
 
     keys_by_env = settings.setup_api_keys()
 
-    assert keys_by_env == {
-        "MULTI_KEY": ["k1", "k2"]
-    }
+    assert keys_by_env == {"MULTI_KEY": ["k1", "k2"]}
 
     # Should set the first key
     assert os.environ.get("MULTI_KEY") == "k1"
