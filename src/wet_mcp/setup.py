@@ -120,7 +120,7 @@ def needs_setup() -> bool:
     return not SETUP_MARKER.exists()
 
 
-def _install_searxng() -> bool:
+def install_searxng() -> bool:
     """Install SearXNG Python package from GitHub zip archive.
 
     Pre-installs build dependencies, then installs SearXNG with
@@ -276,7 +276,7 @@ def run_auto_setup() -> bool:
     logger.debug(f"Created config directory: {config_dir}")
 
     # Step 2: Install SearXNG from GitHub
-    if not _install_searxng():
+    if not install_searxng():
         logger.warning("SearXNG not installed, search will use external URL")
         # Don't fail setup entirely - extract/crawl still works
 
