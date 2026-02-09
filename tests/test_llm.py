@@ -115,3 +115,33 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         "Error: Cannot determine file type" in result
         or "Unsupported media type" in result
     )
+
+@pytest.mark.asyncio
+async def test_encode_image_is_async(mock_settings, tmp_path):
+    """Test that encode_image is called via asyncio.to_thread."""
+    # Setup
+    img_path = tmp_path / "test.jpg"
+    img_path.write_bytes(b"fake-image-data")
+
+    with patch("wet_mcp.llm.asyncio.to_thread", side_effect=asyncio.to_thread) as mock_to_thread, \
+         patch("wet_mcp.llm.encode_image", return_value="encoded_str") as mock_encode, \
+         patch("wet_mcp.llm.acompletion") as mock_completion, \
+         patch("wet_mcp.llm.get_model_capabilities", return_value={"vision": True, "audio_input": False, "audio_output": False}):
+
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "A nice cat."
+        mock_completion.return_value = mock_response
+
+        # Execute
+        await analyze_media(str(img_path))
+
+        # Verify
+        # We check if to_thread was called with encode_image
+        called_with_encode = False
+        for call in mock_to_thread.call_args_list:
+            if call.args and call.args[0] == mock_encode:
+                called_with_encode = True
+                break
+
+        if not called_with_encode:
+             pytest.fail("encode_image was not called via asyncio.to_thread")
