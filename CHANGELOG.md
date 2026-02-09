@@ -12,11 +12,6 @@
 
 * add media analysis action and enhance SearXNG installation robustness. ([27dfa89](https://github.com/n24q02m/wet-mcp/commit/27dfa8918c67d6b6e3d5f1a649cb9521529dcae9))
 
-
-### Bug Fixes
-
-* **release:** add prerelease false to stable config ([ca43ca3](https://github.com/n24q02m/wet-mcp/commit/ca43ca387e7ad0ee77d599557820c53a5c352cbf))
-
 ## [2.2.0](https://github.com/n24q02m/wet-mcp/compare/v2.1.3...v2.2.0) (2026-02-08)
 
 
