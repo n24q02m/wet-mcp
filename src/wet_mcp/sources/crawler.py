@@ -128,8 +128,8 @@ async def _bfs_crawl(
         visited.add(url)
 
         try:
-            result = await crawler.arun(
-                url,
+            result = await crawler.arun(  # type: ignore
+                url=url,
                 config=CrawlerRunConfig(verbose=False),
             )
 
