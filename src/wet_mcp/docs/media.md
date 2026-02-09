@@ -52,8 +52,31 @@ Use this when you need to inspect the actual file content (e.g., sending an imag
 
 ---
 
+### analyze
+Analyze a local media file using configured LLM (requires API_KEYS).
+Supports images, videos, audio, and text files.
+
+**Parameters:**
+- `url` (required): Local file path to analyze
+- `prompt`: Analysis prompt (default: "Describe this image in detail.")
+
+**Example:**
+```json
+{"action": "analyze", "url": "/path/to/image.jpg", "prompt": "What objects are in this image?"}
+```
+
+**Returns:**
+LLM analysis text response.
+
+**Requirements:**
+- Set `API_KEYS` environment variable (format: `GOOGLE_API_KEY:xxx`)
+- Set `LLM_MODELS` to specify model (default: `gemini/gemini-3-flash-preview`)
+
+---
+
 ## Workflow
 
 1. Use `list` to discover media on a page
 2. Review the results (optionally have AI analyze)
 3. Use `download` to save specific files locally
+4. Use `analyze` to get LLM insights on downloaded files
