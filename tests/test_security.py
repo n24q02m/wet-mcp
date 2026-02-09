@@ -1,6 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
-from wet_mcp.sources.crawler import download_media, extract, crawl, sitemap, list_media
+
+from wet_mcp.sources.crawler import crawl, download_media, extract, list_media, sitemap
+
 
 @pytest.mark.asyncio
 async def test_download_media_blocks_unsafe_urls(tmp_path):
