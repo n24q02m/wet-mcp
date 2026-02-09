@@ -319,6 +319,16 @@ async def download_media(
                 if url.startswith("//"):
                     url = f"https:{url}"
 
+                if not is_safe_url(url):
+                    logger.warning(f"Skipping unsafe URL: {url}")
+                    results.append(
+                        {
+                            "url": url,
+                            "error": "Security Alert: Unsafe URL blocked",
+                        }
+                    )
+                    continue
+
                 response = await client.get(url, follow_redirects=True)
                 response.raise_for_status()
 
