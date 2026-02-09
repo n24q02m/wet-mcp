@@ -24,7 +24,7 @@ async def test_download_media_ssrf_protection():
         # Act: Try to download from localhost
         url = "http://localhost/secret.txt"
         with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_bytes"):
-             result_json = await download_media([url], "/tmp/downloads")
+            result_json = await download_media([url], "/tmp/downloads")
 
         # Assert: The request was NOT made because it's unsafe
         mock_client.get.assert_not_called()
@@ -35,7 +35,9 @@ async def test_download_media_ssrf_protection():
         assert "error" in results[0]
         assert "Security Alert: Unsafe URL blocked" in results[0]["error"]
 
+
 if __name__ == "__main__":
     # If run directly
     import asyncio
+
     asyncio.run(test_download_media_ssrf_protection())
