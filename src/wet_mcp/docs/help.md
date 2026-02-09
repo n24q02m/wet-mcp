@@ -36,6 +36,9 @@ Welcome to **WET** (Web ExTract) MCP Server - an open-source alternative to Tavi
 
 // Download specific files
 {"action": "download", "media_urls": ["https://example.com/image.png"]}
+
+// Analyze media with LLM (requires API_KEYS)
+{"action": "analyze", "url": "/path/to/image.jpg", "prompt": "Describe this image"}
 ```
 
 ## Getting Full Documentation
