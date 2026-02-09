@@ -5,6 +5,18 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.3.0-beta](https://github.com/n24q02m/wet-mcp/compare/v2.2.0...v2.3.0-beta) (2026-02-09)
+
+
+### Features
+
+* add media analysis action and enhance SearXNG installation robustness. ([27dfa89](https://github.com/n24q02m/wet-mcp/commit/27dfa8918c67d6b6e3d5f1a649cb9521529dcae9))
+
+
+### Bug Fixes
+
+* **release:** add prerelease false to stable config ([ca43ca3](https://github.com/n24q02m/wet-mcp/commit/ca43ca387e7ad0ee77d599557820c53a5c352cbf))
+
 ## [2.2.0](https://github.com/n24q02m/wet-mcp/compare/v2.1.3...v2.2.0) (2026-02-08)
 
 
