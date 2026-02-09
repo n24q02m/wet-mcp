@@ -14,14 +14,12 @@ def test_setup_api_keys_valid():
         keys = settings.setup_api_keys()
 
         # Verify returned dictionary
-        assert keys == {
-            "GOOGLE_API_KEY": ["abc"],
-            "OPENAI_API_KEY": ["xyz"]
-        }
+        assert keys == {"GOOGLE_API_KEY": ["abc"], "OPENAI_API_KEY": ["xyz"]}
 
         # Verify environment variables are set
         assert os.environ["GOOGLE_API_KEY"] == "abc"
         assert os.environ["OPENAI_API_KEY"] == "xyz"
+
 
 def test_setup_api_keys_empty():
     """Test setup_api_keys with empty input."""
@@ -38,6 +36,7 @@ def test_setup_api_keys_empty():
     with mock.patch.dict(os.environ, {}, clear=True):
         assert settings_empty.setup_api_keys() == {}
         assert len(os.environ) == 0
+
 
 def test_setup_api_keys_invalid_format():
     """Test setup_api_keys with invalid format strings."""
@@ -59,6 +58,7 @@ def test_setup_api_keys_invalid_format():
         assert keys == {"VALID": ["key"]}
         assert os.environ.get("ENV") is None
 
+
 def test_setup_api_keys_multiple_keys():
     """Test setup_api_keys with multiple keys for same env var."""
     settings = Settings(api_keys="ENV:key1,ENV:key2")
@@ -72,6 +72,7 @@ def test_setup_api_keys_multiple_keys():
         # Environment variable should be set to the first key
         assert os.environ["ENV"] == "key1"
 
+
 def test_setup_api_keys_whitespace():
     """Test setup_api_keys with whitespace around keys."""
     settings = Settings(api_keys=" ENV : key1 , OTHER : key2 ")
@@ -79,9 +80,6 @@ def test_setup_api_keys_whitespace():
     with mock.patch.dict(os.environ, {}, clear=True):
         keys = settings.setup_api_keys()
 
-        assert keys == {
-            "ENV": ["key1"],
-            "OTHER": ["key2"]
-        }
+        assert keys == {"ENV": ["key1"], "OTHER": ["key2"]}
         assert os.environ["ENV"] == "key1"
         assert os.environ["OTHER"] == "key2"
