@@ -240,7 +240,7 @@ async def ensure_searxng() -> str:
         _searxng_port = port
 
         # Write settings with correct port
-        settings_path = _get_settings_path(port)
+        settings_path = await asyncio.to_thread(_get_settings_path, port)
 
         # Build environment for SearXNG
         env = os.environ.copy()
