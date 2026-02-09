@@ -4,8 +4,9 @@ import json
 import os
 import tempfile
 from collections import deque
+from collections.abc import AsyncGenerator
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
@@ -105,7 +106,7 @@ async def _bfs_crawl(
     max_depth: int,
     visited: set[str],
     max_links_per_page: int = 20,
-) -> AsyncGenerator[tuple[str, int, Any], None]:
+) -> AsyncGenerator[tuple[str, int, Any]]:
     """Perform BFS crawl starting from root_url.
 
     Yields:
