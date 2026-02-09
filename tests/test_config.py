@@ -1,7 +1,8 @@
 import os
-import pytest
 from unittest import mock
+
 from wet_mcp.config import Settings
+
 
 def test_setup_api_keys_valid():
     """Test setup_api_keys with valid input."""
