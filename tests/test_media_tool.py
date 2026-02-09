@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+
 from wet_mcp.server import media
-from wet_mcp.config import settings
+
 
 @pytest.fixture
 def mock_settings():
@@ -11,25 +13,23 @@ def mock_settings():
         mock_settings.log_level = "INFO"
         yield mock_settings
 
+
 @pytest.mark.asyncio
 async def test_media_list_success(mock_settings):
     """Test media list action successfully calls list_media."""
     mock_list_media = AsyncMock(return_value='{"images": []}')
 
+    # Patch list_media in wet_mcp.server because it is imported at the top level
     with patch("wet_mcp.server.list_media", mock_list_media):
         result = await media(
-            action="list",
-            url="http://example.com",
-            media_type="images",
-            max_items=5
+            action="list", url="http://example.com", media_type="images", max_items=5
         )
 
         mock_list_media.assert_called_once_with(
-            url="http://example.com",
-            media_type="images",
-            max_items=5
+            url="http://example.com", media_type="images", max_items=5
         )
         assert result == '{"images": []}'
+
 
 @pytest.mark.asyncio
 async def test_media_list_missing_url():
@@ -37,24 +37,27 @@ async def test_media_list_missing_url():
     result = await media(action="list")
     assert result == "Error: url is required for list action"
 
+
 @pytest.mark.asyncio
 async def test_media_download_success(mock_settings):
     """Test media download action successfully calls download_media."""
     mock_download_media = AsyncMock(return_value='["file1.jpg"]')
 
-    # patch where it is imported from
+    # download_media is imported INSIDE the media function, so we must patch
+    # the module where it is defined (wet_mcp.sources.crawler) so that the
+    # internal import picks up the mock.
     with patch("wet_mcp.sources.crawler.download_media", mock_download_media):
         result = await media(
             action="download",
             media_urls=["http://example.com/img.jpg"],
-            output_dir="/custom/dir"
+            output_dir="/custom/dir",
         )
 
         mock_download_media.assert_called_once_with(
-            media_urls=["http://example.com/img.jpg"],
-            output_dir="/custom/dir"
+            media_urls=["http://example.com/img.jpg"], output_dir="/custom/dir"
         )
         assert result == '["file1.jpg"]'
+
 
 @pytest.mark.asyncio
 async def test_media_download_default_dir(mock_settings):
@@ -63,15 +66,15 @@ async def test_media_download_default_dir(mock_settings):
 
     with patch("wet_mcp.sources.crawler.download_media", mock_download_media):
         result = await media(
-            action="download",
-            media_urls=["http://example.com/img.jpg"]
+            action="download", media_urls=["http://example.com/img.jpg"]
         )
 
         mock_download_media.assert_called_once_with(
             media_urls=["http://example.com/img.jpg"],
-            output_dir=mock_settings.download_dir
+            output_dir=mock_settings.download_dir,
         )
         assert result == '["file1.jpg"]'
+
 
 @pytest.mark.asyncio
 async def test_media_download_missing_urls():
@@ -79,29 +82,30 @@ async def test_media_download_missing_urls():
     result = await media(action="download")
     assert result == "Error: media_urls is required for download action"
 
+
 @pytest.mark.asyncio
 async def test_media_analyze_success(mock_settings):
     """Test media analyze action successfully calls analyze_media."""
-    mock_analyze_media = AsyncMock(return_value='Analysis result')
+    mock_analyze_media = AsyncMock(return_value="Analysis result")
 
+    # analyze_media is imported INSIDE the media function (wet_mcp.llm.analyze_media)
     with patch("wet_mcp.llm.analyze_media", mock_analyze_media):
         result = await media(
-            action="analyze",
-            url="/path/to/image.jpg",
-            prompt="Describe it"
+            action="analyze", url="/path/to/image.jpg", prompt="Describe it"
         )
 
         mock_analyze_media.assert_called_once_with(
-            media_path="/path/to/image.jpg",
-            prompt="Describe it"
+            media_path="/path/to/image.jpg", prompt="Describe it"
         )
-        assert result == 'Analysis result'
+        assert result == "Analysis result"
+
 
 @pytest.mark.asyncio
 async def test_media_analyze_missing_url():
     """Test media analyze action fails without url (local path)."""
     result = await media(action="analyze")
     assert result == "Error: url (local path) is required for analyze action"
+
 
 @pytest.mark.asyncio
 async def test_media_unknown_action():
