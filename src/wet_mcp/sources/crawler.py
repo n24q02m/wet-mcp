@@ -1,5 +1,6 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 import os
 import tempfile
@@ -286,12 +287,14 @@ async def list_media(
 async def download_media(
     media_urls: list[str],
     output_dir: str,
+    concurrency: int = 5,
 ) -> str:
     """Download media files.
 
     Args:
         media_urls: List of media URLs to download
         output_dir: Output directory
+        concurrency: Max concurrent downloads
 
     Returns:
         JSON string with download results
@@ -303,46 +306,51 @@ async def download_media(
     output_path = Path(output_dir).expanduser()
     output_path.mkdir(parents=True, exist_ok=True)
 
-    results = []
-
     transport = httpx.AsyncHTTPTransport(retries=3)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
-    async with httpx.AsyncClient(
-        timeout=60, transport=transport, headers=headers
-    ) as client:
-        for url in media_urls:
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _download_one(url: str, client: httpx.AsyncClient) -> dict:
+        async with semaphore:
             try:
                 # Handle protocol-relative URLs
-                if url.startswith("//"):
-                    url = f"https:{url}"
+                target_url = url
+                if target_url.startswith("//"):
+                    target_url = f"https:{target_url}"
 
-                response = await client.get(url, follow_redirects=True)
+                if not is_safe_url(target_url):
+                    return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+
+                response = await client.get(target_url, follow_redirects=True)
                 response.raise_for_status()
 
-                filename = url.split("/")[-1].split("?")[0] or "download"
+                filename = target_url.split("/")[-1].split("?")[0] or "download"
                 filepath = output_path / filename
 
-                filepath.write_bytes(response.content)
+                # Write file in thread to avoid blocking event loop
+                await asyncio.to_thread(filepath.write_bytes, response.content)
 
-                results.append(
-                    {
-                        "url": url,
-                        "path": str(filepath),
-                        "size": len(response.content),
-                    }
-                )
+                return {
+                    "url": url,
+                    "path": str(filepath),
+                    "size": len(response.content),
+                }
 
             except Exception as e:
                 logger.error(f"Error downloading {url}: {e}")
-                results.append(
-                    {
-                        "url": url,
-                        "error": str(e),
-                    }
-                )
+                return {
+                    "url": url,
+                    "error": str(e),
+                }
+
+    async with httpx.AsyncClient(
+        timeout=60, transport=transport, headers=headers
+    ) as client:
+        tasks = [_download_one(url, client) for url in media_urls]
+        results = await asyncio.gather(*tasks)
 
     logger.info(f"Downloaded {len([r for r in results if 'path' in r])} files")
     return json.dumps(results, ensure_ascii=False, indent=2)
