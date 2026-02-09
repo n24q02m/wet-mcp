@@ -328,7 +328,9 @@ async def download_media(
 
                 # Security check: Ensure the resolved path is still within the output directory
                 if not filepath.is_relative_to(output_path):
-                    raise ValueError(f"Security Alert: Path traversal attempt detected for {filename}")
+                    raise ValueError(
+                        f"Security Alert: Path traversal attempt detected for {filename}"
+                    )
 
                 filepath.write_bytes(response.content)
 

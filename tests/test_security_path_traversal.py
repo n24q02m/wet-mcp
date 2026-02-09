@@ -43,6 +43,7 @@ async def test_download_media_path_traversal(tmp_path):
             # or "content" was created.
             pass
 
+
 @pytest.mark.asyncio
 async def test_download_media_safe(tmp_path):
     mock_response = MagicMock()
