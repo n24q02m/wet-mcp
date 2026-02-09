@@ -20,12 +20,7 @@ import httpx
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.setup import patch_searxng_version, patch_searxng_windows
-
-# SearXNG install URL (zip archive avoids git filename issues on Windows)
-_SEARXNG_INSTALL_URL = (
-    "https://github.com/searxng/searxng/archive/refs/heads/master.zip"
-)
+from wet_mcp.setup import ensure_searxng_installed
 
 # Module-level process reference for cleanup
 _searxng_process: subprocess.Popen | None = None
@@ -71,81 +66,6 @@ async def _wait_for_service(url: str, timeout: float = 60.0) -> bool:
     return False
 
 
-def _is_searxng_installed() -> bool:
-    """Check if the SearXNG Python package is installed."""
-    try:
-        import searx  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
-def _install_searxng() -> bool:
-    """Install SearXNG from GitHub zip archive.
-
-    Uses zip URL instead of git+ to avoid filename issues on some
-    platforms. Pre-installs build dependencies before SearXNG.
-
-    Returns:
-        True if installation succeeded.
-    """
-    logger.info("Installing SearXNG from GitHub (first run)...")
-
-    try:
-        # Pre-install build dependencies required by SearXNG
-        logger.debug("Installing SearXNG build dependencies...")
-        deps_result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "--quiet",
-                "msgspec",
-                "setuptools",
-                "wheel",
-                "pyyaml",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if deps_result.returncode != 0:
-            logger.error(f"Build deps installation failed: {deps_result.stderr[:500]}")
-            return False
-
-        # Install SearXNG with --no-build-isolation (uses pre-installed deps)
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "--quiet",
-                "--no-build-isolation",
-                _SEARXNG_INSTALL_URL,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-
-        if result.returncode == 0:
-            logger.info("SearXNG installed successfully")
-            patch_searxng_version()
-            patch_searxng_windows()
-            return True
-        else:
-            logger.error(f"SearXNG installation failed: {result.stderr[:500]}")
-            return False
-
-    except subprocess.TimeoutExpired:
-        logger.error("SearXNG installation timed out")
-        return False
-    except Exception as e:
-        logger.error(f"Failed to install SearXNG: {e}")
-        return False
 
 
 def _get_settings_path(port: int) -> Path:
@@ -227,11 +147,9 @@ async def ensure_searxng() -> str:
         return url
 
     # Ensure SearXNG is installed
-    if not _is_searxng_installed():
-        if not _install_searxng():
-            logger.warning("SearXNG installation failed, using external URL")
-            return settings.searxng_url
-
+    if not ensure_searxng_installed():
+        logger.warning("SearXNG installation failed, using external URL")
+        return settings.searxng_url
     try:
         # Find available port
         port = await asyncio.to_thread(_find_available_port, settings.wet_searxng_port)
