@@ -14,14 +14,17 @@ def mock_settings():
     """Mock settings for testing."""
     original_keys = settings.api_keys
     original_models = settings.llm_models
+    original_temperature = settings.llm_temperature
 
     settings.api_keys = "GOOGLE_API_KEY:fake-key"
     settings.llm_models = "gemini/fake-model"
+    settings.llm_temperature = None
 
     yield
 
     settings.api_keys = original_keys
     settings.llm_models = original_models
+    settings.llm_temperature = original_temperature
 
 
 def test_get_llm_config(mock_settings):
@@ -30,6 +33,13 @@ def test_get_llm_config(mock_settings):
     assert config["model"] == "gemini/fake-model"
     assert config["fallbacks"] is None
     assert config["temperature"] is None
+
+
+def test_get_llm_config_with_temperature(mock_settings):
+    """Test LLM config with temperature."""
+    settings.llm_temperature = 0.7
+    config = get_llm_config()
+    assert config["temperature"] == 0.7
 
 
 @patch("wet_mcp.llm.acompletion")

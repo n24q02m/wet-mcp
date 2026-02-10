@@ -38,6 +38,7 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-asyncio",
+    "pytest-timeout",
     "ruff",
     "ty",
     "pre-commit",
@@ -73,6 +74,11 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+timeout = 30
+markers = [
+    "integration: integration tests (require network/services)",
+]
+addopts = "-m 'not integration'"
 
 [tool.ty]
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }
