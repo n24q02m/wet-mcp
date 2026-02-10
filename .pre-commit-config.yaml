@@ -40,7 +40,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest (Python)
-        entry: mise exec -- uv run pytest --tb=short -q
+        entry: mise exec -- uv run pytest --tb=short -q --timeout=30
         language: system
         types: [python]
         pass_filenames: false

@@ -24,7 +24,7 @@ async def _lifespan(_server: FastMCP):
     from wet_mcp.setup import run_auto_setup
 
     logger.info("Starting WET MCP Server...")
-    run_auto_setup()
+    await asyncio.to_thread(run_auto_setup)
     settings.setup_api_keys()
 
     # Pre-import crawl4ai — its first import runs heavy synchronous init

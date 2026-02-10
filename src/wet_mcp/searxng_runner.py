@@ -248,8 +248,8 @@ async def ensure_searxng() -> str:
         return url
 
     # Ensure SearXNG is installed
-    if not _is_searxng_installed():
-        if not _install_searxng():
+    if not await asyncio.to_thread(_is_searxng_installed):
+        if not await asyncio.to_thread(_install_searxng):
             logger.warning("SearXNG installation failed, using external URL")
             return settings.searxng_url
 
@@ -261,7 +261,7 @@ async def ensure_searxng() -> str:
         _searxng_port = port
 
         # Write settings with correct port
-        settings_path = _get_settings_path(port)
+        settings_path = await asyncio.to_thread(_get_settings_path, port)
 
         # Build environment for SearXNG
         env = os.environ.copy()

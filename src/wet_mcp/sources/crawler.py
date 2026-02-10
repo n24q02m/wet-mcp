@@ -1,10 +1,12 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 import os
 import tempfile
 from pathlib import Path
 
+import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
@@ -42,31 +44,30 @@ async def extract(
     """
     logger.info(f"Extracting content from {len(urls)} URLs")
 
-    results = []
-
     async with AsyncWebCrawler(
         verbose=False, config=_browser_config(stealth)
     ) as crawler:
-        for url in urls:
-            if not is_safe_url(url):
-                logger.warning(f"Skipping unsafe URL: {url}")
-                results.append(
-                    {"url": url, "error": "Security Alert: Unsafe URL blocked"}
-                )
-                continue
+        semaphore = asyncio.Semaphore(10)
 
-            try:
-                result = await crawler.arun(
-                    url,
-                    config=CrawlerRunConfig(verbose=False),
-                )
+        async def process_url(url: str):
+            async with semaphore:
+                if not is_safe_url(url):
+                    logger.warning(f"Skipping unsafe URL: {url}")
+                    return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-                if result.success:
-                    content = (
-                        result.markdown if format == "markdown" else result.cleaned_html
+                try:
+                    result = await crawler.arun(
+                        url,
+                        config=CrawlerRunConfig(verbose=False),
                     )
-                    results.append(
-                        {
+
+                    if result.success:
+                        content = (
+                            result.markdown
+                            if format == "markdown"
+                            else result.cleaned_html
+                        )
+                        return {
                             "url": url,
                             "title": result.metadata.get("title", ""),
                             "content": content,
@@ -75,23 +76,21 @@ async def extract(
                                 "external": result.links.get("external", [])[:20],
                             },
                         }
-                    )
-                else:
-                    results.append(
-                        {
+                    else:
+                        return {
                             "url": url,
                             "error": result.error_message or "Failed to extract",
                         }
-                    )
 
-            except Exception as e:
-                logger.error(f"Error extracting {url}: {e}")
-                results.append(
-                    {
+                except Exception as e:
+                    logger.error(f"Error extracting {url}: {e}")
+                    return {
                         "url": url,
                         "error": str(e),
                     }
-                )
+
+        tasks = [process_url(url) for url in urls]
+        results = await asyncio.gather(*tasks)
 
     logger.info(f"Extracted {len(results)} pages")
     return json.dumps(results, ensure_ascii=False, indent=2)
@@ -226,8 +225,12 @@ async def sitemap(
 
                     if result.success and current_depth < depth:
                         for link in result.links.get("internal", [])[:20]:
-                            if link not in visited:
-                                to_visit.append((link, current_depth + 1))
+                            # Extract URL from dict if necessary
+                            link_url = (
+                                link.get("href", "") if isinstance(link, dict) else link
+                            )
+                            if link_url and link_url not in visited:
+                                to_visit.append((link_url, current_depth + 1))
 
                 except Exception as e:
                     logger.debug(f"Error mapping {url}: {e}")
@@ -286,63 +289,74 @@ async def list_media(
 async def download_media(
     media_urls: list[str],
     output_dir: str,
+    concurrency: int = 5,
 ) -> str:
     """Download media files.
 
     Args:
         media_urls: List of media URLs to download
         output_dir: Output directory
+        concurrency: Max concurrent downloads
 
     Returns:
         JSON string with download results
     """
-    import httpx
-
     logger.info(f"Downloading {len(media_urls)} media files")
 
-    output_path = Path(output_dir).expanduser()
+    output_path = Path(output_dir).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
-
-    results = []
 
     transport = httpx.AsyncHTTPTransport(retries=3)
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
-    async with httpx.AsyncClient(
-        timeout=60, transport=transport, headers=headers
-    ) as client:
-        for url in media_urls:
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _download_one(url: str, client: httpx.AsyncClient) -> dict:
+        async with semaphore:
             try:
                 # Handle protocol-relative URLs
-                if url.startswith("//"):
-                    url = f"https:{url}"
+                target_url = url
+                if target_url.startswith("//"):
+                    target_url = f"https:{target_url}"
 
-                response = await client.get(url, follow_redirects=True)
+                if not is_safe_url(target_url):
+                    return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+
+                response = await client.get(target_url, follow_redirects=True)
                 response.raise_for_status()
 
-                filename = url.split("/")[-1].split("?")[0] or "download"
-                filepath = output_path / filename
+                filename = target_url.split("/")[-1].split("?")[0] or "download"
+                filepath = (output_path / filename).resolve()
 
-                filepath.write_bytes(response.content)
+                # Security check: Ensure the resolved path is still within the output directory
+                if not filepath.is_relative_to(output_path):
+                    raise ValueError(
+                        f"Security Alert: Path traversal attempt detected for {filename}"
+                    )
 
-                results.append(
-                    {
-                        "url": url,
-                        "path": str(filepath),
-                        "size": len(response.content),
-                    }
-                )
+                # Write file in thread to avoid blocking event loop
+                await asyncio.to_thread(filepath.write_bytes, response.content)
+
+                return {
+                    "url": url,
+                    "path": str(filepath),
+                    "size": len(response.content),
+                }
 
             except Exception as e:
                 logger.error(f"Error downloading {url}: {e}")
-                results.append(
-                    {
-                        "url": url,
-                        "error": str(e),
-                    }
-                )
+                return {
+                    "url": url,
+                    "error": str(e),
+                }
+
+    async with httpx.AsyncClient(
+        timeout=60, transport=transport, headers=headers
+    ) as client:
+        tasks = [_download_one(url, client) for url in media_urls]
+        results = await asyncio.gather(*tasks)
 
     logger.info(f"Downloaded {len([r for r in results if 'path' in r])} files")
     return json.dumps(results, ensure_ascii=False, indent=2)
