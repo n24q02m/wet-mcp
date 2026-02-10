@@ -48,7 +48,6 @@ async def extract(
     async with AsyncWebCrawler(
         verbose=False, config=_browser_config(stealth)
     ) as crawler:
-
         # Process URLs concurrently to improve throughput
         async def process_url(url: str):
             if not is_safe_url(url):
