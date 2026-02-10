@@ -7,6 +7,7 @@ from importlib.resources import files
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from wet_mcp.config import settings
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
@@ -76,11 +77,11 @@ async def _with_timeout(coro, action: str) -> str:
 
 
 @mcp.tool(
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-    }
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+    )
 )
 async def web(
     action: str,
@@ -150,11 +151,11 @@ async def web(
 
 
 @mcp.tool(
-    annotations={
-        "readOnlyHint": False,
-        "destructiveHint": False,
-        "idempotentHint": False,
-    }
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=False,
+    )
 )
 async def media(
     action: str,
@@ -214,11 +215,11 @@ async def media(
 
 
 @mcp.tool(
-    annotations={
-        "readOnlyHint": True,
-        "destructiveHint": False,
-        "idempotentHint": True,
-    }
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+    )
 )
 async def help(tool_name: str = "web") -> str:
     """Get full documentation for a tool.
