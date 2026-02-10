@@ -1,5 +1,6 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 import os
 import tempfile
@@ -8,7 +9,8 @@ from pathlib import Path
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.config import settings
+from wet_mcp.security import is_safe_path, is_safe_url
 
 # Per-process browser data directory to prevent Playwright lock deadlock
 # when multiple MCP server instances run simultaneously.
@@ -300,6 +302,11 @@ async def download_media(
 
     logger.info(f"Downloading {len(media_urls)} media files")
 
+    # Validate output_dir
+    allowed_dirs = [settings.download_dir] + settings.allowed_dirs
+    if not is_safe_path(output_dir, allowed_dirs):
+        return json.dumps({"error": "Error: Access denied to output directory"})
+
     output_path = Path(output_dir).expanduser()
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -314,6 +321,12 @@ async def download_media(
         timeout=60, transport=transport, headers=headers
     ) as client:
         for url in media_urls:
+            if not is_safe_url(url):
+                results.append(
+                    {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                )
+                continue
+
             try:
                 # Handle protocol-relative URLs
                 if url.startswith("//"):
@@ -325,7 +338,15 @@ async def download_media(
                 filename = url.split("/")[-1].split("?")[0] or "download"
                 filepath = output_path / filename
 
-                filepath.write_bytes(response.content)
+                # Check filename path traversal
+                if not is_safe_path(filepath, allowed_dirs):
+                    results.append(
+                        {"url": url, "error": "Security Alert: Unsafe filename blocked"}
+                    )
+                    continue
+
+                # Use to_thread for blocking file I/O
+                await asyncio.to_thread(filepath.write_bytes, response.content)
 
                 results.append(
                     {

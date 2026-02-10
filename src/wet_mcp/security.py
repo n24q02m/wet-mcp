@@ -1,8 +1,42 @@
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
+
+
+def is_safe_path(path: str | Path, allowed_dirs: list[str | Path]) -> bool:
+    """
+    Check if a path is safe (within allowed directories).
+    Prevents path traversal attacks.
+    """
+    try:
+        # Resolve path to absolute, handling symlinks and ..
+        # Note: strict=False allows checking paths that don't exist yet (for writes)
+        # But for writes, we want to ensure the parent exists or is safe.
+        # However, .resolve() on a non-existent file works as long as the directory exists?
+        # No, pathlib.Path.resolve() on non-existent path behavior depends on python version.
+        # In 3.10+, .resolve() works even if file doesn't exist (on Windows it might be strict by default prior to 3.10?).
+        # Wait, in 3.10 resolve() is strict=False by default.
+        # We are targeting 3.12+.
+
+        target_path = Path(path).expanduser().resolve()
+    except Exception as e:
+        logger.warning(f"Error resolving path {path}: {e}")
+        return False
+
+    for allowed in allowed_dirs:
+        try:
+            allowed_path = Path(allowed).expanduser().resolve()
+            # Check if target_path is allowed_path or inside it
+            if target_path == allowed_path or allowed_path in target_path.parents:
+                return True
+        except Exception:
+            continue
+
+    logger.warning(f"Blocked unsafe path access: {target_path}")
+    return False
 
 
 def is_safe_url(url: str) -> bool:

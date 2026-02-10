@@ -2,11 +2,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from wet_mcp.config import settings
 from wet_mcp.sources.crawler import download_media
 
 
+@pytest.fixture
+def allow_tmp_path(tmp_path):
+    original = settings.allowed_dirs
+    settings.allowed_dirs = [str(tmp_path)]
+    yield
+    settings.allowed_dirs = original
+
+
 @pytest.mark.asyncio
-async def test_download_media_path_traversal(tmp_path):
+async def test_download_media_path_traversal(tmp_path, allow_tmp_path):
     """Test that download_media prevents path traversal."""
 
     # Mock httpx response
@@ -50,7 +59,7 @@ async def test_download_media_path_traversal(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_download_media_safe(tmp_path):
+async def test_download_media_safe(tmp_path, allow_tmp_path):
     mock_response = MagicMock()
     mock_response.content = b"safe content"
     mock_response.raise_for_status = MagicMock()

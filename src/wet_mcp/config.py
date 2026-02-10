@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Media
     download_dir: str = "~/.wet-mcp/downloads"
+    allowed_dirs: list[str] = []
 
     # Media Analysis (LiteLLM)
     api_keys: str | None = None  # provider:key,provider:key
