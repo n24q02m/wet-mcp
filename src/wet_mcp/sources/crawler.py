@@ -3,6 +3,7 @@
 import json
 import os
 import tempfile
+from collections import deque
 from pathlib import Path
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -129,10 +130,11 @@ async def crawl(
                 logger.warning(f"Skipping unsafe URL: {root_url}")
                 continue
 
-            to_crawl = [(root_url, 0)]
+            # Optimized: deque allows O(1) pops for BFS queue
+            to_crawl = deque([(root_url, 0)])
 
             while to_crawl and len(all_results) < max_pages:
-                url, current_depth = to_crawl.pop(0)
+                url, current_depth = to_crawl.popleft()
 
                 if url in visited or current_depth > depth:
                     continue
@@ -206,11 +208,12 @@ async def sitemap(
                 logger.warning(f"Skipping unsafe URL: {root_url}")
                 continue
 
-            to_visit = [(root_url, 0)]
+            # Optimized: deque allows O(1) pops for BFS queue
+            to_visit = deque([(root_url, 0)])
             site_urls = []
 
             while to_visit and len(site_urls) < max_pages:
-                url, current_depth = to_visit.pop(0)
+                url, current_depth = to_visit.popleft()
 
                 if url in visited or current_depth > depth:
                     continue
