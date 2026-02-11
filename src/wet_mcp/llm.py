@@ -24,7 +24,7 @@ from litellm import acompletion  # noqa: E402
 from loguru import logger  # noqa: E402
 
 from wet_mcp.config import settings  # noqa: E402
-from wet_mcp.security import is_safe_path
+from wet_mcp.security import is_safe_path  # noqa: E402
 
 
 def get_llm_config() -> dict:

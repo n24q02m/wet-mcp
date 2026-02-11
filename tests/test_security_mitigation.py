@@ -1,12 +1,10 @@
-
-import asyncio
 import json
-import os
-from pathlib import Path
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_ssrf_mitigation(tmp_path):
@@ -31,10 +29,15 @@ async def test_download_media_ssrf_mitigation(tmp_path):
         result = results[0]
 
         # Verify request was NOT made
-        assert not mock_client.get.called, "SSRF Mitigation Failed: Request was made to unsafe URL!"
+        assert not mock_client.get.called, (
+            "SSRF Mitigation Failed: Request was made to unsafe URL!"
+        )
 
         # Verify error message
-        assert "Security Alert" in result.get("error", ""), f"Unexpected result: {result}"
+        assert "Security Alert" in result.get("error", ""), (
+            f"Unexpected result: {result}"
+        )
+
 
 @pytest.mark.asyncio
 async def test_download_media_path_traversal_mitigation(tmp_path):
@@ -68,7 +71,9 @@ async def test_download_media_path_traversal_mitigation(tmp_path):
 
             # The download should fail due to path traversal check
             assert "error" in result
-            assert "Security Alert" in result["error"], f"Expected Security Alert, got: {result['error']}"
+            assert "Security Alert" in result["error"], (
+                f"Expected Security Alert, got: {result['error']}"
+            )
 
             # Verify nothing was written to parent of download_dir
             # (If it wrote to .., it would be in tmp_path)
@@ -80,20 +85,21 @@ async def test_download_media_path_traversal_mitigation(tmp_path):
             # But we are using real write_bytes in current code (via asyncio.to_thread).
             pass
 
+
 @pytest.mark.asyncio
 async def test_analyze_media_path_traversal_mitigation():
     """
     Verifies that analyze_media blocks access to files outside allowed directories.
     """
-    from wet_mcp.llm import analyze_media
     from wet_mcp.config import settings
+    from wet_mcp.llm import analyze_media
 
     # Setup settings to have a specific download dir
     # We need to patch settings.download_dir
     # Since settings is instantiated in config.py, we patch the instance.
 
     with patch.object(settings, "download_dir", "/tmp/wet-mcp-safe"):
-        with patch.object(settings, "api_keys", "dummy"): # Satisfy api_keys check
+        with patch.object(settings, "api_keys", "dummy"):  # Satisfy api_keys check
             # Attempt to access /etc/passwd
             result = await analyze_media("/etc/passwd")
 
