@@ -1,5 +1,6 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 import os
 import tempfile
@@ -8,7 +9,7 @@ from pathlib import Path
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_path, is_safe_url
 
 # Per-process browser data directory to prevent Playwright lock deadlock
 # when multiple MCP server instances run simultaneously.
@@ -319,13 +320,26 @@ async def download_media(
                 if url.startswith("//"):
                     url = f"https:{url}"
 
+                if not is_safe_url(url):
+                    logger.warning(f"Skipping unsafe URL: {url}")
+                    results.append(
+                        {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                    )
+                    continue
+
                 response = await client.get(url, follow_redirects=True)
                 response.raise_for_status()
 
-                filename = url.split("/")[-1].split("?")[0] or "download"
+                raw_filename = url.split("/")[-1].split("?")[0] or "download"
+                filename = Path(raw_filename).name  # Ensures no path separators
                 filepath = output_path / filename
 
-                filepath.write_bytes(response.content)
+                if not is_safe_path(filepath, [output_path]):
+                    raise ValueError(
+                        f"Security Alert: Path traversal detected: {filepath}"
+                    )
+
+                await asyncio.to_thread(filepath.write_bytes, response.content)
 
                 results.append(
                     {
