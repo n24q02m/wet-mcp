@@ -47,6 +47,17 @@ jobs:
           chmod +x .github/scripts/check-ci-cd-status.sh
           ./.github/scripts/check-ci-cd-status.sh --branch=dev
 
+      - name: Close stale release-please PRs on main
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          STALE_PRS=$(gh pr list --base main --label "autorelease: pending" --json number --jq '.[].number')
+          for pr in $STALE_PRS; do
+            echo "Closing stale release PR #$pr"
+            gh pr close "$pr" --comment "Closed by promote workflow. A new release PR will be created after promotion."
+          done
+          git push origin --delete release-please--branches--main 2>/dev/null || true
+
       - name: Create PR dev -> main
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -94,7 +105,7 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
           config-file: release-please-config-beta.json
-          manifest-file: .release-please-manifest.json
+          manifest-file: .release-please-manifest-beta.json
           target-branch: dev
 
   # ═══════════════════ Release Please (stable on main) ═══════════════════
@@ -328,8 +339,15 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
 
-      - name: Recreate dev from main
+      - name: Sync beta manifest and recreate dev
         run: |
+          # Sync beta manifest from stable manifest
+          cp .release-please-manifest.json .release-please-manifest-beta.json
+          git add .release-please-manifest-beta.json
+          git diff --cached --quiet || git commit -m "chore: sync beta manifest from stable [skip ci]"
+          git push origin main
+
+          # Recreate dev branch from main
           git push origin --delete dev || true
           git checkout -b dev
           git push origin dev
