@@ -1,5 +1,7 @@
 """Configuration settings for WET MCP Server."""
 
+import os
+
 from pydantic_settings import BaseSettings
 
 
@@ -27,6 +29,7 @@ class Settings(BaseSettings):
     # Media Analysis (LiteLLM)
     api_keys: str | None = None  # provider:key,provider:key
     llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
+    llm_temperature: float | None = None
 
     def setup_api_keys(self) -> dict[str, list[str]]:
         """Parse API_KEYS (format: ENV_VAR:key,...) and set env vars.
@@ -39,8 +42,6 @@ class Settings(BaseSettings):
         """
         if not self.api_keys:
             return {}
-
-        import os
 
         keys_by_env: dict[str, list[str]] = {}
 

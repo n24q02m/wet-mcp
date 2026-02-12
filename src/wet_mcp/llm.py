@@ -35,16 +35,10 @@ def get_llm_config() -> dict:
     primary = models[0]
     fallbacks = models[1:] if len(models) > 1 else None
 
-    # Temperature adjustment for reasoning models
-    # (Gemini 2/3 sometimes needs higher temp, but 1.5 is standard)
-    # Temperature adjustment
-    # Use default for Gemini 3 to avoid warnings about infinite loops
-    temperature = None
-
     return {
         "model": primary,
         "fallbacks": fallbacks,
-        "temperature": temperature,
+        "temperature": settings.llm_temperature,
     }
 
 
@@ -141,7 +135,7 @@ async def analyze_media(
         config = get_llm_config()
         logger.info(f"Analyzing media with model: {config['model']}")
 
-        base64_image = encode_image(media_path)
+        base64_image = await asyncio.to_thread(encode_image, media_path)
         data_url = f"data:{mime_type};base64,{base64_image}"
 
         messages = [

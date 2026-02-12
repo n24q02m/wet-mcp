@@ -7,7 +7,10 @@ import asyncio
 import json
 import sys
 
+import pytest
 from loguru import logger
+
+pytestmark = pytest.mark.integration
 
 logger.remove()
 logger.add(sys.stdout, level="INFO")
