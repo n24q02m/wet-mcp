@@ -1,3 +1,5 @@
+"""Tests for extract functionality with singleton browser pool."""
+
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -7,7 +9,7 @@ from wet_mcp.sources.crawler import extract
 
 
 @pytest.mark.asyncio
-async def test_extract_success():
+async def test_extract_success(mock_crawler_instance):
     """Test successful content extraction."""
     mock_result = MagicMock()
     mock_result.success = True
@@ -17,11 +19,13 @@ async def test_extract_success():
     mock_result.links = {"internal": ["/about"], "external": ["https://google.com"]}
     mock_result.error_message = None
 
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler") as MockCrawler:
-        mock_crawler_instance = MockCrawler.return_value
-        mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
-        mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
 
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
         result_json = await extract(["https://example.com"], format="markdown")
         results = json.loads(result_json)
 
@@ -34,17 +38,19 @@ async def test_extract_success():
 
 
 @pytest.mark.asyncio
-async def test_extract_failure():
+async def test_extract_failure(mock_crawler_instance):
     """Test failed content extraction."""
     mock_result = MagicMock()
     mock_result.success = False
     mock_result.error_message = "Page not found"
 
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler") as MockCrawler:
-        mock_crawler_instance = MockCrawler.return_value
-        mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
-        mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
 
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
         result_json = await extract(["https://example.com"])
         results = json.loads(result_json)
 
@@ -54,12 +60,15 @@ async def test_extract_failure():
 
 
 @pytest.mark.asyncio
-async def test_extract_unsafe_url():
+async def test_extract_unsafe_url(mock_crawler_instance):
     """Test extraction with unsafe URL."""
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler") as MockCrawler:
-        mock_crawler_instance = MockCrawler.return_value
-        mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
+    mock_crawler_instance.arun = AsyncMock()
 
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
         result_json = await extract(["http://127.0.0.1"])
         results = json.loads(result_json)
 
@@ -71,15 +80,15 @@ async def test_extract_unsafe_url():
 
 
 @pytest.mark.asyncio
-async def test_extract_exception():
+async def test_extract_exception(mock_crawler_instance):
     """Test extraction when crawler raises exception."""
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler") as MockCrawler:
-        mock_crawler_instance = MockCrawler.return_value
-        mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
-        mock_crawler_instance.arun = AsyncMock(
-            side_effect=Exception("Connection error")
-        )
+    mock_crawler_instance.arun = AsyncMock(side_effect=Exception("Connection error"))
 
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
         result_json = await extract(["https://example.com"])
         results = json.loads(result_json)
 
@@ -89,7 +98,7 @@ async def test_extract_exception():
 
 
 @pytest.mark.asyncio
-async def test_extract_html_format():
+async def test_extract_html_format(mock_crawler_instance):
     """Test extraction with HTML format."""
     mock_result = MagicMock()
     mock_result.success = True
@@ -98,11 +107,13 @@ async def test_extract_html_format():
     mock_result.metadata = {"title": "Test"}
     mock_result.links = {}
 
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler") as MockCrawler:
-        mock_crawler_instance = MockCrawler.return_value
-        mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
-        mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
 
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
         result_json = await extract(["https://example.com"], format="html")
         results = json.loads(result_json)
 
@@ -110,8 +121,8 @@ async def test_extract_html_format():
 
 
 @pytest.mark.asyncio
-async def test_extract_stealth_param():
-    """Test stealth parameter is passed to browser config."""
+async def test_extract_stealth_param(mock_crawler_instance):
+    """Test stealth parameter is passed to _get_crawler."""
     mock_result = MagicMock()
     mock_result.success = True
     mock_result.markdown = "content"
@@ -119,36 +130,36 @@ async def test_extract_stealth_param():
     mock_result.links = {}
     mock_result.cleaned_html = "<p>content</p>"
 
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler") as MockCrawler:
-        mock_crawler_instance = MockCrawler.return_value
-        mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
-        mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
 
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ) as mock_get_crawler:
         # Test with stealth=True
         await extract(["https://example.com"], stealth=True)
+        mock_get_crawler.assert_called_with(True)
 
-        args, kwargs = MockCrawler.call_args_list[0]
-        config = kwargs.get("config")
-        assert config.enable_stealth is True
+        mock_get_crawler.reset_mock()
 
         # Test with stealth=False
         await extract(["https://example.com"], stealth=False)
-
-        args, kwargs = MockCrawler.call_args_list[1]
-        config = kwargs.get("config")
-        assert config.enable_stealth is False
+        mock_get_crawler.assert_called_with(False)
 
 
 @pytest.mark.asyncio
-async def test_extract_empty_list():
+async def test_extract_empty_list(mock_crawler_instance):
     """Test extraction with empty URL list."""
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler") as MockCrawler:
-        mock_crawler_instance = MockCrawler.return_value
-        mock_crawler_instance.__aenter__.return_value = mock_crawler_instance
+    mock_crawler_instance.arun = AsyncMock()
 
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
         result_json = await extract([])
         results = json.loads(result_json)
 
         assert results == []
-        MockCrawler.assert_called_once()
         mock_crawler_instance.arun.assert_not_called()
