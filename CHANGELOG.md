@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.4.0-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.4.0-beta...v2.4.0-beta.1) (2026-02-12)
+
+
+### Features
+
+* **searxng:** add auto-restart and health checks ([03f9d94](https://github.com/n24q02m/wet-mcp/commit/03f9d94cab8cdcde339769df4b1c3cace6d72607))
+
 ## [2.4.0-beta](https://github.com/n24q02m/wet-mcp/compare/v2.3.0...v2.4.0-beta) (2026-02-10)
 
 
