@@ -1,4 +1,4 @@
-"""LLM utilities for WET MCP Server using LiteLLM."""
+"""LLM utilities for WET MCP Server using LiteLLM"""
 
 import base64
 import logging
