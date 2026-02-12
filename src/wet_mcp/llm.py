@@ -24,6 +24,7 @@ from litellm import acompletion  # noqa: E402
 from loguru import logger  # noqa: E402
 
 from wet_mcp.config import settings  # noqa: E402
+from wet_mcp.security import is_safe_path  # noqa: E402
 
 
 def get_llm_config() -> dict:
@@ -67,6 +68,10 @@ async def analyze_media(
     """Analyze media file using configured LLM with auto-capability detection."""
     if not settings.api_keys:
         return "Error: LLM analysis requires API_KEYS to be configured."
+
+    # Security check: Ensure path is within allowed directories
+    if not is_safe_path(media_path, [settings.download_dir]):
+        return f"Error: Access denied. Path '{media_path}' is not within allowed directories."
 
     path_obj = Path(media_path)
     if not path_obj.exists():
