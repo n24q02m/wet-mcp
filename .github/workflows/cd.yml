@@ -341,6 +341,9 @@ jobs:
 
       - name: Sync beta manifest and recreate dev
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           # Sync beta manifest from stable manifest
           cp .release-please-manifest.json .release-please-manifest-beta.json
           git add .release-please-manifest-beta.json
