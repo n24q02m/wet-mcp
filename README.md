@@ -21,7 +21,7 @@
 
 ### Prerequisites
 
-- **Python 3.13+** (or use `uvx`)
+- **Python 3.13** (required — Python 3.14+ is **not** supported due to SearXNG incompatibility)
 
 ### Add to mcp.json
 
@@ -32,7 +32,7 @@
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["wet-mcp@latest"],
+      "args": ["--python", "3.13", "wet-mcp@latest"],
       "env": {
         "API_KEYS": "GOOGLE_API_KEY:AIza..."
       }
@@ -40,6 +40,8 @@
   }
 }
 ```
+
+> **Warning:** You **must** specify `--python 3.13` when using `uvx`. Without it, `uvx` may pick Python 3.14+ which causes SearXNG search to fail silently (`RuntimeError: can't register atexit after shutdown` in DNS resolution).
 
 **That's it!** On first run:
 1. Automatically installs SearXNG from GitHub
@@ -162,7 +164,7 @@ uv run wet-mcp
 docker build -t n24q02m/wet-mcp:latest .
 ```
 
-**Requirements:** Python 3.13+
+**Requirements:** Python 3.13 (not 3.14+)
 
 ---
 
