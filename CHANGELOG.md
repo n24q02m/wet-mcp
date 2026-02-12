@@ -5,6 +5,19 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.4.2](https://github.com/n24q02m/wet-mcp/compare/v2.4.1...v2.4.2) (2026-02-12)
+
+
+### Bug Fixes
+
+* **cd:** auto-resolve merge conflicts in promote workflow ([11b4765](https://github.com/n24q02m/wet-mcp/commit/11b47658d59ac13f6d9119daab725f7a445e2324))
+* use dynamic version from package metadata instead of hardcoded string ([8e9bc2c](https://github.com/n24q02m/wet-mcp/commit/8e9bc2cf23d8d9bbdbe9f59b13e759d4c278e8f8))
+
+
+### Documentation
+
+* add CODEOWNERS and update README description ([02057df](https://github.com/n24q02m/wet-mcp/commit/02057df2070702b7feef47bc72eb97c4e93f9125))
+
 ## [2.4.1](https://github.com/n24q02m/wet-mcp/compare/v2.4.0...v2.4.1) (2026-02-12)
 
 
