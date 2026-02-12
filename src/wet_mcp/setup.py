@@ -191,63 +191,33 @@ def _install_searxng() -> bool:
         return False
 
 
-def _install_playwright() -> bool:
-    """Install Playwright chromium browser and system dependencies.
+def _setup_crawl4ai() -> bool:
+    """Run crawl4ai post-install setup.
 
-    On Linux, attempts to install system deps (requires appropriate permissions).
-    Falls back to browser-only install if system deps fail.
+    Delegates to ``crawl4ai.install.post_install()`` which handles:
+    - ``.crawl4ai`` home directory creation
+    - Playwright chromium + system deps (``--with-deps --force``)
+    - Patchright chromium for stealth/undetected mode
+    - Database migration
+
+    This ensures all required system libraries are installed on every OS
+    (Windows, Ubuntu 20+, macOS, etc.) without requiring manual steps.
 
     Returns:
-        True if browser installation succeeded.
+        True if setup succeeded.
     """
-    # Step 1: Try installing system dependencies (Linux only, may need root)
-    if sys.platform == "linux":
-        logger.info("Installing Playwright system dependencies...")
-        try:
-            result = subprocess.run(
-                [
-                    sys.executable,
-                    "-m",
-                    "playwright",
-                    "install-deps",
-                    "chromium",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode == 0:
-                logger.info("Playwright system deps installed")
-            else:
-                logger.warning(
-                    "Could not install system deps (may need root): "
-                    f"{result.stderr[:200]}"
-                )
-        except Exception as e:
-            logger.warning(f"System deps install skipped: {e}")
-
-    # Step 2: Install Playwright chromium browser
-    logger.info("Installing Playwright chromium browser...")
+    logger.info("Running crawl4ai setup (browsers + system deps)...")
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium"],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        if result.returncode == 0:
-            logger.info("Playwright chromium installed successfully")
-            return True
-        else:
-            logger.warning(f"Playwright install warning: {result.stderr[:200]}")
-            # Don't fail - might already be installed
-            return True
-    except subprocess.TimeoutExpired:
-        logger.error("Playwright installation timed out")
-        return False
-    except FileNotFoundError:
+        from crawl4ai.install import post_install
+
+        post_install()
+        logger.info("crawl4ai setup completed successfully")
+        return True
+    except Exception as e:
+        logger.error(f"crawl4ai setup failed: {e}")
         logger.warning(
-            "Playwright command not found, crawl/extract features may not work"
+            "crawl/extract features may not work. "
+            "Try running 'crawl4ai-setup' manually."
         )
         return False
 
@@ -280,8 +250,8 @@ def run_auto_setup() -> bool:
         logger.warning("SearXNG not installed, search will use external URL")
         # Don't fail setup entirely - extract/crawl still works
 
-    # Step 3: Install Playwright chromium + system deps
-    if not _install_playwright():
+    # Step 3: Run crawl4ai setup (Playwright + system deps + patchright)
+    if not _setup_crawl4ai():
         success = False
 
     # Mark setup as complete
