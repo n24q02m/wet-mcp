@@ -1,12 +1,9 @@
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Import module to patch globals
-import wet_mcp.setup
-
 from wet_mcp.setup import (
     _install_searxng,
     _setup_crawl4ai,
