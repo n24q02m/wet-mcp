@@ -1,8 +1,27 @@
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
+
+
+def is_safe_path(path: str | Path, allowed_dirs: list[str | Path]) -> bool:
+    """
+    Check if a path is within allowed directories.
+    Prevents path traversal.
+    """
+    try:
+        path = Path(path).resolve()
+        for allowed in allowed_dirs:
+            allowed = Path(allowed).resolve()
+            # If path starts with allowed, it's safe (is_relative_to handles this)
+            if path.is_relative_to(allowed):
+                return True
+        return False
+    except Exception as e:
+        logger.error(f"Error validating path {path}: {e}")
+        return False
 
 
 def is_safe_url(url: str) -> bool:
