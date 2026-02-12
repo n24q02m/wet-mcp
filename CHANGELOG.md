@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.4.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.4.0-beta.2...v2.4.0-beta.3) (2026-02-12)
+
+
+### Bug Fixes
+
+* **tests:** replace URL membership checks with set equality for CodeQL ([95d3923](https://github.com/n24q02m/wet-mcp/commit/95d392382e31e6300491f807193757639482a6b0))
+
 ## [2.4.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.4.0-beta.1...v2.4.0-beta.2) (2026-02-12)
 
 
