@@ -1872,7 +1872,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.4.0b0"
+version = "2.4.0b2"
 source = { editable = "." }
 dependencies = [
     { name = "crawl4ai" },

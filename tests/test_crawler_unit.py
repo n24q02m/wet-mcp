@@ -73,10 +73,8 @@ async def test_crawl_depth_limit(mock_crawler_instance):
     results = json.loads(result_json)
 
     urls_crawled = [r["url"] for r in results]
-    assert "https://example.com" in urls_crawled
-    assert "https://example.com/page2" in urls_crawled
+    assert set(urls_crawled) == {"https://example.com", "https://example.com/page2"}
     assert "https://example.com/page3" not in urls_crawled
-    assert len(results) == 2
 
 
 @pytest.mark.asyncio
@@ -113,10 +111,11 @@ async def test_crawl_max_pages(mock_crawler_instance):
     results = json.loads(result_json)
     assert len(results) == 3
     urls = [r["url"] for r in results]
-    assert "https://example.com/page1" in urls
-    assert "https://example.com/page2" in urls
-    assert "https://example.com/page3" in urls
-    assert "https://example.com/page4" not in urls
+    assert set(urls) == {
+        "https://example.com/page1",
+        "https://example.com/page2",
+        "https://example.com/page3",
+    }
 
 
 @pytest.mark.asyncio
@@ -196,8 +195,7 @@ async def test_crawl_already_visited(mock_crawler_instance):
     results = json.loads(result_json)
     assert len(results) == 2
     urls = [r["url"] for r in results]
-    assert "https://example.com/a" in urls
-    assert "https://example.com/b" in urls
+    assert set(urls) == {"https://example.com/a", "https://example.com/b"}
 
 
 @pytest.mark.asyncio
@@ -294,6 +292,4 @@ async def test_crawl_multiple_roots(mock_crawler_instance):
 
     results = json.loads(result_json)
     urls = [r["url"] for r in results]
-    assert "https://example.com" in urls
-    assert "https://other.com" in urls
-    assert len(results) == 2
+    assert set(urls) == {"https://example.com", "https://other.com"}

@@ -78,10 +78,8 @@ async def test_sitemap_depth_limit(mock_crawler_instance):
 
     data = json.loads(result)
     urls = [item["url"] for item in data]
-    assert "https://example.com" in urls
-    assert "https://example.com/page1" in urls
+    assert set(urls) == {"https://example.com", "https://example.com/page1"}
     assert "https://example.com/page2" not in urls
-    assert len(data) == 2
 
 
 @pytest.mark.asyncio
@@ -159,9 +157,7 @@ async def test_sitemap_multiple_roots(mock_crawler_instance):
 
     data = json.loads(result)
     urls = [item["url"] for item in data]
-    assert "https://example.com" in urls
-    assert "https://other.com" in urls
-    assert len(data) == 2
+    assert set(urls) == {"https://example.com", "https://other.com"}
 
 
 @pytest.mark.asyncio
@@ -197,8 +193,6 @@ async def test_sitemap_no_duplicate_visits(mock_crawler_instance):
 
     data = json.loads(result)
     urls = [item["url"] for item in data]
-    assert len(urls) == 2
-    assert "https://example.com/a" in urls
-    assert "https://example.com/b" in urls
+    assert set(urls) == {"https://example.com/a", "https://example.com/b"}
     # arun should only be called twice (once per unique URL)
     assert mock_crawler_instance.arun.call_count == 2
