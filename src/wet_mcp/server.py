@@ -24,7 +24,7 @@ async def _lifespan(_server: FastMCP):
     from wet_mcp.setup import run_auto_setup
 
     logger.info("Starting WET MCP Server...")
-    run_auto_setup()
+    await asyncio.to_thread(run_auto_setup)
     settings.setup_api_keys()
 
     # Pre-import crawl4ai — its first import runs heavy synchronous init
@@ -39,6 +39,15 @@ async def _lifespan(_server: FastMCP):
     yield
 
     logger.info("Shutting down WET MCP Server...")
+
+    # Shut down the shared browser pool first (may take a few seconds)
+    try:
+        from wet_mcp.sources.crawler import shutdown_crawler
+
+        await shutdown_crawler()
+    except Exception as exc:
+        logger.debug(f"Browser pool shutdown error (non-fatal): {exc}")
+
     stop_searxng()
 
 
@@ -49,6 +58,10 @@ mcp = FastMCP(
     lifespan=_lifespan,
 )
 
+# Grace period (seconds) given to a cancelled task to clean up resources
+# (e.g. close browser tabs) before we abandon it entirely.
+_CANCEL_GRACE_PERIOD = 5.0
+
 
 async def _with_timeout(coro, action: str) -> str:
     """Wrap coroutine with hard timeout.
@@ -58,6 +71,9 @@ async def _with_timeout(coro, action: str) -> str:
     causing ``wait_for`` to block indefinitely.  ``asyncio.wait``
     returns immediately when the deadline expires regardless of whether
     the inner task cooperates with cancellation.
+
+    After cancellation the task is given a brief grace period to release
+    resources (browser tabs, network connections) before being abandoned.
     """
     timeout = settings.tool_timeout
     if timeout <= 0:
@@ -67,12 +83,25 @@ async def _with_timeout(coro, action: str) -> str:
     done, _pending = await asyncio.wait({task}, timeout=timeout)
 
     if done:
+        # Propagate any exception raised by the task
         return task.result()
 
-    # Hard timeout — fire-and-forget cancel, return error immediately
+    # Hard timeout — cancel and wait briefly for cleanup
     task.cancel()
+    logger.warning(f"Tool '{action}' timed out after {timeout}s, cancelling...")
+
+    # Give the task a grace period to clean up (close browser pages, etc.)
+    try:
+        await asyncio.wait_for(asyncio.shield(task), timeout=_CANCEL_GRACE_PERIOD)
+    except (asyncio.CancelledError, TimeoutError, Exception):
+        # Task either cancelled cleanly, timed out again, or raised — all OK
+        pass
+
     logger.error(f"Tool '{action}' timed out after {timeout}s")
-    return f"Error: '{action}' timed out after {timeout}s. Increase TOOL_TIMEOUT or try simpler parameters."
+    return (
+        f"Error: '{action}' timed out after {timeout}s. "
+        "Increase TOOL_TIMEOUT or try simpler parameters."
+    )
 
 
 @mcp.tool()
