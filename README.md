@@ -1,6 +1,6 @@
 # WET - Web ExTract MCP Server
 
-**Open-source MCP Server for web scraping & multimodal extraction.**
+**Open-source MCP Server for web search, content extraction & multimodal analysis.**
 
 [![PyPI](https://img.shields.io/pypi/v/wet-mcp)](https://pypi.org/project/wet-mcp/)
 [![Docker](https://img.shields.io/docker/v/n24q02m/wet-mcp?label=docker)](https://hub.docker.com/r/n24q02m/wet-mcp)
