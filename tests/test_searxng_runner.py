@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from wet_mcp.searxng_runner import _get_settings_path
+from wet_mcp.searxng_runner import _find_available_port, _get_settings_path
 
 
 def test_get_settings_path():
@@ -53,3 +53,55 @@ def test_get_settings_path():
         # Verify write_text called with correct content
         expected_content = "server:\n  port: 9090\n"
         mock_settings_file.write_text.assert_called_once_with(expected_content)
+
+
+def test_find_available_port_success():
+    """Test finding an available port on the first try."""
+    with patch("wet_mcp.searxng_runner.socket.socket") as mock_socket_cls:
+        mock_socket = mock_socket_cls.return_value
+        mock_socket.__enter__.return_value = mock_socket
+
+        # Simulate successful bind
+        mock_socket.bind.return_value = None
+
+        start_port = 8080
+        port = _find_available_port(start_port)
+
+        assert port == start_port
+        mock_socket.bind.assert_called_once_with(("127.0.0.1", start_port))
+
+
+def test_find_available_port_retry():
+    """Test finding an available port after retries."""
+    with patch("wet_mcp.searxng_runner.socket.socket") as mock_socket_cls:
+        mock_socket = mock_socket_cls.return_value
+        mock_socket.__enter__.return_value = mock_socket
+
+        # Simulate bind failure on first call, success on second
+        mock_socket.bind.side_effect = [OSError("Address in use"), None]
+
+        start_port = 8080
+        port = _find_available_port(start_port)
+
+        assert port == start_port + 1
+        assert mock_socket.bind.call_count == 2
+        mock_socket.bind.assert_any_call(("127.0.0.1", start_port))
+        mock_socket.bind.assert_any_call(("127.0.0.1", start_port + 1))
+
+
+def test_find_available_port_failure():
+    """Test behavior when no ports are available in range."""
+    with patch("wet_mcp.searxng_runner.socket.socket") as mock_socket_cls:
+        mock_socket = mock_socket_cls.return_value
+        mock_socket.__enter__.return_value = mock_socket
+
+        # Simulate bind failure on all calls
+        mock_socket.bind.side_effect = OSError("Address in use")
+
+        start_port = 8080
+        max_tries = 5
+        port = _find_available_port(start_port, max_tries=max_tries)
+
+        # Should return start_port if all attempts fail (current implementation behavior)
+        assert port == start_port
+        assert mock_socket.bind.call_count == max_tries
