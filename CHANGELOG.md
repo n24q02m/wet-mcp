@@ -10,7 +10,7 @@
 
 ### Features
 
-* enhance documentation search with GitHub raw markdown support and content cleaning ([d79e07b](https://github.com/n24q02m/wet-mcp/commit/d79e07b5e1b42bc12b85b3d5b50a833c3ed2cc80))
+* overhaul FTS5 search engine with BM25 column weights, tiered AND-to-OR queries, min-max normalization, RRF fusion, chunk quality scoring, language-agnostic stop word handling via BM25 IDF, content cleaning, sitemap discovery, and GitHub raw markdown fallback ([d79e07b](https://github.com/n24q02m/wet-mcp/commit/d79e07b5e1b42bc12b85b3d5b50a833c3ed2cc80))
 
 ## [2.5.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.1...v2.5.0-beta.2) (2026-02-13)
 
