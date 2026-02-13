@@ -1,11 +1,10 @@
 import sys
-import types
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import patch
 
 # We need to import the module under test.
 # Since it is a script, we can import it if it's in python path.
 from wet_mcp.run_searxng import patch_windows_compatibility
+
 
 def test_patch_windows_compatibility_linux():
     """Verify that no patches are applied on Linux."""
