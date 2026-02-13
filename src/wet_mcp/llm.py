@@ -55,11 +55,25 @@ def get_model_capabilities(model: str) -> dict:
     }
 
 
-def encode_image(image_path: str) -> str:
-    """Encode image to base64."""
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
+def encode_image(image_path: str, mime_type: str | None = None) -> str:
+    """Encode image to base64 using chunked processing to reduce GIL blocking.
 
+    If mime_type is provided, returns a full data URL string.
+    """
+    # Use 192KB chunk size (multiple of 3 to align with base64 24-bit groups)
+    chunk_size = 192 * 1024
+    parts = []
+
+    if mime_type:
+        parts.append(f"data:{mime_type};base64,")
+
+    with open(image_path, "rb") as image_file:
+        while True:
+            chunk = image_file.read(chunk_size)
+            if not chunk:
+                break
+            parts.append(base64.b64encode(chunk).decode("utf-8"))
+    return "".join(parts)
 
 async def analyze_media(
     media_path: str, prompt: str = "Describe this media in detail."
@@ -135,8 +149,7 @@ async def analyze_media(
         config = get_llm_config()
         logger.info(f"Analyzing media with model: {config['model']}")
 
-        base64_image = await asyncio.to_thread(encode_image, media_path)
-        data_url = f"data:{mime_type};base64,{base64_image}"
+        data_url = await asyncio.to_thread(encode_image, media_path, mime_type)
 
         messages = [
             {
