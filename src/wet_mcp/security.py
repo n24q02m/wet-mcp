@@ -1,3 +1,4 @@
+from pathlib import Path
 import ipaddress
 import socket
 from urllib.parse import urlparse
@@ -69,3 +70,16 @@ def is_safe_url(url: str) -> bool:
         return False
 
     return True
+
+
+def is_safe_path(path: str | Path, base_dir: str | Path) -> bool:
+    """
+    Check if a path is safely within the base directory (prevent path traversal).
+    """
+    try:
+        path_obj = Path(path).expanduser().resolve()
+        base_obj = Path(base_dir).expanduser().resolve()
+        return path_obj.is_relative_to(base_obj)
+    except Exception as e:
+        logger.error(f"Path validation error: {e}")
+        return False
