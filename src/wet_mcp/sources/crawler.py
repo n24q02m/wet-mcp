@@ -19,7 +19,7 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.security import is_safe_url, is_safe_path
+from wet_mcp.security import is_safe_path, is_safe_url
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)

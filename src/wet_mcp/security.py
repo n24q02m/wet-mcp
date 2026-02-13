@@ -1,6 +1,6 @@
-from pathlib import Path
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
