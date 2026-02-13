@@ -5,8 +5,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from wet_mcp.sources.crawler import download_media
+
 from wet_mcp.config import settings
+from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_prevents_arbitrary_write():
@@ -21,7 +23,6 @@ async def test_download_media_prevents_arbitrary_write():
         # verify wet_mcp.config.settings is the instance we are patching
 
         with patch.object(settings, "download_dir", str(safe_dir)):
-
             # Mock httpx response
             mock_response = MagicMock()
             mock_response.content = b"malicious content"
@@ -35,7 +36,6 @@ async def test_download_media_prevents_arbitrary_write():
 
             with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
                 with patch("httpx.AsyncClient", return_value=mock_client):
-
                     target_url = "http://example.com/exploit.txt"
 
                     # 1. Attempt absolute path outside safe dir
@@ -65,7 +65,7 @@ async def test_download_media_prevents_arbitrary_write():
 
                     assert "error" in result
                     assert "Security Alert" in result["error"]
-                     # Verify file was NOT created
+                    # Verify file was NOT created
                     assert not (sensitive_dir / "exploit.txt").exists()
 
                     # 3. Attempt valid download (inside safe dir)
