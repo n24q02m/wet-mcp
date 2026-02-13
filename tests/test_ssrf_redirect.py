@@ -1,6 +1,8 @@
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 
 @pytest.mark.asyncio
 async def test_download_media_ssrf_redirect():
@@ -40,20 +42,25 @@ async def test_download_media_ssrf_redirect():
                 if "localhost" in url:
                     return False
                 return True
+
             mock_is_safe.side_effect = side_effect
 
             from wet_mcp.sources.crawler import download_media
 
             with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_bytes"):
                 # Initial URL is safe
-                result_json = await download_media(["http://safe.com/image.png"], "/tmp/downloads")
+                result_json = await download_media(
+                    ["http://safe.com/image.png"], "/tmp/downloads"
+                )
 
             results = json.loads(result_json)
 
             # Expect error due to unsafe redirect
             if "error" not in results[0]:
-                 # If vulnerable, it returns success with redirect content or final content depending on how mocked.
-                 pytest.fail(f"Vulnerability: Did not block unsafe redirect. Result: {results[0]}")
+                # If vulnerable, it returns success with redirect content or final content depending on how mocked.
+                pytest.fail(
+                    f"Vulnerability: Did not block unsafe redirect. Result: {results[0]}"
+                )
 
             assert "Security Alert" in results[0]["error"]
             assert "Unsafe URL blocked" in results[0]["error"]
