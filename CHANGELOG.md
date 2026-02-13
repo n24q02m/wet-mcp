@@ -5,6 +5,18 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta...v2.5.0-beta.1) (2026-02-13)
+
+
+### Bug Fixes
+
+* SearXNG port contention, docs discovery priority, and llms.txt quality check ([b7565f8](https://github.com/n24q02m/wet-mcp/commit/b7565f846785867c2e32bcae1c565e98b74da864))
+
+
+### Documentation
+
+* fix Docker volume persistence and config documentation ([9ded9b1](https://github.com/n24q02m/wet-mcp/commit/9ded9b13c7e3f5ed89127254ed5448a3d885a329))
+
 ## [2.5.0-beta](https://github.com/n24q02m/wet-mcp/compare/v2.4.1...v2.5.0-beta) (2026-02-13)
 
 
