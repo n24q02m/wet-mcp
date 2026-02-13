@@ -1,9 +1,9 @@
 import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from wet_mcp.llm import analyze_media
 from wet_mcp.security import is_safe_path
 from wet_mcp.sources.crawler import (
     crawl,
@@ -12,8 +12,6 @@ from wet_mcp.sources.crawler import (
     list_media,
     sitemap,
 )
-from wet_mcp.llm import analyze_media
-
 
 # ---------------------------------------------------------------------------
 # Unit Tests: is_safe_path
@@ -100,7 +98,8 @@ async def test_analyze_media_safe_access(tmp_path):
         mock_settings.llm_temperature = 0.0
 
         # Mock LLM calls
-        with patch("wet_mcp.llm.get_model_capabilities", return_value={"vision": True, "audio_input": False, "audio_output": False}),              patch("wet_mcp.llm.acompletion", new_callable=AsyncMock) as mock_llm:
+        with patch("wet_mcp.llm.get_model_capabilities", return_value={"vision": True, "audio_input": False, "audio_output": False}), \
+             patch("wet_mcp.llm.acompletion", new_callable=AsyncMock) as mock_llm:
 
             mock_llm.return_value.choices = [MagicMock(message=MagicMock(content="Analysis"))]
 
@@ -129,7 +128,8 @@ async def test_crawler_functions_reject_unsafe_urls(func, args):
              data = json.loads(result)
              # Should be empty list or error
              if isinstance(data, list):
-                 if len(data) > 0: assert all("Security Alert" in item.get("error", "") for item in data)
+                 if len(data) > 0:
+                     assert all("Security Alert" in item.get("error", "") for item in data)
              elif isinstance(data, dict):
                  assert "Security Alert" in data.get("error", "")
 
