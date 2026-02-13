@@ -19,7 +19,7 @@ async def test_download_media_ssrf_protection():
     mock_client_cls.return_value.__aenter__.return_value = mock_client
     mock_client_cls.return_value.__aexit__.return_value = None
 
-    with patch("httpx.AsyncClient", mock_client_cls):
+    with patch("wet_mcp.config.settings.download_dir", "/tmp/downloads"), patch("httpx.AsyncClient", mock_client_cls):
         url = "http://localhost/secret.txt"
         with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_bytes"):
             result_json = await download_media([url], "/tmp/downloads")

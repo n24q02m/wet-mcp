@@ -18,7 +18,8 @@ import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_path, is_safe_url
+from wet_mcp.config import settings
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
@@ -404,6 +405,11 @@ async def download_media(
         JSON string with download results
     """
     logger.info(f"Downloading {len(media_urls)} media files")
+    # Security Check: Ensure output_dir is allowed
+    if not is_safe_path(output_dir, settings.download_dir):
+        msg = f"Security Alert: Unsafe output directory blocked: {output_dir}"
+        logger.error(msg)
+        return json.dumps({"error": msg})
 
     output_path = Path(output_dir).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
