@@ -230,11 +230,8 @@ async def media(
             return f"Error: Unknown action '{action}'. Valid actions: list, download, analyze"
 
 
-@mcp.tool()
-async def help(tool_name: str = "web") -> str:
-    """Get full documentation for a tool.
-    Use when compressed descriptions are insufficient.
-    """
+def _read_tool_docs(tool_name: str) -> str:
+    """Read tool documentation from disk (synchronously)."""
     try:
         doc_file = files("wet_mcp.docs").joinpath(f"{tool_name}.md")
         return doc_file.read_text()
@@ -242,6 +239,14 @@ async def help(tool_name: str = "web") -> str:
         return f"Error: No documentation found for tool '{tool_name}'"
     except Exception as e:
         return f"Error loading documentation: {e}"
+
+
+@mcp.tool()
+async def help(tool_name: str = "web") -> str:
+    """Get full documentation for a tool.
+    Use when compressed descriptions are insufficient.
+    """
+    return await asyncio.to_thread(_read_tool_docs, tool_name)
 
 
 def main() -> None:
