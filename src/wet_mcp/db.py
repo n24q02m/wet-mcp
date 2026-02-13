@@ -49,13 +49,13 @@ def _build_fts_queries(query: str) -> list[str]:
     if not safe:
         return []
     if len(safe) == 1:
-        return [f'"{ safe[0]}"*']
+        return [f'"{safe[0]}"*']
 
     return [
         # Tier 1: AND — all terms must appear (most precise)
-        " AND ".join(f'"{ w}"*' for w in safe),
+        " AND ".join(f'"{w}"*' for w in safe),
         # Tier 2: OR — any term matches (broadest fallback)
-        " OR ".join(f'"{ w}"*' for w in safe),
+        " OR ".join(f'"{w}"*' for w in safe),
     ]
 
 
@@ -606,7 +606,7 @@ class DocsDB:
             if rng > 0:
                 fts_scores = {k: (v - min_f) / rng for k, v in fts_scores.items()}
             else:
-                fts_scores = {k: 1.0 for k in fts_scores}
+                fts_scores = dict.fromkeys(fts_scores, 1.0)
 
         # --- Vector search ---
         vec_scores: dict[str, float] = {}

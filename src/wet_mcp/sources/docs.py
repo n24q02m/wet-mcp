@@ -530,8 +530,7 @@ async def _try_github_raw_docs(
                 title = fname.rsplit(".", 1)[0].replace("-", " ").replace("_", " ")
 
                 gh_page_url = (
-                    f"https://github.com/{owner}/{repo}/blob/"
-                    f"{default_branch}/{fpath}"
+                    f"https://github.com/{owner}/{repo}/blob/{default_branch}/{fpath}"
                 )
                 pages.append(
                     {
@@ -545,8 +544,7 @@ async def _try_github_raw_docs(
 
         if pages:
             logger.info(
-                f"Fetched {len(pages)} raw markdown docs from "
-                f"github.com/{owner}/{repo}"
+                f"Fetched {len(pages)} raw markdown docs from github.com/{owner}/{repo}"
             )
             return pages
 
