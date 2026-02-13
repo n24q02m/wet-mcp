@@ -96,12 +96,13 @@ This downloads rclone, opens a browser for Google Drive auth, and outputs a **ba
       "command": "uvx",
       "args": ["--python", "3.13", "wet-mcp@latest"],
       "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza...",
-        "SYNC_ENABLED": "true",
-        "SYNC_REMOTE": "gdrive",
-        "SYNC_INTERVAL": "300",
-        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",
-        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>"
+        "API_KEYS": "GOOGLE_API_KEY:AIza...", // optional: enables media analysis & docs embedding
+        "SYNC_ENABLED": "true",               // required for sync
+        "SYNC_REMOTE": "gdrive",               // required: rclone remote name
+        "SYNC_INTERVAL": "300",                // optional: auto-sync seconds (default: 0 = manual)
+        // "SYNC_FOLDER": "wet-mcp",            // optional: remote folder (default: wet-mcp)
+        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",  // required: rclone backend type
+        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>" // required: from setup-sync
       }
     }
   }
@@ -125,18 +126,19 @@ Remote is configured via env vars — works in any environment (local, Docker, C
         "-e", "API_KEYS",
         "-e", "SYNC_ENABLED",
         "-e", "SYNC_REMOTE",
-        "-e", "SYNC_INTERVAL",
+        "-e", "SYNC_INTERVAL",              // optional: remove if manual sync only
         "-e", "RCLONE_CONFIG_GDRIVE_TYPE",
         "-e", "RCLONE_CONFIG_GDRIVE_TOKEN",
         "n24q02m/wet-mcp:latest"
       ],
       "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza...",
-        "SYNC_ENABLED": "true",
-        "SYNC_REMOTE": "gdrive",
-        "SYNC_INTERVAL": "300",
-        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",
-        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>"
+        "API_KEYS": "GOOGLE_API_KEY:AIza...", // optional: enables media analysis & docs embedding
+        "SYNC_ENABLED": "true",               // required for sync
+        "SYNC_REMOTE": "gdrive",               // required: rclone remote name
+        "SYNC_INTERVAL": "300",                // optional: auto-sync seconds (default: 0 = manual)
+        // "SYNC_FOLDER": "wet-mcp",            // optional: remote folder (default: wet-mcp)
+        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",  // required: rclone backend type
+        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>" // required: from setup-sync
       }
     }
   }
@@ -186,23 +188,23 @@ wet-mcp
 | Variable | Default | Description |
 |:---------|:--------|:------------|
 | `WET_AUTO_SEARXNG` | `true` | Auto-start embedded SearXNG subprocess |
-| `WET_SEARXNG_PORT` | `8080` | SearXNG port |
-| `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL (when auto disabled) |
-| `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout (seconds) |
-| `API_KEYS` | - | LLM API keys (format: `ENV_VAR:key,...`) |
-| `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis |
-| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model for docs vector search |
-| `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions |
-| `CACHE_DIR` | `~/.wet-mcp` | Data directory (cache DB, docs DB, downloads) |
-| `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location |
-| `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory |
-| `TOOL_TIMEOUT` | `120` | Tool execution timeout in seconds (0 = no timeout) |
-| `WET_CACHE` | `true` | Enable/disable web cache |
-| `SYNC_ENABLED` | `false` | Enable rclone sync for docs DB |
-| `SYNC_REMOTE` | - | rclone remote name (e.g., "gdrive") |
-| `SYNC_FOLDER` | `wet-mcp` | Remote folder name |
-| `SYNC_INTERVAL` | `0` | Auto-sync interval in seconds (0 = manual) |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| `WET_SEARXNG_PORT` | `8080` | SearXNG port (optional) |
+| `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL (optional, when auto disabled) |
+| `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
+| `API_KEYS` | - | LLM API keys (optional, format: `ENV_VAR:key,...`) |
+| `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
+| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model for docs vector search (optional) |
+| `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
+| `CACHE_DIR` | `~/.wet-mcp` | Data directory for cache DB, docs DB, downloads (optional) |
+| `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location (optional) |
+| `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory (optional) |
+| `TOOL_TIMEOUT` | `120` | Tool execution timeout in seconds, 0=no timeout (optional) |
+| `WET_CACHE` | `true` | Enable/disable web cache (optional) |
+| `SYNC_ENABLED` | `false` | Enable rclone sync |
+| `SYNC_REMOTE` | - | rclone remote name (required when sync enabled) |
+| `SYNC_FOLDER` | `wet-mcp` | Remote folder name (optional) |
+| `SYNC_INTERVAL` | `0` | Auto-sync interval in seconds, 0=manual (optional) |
+| `LOG_LEVEL` | `INFO` | Logging level (optional) |
 
 ### LLM Configuration (Optional)
 
