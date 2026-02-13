@@ -197,9 +197,11 @@ async def test_sitemap_no_duplicate_visits(mock_crawler_instance):
     # arun should only be called twice (once per unique URL)
     assert mock_crawler_instance.arun.call_count == 2
 
+
 @pytest.mark.asyncio
 async def test_sitemap_max_pages_per_root(mock_crawler_instance):
     """Test that max_pages limit is applied per root URL."""
+
     # Setup: Each URL returns 10 unique links
     def side_effect(url, config=None):
         res = MagicMock()
@@ -207,9 +209,7 @@ async def test_sitemap_max_pages_per_root(mock_crawler_instance):
         # Generate predictable links based on parent URL to ensure uniqueness
         prefix = url.rstrip("/")
         if url in ("https://root1.com", "https://root2.com"):
-            res.links = {
-                "internal": [f"{prefix}/p{i}" for i in range(10)]
-            }
+            res.links = {"internal": [f"{prefix}/p{i}" for i in range(10)]}
         else:
             res.links = {"internal": []}
         return res
@@ -223,9 +223,7 @@ async def test_sitemap_max_pages_per_root(mock_crawler_instance):
     ):
         # 2 roots, max_pages=5 per root. Should result in 5+5=10 pages total
         result = await sitemap(
-            ["https://root1.com", "https://root2.com"],
-            depth=1,
-            max_pages=5
+            ["https://root1.com", "https://root2.com"], depth=1, max_pages=5
         )
 
     data = json.loads(result)
@@ -289,6 +287,7 @@ async def test_sitemap_empty_input(mock_crawler_instance):
 @pytest.mark.asyncio
 async def test_sitemap_duplicate_links_on_page(mock_crawler_instance):
     """Test that duplicate links on a single page are processed only once."""
+
     def side_effect(url, config=None):
         res = MagicMock()
         res.success = True
@@ -342,13 +341,14 @@ async def test_sitemap_duplicate_links_on_page(mock_crawler_instance):
 @pytest.mark.asyncio
 async def test_sitemap_relative_links(mock_crawler_instance):
     """Test that relative links are passed to the crawler as-is."""
+
     def side_effect(url, config=None):
         res = MagicMock()
         res.success = True
         if url == "https://example.com":
-             res.links = {"internal": ["/relative/path"]}
+            res.links = {"internal": ["/relative/path"]}
         else:
-             res.links = {"internal": []}
+            res.links = {"internal": []}
         return res
 
     mock_crawler_instance.arun = AsyncMock(side_effect=side_effect)
