@@ -1,3 +1,4 @@
+from pathlib import Path
 import ipaddress
 import socket
 from urllib.parse import urlparse
@@ -69,3 +70,12 @@ def is_safe_url(url: str) -> bool:
         return False
 
     return True
+
+def is_safe_path(target: str | Path, base: str | Path) -> bool:
+    """Check if target path is within base path."""
+    try:
+        base_path = Path(base).expanduser().resolve()
+        target_path = Path(target).expanduser().resolve()
+        return target_path.is_relative_to(base_path)
+    except Exception:
+        return False
