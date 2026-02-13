@@ -430,28 +430,35 @@ async def download_media(
                 if not is_safe_url(target_url):
                     return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-                response = await client.get(target_url, follow_redirects=True)
-                response.raise_for_status()
+                # Use stream to avoid loading large files into memory
+                async with client.stream(
+                    "GET", target_url, follow_redirects=True
+                ) as response:
+                    response.raise_for_status()
 
-                filename = target_url.split("/")[-1].split("?")[0] or "download"
-                filepath = (output_path / filename).resolve()
+                    filename = target_url.split("/")[-1].split("?")[0] or "download"
+                    filepath = (output_path / filename).resolve()
 
-                # Security check: Ensure the resolved path is still
-                # within the output directory
-                if not filepath.is_relative_to(output_path):
-                    raise ValueError(
-                        f"Security Alert: Path traversal attempt detected "
-                        f"for {filename}"
-                    )
+                    # Security check: Ensure the resolved path is still
+                    # within the output directory
+                    if not filepath.is_relative_to(output_path):
+                        raise ValueError(
+                            f"Security Alert: Path traversal attempt detected "
+                            f"for {filename}"
+                        )
 
-                # Write file in thread to avoid blocking event loop
-                await asyncio.to_thread(filepath.write_bytes, response.content)
+                    # Write chunks in thread to avoid blocking event loop
+                    total_size = 0
+                    with open(filepath, "wb") as f:
+                        async for chunk in response.aiter_bytes():
+                            await asyncio.to_thread(f.write, chunk)
+                            total_size += len(chunk)
 
-                return {
-                    "url": url,
-                    "path": str(filepath),
-                    "size": len(response.content),
-                }
+                    return {
+                        "url": url,
+                        "path": str(filepath),
+                        "size": total_size,
+                    }
 
             except Exception as e:
                 logger.error(f"Error downloading {url}: {e}")
