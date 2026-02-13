@@ -13,12 +13,15 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
 from wet_mcp.security import is_safe_url
+
+if TYPE_CHECKING:
+    from crawl4ai import AsyncWebCrawler, BrowserConfig
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
@@ -35,15 +38,17 @@ _MAX_CONCURRENT_OPS = 6
 
 # Guards all access to the shared crawler instance.
 _pool_lock = asyncio.Lock()
-_crawler_instance: AsyncWebCrawler | None = None
+_crawler_instance: "AsyncWebCrawler | None" = None
 _crawler_stealth: bool = False  # stealth mode of the current instance
 
 # Semaphore to limit concurrent browser operations across all callers.
 _browser_semaphore: asyncio.Semaphore | None = None
 
 
-def _browser_config(stealth: bool = False) -> BrowserConfig:
+def _browser_config(stealth: bool = False) -> "BrowserConfig":
     """Create BrowserConfig with per-process isolated data directory."""
+    from crawl4ai import BrowserConfig
+
     return BrowserConfig(
         headless=True,
         enable_stealth=stealth,
@@ -64,7 +69,7 @@ def _get_semaphore() -> asyncio.Semaphore:
     return _browser_semaphore
 
 
-async def _get_crawler(stealth: bool = False) -> AsyncWebCrawler:
+async def _get_crawler(stealth: bool = False) -> "AsyncWebCrawler":
     """Return a shared AsyncWebCrawler, creating one if necessary.
 
     If the requested *stealth* mode differs from the current instance the
@@ -72,6 +77,8 @@ async def _get_crawler(stealth: bool = False) -> AsyncWebCrawler:
     happen in practice since most calls use the same stealth setting.
     """
     global _crawler_instance, _crawler_stealth
+
+    from crawl4ai import AsyncWebCrawler
 
     async with _pool_lock:
         # Reuse existing instance if stealth matches
@@ -143,6 +150,8 @@ async def extract(
     """
     logger.info(f"Extracting content from {len(urls)} URLs")
 
+    from crawl4ai import CrawlerRunConfig
+
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
@@ -211,6 +220,8 @@ async def crawl(
         JSON string with crawled content
     """
     logger.info(f"Crawling {len(urls)} URLs with depth={depth}")
+
+    from crawl4ai import CrawlerRunConfig
 
     all_results = []
     visited: set[str] = set()
@@ -292,6 +303,8 @@ async def sitemap(
     """
     logger.info(f"Mapping {len(urls)} URLs")
 
+    from crawl4ai import CrawlerRunConfig
+
     all_urls: list[dict[str, object]] = []
     visited: set[str] = set()
 
@@ -356,6 +369,8 @@ async def list_media(
         JSON string with media list
     """
     logger.info(f"Listing media from: {url}")
+
+    from crawl4ai import CrawlerRunConfig
 
     if not is_safe_url(url):
         return json.dumps({"error": "Security Alert: Unsafe URL blocked"})
