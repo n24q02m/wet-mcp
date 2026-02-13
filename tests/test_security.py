@@ -17,6 +17,7 @@ from wet_mcp.sources.crawler import (
 # Unit Tests: is_safe_path
 # ---------------------------------------------------------------------------
 
+
 def test_is_safe_path_basic(tmp_path):
     """Test basic path safety checks."""
     base = tmp_path / "jail"
@@ -48,6 +49,7 @@ def test_is_safe_path_traversal(tmp_path):
 # Integration Tests: list_media (SSRF)
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_list_media_ssrf():
     """Test that list_media blocks unsafe URLs."""
@@ -63,6 +65,7 @@ async def test_list_media_ssrf():
 # ---------------------------------------------------------------------------
 # Integration Tests: analyze_media (Path Traversal)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_analyze_media_path_traversal(tmp_path):
@@ -98,10 +101,20 @@ async def test_analyze_media_safe_access(tmp_path):
         mock_settings.llm_temperature = 0.0
 
         # Mock LLM calls
-        with patch("wet_mcp.llm.get_model_capabilities", return_value={"vision": True, "audio_input": False, "audio_output": False}), \
-             patch("wet_mcp.llm.acompletion", new_callable=AsyncMock) as mock_llm:
-
-            mock_llm.return_value.choices = [MagicMock(message=MagicMock(content="Analysis"))]
+        with (
+            patch(
+                "wet_mcp.llm.get_model_capabilities",
+                return_value={
+                    "vision": True,
+                    "audio_input": False,
+                    "audio_output": False,
+                },
+            ),
+            patch("wet_mcp.llm.acompletion", new_callable=AsyncMock) as mock_llm,
+        ):
+            mock_llm.return_value.choices = [
+                MagicMock(message=MagicMock(content="Analysis"))
+            ]
 
             result = await analyze_media(str(safe_file))
 
@@ -112,26 +125,32 @@ async def test_analyze_media_safe_access(tmp_path):
 # Parameterized Security Suite
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize("func, args", [
-    (crawl, (["http://unsafe.com"],)),
-    (extract, (["http://unsafe.com"],)),
-    (sitemap, (["http://unsafe.com"],)),
-])
+@pytest.mark.parametrize(
+    "func, args",
+    [
+        (crawl, (["http://unsafe.com"],)),
+        (extract, (["http://unsafe.com"],)),
+        (sitemap, (["http://unsafe.com"],)),
+    ],
+)
 async def test_crawler_functions_reject_unsafe_urls(func, args):
     """Verify that crawler functions reject unsafe URLs."""
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=False):
         # Mock crawler to ensure it's not used
         with patch("wet_mcp.sources.crawler._get_crawler", new_callable=AsyncMock):
-             result = await func(*args)
+            result = await func(*args)
 
-             data = json.loads(result)
-             # Should be empty list or error
-             if isinstance(data, list):
-                 if len(data) > 0:
-                     assert all("Security Alert" in item.get("error", "") for item in data)
-             elif isinstance(data, dict):
-                 assert "Security Alert" in data.get("error", "")
+            data = json.loads(result)
+            # Should be empty list or error
+            if isinstance(data, list):
+                if len(data) > 0:
+                    assert all(
+                        "Security Alert" in item.get("error", "") for item in data
+                    )
+            elif isinstance(data, dict):
+                assert "Security Alert" in data.get("error", "")
 
 
 @pytest.mark.asyncio
