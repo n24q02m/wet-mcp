@@ -1,7 +1,7 @@
-import sys
-import importlib.util
 from unittest.mock import MagicMock, patch
+
 from wet_mcp.setup import _install_searxng
+
 
 def test_install_searxng_checks_installed():
     """Test that _install_searxng checks for installation without importing."""
@@ -19,6 +19,7 @@ def test_install_searxng_checks_installed():
         # Verify it called find_spec with "searx"
         mock_find_spec.assert_called_with("searx")
 
+
 def test_install_searxng_not_installed():
     """Test _install_searxng when searx is not installed."""
     with patch("importlib.util.find_spec") as mock_find_spec:
@@ -27,7 +28,9 @@ def test_install_searxng_not_installed():
         with patch("subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
 
-            with patch("wet_mcp.setup.patch_searxng_version"),                  patch("wet_mcp.setup.patch_searxng_windows"):
-
+            with (
+                patch("wet_mcp.setup.patch_searxng_version"),
+                patch("wet_mcp.setup.patch_searxng_windows"),
+            ):
                 assert _install_searxng() is True
                 assert mock_run.called

@@ -8,8 +8,8 @@ This module handles automatic first-run setup:
 Setup runs automatically on first server start.
 """
 
-import subprocess
 import importlib.util
+import subprocess
 import sys
 from pathlib import Path
 
