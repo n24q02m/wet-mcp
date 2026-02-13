@@ -1,9 +1,11 @@
 """Tests for src/wet_mcp/server.py."""
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from wet_mcp.config import settings
 from wet_mcp.server import web
 
 
@@ -173,3 +175,38 @@ async def test_web_invalid_action():
     """Test invalid action."""
     result = await web(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_web_timeout():
+    """Test web action timeout."""
+    async def slow_search(*args, **kwargs):
+        await asyncio.sleep(0.2)
+        return "Slow Result"
+
+    with (
+        patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+        patch.object(settings, "tool_timeout", 0.1),
+    ):
+        mock_ensure.return_value = "http://localhost:8080"
+        mock_search.side_effect = slow_search
+
+        result = await web(action="search", query="test query")
+
+        assert "Error: 'search' timed out" in result
+        mock_search.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_web_exception_propagation():
+    """Test web action exception propagation."""
+    with (
+        patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+    ):
+        mock_ensure.return_value = "http://localhost:8080"
+        mock_search.side_effect = ValueError("Test Error")
+
+        with pytest.raises(ValueError, match="Test Error"):
+            await web(action="search", query="test query")
