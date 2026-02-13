@@ -11,44 +11,50 @@ async def test_download_media_path_traversal(tmp_path):
 
     # Mock httpx response
     mock_response = MagicMock()
-    mock_response.content = b"fake content"
     mock_response.raise_for_status = MagicMock()
 
-    # Mock httpx client context manager
+    # Mock httpx client
     mock_client = AsyncMock()
-    mock_client.get.return_value = mock_response
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
 
-    # We need to simulate is_safe_url passing for these URLs, or mock it.
-    # Since we are testing path traversal, we assume the URL is "safe" network-wise but malicious filename-wise.
-    # But wait, is_safe_url checks scheme and IP.
-    # "http://example.com/.." is safe network-wise (resolves to example.com IP).
+    # stream returns a context manager
+    mock_stream_ctx = MagicMock()
+    mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
+    mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+
+    # client context manager
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
 
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
         with patch("httpx.AsyncClient", return_value=mock_client):
             # 1. Traversal attempt with '..' as filename
-            # This simulates a URL where split('/')[-1] is '..'
             url1 = "http://example.com/.."
             res1 = await download_media([url1], str(tmp_path))
 
             # Should fail with "Security Alert" because '..' resolves to parent dir
             assert "Security Alert" in res1
 
-            # Verify no files were written in parent
-            pass
-
 
 @pytest.mark.asyncio
 async def test_download_media_safe(tmp_path):
     mock_response = MagicMock()
-    mock_response.content = b"safe content"
     mock_response.raise_for_status = MagicMock()
 
+    async def mock_aiter_bytes(chunk_size=None):
+        yield b"safe "
+        yield b"content"
+
+    mock_response.aiter_bytes = mock_aiter_bytes
+
+    mock_stream_ctx = MagicMock()
+    mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
+
     mock_client = AsyncMock()
-    mock_client.get.return_value = mock_response
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.__aexit__.return_value = None
+    mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
 
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
         with patch("httpx.AsyncClient", return_value=mock_client):

@@ -430,9 +430,6 @@ async def download_media(
                 if not is_safe_url(target_url):
                     return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-                response = await client.get(target_url, follow_redirects=True)
-                response.raise_for_status()
-
                 filename = target_url.split("/")[-1].split("?")[0] or "download"
                 filepath = (output_path / filename).resolve()
 
@@ -444,13 +441,25 @@ async def download_media(
                         f"for {filename}"
                     )
 
-                # Write file in thread to avoid blocking event loop
-                await asyncio.to_thread(filepath.write_bytes, response.content)
+                downloaded_size = 0
+                async with client.stream(
+                    "GET", target_url, follow_redirects=True
+                ) as response:
+                    response.raise_for_status()
+
+                    # Write file in thread to avoid blocking event loop
+                    f = await asyncio.to_thread(open, filepath, "wb")
+                    try:
+                        async for chunk in response.aiter_bytes():
+                            await asyncio.to_thread(f.write, chunk)
+                            downloaded_size += len(chunk)
+                    finally:
+                        await asyncio.to_thread(f.close)
 
                 return {
                     "url": url,
                     "path": str(filepath),
-                    "size": len(response.content),
+                    "size": downloaded_size,
                 }
 
             except Exception as e:
