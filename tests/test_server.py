@@ -1,9 +1,11 @@
 """Tests for src/wet_mcp/server.py."""
 
+import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from wet_mcp.config import settings
 from wet_mcp.server import web
 
 
@@ -173,3 +175,52 @@ async def test_web_invalid_action():
     """Test invalid action."""
     result = await web(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_web_timeout():
+    """Test web action timeout."""
+    with (
+        patch("wet_mcp.server.extract", new_callable=AsyncMock) as mock_extract,
+        patch.object(settings, "tool_timeout", 0.1),
+    ):
+        # Mock extract to sleep longer than timeout
+        async def slow_extract(*args, **kwargs):
+            await asyncio.sleep(0.2)
+            return "Should not see this"
+
+        mock_extract.side_effect = slow_extract
+
+        result = await web(action="extract", urls=["https://example.com"])
+
+        assert "Error: 'extract' timed out after 0.1s" in result
+        mock_extract.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_web_exception_propagation():
+    """Test exception propagation from underlying tool."""
+    with patch("wet_mcp.server.extract", new_callable=AsyncMock) as mock_extract:
+        mock_extract.side_effect = ValueError("Something went wrong")
+
+        with pytest.raises(ValueError, match="Something went wrong"):
+            await web(action="extract", urls=["https://example.com"])
+
+
+@pytest.mark.asyncio
+async def test_web_empty_urls():
+    """Test web action with empty urls list."""
+    result = await web(action="extract", urls=[])
+    assert "Error: urls is required" in result
+
+
+@pytest.mark.asyncio
+async def test_web_no_timeout():
+    """Test web action with timeout disabled."""
+    with (
+        patch("wet_mcp.server.extract", new_callable=AsyncMock) as mock_extract,
+        patch.object(settings, "tool_timeout", 0),
+    ):
+        mock_extract.return_value = "Result"
+        result = await web(action="extract", urls=["https://example.com"])
+        assert result == "Result"
