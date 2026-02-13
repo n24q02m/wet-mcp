@@ -622,6 +622,7 @@ async def _do_docs_search(
     logger.info(f"Library '{library}' not indexed, discovering docs...")
 
     from wet_mcp.sources.docs import (
+        _try_github_raw_docs,
         chunk_llms_txt,
         chunk_markdown,
         discover_library,
@@ -632,11 +633,13 @@ async def _do_docs_search(
     # Discover library metadata from registries
     discovery = await discover_library(library)
     docs_url = ""
+    repo_url = ""
     registry = ""
     description = ""
 
     if discovery:
         docs_url = discovery.get("homepage", "")
+        repo_url = discovery.get("repository", "")
         registry = discovery.get("registry", "")
         description = discovery.get("description", "")
     else:
@@ -693,26 +696,45 @@ async def _do_docs_search(
         page_count = 1
         logger.info(f"Indexed {len(all_chunks)} chunks from llms.txt")
     else:
-        # Tier 1: Crawl docs pages
-        pages = await fetch_docs_pages(
-            docs_url=docs_url,
-            query=query,
-            max_pages=30,
-        )
-        page_count = len(pages)
-
-        for page in pages:
-            page_chunks = chunk_markdown(
-                content=page["content"],
-                url=page.get("url", ""),
+        # Tier 1: Try GitHub raw markdown (clean content, no JS rendering)
+        gh_target = repo_url or docs_url
+        gh_pages = await _try_github_raw_docs(gh_target, max_files=30)
+        if gh_pages:
+            page_count = len(gh_pages)
+            for page in gh_pages:
+                page_chunks = chunk_markdown(
+                    content=page["content"],
+                    url=page.get("url", ""),
+                )
+                for chunk in page_chunks:
+                    if not chunk.get("title") and page.get("title"):
+                        chunk["title"] = page["title"]
+                all_chunks.extend(page_chunks)
+            logger.info(
+                f"Indexed {len(all_chunks)} chunks from {page_count} "
+                "GitHub raw markdown files"
             )
-            # Set title from page if chunk doesn't have one
-            for chunk in page_chunks:
-                if not chunk.get("title") and page.get("title"):
-                    chunk["title"] = page["title"]
-            all_chunks.extend(page_chunks)
+        else:
+            # Tier 2: Crawl docs pages (rendered HTML -> markdown)
+            pages = await fetch_docs_pages(
+                docs_url=docs_url,
+                query=query,
+                max_pages=30,
+            )
+            page_count = len(pages)
 
-        logger.info(f"Indexed {len(all_chunks)} chunks from {page_count} pages")
+            for page in pages:
+                page_chunks = chunk_markdown(
+                    content=page["content"],
+                    url=page.get("url", ""),
+                )
+                # Set title from page if chunk doesn't have one
+                for chunk in page_chunks:
+                    if not chunk.get("title") and page.get("title"):
+                        chunk["title"] = page["title"]
+                all_chunks.extend(page_chunks)
+
+            logger.info(f"Indexed {len(all_chunks)} chunks from {page_count} pages")
 
     if not all_chunks:
         return json.dumps(
