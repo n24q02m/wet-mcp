@@ -5,6 +5,15 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.1...v2.5.0-beta.2) (2026-02-13)
+
+
+### Bug Fixes
+
+* improve docs discovery scoring, crawl scope, and cache validation ([cd3466a](https://github.com/n24q02m/wet-mcp/commit/cd3466a71ffc39ee6015acc9dc67abb74be716ac))
+* refine discovery scoring with library-name-in-domain bonus ([3dcdb4f](https://github.com/n24q02m/wet-mcp/commit/3dcdb4f2fd0e913f6514febf394428021f8d7266))
+* replace broken repo-name cache validation with discovery version ([23b1eee](https://github.com/n24q02m/wet-mcp/commit/23b1eee51927afcf3e6160774423a5fc80b1192c))
+
 ## [2.5.0-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta...v2.5.0-beta.1) (2026-02-13)
 
 
