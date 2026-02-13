@@ -229,10 +229,13 @@ async def test_sitemap_max_pages_per_root(mock_crawler_instance):
     data = json.loads(result)
     assert len(data) == 10
 
-    urls = [item["url"] for item in data]
-    assert "https://root1.com" in urls
-    assert "https://root2.com" in urls
+    # Use explicit comparisons to avoid CodeQL false positives about URL sanitization
+    # checks involving "in" operator on lists.
+    assert any(item["url"] == "https://root1.com" for item in data)
+    assert any(item["url"] == "https://root2.com" for item in data)
+
     # Verify we got children for both
+    urls = [item["url"] for item in data]
     assert any(u.startswith("https://root1.com/p") for u in urls)
     assert any(u.startswith("https://root2.com/p") for u in urls)
 
@@ -260,11 +263,15 @@ async def test_sitemap_mixed_link_formats(mock_crawler_instance):
         result = await sitemap(["https://example.com"], depth=1)
 
     data = json.loads(result)
-    urls = {item["url"] for item in data}
-    assert "https://example.com" in urls
-    assert "https://example.com/str" in urls
-    assert "https://example.com/dict" in urls
-    assert len(urls) == 3
+
+    # Use set equality for stricter check and to appease CodeQL
+    actual_urls = {item["url"] for item in data}
+    expected_urls = {
+        "https://example.com",
+        "https://example.com/str",
+        "https://example.com/dict",
+    }
+    assert actual_urls == expected_urls
 
 
 @pytest.mark.asyncio
@@ -313,12 +320,15 @@ async def test_sitemap_duplicate_links_on_page(mock_crawler_instance):
         result = await sitemap(["https://example.com"], depth=2)
 
     data = json.loads(result)
-    urls = {item["url"] for item in data}
-    assert urls == {
+
+    # Use set equality
+    actual_urls = {item["url"] for item in data}
+    expected_urls = {
         "https://example.com",
         "https://example.com/dup",
         "https://example.com/unique",
     }
+    assert actual_urls == expected_urls
 
     # Verify arun calls: root, dup, unique. Total 3.
     # The duplicate link is added to to_visit twice?
@@ -361,8 +371,9 @@ async def test_sitemap_relative_links(mock_crawler_instance):
         result = await sitemap(["https://example.com"], depth=1)
 
     data = json.loads(result)
-    urls = {item["url"] for item in data}
-    assert "/relative/path" in urls
+
+    # Check explicitly using any/exact match
+    assert any(item["url"] == "/relative/path" for item in data)
 
     # Verify arun was called with relative path
     calls = [call.args[0] for call in mock_crawler_instance.arun.call_args_list]
