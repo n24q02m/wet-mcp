@@ -331,13 +331,6 @@ async def test_crawl_internal_link_limit(mock_crawler_instance):
     # Use a safe list comprehension with integer conversion which is generally safe
     # If CodeQL still complains, we might need a whitelist or static list
     # Trying with a slightly different structure to avoid 'arbitrary position' warning
-    # by ensuring the string construction is strictly controlled
-    internal_links = [{"href": f"https://example.com/page{i}"} for i in range(1, 16)]
-
-    # Alternatively, use a static tuple if the above fails again, but let's try to verify
-    # if the previous fix failed because of how it was applied or the nature of concatenation.
-    # The error 'arbitrary position in sanitized URL' often relates to untrusted input.
-    # Here 'i' is trusted (from range).
 
     # Let's use a very explicit, non-concatenation approach for the test data
     safe_links = [
