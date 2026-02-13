@@ -10,21 +10,24 @@ from wet_mcp.llm import analyze_media, get_llm_config
 
 
 @pytest.fixture
-def mock_settings():
+def mock_settings(tmp_path):
     """Mock settings for testing."""
     original_keys = settings.api_keys
     original_models = settings.llm_models
     original_temperature = settings.llm_temperature
+    original_download_dir = settings.download_dir
 
     settings.api_keys = "GOOGLE_API_KEY:fake-key"
     settings.llm_models = "gemini/fake-model"
     settings.llm_temperature = None
+    settings.download_dir = str(tmp_path)
 
     yield
 
     settings.api_keys = original_keys
     settings.llm_models = original_models
     settings.llm_temperature = original_temperature
+    settings.download_dir = original_download_dir
 
 
 def test_get_llm_config(mock_settings):
@@ -89,9 +92,11 @@ def test_analyze_media_no_keys():
     assert "Error: LLM analysis requires API_KEYS" in result
 
 
-def test_analyze_media_file_not_found(mock_settings):
+def test_analyze_media_file_not_found(mock_settings, tmp_path):
     """Test file not found error."""
-    result = asyncio.run(analyze_media("non_existent_file.jpg"))
+    # Use a path inside tmp_path (which is allowed) but doesn't exist
+    missing_file = tmp_path / "non_existent_file.jpg"
+    result = asyncio.run(analyze_media(str(missing_file)))
     assert "Error: File not found" in result
 
 
