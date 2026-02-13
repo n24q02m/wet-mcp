@@ -389,3 +389,133 @@ async def test_search_result_format(mock_httpx_client):
     assert r["snippet"] == "Example snippet text"
     assert r["source"] == "duckduckgo"
     assert "extra_field" not in r
+
+
+@pytest.mark.asyncio
+async def test_search_parameters_correct(mock_httpx_client):
+    """Test that search is called with correct parameters."""
+    mock_response = unittest.mock.Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {"results": []}
+
+    mock_context = unittest.mock.AsyncMock()
+    mock_context.get.return_value = mock_response
+    mock_context.__aenter__.return_value = mock_context
+    mock_httpx_client.return_value = mock_context
+
+    await search(
+        searxng_url="http://localhost:8080",
+        query="test query",
+        categories="images",
+        max_results=5,
+    )
+
+    call_args = mock_context.get.call_args
+    assert call_args is not None
+    args, kwargs = call_args
+
+    assert args[0] == "http://localhost:8080/search"
+    assert kwargs["params"] == {
+        "q": "test query",
+        "format": "json",
+        "categories": "images",
+    }
+    assert kwargs["headers"] == {
+        "X-Real-IP": "127.0.0.1",
+        "X-Forwarded-For": "127.0.0.1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_search_json_decode_error(mock_httpx_client):
+    """Test handling of JSON decode error (invalid response format)."""
+    mock_response = unittest.mock.Mock()
+    mock_response.status_code = 200
+    # Simulate valid response on second try
+    mock_response_ok = unittest.mock.Mock()
+    mock_response_ok.status_code = 200
+    mock_response_ok.json.return_value = {"results": []}
+
+    mock_context = unittest.mock.AsyncMock()
+    # First call raises JSONDecodeError, second succeeds
+    mock_response.json.side_effect = json.JSONDecodeError("Expecting value", "doc", 0)
+
+    mock_context.get.side_effect = [mock_response, mock_response_ok]
+    mock_context.__aenter__.return_value = mock_context
+    mock_httpx_client.return_value = mock_context
+
+    with unittest.mock.patch(
+        "wet_mcp.sources.searxng.asyncio.sleep", new_callable=unittest.mock.AsyncMock
+    ):
+        result = await search(
+            searxng_url="http://localhost:8080",
+            query="json_error",
+        )
+
+    data = json.loads(result)
+    assert data["query"] == "json_error"
+    # Should have retried once
+    assert mock_context.get.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_search_missing_fields_graceful(mock_httpx_client):
+    """Test handling of results with missing fields."""
+    mock_response = unittest.mock.Mock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "results": [
+            {
+                # Missing url, title, content
+                "engine": "google",
+            }
+        ]
+    }
+
+    mock_context = unittest.mock.AsyncMock()
+    mock_context.get.return_value = mock_response
+    mock_context.__aenter__.return_value = mock_context
+    mock_httpx_client.return_value = mock_context
+
+    result = await search(
+        searxng_url="http://localhost:8080",
+        query="missing_fields",
+    )
+
+    data = json.loads(result)
+    assert len(data["results"]) == 1
+    r = data["results"][0]
+    assert r["url"] == ""
+    assert r["title"] == ""
+    assert r["snippet"] == ""
+    assert r["source"] == "google"
+
+
+@pytest.mark.asyncio
+async def test_search_restart_on_connection_error(mock_health_check, mock_httpx_client):
+    """Test that _ensure_searxng_healthy is called again on connection error."""
+    error = httpx.RequestError("Connection refused", request=unittest.mock.Mock())
+
+    # Success response for retry
+    mock_response_ok = unittest.mock.Mock()
+    mock_response_ok.status_code = 200
+    mock_response_ok.json.return_value = {"results": []}
+
+    mock_context = unittest.mock.AsyncMock()
+    # First call fails, second succeeds
+    mock_context.get.side_effect = [error, mock_response_ok]
+    mock_context.__aenter__.return_value = mock_context
+    mock_httpx_client.return_value = mock_context
+
+    with unittest.mock.patch(
+        "wet_mcp.sources.searxng.asyncio.sleep", new_callable=unittest.mock.AsyncMock
+    ):
+        await search(
+            searxng_url="http://localhost:8080",
+            query="restart_test",
+        )
+
+    # Verify _ensure_searxng_healthy was called initially AND after failure
+    # 1. Initial check
+    # 2. After RequestError
+    assert mock_health_check.call_count == 2
