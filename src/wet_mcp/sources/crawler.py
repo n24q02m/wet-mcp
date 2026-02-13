@@ -430,7 +430,34 @@ async def download_media(
                 if not is_safe_url(target_url):
                     return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-                response = await client.get(target_url, follow_redirects=True)
+                # Manual redirect handling for security check on each hop
+                response = None
+                redirect_count = 0
+                max_redirects = 10
+
+                while redirect_count < max_redirects:
+                    response = await client.get(target_url, follow_redirects=False)
+
+                    if response.is_redirect:
+                        location = response.headers.get("Location")
+                        if not location:
+                            break
+
+                        # Resolve relative URLs
+                        next_url = str(response.url.join(location))
+
+                        if not is_safe_url(next_url):
+                            return {"url": url, "error": "Security Alert: Unsafe redirect blocked"}
+
+                        target_url = next_url
+                        redirect_count += 1
+                        continue
+
+                    break
+
+                if response is None:
+                    return {"url": url, "error": "Download failed"}
+
                 response.raise_for_status()
 
                 filename = target_url.split("/")[-1].split("?")[0] or "download"
