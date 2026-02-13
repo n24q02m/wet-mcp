@@ -108,12 +108,14 @@ async def discover_library(name: str) -> dict | None:
     """Discover library metadata from package registries.
 
     Queries npm, PyPI, and crates.io in parallel. Scores by:
-    1. Exact name match (case-insensitive) — critical for disambiguation
+    1. Exact name match (case-insensitive)
     2. Has valid docs/homepage URL
-    3. Has description
+    3. Non-GitHub homepage (custom domain = established project)
+    4. Description length (longer = more established)
+    5. Dedicated docs URL pattern (readthedocs, docs.*, etc.)
 
     This prevents e.g. npm's obscure "fastapi" package from shadowing
-    Python's FastAPI, or npm "tokio" from shadowing Rust's tokio.
+    Python's FastAPI, or npm "torch" from shadowing PyTorch.
     """
     results = await asyncio.gather(
         _discover_from_npm(name),
@@ -132,11 +134,29 @@ async def discover_library(name: str) -> dict | None:
         if r.get("name", "").lower() == name.lower():
             score += 10
         # Has a docs/homepage URL
-        if r.get("homepage"):
+        homepage = r.get("homepage", "")
+        if homepage:
             score += 5
-        # Has a description (indicates a real, maintained package)
-        if r.get("description"):
-            score += 2
+            # Non-GitHub homepage = established project with custom domain
+            parsed_hp = urlparse(homepage)
+            if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
+                score += 3
+            # Bonus for dedicated docs domains
+            if any(
+                p in parsed_hp.netloc
+                for p in ("readthedocs", "rtfd.io", "docs.", ".dev")
+            ):
+                score += 2
+        # Description quality (longer = more established)
+        desc = r.get("description", "")
+        if desc:
+            desc_len = len(desc)
+            if desc_len > 100:
+                score += 3
+            elif desc_len > 50:
+                score += 2
+            elif desc_len > 20:
+                score += 1
         scored.append((score, r))
 
     # Sort by score descending, pick best
@@ -371,6 +391,27 @@ async def fetch_docs_pages(
     pages: list[dict] = []
     seen_urls: set[str] = {docs_url}
 
+    # For GitHub URLs, restrict crawl to the same repo path
+    docs_parsed = urlparse(docs_url)
+    _is_github = "github.com" in docs_parsed.netloc
+    # Extract /org/repo prefix for GitHub URLs
+    _gh_path_prefix = "/".join(docs_parsed.path.strip("/").split("/")[:2])
+    # Known non-docs GitHub paths to skip
+    _gh_skip_paths = {
+        "features",
+        "enterprise",
+        "copilot",
+        "marketplace",
+        "security",
+        "sponsors",
+        "login",
+        "signup",
+        "about",
+        "pricing",
+        "customer-stories",
+        "why-github",
+    }
+
     for r in root_results:
         if r.get("content") and not r.get("error"):
             pages.append(
@@ -389,9 +430,21 @@ async def fetch_docs_pages(
                 if href and href not in seen_urls:
                     # Only follow docs-like paths
                     parsed = urlparse(href)
-                    docs_parsed = urlparse(docs_url)
                     if parsed.netloc == docs_parsed.netloc or not parsed.netloc:
                         full_url = urljoin(docs_url, href)
+                        full_parsed = urlparse(full_url)
+
+                        # GitHub-specific: stay within same repo
+                        if _is_github:
+                            path_parts = full_parsed.path.strip("/").split("/")
+                            # Skip known non-docs paths
+                            if path_parts and path_parts[0] in _gh_skip_paths:
+                                continue
+                            # Must be within same org/repo
+                            link_prefix = "/".join(path_parts[:2])
+                            if link_prefix != _gh_path_prefix:
+                                continue
+
                         if full_url not in seen_urls:
                             link_urls.append(full_url)
                             seen_urls.add(full_url)
