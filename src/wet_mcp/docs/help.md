@@ -1,23 +1,34 @@
 # WET MCP Server - Help
 
-Welcome to **WET** (Web ExTract) MCP Server - an open-source alternative to Tavily.
+Welcome to **WET** (Web Extended Toolkit) MCP Server.
 
 ## Available Tools
 
 | Tool | Description |
 |:-----|:------------|
-| `web` | Web search, content extraction, crawling, site mapping |
+| `search` | Web search, academic research, library documentation search |
+| `extract` | Content extraction, deep crawling, site mapping |
 | `media` | Media discovery (images, videos, audio) and download |
 | `help` | Get full documentation for any tool |
 
 ## Quick Reference
 
-### web tool
+### search tool
 
 ```json
 // Search the web
 {"action": "search", "query": "your search query"}
 
+// Academic/scientific search
+{"action": "research", "query": "transformer attention mechanism"}
+
+// Search library documentation (auto-indexes on first call)
+{"action": "docs", "query": "how to create routes", "library": "fastapi"}
+```
+
+### extract tool
+
+```json
 // Extract content from URLs
 {"action": "extract", "urls": ["https://example.com"]}
 
@@ -46,8 +57,9 @@ Welcome to **WET** (Web ExTract) MCP Server - an open-source alternative to Tavi
 Call `help` with the tool name:
 
 ```json
-{"tool_name": "web"}    // Web tool documentation
-{"tool_name": "media"}  // Media tool documentation
+{"tool_name": "search"}   // Search tool documentation
+{"tool_name": "extract"}  // Extract tool documentation
+{"tool_name": "media"}    // Media tool documentation
 ```
 
 ## Features
@@ -56,3 +68,7 @@ Call `help` with the tool name:
 - **Anti-bot bypass**: Stealth mode works with Cloudflare, Medium, LinkedIn, etc.
 - **Multimodal**: Extract and download images, videos, audio files
 - **Deep crawling**: Follow links to specified depth with page limits
+- **Academic search**: Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
+- **Library docs**: Auto-discover and index documentation with FTS5 hybrid search
+- **Local cache**: TTL-based caching for all web operations (search, extract, crawl, map)
+- **Docs sync**: Sync indexed docs across machines via rclone

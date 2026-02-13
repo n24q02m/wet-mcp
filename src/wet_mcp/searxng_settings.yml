@@ -22,6 +22,7 @@ outgoing:
 
 # Engines to enable
 engines:
+  # General search engines
   - name: google
     disabled: false
   - name: bing
@@ -30,3 +31,23 @@ engines:
     disabled: false
   - name: brave
     disabled: false
+
+  # Academic / Science engines (category: science)
+  - name: google scholar
+    disabled: false
+    shortcut: gsc
+  - name: semantic scholar
+    disabled: false
+    shortcut: ssc
+  - name: arxiv
+    disabled: false
+    shortcut: arx
+  - name: pubmed
+    disabled: false
+    shortcut: pub
+  - name: crossref
+    disabled: false
+    shortcut: cr
+  - name: base
+    disabled: false
+    shortcut: bas

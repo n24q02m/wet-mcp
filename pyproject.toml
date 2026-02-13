@@ -1,11 +1,11 @@
 [project]
 name = "wet-mcp"
-version = "2.4.1"
-description = "Open-source MCP Server for web search, extract, and crawl with embedded SearXNG"
+version = "3.0.0"
+description = "Open-source MCP Server for web search, extract, crawl, academic research, and library docs with embedded SearXNG"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "n24q02m", email = "quangminh2422004@gmail.com" }]
-keywords = ["mcp", "web-scraping", "searxng", "crawl4ai", "tavily-alternative"]
+keywords = ["mcp", "web-scraping", "searxng", "crawl4ai", "library-docs"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -32,6 +32,12 @@ dependencies = [
     "loguru",
     # LLM
     "litellm",
+]
+
+[project.optional-dependencies]
+vector = [
+    # Vector search for docs (optional, FTS5-only works without)
+    "sqlite-vec",
 ]
 
 [dependency-groups]
