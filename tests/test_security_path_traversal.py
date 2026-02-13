@@ -45,7 +45,7 @@ async def test_download_media_safe(tmp_path):
 
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
         with patch("httpx.AsyncClient", return_value=mock_client):
-             with patch("wet_mcp.config.settings.download_dir", str(tmp_path)):
+            with patch("wet_mcp.config.settings.download_dir", str(tmp_path)):
                 url = "http://example.com/image.png"
                 await download_media([url], str(tmp_path))
 
