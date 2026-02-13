@@ -27,7 +27,12 @@ from wet_mcp.config import settings  # noqa: E402
 
 
 def get_llm_config() -> dict:
-    """Build LLM configuration with fallback."""
+    """Build LLM configuration with fallback.
+
+    Temperature Logic:
+    - Defaults to None (recommended for Gemini 3 to avoid infinite loops).
+    - Can be overridden via LLM_TEMPERATURE env var.
+    """
     models = [m.strip() for m in settings.llm_models.split(",") if m.strip()]
     if not models:
         models = ["gemini/gemini-3-flash-preview"]
