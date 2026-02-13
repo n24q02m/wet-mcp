@@ -135,6 +135,7 @@ async def analyze_media(
         config = get_llm_config()
         logger.info(f"Analyzing media with model: {config['model']}")
 
+        # Use asyncio.to_thread to avoid blocking the event loop during file I/O and encoding
         base64_image = await asyncio.to_thread(encode_image, media_path)
         data_url = f"data:{mime_type};base64,{base64_image}"
 
