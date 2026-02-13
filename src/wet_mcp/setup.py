@@ -8,6 +8,7 @@ This module handles automatic first-run setup:
 Setup runs automatically on first server start.
 """
 
+import importlib.util
 import subprocess
 import sys
 from pathlib import Path
@@ -26,8 +27,6 @@ _SEARXNG_INSTALL_URL = (
 def _find_searx_package_dir() -> Path | None:
     """Find SearXNG package directory via importlib."""
     try:
-        import importlib.util
-
         spec = importlib.util.find_spec("searx")
         if spec and spec.submodule_search_locations:
             return Path(spec.submodule_search_locations[0])
@@ -129,13 +128,9 @@ def _install_searxng() -> bool:
     Returns:
         True if installation succeeded or already installed.
     """
-    try:
-        import searx  # noqa: F401
-
+    if importlib.util.find_spec("searx"):
         logger.debug("SearXNG already installed")
         return True
-    except ImportError:
-        pass
 
     logger.info("Installing SearXNG from GitHub...")
     try:
