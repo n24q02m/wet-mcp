@@ -1,6 +1,8 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from wet_mcp.searxng_runner import _get_settings_path
 
 
@@ -53,3 +55,70 @@ def test_get_settings_path():
         # Verify write_text called with correct content
         expected_content = "server:\n  port: 9090\n"
         mock_settings_file.write_text.assert_called_once_with(expected_content)
+
+
+def test_get_settings_path_permission_error():
+    # Simulate PermissionError on mkdir
+    mock_home = MagicMock(spec=Path)
+    mock_config_dir = MagicMock(spec=Path)
+    mock_home.__truediv__.return_value = mock_config_dir
+    mock_config_dir.mkdir.side_effect = PermissionError("Access denied")
+
+    with (
+        patch("wet_mcp.searxng_runner.Path") as mock_path_cls,
+        patch("wet_mcp.searxng_runner.files"),  # Won't be reached but good to mock
+        pytest.raises(PermissionError),
+    ):
+        mock_path_cls.home.return_value = mock_home
+        _get_settings_path(8080)
+
+
+def test_get_settings_path_template_error():
+    # Simulate FileNotFoundError on read_text
+    mock_home = MagicMock(spec=Path)
+    mock_config_dir = MagicMock(spec=Path)
+    mock_settings_file = MagicMock(spec=Path)
+
+    mock_home.__truediv__.return_value = mock_config_dir
+    mock_config_dir.__truediv__.return_value = mock_settings_file
+
+    # Mock files("wet_mcp") raising error
+    mock_files = MagicMock()
+    mock_bundled_file = MagicMock()
+    mock_files.joinpath.return_value = mock_bundled_file
+    mock_bundled_file.read_text.side_effect = FileNotFoundError("Template missing")
+
+    with (
+        patch("wet_mcp.searxng_runner.Path") as mock_path_cls,
+        patch("wet_mcp.searxng_runner.os.getpid", return_value=12345),
+        patch("wet_mcp.searxng_runner.files", return_value=mock_files),
+        pytest.raises(FileNotFoundError),
+    ):
+        mock_path_cls.home.return_value = mock_home
+        _get_settings_path(8080)
+
+
+def test_get_settings_path_write_error():
+    # Simulate OSError on write_text
+    mock_home = MagicMock(spec=Path)
+    mock_config_dir = MagicMock(spec=Path)
+    mock_settings_file = MagicMock(spec=Path)
+
+    mock_home.__truediv__.return_value = mock_config_dir
+    mock_config_dir.__truediv__.return_value = mock_settings_file
+
+    mock_files = MagicMock()
+    mock_bundled_file = MagicMock()
+    mock_files.joinpath.return_value = mock_bundled_file
+    mock_bundled_file.read_text.return_value = "content"
+
+    mock_settings_file.write_text.side_effect = OSError("Disk full")
+
+    with (
+        patch("wet_mcp.searxng_runner.Path") as mock_path_cls,
+        patch("wet_mcp.searxng_runner.os.getpid", return_value=12345),
+        patch("wet_mcp.searxng_runner.files", return_value=mock_files),
+        pytest.raises(OSError),
+    ):
+        mock_path_cls.home.return_value = mock_home
+        _get_settings_path(8080)
