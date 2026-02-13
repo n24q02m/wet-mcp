@@ -108,3 +108,67 @@ async def test_media_unknown_action():
     result = await media(action="unknown_action")
     assert "Error: Unknown action 'unknown_action'" in result
     assert "Valid actions: list, download, analyze" in result
+
+@pytest.mark.asyncio
+async def test_media_list_defaults(mock_settings):
+    """Test media list action with default arguments."""
+    mock_list_media = AsyncMock(return_value='{"images": []}')
+
+    with patch("wet_mcp.server.list_media", mock_list_media):
+        result = await media(action="list", url="http://example.com")
+
+        mock_list_media.assert_called_once_with(
+            url="http://example.com", media_type="all", max_items=10
+        )
+        assert result == '{"images": []}'
+
+
+@pytest.mark.asyncio
+async def test_media_analyze_defaults(mock_settings):
+    """Test media analyze action with default prompt."""
+    mock_analyze_media = AsyncMock(return_value="Analysis result")
+
+    with patch("wet_mcp.llm.analyze_media", mock_analyze_media):
+        result = await media(action="analyze", url="/path/to/image.jpg")
+
+        mock_analyze_media.assert_called_once_with(
+            media_path="/path/to/image.jpg", prompt="Describe this image in detail."
+        )
+        assert result == "Analysis result"
+
+
+@pytest.mark.asyncio
+async def test_media_download_ignores_unused(mock_settings):
+    """Test media download action ignores unused 'url' argument."""
+    mock_download_media = AsyncMock(return_value='["file1.jpg"]')
+
+    with patch("wet_mcp.sources.crawler.download_media", mock_download_media):
+        result = await media(
+            action="download",
+            media_urls=["http://example.com/img.jpg"],
+            url="http://should-be-ignored.com",
+        )
+
+        mock_download_media.assert_called_once_with(
+            media_urls=["http://example.com/img.jpg"],
+            output_dir=mock_settings.download_dir,
+        )
+        assert result == '["file1.jpg"]'
+
+
+@pytest.mark.asyncio
+async def test_media_list_ignores_unused(mock_settings):
+    """Test media list action ignores unused 'media_urls' argument."""
+    mock_list_media = AsyncMock(return_value='{"images": []}')
+
+    with patch("wet_mcp.server.list_media", mock_list_media):
+        result = await media(
+            action="list",
+            url="http://example.com",
+            media_urls=["http://should-be-ignored.com"],
+        )
+
+        mock_list_media.assert_called_once_with(
+            url="http://example.com", media_type="all", max_items=10
+        )
+        assert result == '{"images": []}'
