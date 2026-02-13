@@ -1,7 +1,11 @@
-import pytest
-from unittest.mock import patch, AsyncMock, PropertyMock
+from unittest.mock import AsyncMock, patch
+from urllib.parse import urlparse
+
 import httpx
+import pytest
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_ssrf_redirect_fix(tmp_path):
@@ -12,8 +16,12 @@ async def test_ssrf_redirect_fix(tmp_path):
 
     with patch("wet_mcp.sources.crawler.is_safe_url") as mock_is_safe:
         def side_effect(url):
-            if "safe.com" in str(url): return True
-            if "127.0.0.1" in str(url): return False
+            # Parse the URL to safely check the domain/IP
+            parsed = urlparse(str(url))
+            if parsed.hostname == "safe.com":
+                return True
+            if parsed.hostname == "127.0.0.1":
+                return False
             return True
         mock_is_safe.side_effect = side_effect
 
@@ -25,11 +33,6 @@ async def test_ssrf_redirect_fix(tmp_path):
             req1 = httpx.Request("GET", safe_url)
             r1 = httpx.Response(302, headers={"Location": unsafe_url}, request=req1)
 
-            # We need to make sure response.url returns the correct URL
-            # httpx.Response.url property returns self.request.url if not set explicitly via extension
-            # But let's just patch it to be safe or rely on behavior.
-            # Actually, let's just use what httpx gives us.
-
             req2 = httpx.Request("GET", unsafe_url)
             r2 = httpx.Response(200, content=b"SECRET", request=req2)
 
@@ -38,8 +41,8 @@ async def test_ssrf_redirect_fix(tmp_path):
             try:
                 # Execute
                 await download_media([safe_url], str(output_dir))
-            except Exception as e:
-                pass # Ignore runtime errors if mocked incorrectly, we care about calls
+            except Exception:
+                pass  # Ignore runtime errors if mocked incorrectly, we care about calls
 
             # Verification:
 
@@ -49,12 +52,9 @@ async def test_ssrf_redirect_fix(tmp_path):
 
             # 2. Check that follow_redirects=False was used in the first call
             # Current vulnerable code uses True.
-            args, kwargs = client_instance.get.call_args_list[0]
+            _, kwargs = client_instance.get.call_args_list[0]
             if kwargs.get("follow_redirects") is True:
-                 pytest.fail("VULNERABLE: follow_redirects=True used")
-
-            # If we reach here, it means follow_redirects=False (or None/default, which is False for client instance usually, but client.get defaults to True? No, httpx.get defaults to True, client.get defaults to client setting).
-            # Wait, client.get(url, follow_redirects=...) overrides client setting.
+                pytest.fail("VULNERABLE: follow_redirects=True used")
 
             # 3. Check is_safe_url calls
             mock_is_safe.assert_any_call(safe_url)
@@ -68,6 +68,6 @@ async def test_ssrf_redirect_fix(tmp_path):
             # 4. client.get should NOT be called for unsafe_url
             if client_instance.get.call_count > 1:
                 # Check 2nd call
-                args2, kwargs2 = client_instance.get.call_args_list[1]
+                args2, _ = client_instance.get.call_args_list[1]
                 if str(args2[0]) == unsafe_url:
-                     pytest.fail("VULNERABLE: Unsafe URL was fetched")
+                    pytest.fail("VULNERABLE: Unsafe URL was fetched")
