@@ -579,6 +579,26 @@ async def _do_docs_search(
     lib = _docs_db.get_library(library)
 
     if lib:
+        # Validate cached docs_url: if it points to wrong GitHub repo, force re-index
+        cached_url = lib.get("docs_url", "")
+        if cached_url and "github.com" in cached_url:
+            from urllib.parse import urlparse
+
+            gh_path = urlparse(cached_url).path.strip("/").split("/")
+            # Check if GitHub repo name matches library name
+            if len(gh_path) >= 2:
+                repo_name = gh_path[1].lower()
+                if (
+                    repo_name != library.lower()
+                    and repo_name != library.lower().replace("-", "")
+                ):
+                    logger.info(
+                        f"Cached docs_url '{cached_url}' repo '{repo_name}' "
+                        f"doesn't match library '{library}', forcing re-index"
+                    )
+                    lib = None  # Force re-discovery below
+
+    if lib:
         # Check if we have indexed chunks
         ver = _docs_db.get_best_version(lib["id"], version)
         if ver and ver.get("chunk_count", 0) > 0:
