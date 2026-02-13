@@ -451,7 +451,7 @@ async def download_media(
                     f = await asyncio.to_thread(open, filepath, "wb")
                     try:
                         async for chunk in response.aiter_bytes():
-                            await asyncio.to_thread(f.write, chunk)
+                            await asyncio.to_thread(f.write, chunk)  # ty: ignore[invalid-argument-type]
                             downloaded_size += len(chunk)
                     finally:
                         await asyncio.to_thread(f.close)
