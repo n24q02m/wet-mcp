@@ -5,6 +5,18 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.5](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.4...v2.5.0-beta.5) (2026-02-13)
+
+
+### Features
+
+* add batch splitting and retry with exponential backoff to embedder ([9fe0e94](https://github.com/n24q02m/wet-mcp/commit/9fe0e946b28430ab5254739dc51415c9ed4a1e0e))
+
+
+### Bug Fixes
+
+* resolve ruff C420 lint and f-string format issues in db.py ([bdc3808](https://github.com/n24q02m/wet-mcp/commit/bdc380820b7d0aff5b1f49bf0c710cb3d16a863b))
+
 ## [2.5.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.3...v2.5.0-beta.4) (2026-02-13)
 
 
