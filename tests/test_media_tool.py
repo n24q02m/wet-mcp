@@ -109,6 +109,7 @@ async def test_media_unknown_action():
     assert "Error: Unknown action 'unknown_action'" in result
     assert "Valid actions: list, download, analyze" in result
 
+
 @pytest.mark.asyncio
 async def test_media_list_defaults(mock_settings):
     """Test media list action with default arguments."""
