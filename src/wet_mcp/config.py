@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     llm_temperature: float | None = None
 
     def setup_api_keys(self) -> dict[str, list[str]]:
-        """Parse API_KEYS (format: ENV_VAR:key,...) and set env vars.
+        """Parse API_KEYS (format: ENV_VAR:key,...) and set environment variables.
 
         Example:
             API_KEYS="GOOGLE_API_KEY:abc,GOOGLE_API_KEY:def,OPENAI_API_KEY:xyz"
