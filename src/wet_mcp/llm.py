@@ -75,6 +75,7 @@ def encode_image(image_path: str, mime_type: str | None = None) -> str:
             parts.append(base64.b64encode(chunk).decode("utf-8"))
     return "".join(parts)
 
+
 async def analyze_media(
     media_path: str, prompt: str = "Describe this media in detail."
 ) -> str:
