@@ -17,7 +17,7 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-requires-python = "==3.13.*"
+requires-python = ">=3.12"
 dependencies = [
     # MCP Server
     "mcp[cli]",

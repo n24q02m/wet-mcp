@@ -18,7 +18,7 @@ import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_path, is_safe_url
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
@@ -438,7 +438,7 @@ async def download_media(
 
                 # Security check: Ensure the resolved path is still
                 # within the output directory
-                if not filepath.is_relative_to(output_path):
+                if not is_safe_path(filepath, output_path):
                     raise ValueError(
                         f"Security Alert: Path traversal attempt detected "
                         f"for {filename}"
