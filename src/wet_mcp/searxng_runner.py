@@ -29,7 +29,7 @@ import httpx
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.setup import patch_searxng_version, patch_searxng_windows
+from wet_mcp.setup import patch_searxng_version
 
 # Maximum number of restart attempts before giving up and falling back
 # to the external SearXNG URL.
@@ -176,7 +176,6 @@ def _install_searxng() -> bool:
         if result.returncode == 0:
             logger.info("SearXNG installed successfully")
             patch_searxng_version()
-            patch_searxng_windows()
             return True
         else:
             logger.error(f"SearXNG installation failed: {result.stderr[:500]}")
@@ -400,7 +399,7 @@ async def _start_searxng_subprocess() -> str | None:
 
         _searxng_process = await asyncio.to_thread(
             lambda: subprocess.Popen(
-                [sys.executable, "-m", "searx.webapp"],
+                [sys.executable, "-m", "wet_mcp.run_searxng"],
                 env=env,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
