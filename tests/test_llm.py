@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from wet_mcp.config import settings
-from wet_mcp.llm import analyze_media, get_llm_config
+from wet_mcp.llm import analyze_media, encode_image, get_llm_config
 
 
 @pytest.fixture
@@ -125,3 +125,14 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         "Error: Cannot determine file type" in result
         or "Unsupported media type" in result
     )
+
+
+@pytest.mark.asyncio
+async def test_encode_image(tmp_path):
+    """Test async encode_image."""
+    img_path = tmp_path / "test_encode.jpg"
+    img_path.write_bytes(b"test-data")
+
+    result = await encode_image(str(img_path))
+    # base64("test-data") -> "dGVzdC1kYXRh"
+    assert result == "dGVzdC1kYXRh"
