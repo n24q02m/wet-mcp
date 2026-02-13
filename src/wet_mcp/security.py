@@ -1,9 +1,9 @@
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
-from pathlib import Path
 
 
 def is_safe_url(url: str) -> bool:
@@ -70,6 +70,7 @@ def is_safe_url(url: str) -> bool:
         return False
 
     return True
+
 
 def is_safe_path(path: str | Path, base_dir: str | Path) -> bool:
     """

@@ -1,7 +1,7 @@
-import os
-from pathlib import Path
 import pytest
+
 from wet_mcp.security import is_safe_path
+
 
 def test_is_safe_path_basic(tmp_path):
     """Test basic safe path scenarios."""
@@ -16,6 +16,7 @@ def test_is_safe_path_basic(tmp_path):
     # Also works with strings
     assert is_safe_path(str(safe), str(base))
 
+
 def test_is_safe_path_traversal(tmp_path):
     """Test path traversal attempts."""
     base = tmp_path / "base"
@@ -29,6 +30,7 @@ def test_is_safe_path_traversal(tmp_path):
     unsafe_str = str(base) + "/../unsafe.txt"
     assert not is_safe_path(unsafe_str, base)
 
+
 def test_is_safe_path_absolute(tmp_path):
     """Test absolute paths."""
     base = tmp_path / "base"
@@ -41,6 +43,7 @@ def test_is_safe_path_absolute(tmp_path):
     # Absolute path inside
     inside = base / "inside.txt"
     assert is_safe_path(inside, base)
+
 
 def test_is_safe_path_symlink(tmp_path):
     """Test symlink resolution."""
@@ -60,6 +63,7 @@ def test_is_safe_path_symlink(tmp_path):
     # resolving link -> target
     # target is NOT relative to base
     assert not is_safe_path(link, base)
+
 
 def test_is_safe_path_expanduser():
     """Test that expanduser is called."""
