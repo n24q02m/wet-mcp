@@ -8,6 +8,7 @@ This module handles automatic first-run setup:
 Setup runs automatically on first server start.
 """
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -120,32 +121,61 @@ def needs_setup() -> bool:
     return not SETUP_MARKER.exists()
 
 
-def _install_searxng() -> bool:
-    """Install SearXNG Python package from GitHub zip archive.
+def get_pip_command() -> list[str]:
+    """Get cross-platform pip install command.
 
-    Pre-installs build dependencies, then installs SearXNG with
-    --no-build-isolation for reliable builds across platforms.
+    Priority:
+    1. uv pip (for uv environments - no pip module)
+    2. pip (for traditional venvs)
+    3. python -m pip (fallback)
+    """
+    # Check uv first (cross-platform, works in uv venvs without pip)
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return [uv_path, "pip", "install"]
+
+    # Check pip executable
+    pip_path = shutil.which("pip")
+    if pip_path:
+        return [pip_path, "install"]
+
+    # Fallback to python -m pip
+    return [sys.executable, "-m", "pip", "install"]
+
+
+def is_searxng_installed() -> bool:
+    """Check if the SearXNG Python package is installed."""
+    try:
+        import searx  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def install_searxng() -> bool:
+    """Install SearXNG from GitHub zip archive.
+
+    Uses zip URL instead of git+ to avoid filename issues on some
+    platforms. Pre-installs build dependencies before SearXNG.
 
     Returns:
         True if installation succeeded or already installed.
     """
-    try:
-        import searx  # noqa: F401
-
+    if is_searxng_installed():
         logger.debug("SearXNG already installed")
         return True
-    except ImportError:
-        pass
 
     logger.info("Installing SearXNG from GitHub...")
     try:
-        # Pre-install build dependencies
+        pip_cmd = get_pip_command()
+        logger.debug(f"Using pip command: {pip_cmd}")
+
+        # Pre-install build dependencies required by SearXNG
+        logger.debug("Installing SearXNG build dependencies...")
         deps_result = subprocess.run(
             [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
+                *pip_cmd,
                 "--quiet",
                 "msgspec",
                 "setuptools",
@@ -157,16 +187,13 @@ def _install_searxng() -> bool:
             timeout=120,
         )
         if deps_result.returncode != 0:
-            logger.error(f"Build deps install failed: {deps_result.stderr[:300]}")
+            logger.error(f"Build deps installation failed: {deps_result.stderr[:500]}")
             return False
 
-        # Install SearXNG with --no-build-isolation
+        # Install SearXNG with --no-build-isolation (uses pre-installed deps)
         result = subprocess.run(
             [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
+                *pip_cmd,
                 "--quiet",
                 "--no-build-isolation",
                 _SEARXNG_INSTALL_URL,
@@ -175,19 +202,21 @@ def _install_searxng() -> bool:
             text=True,
             timeout=300,
         )
+
         if result.returncode == 0:
             logger.info("SearXNG installed successfully")
             patch_searxng_version()
             patch_searxng_windows()
             return True
         else:
-            logger.error(f"SearXNG install failed: {result.stderr[:300]}")
+            logger.error(f"SearXNG installation failed: {result.stderr[:500]}")
             return False
+
     except subprocess.TimeoutExpired:
         logger.error("SearXNG installation timed out")
         return False
     except Exception as e:
-        logger.error(f"SearXNG install error: {e}")
+        logger.error(f"Failed to install SearXNG: {e}")
         return False
 
 
@@ -246,7 +275,7 @@ def run_auto_setup() -> bool:
     logger.debug(f"Created config directory: {config_dir}")
 
     # Step 2: Install SearXNG from GitHub
-    if not _install_searxng():
+    if not install_searxng():
         logger.warning("SearXNG not installed, search will use external URL")
         # Don't fail setup entirely - extract/crawl still works
 
