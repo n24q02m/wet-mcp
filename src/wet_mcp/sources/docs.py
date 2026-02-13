@@ -23,7 +23,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 2
+DISCOVERY_VERSION = 3
 
 # ---------------------------------------------------------------------------
 # Registry discovery — find docs URL from library name
@@ -145,12 +145,15 @@ async def discover_library(name: str) -> dict | None:
             parsed_hp = urlparse(homepage)
             if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
                 score += 3
-            # Bonus for dedicated docs domains
-            if any(
-                p in parsed_hp.netloc
-                for p in ("readthedocs", "rtfd.io", "docs.", ".dev")
-            ):
-                score += 2
+                # Library name appears in the domain → likely official site
+                # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
+                lib_norm = name.lower().replace("-", "")
+                host_norm = parsed_hp.netloc.lower().replace("-", "")
+                if lib_norm in host_norm:
+                    score += 3
+                # Known dedicated docs platforms (not generic hosts like docs.rs)
+                if any(p in parsed_hp.netloc for p in ("readthedocs", "rtfd.io")):
+                    score += 2
         # Description quality (longer = more established)
         desc = r.get("description", "")
         if desc:
