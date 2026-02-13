@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.2...v2.5.0-beta.3) (2026-02-13)
+
+
+### Features
+
+* enhance documentation search with GitHub raw markdown support and content cleaning ([d79e07b](https://github.com/n24q02m/wet-mcp/commit/d79e07b5e1b42bc12b85b3d5b50a833c3ed2cc80))
+
 ## [2.5.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.1...v2.5.0-beta.2) (2026-02-13)
 
 
