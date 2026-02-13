@@ -575,28 +575,20 @@ async def _do_docs_search(
     if not _docs_db:
         return "Error: Docs database not initialized"
 
+    from wet_mcp.sources.docs import DISCOVERY_VERSION
+
     # Step 1: Check if library is already indexed
     lib = _docs_db.get_library(library)
 
     if lib:
-        # Validate cached docs_url: if it points to wrong GitHub repo, force re-index
-        cached_url = lib.get("docs_url", "")
-        if cached_url and "github.com" in cached_url:
-            from urllib.parse import urlparse
-
-            gh_path = urlparse(cached_url).path.strip("/").split("/")
-            # Check if GitHub repo name matches library name
-            if len(gh_path) >= 2:
-                repo_name = gh_path[1].lower()
-                if (
-                    repo_name != library.lower()
-                    and repo_name != library.lower().replace("-", "")
-                ):
-                    logger.info(
-                        f"Cached docs_url '{cached_url}' repo '{repo_name}' "
-                        f"doesn't match library '{library}', forcing re-index"
-                    )
-                    lib = None  # Force re-discovery below
+        # Invalidate cache if discovery scoring has been updated
+        cached_version = lib.get("discovery_version", 0)
+        if cached_version < DISCOVERY_VERSION:
+            logger.info(
+                f"Library '{library}' cached with discovery v{cached_version} "
+                f"(current v{DISCOVERY_VERSION}), forcing re-index"
+            )
+            lib = None  # Force re-discovery below
 
     if lib:
         # Check if we have indexed chunks
