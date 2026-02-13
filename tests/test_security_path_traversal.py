@@ -59,6 +59,7 @@ async def test_download_media_safe(tmp_path):
                 assert expected_file.exists()
                 assert expected_file.read_bytes() == b"safe content"
 
+
 @pytest.mark.asyncio
 async def test_download_media_output_dir_traversal(tmp_path):
     """Test that download_media prevents arbitrary output_dir."""
@@ -71,11 +72,12 @@ async def test_download_media_output_dir_traversal(tmp_path):
         target_download_dir.mkdir()
 
         with patch("wet_mcp.config.settings.download_dir", str(target_download_dir)):
-
             # 1. Attempt with a path outside downloads
             unsafe_dir = tmp_path / "outside"
 
-            with pytest.raises(ValueError, match="Security Alert: Output directory must be within"):
+            with pytest.raises(
+                ValueError, match="Security Alert: Output directory must be within"
+            ):
                 await download_media(["http://example.com/foo.txt"], str(unsafe_dir))
 
             assert not unsafe_dir.exists()
@@ -83,8 +85,12 @@ async def test_download_media_output_dir_traversal(tmp_path):
             # 2. Attempt with traversal relative to downloads
             unsafe_traversal = target_download_dir / ".." / "outside_via_traversal"
 
-            with pytest.raises(ValueError, match="Security Alert: Output directory must be within"):
-                await download_media(["http://example.com/foo.txt"], str(unsafe_traversal))
+            with pytest.raises(
+                ValueError, match="Security Alert: Output directory must be within"
+            ):
+                await download_media(
+                    ["http://example.com/foo.txt"], str(unsafe_traversal)
+                )
 
             # 3. Valid download should pass (output_dir check only)
             valid_dir = target_download_dir / "subdir"

@@ -71,6 +71,7 @@ def is_safe_url(url: str) -> bool:
 
     return True
 
+
 def is_safe_path(target: str | Path, base: str | Path) -> bool:
     """Check if target path is within base path."""
     try:
