@@ -447,7 +447,10 @@ async def download_media(
                         next_url = str(response.url.join(location))
 
                         if not is_safe_url(next_url):
-                            return {"url": url, "error": "Security Alert: Unsafe redirect blocked"}
+                            return {
+                                "url": url,
+                                "error": "Security Alert: Unsafe redirect blocked",
+                            }
 
                         target_url = next_url
                         redirect_count += 1

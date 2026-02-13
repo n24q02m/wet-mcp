@@ -15,6 +15,7 @@ async def test_ssrf_redirect_fix(tmp_path):
     output_dir.mkdir()
 
     with patch("wet_mcp.sources.crawler.is_safe_url") as mock_is_safe:
+
         def side_effect(url):
             # Parse the URL to safely check the domain/IP
             parsed = urlparse(str(url))
@@ -23,6 +24,7 @@ async def test_ssrf_redirect_fix(tmp_path):
             if parsed.hostname == "127.0.0.1":
                 return False
             return True
+
         mock_is_safe.side_effect = side_effect
 
         with patch("httpx.AsyncClient") as MockClient:
@@ -63,7 +65,9 @@ async def test_ssrf_redirect_fix(tmp_path):
             try:
                 mock_is_safe.assert_any_call(unsafe_url)
             except AssertionError:
-                pytest.fail("VULNERABLE: Redirect target was NOT checked by is_safe_url")
+                pytest.fail(
+                    "VULNERABLE: Redirect target was NOT checked by is_safe_url"
+                )
 
             # 4. client.get should NOT be called for unsafe_url
             if client_instance.get.call_count > 1:
