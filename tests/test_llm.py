@@ -10,21 +10,24 @@ from wet_mcp.llm import analyze_media, get_llm_config
 
 
 @pytest.fixture
-def mock_settings():
+def mock_settings(tmp_path):
     """Mock settings for testing."""
     original_keys = settings.api_keys
     original_models = settings.llm_models
     original_temperature = settings.llm_temperature
+    original_download_dir = settings.download_dir
 
     settings.api_keys = "GOOGLE_API_KEY:fake-key"
     settings.llm_models = "gemini/fake-model"
     settings.llm_temperature = None
+    settings.download_dir = str(tmp_path)
 
     yield
 
     settings.api_keys = original_keys
     settings.llm_models = original_models
     settings.llm_temperature = original_temperature
+    settings.download_dir = original_download_dir
 
 
 def test_get_llm_config(mock_settings):
@@ -89,9 +92,11 @@ def test_analyze_media_no_keys():
     assert "Error: LLM analysis requires API_KEYS" in result
 
 
-def test_analyze_media_file_not_found(mock_settings):
+def test_analyze_media_file_not_found(mock_settings, tmp_path):
     """Test file not found error."""
-    result = asyncio.run(analyze_media("non_existent_file.jpg"))
+    # Use a path that is "safe" (inside allowed dir) but doesn't exist
+    safe_non_existent = tmp_path / "non_existent_file.jpg"
+    result = asyncio.run(analyze_media(str(safe_non_existent)))
     assert "Error: File not found" in result
 
 
@@ -125,3 +130,18 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         "Error: Cannot determine file type" in result
         or "Unsupported media type" in result
     )
+
+def test_analyze_media_access_denied(mock_settings, tmp_path):
+    """Test access denied for files outside allowed directory."""
+    # Create a file outside the allowed directory (which is tmp_path)
+    # We can't easily write outside tmp_path in tests without permission issues or messing up system.
+    # Instead, we can change the allowed directory in settings to something else,
+    # and try to access a file in tmp_path.
+
+    settings.download_dir = str(tmp_path / "subdir")
+
+    file_in_tmp = tmp_path / "outside.txt"
+    file_in_tmp.write_text("secret")
+
+    result = asyncio.run(analyze_media(str(file_in_tmp)))
+    assert "Error: Access denied" in result
