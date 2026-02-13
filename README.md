@@ -1,6 +1,6 @@
-# WET - Web ExTract MCP Server
+# WET - Web Extended Toolkit MCP Server
 
-**Open-source MCP Server for web search, content extraction & multimodal analysis.**
+**Open-source MCP Server for web search, content extraction, library docs & multimodal analysis.**
 
 [![PyPI](https://img.shields.io/pypi/v/wet-mcp)](https://pypi.org/project/wet-mcp/)
 [![Docker](https://img.shields.io/docker/v/n24q02m/wet-mcp?label=docker)](https://hub.docker.com/r/n24q02m/wet-mcp)
@@ -9,11 +9,15 @@
 ## Features
 
 - **Web Search** - Search via embedded SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave)
+- **Academic Research** - Search Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
+- **Library Docs** - Auto-discover and index documentation with FTS5 hybrid search
 - **Content Extract** - Extract clean content (Markdown/Text)
 - **Deep Crawl** - Crawl multiple pages from a root URL with depth control
 - **Site Map** - Discover website URL structure
 - **Media** - List and download images, videos, audio files
 - **Anti-bot** - Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter
+- **Local Cache** - TTL-based caching for all web operations
+- **Docs Sync** - Sync indexed docs across machines via rclone
 
 ---
 
@@ -21,19 +25,20 @@
 
 ### Prerequisites
 
-- **Python 3.13** (required — Python 3.14+ is **not** supported due to SearXNG incompatibility)
+- **Python 3.13** (required -- Python 3.14+ is **not** supported due to SearXNG incompatibility)
 
 ### Add to mcp.json
 
 #### uvx (Recommended)
 
-```json
+```jsonc
 {
   "mcpServers": {
     "wet": {
       "command": "uvx",
       "args": ["--python", "3.13", "wet-mcp@latest"],
       "env": {
+        // Optional: API keys for embedding and media analysis
         "API_KEYS": "GOOGLE_API_KEY:AIza..."
       }
     }
@@ -51,12 +56,16 @@
 
 #### Docker
 
-```json
+```jsonc
 {
   "mcpServers": {
     "wet": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "API_KEYS", "n24q02m/wet-mcp:latest"],
+      "args": [
+        "run", "-i", "--rm",
+        "-e", "API_KEYS",
+        "n24q02m/wet-mcp:latest"
+      ],
       "env": {
         "API_KEYS": "GOOGLE_API_KEY:AIza..."
       }
@@ -64,6 +73,39 @@
   }
 }
 ```
+
+#### With docs sync (Google Drive)
+
+**Step 1**: Get a drive token (one-time, requires browser):
+
+```bash
+uvx --python 3.13 wet-mcp setup-sync drive
+```
+
+This downloads rclone, opens a browser for Google Drive auth, and outputs a **base64-encoded token** for `RCLONE_CONFIG_GDRIVE_TOKEN`.
+
+**Step 2**: Copy the token and add it to your MCP config:
+
+```jsonc
+{
+  "mcpServers": {
+    "wet": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "wet-mcp@latest"],
+      "env": {
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",
+        "SYNC_ENABLED": "true",
+        "SYNC_REMOTE": "gdrive",
+        "SYNC_INTERVAL": "300",
+        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",
+        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>"
+      }
+    }
+  }
+}
+```
+
+Both raw JSON and base64-encoded tokens are supported. Base64 is recommended — it avoids nested JSON escaping issues.
 
 ### Without uvx
 
@@ -78,17 +120,25 @@ wet-mcp
 
 | Tool | Actions | Description |
 |:-----|:--------|:------------|
-| `web` | search, extract, crawl, map | Web operations |
+| `search` | search, research, docs | Web search, academic research, library documentation |
+| `extract` | extract, crawl, map | Content extraction, deep crawling, site mapping |
 | `media` | list, download, analyze | Media discovery & download |
-| `help` | - | Full documentation |
+| `help` | - | Full documentation for any tool |
 
 ### Usage Examples
 
 ```json
+// search tool
 {"action": "search", "query": "python web scraping", "max_results": 10}
+{"action": "research", "query": "transformer attention mechanism"}
+{"action": "docs", "query": "how to create routes", "library": "fastapi"}
+
+// extract tool
 {"action": "extract", "urls": ["https://example.com"]}
 {"action": "crawl", "urls": ["https://docs.python.org"], "depth": 2}
 {"action": "map", "urls": ["https://example.com"]}
+
+// media tool
 {"action": "list", "url": "https://github.com/python/cpython"}
 {"action": "download", "media_urls": ["https://example.com/image.png"]}
 ```
@@ -102,17 +152,26 @@ wet-mcp
 | `WET_AUTO_SEARXNG` | `true` | Auto-start embedded SearXNG subprocess |
 | `WET_SEARXNG_PORT` | `8080` | SearXNG port |
 | `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL (when auto disabled) |
-| `API_KEYS` | - | LLM API keys for media analysis |
+| `API_KEYS` | - | LLM API keys (format: `ENV_VAR:key,...`) |
+| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model for docs vector search |
+| `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions |
+| `WET_CACHE` | `true` | Enable/disable web cache |
+| `SYNC_ENABLED` | `false` | Enable rclone sync for docs DB |
+| `SYNC_REMOTE` | - | rclone remote name (e.g., "gdrive") |
+| `SYNC_FOLDER` | `wet-mcp` | Remote folder name |
+| `SYNC_INTERVAL` | `0` | Auto-sync interval in seconds (0 = manual) |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
 ### LLM Configuration (Optional)
 
-For media analysis (images, videos, audio), configure API keys:
+For media analysis and docs embedding, configure API keys:
 
 ```bash
 API_KEYS=GOOGLE_API_KEY:AIza...
 LLM_MODELS=gemini/gemini-3-flash-preview
 ```
+
+The server auto-detects embedding models from configured API keys (Gemini > OpenAI > Mistral > Cohere).
 
 ---
 
@@ -124,22 +183,27 @@ LLM_MODELS=gemini/gemini-3-flash-preview
 │            (Claude, Cursor, Windsurf)                   │
 └─────────────────────┬───────────────────────────────────┘
                       │ MCP Protocol
-                      ▼
+                      v
 ┌─────────────────────────────────────────────────────────┐
 │                   WET MCP Server                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐   │
-│  │   web    │  │  media   │  │        help          │   │
-│  │ (search, │  │ (list,   │  │  (full documentation)│   │
-│  │ extract, │  │ download,│  └──────────────────────┘   │
-│  │ crawl,   │  │ analyze) │                             │
-│  │ map)     │  └────┬─────┘                             │
-│  └────┬─────┘       │                                   │
-│       │             │                                   │
-│       ▼             ▼                                   │
-│  ┌──────────┐  ┌──────────┐                             │
-│  │ SearXNG  │  │ Crawl4AI │                             │
-│  │(embedded)│  │(Playwright)│                           │
-│  └──────────┘  └──────────┘                             │
+│  ┌──────────┐  ┌──────────┐  ┌───────┐  ┌──────────┐   │
+│  │  search  │  │ extract  │  │ media │  │   help   │   │
+│  │ (search, │  │(extract, │  │(list, │  │          │   │
+│  │ research,│  │ crawl,   │  │downld,│  │          │   │
+│  │ docs)    │  │ map)     │  │analyz)│  │          │   │
+│  └──┬───┬───┘  └────┬─────┘  └──┬────┘  └──────────┘   │
+│     │   │           │           │                       │
+│     v   v           v           v                       │
+│  ┌──────┐ ┌──────┐ ┌──────────┐                         │
+│  │SearX │ │DocsDB│ │ Crawl4AI │                         │
+│  │NG    │ │FTS5+ │ │(Playwrgt)│                         │
+│  │      │ │sqlite│ │          │                         │
+│  │      │ │-vec  │ │          │                         │
+│  └──────┘ └──────┘ └──────────┘                         │
+│                                                         │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  WebCache (SQLite, TTL)  │  rclone sync (docs)   │   │
+│  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
 

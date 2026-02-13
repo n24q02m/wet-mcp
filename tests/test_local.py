@@ -118,7 +118,7 @@ async def test_help():
     print("=" * 50)
 
     try:
-        for tool_name in ["web", "media", "help"]:
+        for tool_name in ["search", "extract", "media", "help"]:
             result = await help(tool_name)
             has_content = len(result) > 50 and "Error" not in result
             status = "OK" if has_content else "FAIL"
@@ -130,16 +130,16 @@ async def test_help():
         return False
 
 
-async def test_web_extract_tool():
-    """Test the web() tool with extract action (full MCP tool path)."""
-    from wet_mcp.server import web
+async def test_extract_tool():
+    """Test the extract() tool with extract action (full MCP tool path)."""
+    from wet_mcp.server import extract
 
     print("\n" + "=" * 50)
-    print("TEST 5: web() tool - extract action")
+    print("TEST 5: extract() tool - extract action")
     print("=" * 50)
 
     try:
-        result = await web(
+        result = await extract(
             action="extract",
             urls=["https://httpbin.org/html"],
             format="markdown",
@@ -162,16 +162,16 @@ async def test_web_extract_tool():
         return False
 
 
-async def test_web_search_fallback():
-    """Test web() search action when no SearXNG (should return error gracefully)."""
-    from wet_mcp.server import web
+async def test_search_fallback():
+    """Test search() action when no SearXNG (should return error gracefully)."""
+    from wet_mcp.server import search
 
     print("\n" + "=" * 50)
-    print("TEST 6: web() tool - search (no SearXNG)")
+    print("TEST 6: search() tool - search (no SearXNG)")
     print("=" * 50)
 
     try:
-        result = await web(
+        result = await search(
             action="search",
             query="python programming",
         )
@@ -201,8 +201,8 @@ async def main():
     results["sitemap"] = await test_sitemap()
     results["list_media"] = await test_list_media()
     results["help"] = await test_help()
-    results["web_extract"] = await test_web_extract_tool()
-    results["search_fallback"] = await test_web_search_fallback()
+    results["extract_tool"] = await test_extract_tool()
+    results["search_fallback"] = await test_search_fallback()
 
     # Summary
     print("\n" + "=" * 50)
