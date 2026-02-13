@@ -18,7 +18,8 @@ import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.config import settings
+from wet_mcp.security import is_safe_path, is_safe_url
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
@@ -397,7 +398,7 @@ async def download_media(
 
     Args:
         media_urls: List of media URLs to download
-        output_dir: Output directory
+        output_dir: Output directory (relative to configured download_dir or absolute path within it)
         concurrency: Max concurrent downloads
 
     Returns:
@@ -405,7 +406,20 @@ async def download_media(
     """
     logger.info(f"Downloading {len(media_urls)} media files")
 
-    output_path = Path(output_dir).expanduser().resolve()
+    # Security fix: enforce output_dir is within settings.download_dir
+    base_dir = Path(settings.download_dir).expanduser().resolve()
+    requested_path = Path(output_dir).expanduser()
+
+    if requested_path.is_absolute():
+        output_path = requested_path.resolve()
+    else:
+        output_path = (base_dir / requested_path).resolve()
+
+    if not is_safe_path(output_path, base_dir):
+        msg = f"Security Alert: Output directory must be within {base_dir}"
+        logger.error(msg)
+        return json.dumps({"error": msg})
+
     output_path.mkdir(parents=True, exist_ok=True)
 
     transport = httpx.AsyncHTTPTransport(retries=3)

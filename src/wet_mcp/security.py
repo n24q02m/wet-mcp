@@ -1,8 +1,23 @@
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
+
+
+def is_safe_path(path: str | Path, base_dir: str | Path) -> bool:
+    """
+    Check if a path is safe (relative to a base directory).
+    Prevents path traversal attacks.
+    """
+    try:
+        path = Path(path).resolve()
+        base = Path(base_dir).resolve()
+        return path.is_relative_to(base)
+    except Exception as e:
+        logger.error(f"Error validating path {path}: {e}")
+        return False
 
 
 def is_safe_url(url: str) -> bool:
