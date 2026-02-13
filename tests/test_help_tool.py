@@ -3,7 +3,9 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from wet_mcp.server import help
+
 
 @pytest.mark.asyncio
 async def test_help_success():
@@ -22,6 +24,7 @@ async def test_help_success():
         mock_files.joinpath.assert_called_once_with("web.md")
         mock_path.read_text.assert_called_once()
 
+
 @pytest.mark.asyncio
 async def test_help_file_not_found():
     """Test help tool when documentation file is missing."""
@@ -36,6 +39,7 @@ async def test_help_file_not_found():
 
         assert "Error: No documentation found" in result
         assert "non_existent_tool" in result
+
 
 @pytest.mark.asyncio
 async def test_help_generic_error():
