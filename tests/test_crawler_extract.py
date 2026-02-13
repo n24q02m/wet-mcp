@@ -163,3 +163,77 @@ async def test_extract_empty_list(mock_crawler_instance):
 
         assert results == []
         mock_crawler_instance.arun.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_extract_mixed_results(mock_crawler_instance):
+    """Test extraction with mixed success and failure results."""
+
+    def side_effect(url, config=None):
+        result = MagicMock()
+        if url == "https://good.com":
+            result.success = True
+            result.markdown = "Good content"
+            result.cleaned_html = "<p>Good content</p>"
+            result.metadata = {"title": "Good Page"}
+            result.links = {"internal": [], "external": []}
+        else:
+            result.success = False
+            result.error_message = "Failed"
+        return result
+
+    mock_crawler_instance.arun = AsyncMock(side_effect=side_effect)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        result_json = await extract(["https://good.com", "https://bad.com"])
+        results = json.loads(result_json)
+
+        assert len(results) == 2
+        # Sort results by URL to ensure deterministic assertions
+        results.sort(key=lambda x: x["url"])
+
+        assert results[0]["url"] == "https://bad.com"
+        assert results[0]["error"] == "Failed"
+
+        assert results[1]["url"] == "https://good.com"
+        assert results[1]["content"] == "Good content"
+
+
+@pytest.mark.asyncio
+async def test_extract_malformed_links(mock_crawler_instance):
+    """Test robustness against malformed crawler results (links is None)."""
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Content"
+    mock_result.cleaned_html = "<p>Content</p>"
+    mock_result.metadata = {"title": "Title"}
+    mock_result.links = None  # Simulating malformed response
+
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        result_json = await extract(["https://example.com"])
+        results = json.loads(result_json)
+
+        assert len(results) == 1
+        assert "error" in results[0]
+        assert "NoneType" in results[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_extract_crawler_init_failure():
+    """Test that crawler initialization failure propagates."""
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        side_effect=Exception("Init failed"),
+    ):
+        with pytest.raises(Exception, match="Init failed"):
+            await extract(["https://example.com"])
