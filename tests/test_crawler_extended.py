@@ -26,10 +26,7 @@ async def test_crawl_format_html(mock_crawler_instance):
         return_value=mock_crawler_instance,
     ):
         result_json = await crawl(
-            urls=["https://example.com"],
-            format="html",
-            depth=1,
-            max_pages=10
+            urls=["https://example.com"], format="html", depth=1, max_pages=10
         )
 
     results = json.loads(result_json)
@@ -72,11 +69,7 @@ async def test_crawl_internal_links_limit(mock_crawler_instance):
         return_value=mock_crawler_instance,
     ):
         # Set max_pages high enough to cover root + 10 children
-        result_json = await crawl(
-            urls=["https://example.com"],
-            depth=2,
-            max_pages=20
-        )
+        result_json = await crawl(urls=["https://example.com"], depth=2, max_pages=20)
 
     results = json.loads(result_json)
 
@@ -85,8 +78,7 @@ async def test_crawl_internal_links_limit(mock_crawler_instance):
 
     urls = sorted([r["url"] for r in results])
     expected_urls = sorted(
-        ["https://example.com"] +
-        [f"https://example.com/page{i}" for i in range(1, 11)]
+        ["https://example.com"] + [f"https://example.com/page{i}" for i in range(1, 11)]
     )
     assert urls == expected_urls
 
@@ -106,10 +98,10 @@ async def test_crawl_links_as_strings(mock_crawler_instance):
         res.metadata = {"title": f"Title for {url}"}
 
         if url == "https://example.com":
-             # Return list of strings here
-             res.links = {"internal": ["https://example.com/page2"], "external": []}
+            # Return list of strings here
+            res.links = {"internal": ["https://example.com/page2"], "external": []}
         else:
-             res.links = {"internal": [], "external": []}
+            res.links = {"internal": [], "external": []}
         return res
 
     mock_crawler_instance.arun = AsyncMock(side_effect=side_effect)
@@ -119,11 +111,7 @@ async def test_crawl_links_as_strings(mock_crawler_instance):
         new_callable=AsyncMock,
         return_value=mock_crawler_instance,
     ):
-        result_json = await crawl(
-            urls=["https://example.com"],
-            depth=2,
-            max_pages=10
-        )
+        result_json = await crawl(urls=["https://example.com"], depth=2, max_pages=10)
 
     results = json.loads(result_json)
     assert len(results) == 2
