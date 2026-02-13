@@ -293,3 +293,155 @@ async def test_crawl_multiple_roots(mock_crawler_instance):
     results = json.loads(result_json)
     urls = [r["url"] for r in results]
     assert set(urls) == {"https://example.com", "https://other.com"}
+
+
+@pytest.mark.asyncio
+async def test_crawl_format_html(mock_crawler_instance):
+    """Test that cleaned_html is returned when format is not markdown."""
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Markdown Content"
+    mock_result.cleaned_html = "<p>HTML Content</p>"
+    mock_result.metadata = {"title": "Test"}
+    mock_result.links = {"internal": [], "external": []}
+
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        result_json = await crawl(urls=["https://example.com"], format="html")
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert results[0]["content"] == "<p>HTML Content</p>"
+
+
+@pytest.mark.asyncio
+async def test_crawl_internal_link_limit(mock_crawler_instance):
+    """Test that only first 10 internal links are processed."""
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Content"
+    mock_result.cleaned_html = "<p>Content</p>"
+    mock_result.metadata = {"title": "Test"}
+
+    # Generate 15 internal links
+    internal_links = [{"href": f"https://example.com/page{i}"} for i in range(1, 16)]
+    mock_result.links = {"internal": internal_links, "external": []}
+
+    # Only the first call (root) returns links, subsequent calls return empty links
+    def side_effect(url, config=None):
+        if url == "https://example.com":
+            return mock_result
+
+        # For child pages
+        res = MagicMock()
+        res.success = True
+        res.markdown = f"Content for {url}"
+        res.cleaned_html = f"<p>Content for {url}</p>"
+        res.metadata = {"title": f"Title for {url}"}
+        res.links = {"internal": [], "external": []}
+        return res
+
+    mock_crawler_instance.arun = AsyncMock(side_effect=side_effect)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        # depth=1 to allow crawling internal links
+        # max_pages=20 to ensure we don't hit page limit before link limit
+        result_json = await crawl(urls=["https://example.com"], depth=1, max_pages=50)
+
+    results = json.loads(result_json)
+
+    # We expect 1 (root) + 10 (children) = 11 results
+    assert len(results) == 11
+    urls = {r["url"] for r in results}
+    assert "https://example.com" in urls
+    # Check that page1 to page10 are present
+    for i in range(1, 11):
+        assert f"https://example.com/page{i}" in urls
+    # Check that page11 is NOT present
+    assert "https://example.com/page11" not in urls
+
+
+@pytest.mark.asyncio
+async def test_crawl_link_format_handling(mock_crawler_instance):
+    """Test that both dict and string link formats are handled."""
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Content"
+    mock_result.cleaned_html = "<p>Content</p>"
+    mock_result.metadata = {"title": "Test"}
+
+    # Mix of dict and string links
+    mock_result.links = {
+        "internal": [
+            {"href": "https://example.com/dict-link"},
+            "https://example.com/string-link",
+        ],
+        "external": [],
+    }
+
+    def side_effect(url, config=None):
+        if url == "https://example.com":
+            return mock_result
+
+        # For child pages
+        res = MagicMock()
+        res.success = True
+        res.markdown = f"Content for {url}"
+        res.cleaned_html = f"<p>Content for {url}</p>"
+        res.metadata = {"title": f"Title for {url}"}
+        res.links = {"internal": [], "external": []}
+        return res
+
+    mock_crawler_instance.arun = AsyncMock(side_effect=side_effect)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        result_json = await crawl(urls=["https://example.com"], depth=1)
+
+    results = json.loads(result_json)
+    urls = {r["url"] for r in results}
+
+    assert "https://example.com/dict-link" in urls
+    assert "https://example.com/string-link" in urls
+
+
+@pytest.mark.asyncio
+async def test_crawl_link_none_handling(mock_crawler_instance):
+    """Test that None or empty links are ignored."""
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Content"
+    mock_result.cleaned_html = "<p>Content</p>"
+    mock_result.metadata = {"title": "Test"}
+
+    # Invalid links
+    mock_result.links = {
+        "internal": [{"href": ""}, None, "", {"href": None}],
+        "external": [],
+    }
+
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        result_json = await crawl(urls=["https://example.com"], depth=1)
+
+    results = json.loads(result_json)
+    # Should only return the root page
+    assert len(results) == 1
+    assert results[0]["url"] == "https://example.com"
