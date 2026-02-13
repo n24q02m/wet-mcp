@@ -218,10 +218,10 @@ async def crawl(
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
-    for root_url in urls:
+    async def _crawl_root(root_url: str):
         if not is_safe_url(root_url):
             logger.warning(f"Skipping unsafe URL: {root_url}")
-            continue
+            return
 
         to_crawl: list[tuple[str, int]] = [(root_url, 0)]
 
@@ -246,6 +246,10 @@ async def crawl(
                             if format == "markdown"
                             else result.cleaned_html
                         )
+
+                        if len(all_results) >= max_pages:
+                            break
+
                         all_results.append(
                             {
                                 "url": url,
@@ -259,7 +263,7 @@ async def crawl(
                         if current_depth < depth:
                             internal_links = result.links.get("internal", [])
                             for link_item in internal_links[:10]:
-                                # Crawl4AI returns dicts with 'href' key
+                                # Crawl4AI returns dicts with "href" key
                                 link_url = (
                                     link_item.get("href", "")
                                     if isinstance(link_item, dict)
@@ -271,9 +275,11 @@ async def crawl(
                 except Exception as e:
                     logger.error(f"Error crawling {url}: {e}")
 
+    tasks = [_crawl_root(root_url) for root_url in urls]
+    await asyncio.gather(*tasks)
+
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
-
 
 async def sitemap(
     urls: list[str],
@@ -298,10 +304,10 @@ async def sitemap(
     crawler = await _get_crawler(stealth=False)
     sem = _get_semaphore()
 
-    for root_url in urls:
+    async def _map_root(root_url: str):
         if not is_safe_url(root_url):
             logger.warning(f"Skipping unsafe URL: {root_url}")
-            continue
+            return
 
         to_visit: list[tuple[str, int]] = [(root_url, 0)]
         site_urls: list[dict[str, object]] = []
@@ -336,10 +342,11 @@ async def sitemap(
 
         all_urls.extend(site_urls)
 
+    tasks = [_map_root(root_url) for root_url in urls]
+    await asyncio.gather(*tasks)
+
     logger.info(f"Mapped {len(all_urls)} URLs")
     return json.dumps(all_urls, ensure_ascii=False, indent=2)
-
-
 async def list_media(
     url: str,
     media_type: str = "all",
