@@ -371,7 +371,7 @@ async def _start_searxng_subprocess() -> str | None:
 
     # Kill any existing process first
     if _searxng_process is not None:
-        _force_kill_process(_searxng_process)
+        await asyncio.to_thread(_force_kill_process, _searxng_process)
         _searxng_process = None
         _searxng_port = None
 
@@ -436,7 +436,7 @@ async def _start_searxng_subprocess() -> str | None:
     except Exception as e:
         logger.error(f"Failed to start SearXNG subprocess: {e}")
         if _searxng_process is not None:
-            _force_kill_process(_searxng_process)
+            await asyncio.to_thread(_force_kill_process, _searxng_process)
             _searxng_process = None
             _searxng_port = None
         return None
