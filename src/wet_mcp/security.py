@@ -1,5 +1,6 @@
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -69,3 +70,33 @@ def is_safe_url(url: str) -> bool:
         return False
 
     return True
+
+
+def is_safe_path(path: str | Path, base_dir: str | Path) -> bool:
+    """
+    Check if a path is safe (contained within base_dir).
+
+    Args:
+        path: Path to check
+        base_dir: Directory that the path must be relative to
+
+    Returns:
+        True if the path is safely within the base directory.
+    """
+    try:
+        # Expand user paths (e.g., ~/) and resolve absolute path
+        # resolving also eliminates '..' components
+        path_obj = Path(path).expanduser().resolve()
+        base_obj = Path(base_dir).expanduser().resolve()
+
+        # Check if the resolved path starts with the resolved base directory
+        # is_relative_to handles nested paths correctly
+        if not path_obj.is_relative_to(base_obj):
+            logger.warning(f"Blocked unsafe path traversal: {path} (Base: {base_dir})")
+            return False
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Error validating path {path}: {e}")
+        return False
