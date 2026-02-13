@@ -70,3 +70,23 @@ def test_setup_api_keys_whitespace():
         assert keys == {"ENV": ["key1"], "OTHER": ["key2"]}
         assert os.environ["ENV"] == "key1"
         assert os.environ["OTHER"] == "key2"
+
+
+def test_setup_api_keys_colon_in_value():
+    """Test setup_api_keys where the key value contains colons."""
+    settings = Settings(api_keys="CONNECTION_STRING:driver:postgres:db,OTHER:val")
+    with mock.patch.dict(os.environ, {}, clear=True):
+        keys = settings.setup_api_keys()
+        assert keys == {"CONNECTION_STRING": ["driver:postgres:db"], "OTHER": ["val"]}
+        assert os.environ["CONNECTION_STRING"] == "driver:postgres:db"
+
+
+def test_setup_api_keys_empty_env_var_name():
+    """Test setup_api_keys with empty environment variable name."""
+    settings = Settings(api_keys=":key,VALID:val")
+    with mock.patch.dict(os.environ, {}, clear=True):
+        keys = settings.setup_api_keys()
+        assert keys == {"VALID": ["val"]}
+        assert "VALID" in os.environ
+        # Ensure no empty key was set
+        assert "" not in os.environ
