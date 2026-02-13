@@ -81,5 +81,10 @@ ENV PYTHONPATH=/app/src
 # Mark setup as complete (everything pre-installed)
 RUN mkdir -p /root/.wet-mcp && touch /root/.wet-mcp/.setup-complete
 
+# Default data directory (cache, docs DB, downloads)
+ENV CACHE_DIR=/data
+ENV DOWNLOAD_DIR=/data/downloads
+VOLUME /data
+
 # Stdio transport by default
 CMD ["python", "-m", "wet_mcp"]

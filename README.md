@@ -63,6 +63,7 @@
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
+        "-v", "wet-data:/data",
         "-e", "API_KEYS",
         "n24q02m/wet-mcp:latest"
       ],
@@ -73,6 +74,8 @@
   }
 }
 ```
+
+> The `-v wet-data:/data` volume mount persists cached web pages, indexed library docs, and downloaded media across container restarts.
 
 #### With docs sync (Google Drive)
 
@@ -106,6 +109,39 @@ This downloads rclone, opens a browser for Google Drive auth, and outputs a **ba
 ```
 
 Both raw JSON and base64-encoded tokens are supported. Base64 is recommended — it avoids nested JSON escaping issues.
+
+Remote is configured via env vars — works in any environment (local, Docker, CI).
+
+#### With sync in Docker
+
+```jsonc
+{
+  "mcpServers": {
+    "wet": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "wet-data:/data",
+        "-e", "API_KEYS",
+        "-e", "SYNC_ENABLED",
+        "-e", "SYNC_REMOTE",
+        "-e", "SYNC_INTERVAL",
+        "-e", "RCLONE_CONFIG_GDRIVE_TYPE",
+        "-e", "RCLONE_CONFIG_GDRIVE_TOKEN",
+        "n24q02m/wet-mcp:latest"
+      ],
+      "env": {
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",
+        "SYNC_ENABLED": "true",
+        "SYNC_REMOTE": "gdrive",
+        "SYNC_INTERVAL": "300",
+        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",
+        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>"
+      }
+    }
+  }
+}
+```
 
 ### Without uvx
 
@@ -152,9 +188,15 @@ wet-mcp
 | `WET_AUTO_SEARXNG` | `true` | Auto-start embedded SearXNG subprocess |
 | `WET_SEARXNG_PORT` | `8080` | SearXNG port |
 | `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL (when auto disabled) |
+| `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout (seconds) |
 | `API_KEYS` | - | LLM API keys (format: `ENV_VAR:key,...`) |
+| `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis |
 | `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model for docs vector search |
 | `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions |
+| `CACHE_DIR` | `~/.wet-mcp` | Data directory (cache DB, docs DB, downloads) |
+| `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location |
+| `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory |
+| `TOOL_TIMEOUT` | `120` | Tool execution timeout in seconds (0 = no timeout) |
 | `WET_CACHE` | `true` | Enable/disable web cache |
 | `SYNC_ENABLED` | `false` | Enable rclone sync for docs DB |
 | `SYNC_REMOTE` | - | rclone remote name (e.g., "gdrive") |
