@@ -23,7 +23,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 3
+DISCOVERY_VERSION = 4
 
 # ---------------------------------------------------------------------------
 # Registry discovery — find docs URL from library name
@@ -256,6 +256,64 @@ def _is_toc_only(content: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Content cleaning — strip noise before chunking
+# ---------------------------------------------------------------------------
+
+# Badge/shield image patterns
+_BADGE_RE = re.compile(
+    r"!\[.*?\]\(https?://(?:img\.shields\.io|badge\.|badges\.|github\.com/.*?/badge).*?\)",
+    re.IGNORECASE,
+)
+# Navigation line patterns
+_NAV_RE = re.compile(
+    r"^\s*(?:"
+    r"\u2190 Previous|Next \u2192|Skip to (?:main )?content|"
+    r"Table of [Cc]ontents|On this page|"
+    r"Edit (?:this|on) (?:page|GitHub)|"
+    r"Suggest (?:changes|edits)|"
+    r"Was this (?:page|article) helpful\?|"
+    r"\u2b50 Star (?:us|this)"
+    r")",
+    re.IGNORECASE,
+)
+# Footer boilerplate
+_FOOTER_RE = re.compile(
+    r"^\s*(?:"
+    r"Built with|Powered by|Made with|Generated (?:by|with)|"
+    r"Copyright\s*(?:\u00a9|\(c\))|\u00a9\s*\d{4}|"
+    r"All [Rr]ights [Rr]eserved"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _clean_doc_content(content: str) -> str:
+    """Strip noise from crawled documentation content.
+
+    Removes badges, navigation elements, footer boilerplate.
+    Applied before chunking to reduce index noise.
+    """
+    # Remove badge images
+    content = _BADGE_RE.sub("", content)
+
+    # Filter noise lines
+    lines = content.splitlines()
+    cleaned = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            cleaned.append(line)
+            continue
+        if _NAV_RE.match(stripped):
+            continue
+        if _FOOTER_RE.match(stripped):
+            continue
+        cleaned.append(line)
+
+    return "\n".join(cleaned)
+
+
+# ---------------------------------------------------------------------------
 # Content chunking — split docs into searchable chunks
 # ---------------------------------------------------------------------------
 
@@ -275,6 +333,11 @@ def chunk_markdown(
     Chunks that are too large are further split by paragraphs.
     """
     if not content or not content.strip():
+        return []
+
+    # Clean noise (badges, navigation, footer) before chunking
+    content = _clean_doc_content(content)
+    if not content.strip():
         return []
 
     chunks: list[dict] = []
@@ -369,6 +432,198 @@ def chunk_llms_txt(content: str, base_url: str = "") -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# GitHub raw markdown — fetch docs directly from repo
+# ---------------------------------------------------------------------------
+
+# Pattern to extract owner/repo from GitHub URLs
+_GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
+
+# Common docs directory names in repos
+_DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
+
+
+async def _try_github_raw_docs(
+    repo_url: str,
+    max_files: int = 30,
+) -> list[dict] | None:
+    """Fetch raw markdown docs from a GitHub repository.
+
+    Uses GitHub API to list docs directories and fetch raw .md files.
+    Produces cleaner content than crawling rendered HTML pages.
+
+    Args:
+        repo_url: URL containing github.com/owner/repo
+        max_files: Maximum number of markdown files to fetch
+
+    Returns:
+        List of {url, title, content} dicts if successful, None otherwise.
+    """
+    match = _GH_REPO_RE.search(repo_url)
+    if not match:
+        return None
+
+    owner, repo = match.group(1), match.group(2)
+    api_base = f"https://api.github.com/repos/{owner}/{repo}"
+    raw_base = f"https://raw.githubusercontent.com/{owner}/{repo}"
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        # Resolve default branch
+        try:
+            resp = await client.get(
+                api_base,
+                headers={"Accept": "application/vnd.github.v3+json"},
+            )
+            if resp.status_code != 200:
+                return None
+            default_branch = resp.json().get("default_branch", "main")
+        except Exception:
+            return None
+
+        # Find docs directories via tree API
+        md_files: list[str] = []
+        try:
+            resp = await client.get(
+                f"{api_base}/git/trees/{default_branch}?recursive=1",
+                headers={"Accept": "application/vnd.github.v3+json"},
+            )
+            if resp.status_code != 200:
+                return None
+
+            tree = resp.json().get("tree", [])
+            for item in tree:
+                if item.get("type") != "blob":
+                    continue
+                path = item.get("path", "")
+                path_lower = path.lower()
+
+                # README.md at root
+                if path_lower == "readme.md":
+                    md_files.insert(0, path)  # Prioritize README
+                    continue
+
+                # Markdown files in docs-like directories
+                if not path_lower.endswith((".md", ".mdx")):
+                    continue
+                parts = path.split("/")
+                if any(p.lower() in _DOC_DIRS for p in parts):
+                    md_files.append(path)
+        except Exception:
+            return None
+
+        if not md_files:
+            return None
+
+        # Fetch raw content for each markdown file
+        pages: list[dict] = []
+        for fpath in md_files[:max_files]:
+            raw_url = f"{raw_base}/{default_branch}/{fpath}"
+            try:
+                resp = await client.get(raw_url)
+                if resp.status_code != 200:
+                    continue
+                content = resp.text
+                if len(content) < 50:
+                    continue
+
+                # Derive title from filename
+                fname = fpath.rsplit("/", 1)[-1]
+                title = fname.rsplit(".", 1)[0].replace("-", " ").replace("_", " ")
+
+                gh_page_url = (
+                    f"https://github.com/{owner}/{repo}/blob/"
+                    f"{default_branch}/{fpath}"
+                )
+                pages.append(
+                    {
+                        "url": gh_page_url,
+                        "title": title,
+                        "content": content,
+                    }
+                )
+            except Exception:
+                continue
+
+        if pages:
+            logger.info(
+                f"Fetched {len(pages)} raw markdown docs from "
+                f"github.com/{owner}/{repo}"
+            )
+            return pages
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Sitemap discovery — find all docs URLs from sitemap.xml
+# ---------------------------------------------------------------------------
+
+
+async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
+    """Try fetching sitemap.xml and extracting docs page URLs.
+
+    Helps discover pages on SPA sites where link extraction from
+    rendered HTML yields only the JS shell page.
+    """
+    parsed = urlparse(base_url)
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    for path in ("/sitemap.xml", "/sitemap_index.xml"):
+        url = f"{origin}{path}"
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    continue
+                text = resp.text
+                if "<urlset" not in text and "<sitemapindex" not in text:
+                    continue
+
+                # Handle sitemap index (links to sub-sitemaps)
+                if "<sitemapindex" in text:
+                    sub_urls = re.findall(r"<loc>\s*(.*?)\s*</loc>", text)
+                    all_page_urls: list[str] = []
+                    for sub_url in sub_urls[:5]:
+                        try:
+                            sub_resp = await client.get(sub_url)
+                            if sub_resp.status_code == 200:
+                                sub_locs = re.findall(
+                                    r"<loc>\s*(.*?)\s*</loc>", sub_resp.text
+                                )
+                                all_page_urls.extend(sub_locs)
+                        except Exception:
+                            continue
+                    urls = all_page_urls
+                else:
+                    urls = re.findall(r"<loc>\s*(.*?)\s*</loc>", text)
+
+                # Filter to same domain, skip non-doc paths
+                skip_patterns = (
+                    "/blog/",
+                    "/changelog",
+                    "/releases",
+                    "/feed",
+                    "/rss",
+                    "/sitemap",
+                    "/robots.txt",
+                    "/search",
+                )
+                filtered = [
+                    u
+                    for u in urls
+                    if parsed.netloc in u
+                    and not any(skip in u.lower() for skip in skip_patterns)
+                ]
+
+                if filtered:
+                    logger.info(f"Found {len(filtered)} URLs from sitemap at {url}")
+                    return filtered[:max_urls]
+        except Exception:
+            continue
+
+    return []
+
+
+# ---------------------------------------------------------------------------
 # Docs fetching with Crawl4AI
 # ---------------------------------------------------------------------------
 
@@ -455,6 +710,13 @@ async def fetch_docs_pages(
                         if full_url not in seen_urls:
                             link_urls.append(full_url)
                             seen_urls.add(full_url)
+
+            # Try sitemap.xml for additional URL discovery (helps SPA sites)
+            sitemap_urls = await _try_sitemap(docs_url, max_urls=max_pages)
+            for su in sitemap_urls:
+                if su not in seen_urls:
+                    link_urls.append(su)
+                    seen_urls.add(su)
 
             # If we have a query, prioritize relevant links
             if query and link_urls:

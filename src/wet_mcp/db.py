@@ -9,6 +9,7 @@ sqlite-vec for vectors, JSONL export/import for sync.
 """
 
 import json
+import re
 import sqlite3
 import struct
 import time
@@ -29,6 +30,162 @@ def _serialize_f32(vec: list[float]) -> bytes:
 def _now_ts() -> float:
     """Current timestamp as float."""
     return time.time()
+
+
+# Common English stop words filtered from FTS queries to reduce noise.
+_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "can",
+        "shall",
+        "to",
+        "of",
+        "in",
+        "for",
+        "on",
+        "with",
+        "at",
+        "by",
+        "from",
+        "as",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "between",
+        "out",
+        "off",
+        "over",
+        "under",
+        "again",
+        "further",
+        "then",
+        "once",
+        "and",
+        "but",
+        "or",
+        "nor",
+        "not",
+        "so",
+        "very",
+        "just",
+        "about",
+        "up",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "i",
+        "me",
+        "my",
+        "we",
+        "our",
+        "you",
+        "your",
+        "he",
+        "him",
+        "his",
+        "she",
+        "her",
+        "they",
+        "them",
+        "their",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "how",
+        "when",
+        "where",
+        "why",
+    }
+)
+
+# Patterns for chunk quality scoring
+_CODE_BLOCK_RE = re.compile(r"```")
+_LINK_LINE_RE = re.compile(r"^\s*[-*]?\s*\[.+?\]\(.+?\)\s*$|^\s*https?://\S+\s*$")
+
+
+def _build_fts_queries(query: str) -> list[str]:
+    """Build tiered FTS5 queries: AND (precise) -> OR (broad).
+
+    Filters common English stop words to reduce noise.
+    Uses prefix matching for partial word support.
+    """
+    words = [w.strip() for w in query.split() if w.strip()]
+    content_words = [w for w in words if w.lower() not in _STOP_WORDS]
+    if not content_words:
+        content_words = words  # All stop words -> use them anyway
+
+    safe = [w.replace('"', '""') for w in content_words]
+
+    if len(safe) == 1:
+        return [f'"{ safe[0]}"*']
+
+    return [
+        # Tier 1: AND -- all terms must appear (most precise)
+        " AND ".join(f'"{ w}"*' for w in safe),
+        # Tier 2: OR -- any term matches (broadest fallback)
+        " OR ".join(f'"{ w}"*' for w in safe),
+    ]
+
+
+def _chunk_quality_score(content: str) -> float:
+    """Score chunk content quality for docs ranking (0.0 to 1.0).
+
+    Boosts chunks with code examples, penalizes link-heavy TOC chunks.
+    """
+    score = 0.0
+
+    # Code blocks signal practical documentation
+    code_blocks = len(_CODE_BLOCK_RE.findall(content)) // 2
+    score += min(code_blocks, 3) * 2.0  # up to +6
+
+    # Longer content tends to be more informative
+    length = len(content)
+    if length > 500:
+        score += 2.0
+    elif length > 200:
+        score += 1.0
+
+    # Link-heavy content is usually navigation/TOC, not docs
+    lines = [ln for ln in content.splitlines() if ln.strip()]
+    if lines:
+        link_lines = sum(1 for ln in lines if _LINK_LINE_RE.match(ln))
+        ratio = link_lines / len(lines)
+        if ratio > 0.5:
+            score -= 4.0
+        elif ratio > 0.3:
+            score -= 2.0
+
+    # Normalize to 0-1 range
+    return max(0.0, min(score / 8.0, 1.0))
 
 
 class DocsDB:
@@ -465,7 +622,13 @@ class DocsDB:
         limit: int = 10,
         query_embedding: list[float] | None = None,
     ) -> list[dict]:
-        """Hybrid search: FTS5 + optional vector + recency scoring.
+        """Hybrid search: FTS5 + optional vector + quality scoring.
+
+        Uses tiered FTS5 queries (AND -> OR fallback), BM25 column weights
+        (boosting title/heading matches), min-max score normalization,
+        and RRF fusion when vector search is available.
+        Recency is intentionally excluded -- all doc chunks share the same
+        indexing timestamp, making recency meaningless for static docs.
 
         Args:
             query: Search query text
@@ -490,41 +653,57 @@ class DocsDB:
                 if ver:
                     version_id = ver["id"]
 
-        # --- FTS5 search ---
-        words = [w.strip() for w in query.split() if w.strip()]
-        safe_words = [w.replace('"', '""') for w in words]
-        fts_query = " OR ".join(f'"{w}"*' for w in safe_words)
+        candidate_limit = limit * 3
 
+        # --- FTS5 search with tiered queries + BM25 column weights ---
+        # Weights: id(0), content(1), title(5), heading_path(10)
+        fts_queries = _build_fts_queries(query)
         fts_scores: dict[str, float] = {}
         fts_chunks: dict[str, dict] = {}
 
-        try:
-            fts_sql = """
-                SELECT c.*, f.rank
-                FROM doc_chunks_fts f
-                JOIN doc_chunks c ON f.id = c.id
-                WHERE doc_chunks_fts MATCH ?
-            """
-            fts_params: list = [fts_query]
+        for fts_query in fts_queries:
+            try:
+                fts_sql = """
+                    SELECT c.*,
+                           bm25(doc_chunks_fts, 0.0, 1.0, 5.0, 10.0) AS bm25_score
+                    FROM doc_chunks_fts f
+                    JOIN doc_chunks c ON f.id = c.id
+                    WHERE doc_chunks_fts MATCH ?
+                """
+                fts_params: list = [fts_query]
 
-            if library_id:
-                fts_sql += " AND c.library_id = ?"
-                fts_params.append(library_id)
-            if version_id:
-                fts_sql += " AND c.version_id = ?"
-                fts_params.append(version_id)
+                if library_id:
+                    fts_sql += " AND c.library_id = ?"
+                    fts_params.append(library_id)
+                if version_id:
+                    fts_sql += " AND c.version_id = ?"
+                    fts_params.append(version_id)
 
-            fts_sql += " ORDER BY f.rank LIMIT ?"
-            fts_params.append(limit * 3)
+                fts_sql += " ORDER BY bm25_score LIMIT ?"
+                fts_params.append(candidate_limit)
 
-            rows = self._conn.execute(fts_sql, fts_params).fetchall()
-            for row in rows:
-                chunk = dict(row)
-                cid = chunk["id"]
-                fts_scores[cid] = 1.0 / (1.0 + abs(chunk.pop("rank", 0)))
-                fts_chunks[cid] = chunk
-        except Exception as e:
-            logger.debug(f"FTS search error: {e}")
+                rows = self._conn.execute(fts_sql, fts_params).fetchall()
+                if rows:
+                    for row in rows:
+                        chunk = dict(row)
+                        cid = chunk["id"]
+                        # BM25 is negative; negate so higher = better
+                        fts_scores[cid] = -chunk.pop("bm25_score", 0)
+                        fts_chunks[cid] = chunk
+                    break  # Got results from this tier, skip broader query
+            except Exception as e:
+                logger.debug(f"FTS search error: {e}")
+                continue
+
+        # Min-max normalize FTS scores to 0-1
+        if fts_scores:
+            min_f = min(fts_scores.values())
+            max_f = max(fts_scores.values())
+            rng = max_f - min_f
+            if rng > 0:
+                fts_scores = {k: (v - min_f) / rng for k, v in fts_scores.items()}
+            else:
+                fts_scores = {k: 1.0 for k in fts_scores}
 
         # --- Vector search ---
         vec_scores: dict[str, float] = {}
@@ -546,7 +725,7 @@ class DocsDB:
                     vec_params.append(version_id)
 
                 vec_sql += " ORDER BY v.distance LIMIT ?"
-                vec_params.append(limit * 3)
+                vec_params.append(candidate_limit)
 
                 vec_rows = self._conn.execute(vec_sql, vec_params).fetchall()
                 for vr in vec_rows:
@@ -565,28 +744,35 @@ class DocsDB:
         # --- Combine scores ---
         all_ids = set(fts_scores.keys()) | set(vec_scores.keys())
         scored: list[tuple[str, float]] = []
-        now_ts = time.time()
 
-        for cid in all_ids:
-            fts = fts_scores.get(cid, 0.0)
-            vec = vec_scores.get(cid, 0.0)
+        if vec_scores:
+            # RRF fusion when both FTS and vector signals available
+            k = 60
+            fts_ranked = sorted(
+                all_ids, key=lambda x: fts_scores.get(x, 0.0), reverse=True
+            )
+            vec_ranked = sorted(
+                all_ids, key=lambda x: vec_scores.get(x, 0.0), reverse=True
+            )
+            fts_rank = {cid: i + 1 for i, cid in enumerate(fts_ranked)}
+            vec_rank = {cid: i + 1 for i, cid in enumerate(vec_ranked)}
 
-            # Recency boost (exponential decay, half-life = 30 days)
-            chunk = fts_chunks.get(cid)
-            recency = 0.0
-            if chunk:
-                created = chunk.get("created_at", 0)
-                if created:
-                    days_old = (now_ts - created) / 86400
-                    recency = 2.0 ** (-days_old / 30.0)
-
-            # Weighted combination (matching mnemo-mcp pattern)
-            if vec > 0:
-                score = fts * 0.35 + vec * 0.35 + recency * 0.3
-            else:
-                score = fts * 0.6 + recency * 0.4
-
-            scored.append((cid, score))
+            for cid in all_ids:
+                fr = fts_rank.get(cid, len(all_ids))
+                vr = vec_rank.get(cid, len(all_ids))
+                rrf = 1.0 / (k + fr) + 1.0 / (k + vr)
+                # Small quality boost
+                chunk = fts_chunks.get(cid)
+                quality = _chunk_quality_score(chunk["content"]) if chunk else 0.0
+                scored.append((cid, rrf + quality * 0.005))
+        else:
+            # FTS-only: normalized score + quality boost
+            for cid in fts_scores:
+                fts = fts_scores[cid]
+                chunk = fts_chunks.get(cid)
+                quality = _chunk_quality_score(chunk["content"]) if chunk else 0.0
+                score = fts * 0.85 + quality * 0.15
+                scored.append((cid, score))
 
         # Sort by score descending
         scored.sort(key=lambda x: x[1], reverse=True)
