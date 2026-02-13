@@ -20,8 +20,13 @@ def mock_settings():
     settings.llm_models = "gemini/fake-model"
     settings.llm_temperature = None
 
+    # Patch is_safe_path to allow testing with temp files
+    patcher = patch("wet_mcp.llm.is_safe_path", return_value=True)
+    patcher.start()
+
     yield
 
+    patcher.stop()
     settings.api_keys = original_keys
     settings.llm_models = original_models
     settings.llm_temperature = original_temperature
