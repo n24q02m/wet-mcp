@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.3...v2.5.0-beta.4) (2026-02-13)
+
+
+### Bug Fixes
+
+* correct changelog descriptions for FTS5 search overhaul ([828eb9a](https://github.com/n24q02m/wet-mcp/commit/828eb9a068350c4b84c67a3b6ae59d0265cae85d))
+
 ## [2.5.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.2...v2.5.0-beta.3) (2026-02-13)
 
 
