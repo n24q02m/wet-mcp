@@ -107,8 +107,13 @@ async def _discover_from_crates(name: str) -> dict | None:
 async def discover_library(name: str) -> dict | None:
     """Discover library metadata from package registries.
 
-    Queries npm, PyPI, and crates.io in parallel. Returns the first
-    result that has a valid homepage/docs URL.
+    Queries npm, PyPI, and crates.io in parallel. Scores by:
+    1. Exact name match (case-insensitive) — critical for disambiguation
+    2. Has valid docs/homepage URL
+    3. Has description
+
+    This prevents e.g. npm's obscure "fastapi" package from shadowing
+    Python's FastAPI, or npm "tokio" from shadowing Rust's tokio.
     """
     results = await asyncio.gather(
         _discover_from_npm(name),
@@ -117,18 +122,36 @@ async def discover_library(name: str) -> dict | None:
         return_exceptions=True,
     )
 
-    # Pick first result with a usable homepage
+    # Score each result for relevance
+    scored: list[tuple[int, dict]] = []
     for r in results:
-        if isinstance(r, dict) and r.get("homepage"):
-            logger.info(
-                f"Discovered {name} docs: {r['homepage']} (via {r['registry']})"
-            )
-            return r
+        if not isinstance(r, dict):
+            continue
+        score = 0
+        # Exact name match is the strongest signal
+        if r.get("name", "").lower() == name.lower():
+            score += 10
+        # Has a docs/homepage URL
+        if r.get("homepage"):
+            score += 5
+        # Has a description (indicates a real, maintained package)
+        if r.get("description"):
+            score += 2
+        scored.append((score, r))
 
-    # Fallback: any result
-    for r in results:
-        if isinstance(r, dict):
-            return r
+    # Sort by score descending, pick best
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    if scored:
+        best_score, best = scored[0]
+        if best.get("homepage"):
+            logger.info(
+                f"Discovered {name} docs: {best['homepage']} "
+                f"(via {best['registry']}, score={best_score})"
+            )
+            return best
+        # No homepage but has some data
+        return best
 
     return None
 
@@ -149,7 +172,7 @@ async def try_llms_txt(base_url: str) -> str | None:
     parsed = urlparse(base_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
 
-    # Try both variants
+    # Try both variants — prefer llms-full.txt (actual content)
     for filename in ("llms-full.txt", "llms.txt"):
         url = f"{origin}/{filename}"
         try:
@@ -161,12 +184,48 @@ async def try_llms_txt(base_url: str) -> str | None:
                     if len(content) > 200 and not content.strip().startswith(
                         "<!DOCTYPE"
                     ):
+                        # llms.txt (non-full) is often just a TOC with links.
+                        # Check quality: if >50% of non-empty lines are just
+                        # markdown links, skip — better to crawl actual pages.
+                        if filename == "llms.txt" and _is_toc_only(content):
+                            logger.info(
+                                f"Skipping {url}: TOC-only content, "
+                                "will fall back to crawling"
+                            )
+                            continue
                         logger.info(f"Found {filename} at {url} ({len(content)} chars)")
                         return content
         except Exception:
             continue
 
     return None
+
+
+def _is_toc_only(content: str) -> bool:
+    """Check if content is mostly a table of contents (links only).
+
+    Returns True if >50% of non-empty lines are markdown links or bare URLs,
+    indicating the file is just a TOC rather than actual documentation.
+    """
+    lines = [line.strip() for line in content.splitlines() if line.strip()]
+    if not lines:
+        return True
+
+    # Patterns that indicate a TOC line (not actual content)
+    link_pattern = re.compile(
+        r"^[-*]\s*\[.+?\]\(.+?\)\s*$"  # - [Title](url) or * [Title](url)
+        r"|^\[.+?\]\(.+?\)\s*$"  # [Title](url) bare
+        r"|^https?://\S+\s*$"  # bare URL
+        r"|^>\s*[-*]?\s*\[.+?\]\(.+?\)"  # > - [Title](url) quoted
+    )
+    toc_lines = sum(1 for line in lines if link_pattern.match(line))
+
+    # Also count heading-only lines (# Title without body)
+    heading_lines = sum(1 for line in lines if line.startswith("#"))
+
+    content_lines = len(lines) - toc_lines - heading_lines
+    # If less than 50% of lines are actual content, it's a TOC
+    return content_lines < len(lines) * 0.5
 
 
 # ---------------------------------------------------------------------------
