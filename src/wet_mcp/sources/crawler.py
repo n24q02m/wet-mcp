@@ -393,7 +393,7 @@ async def download_media(
     output_dir: str,
     concurrency: int = 5,
 ) -> str:
-    """Download media files.
+    """Download media files using httpx.
 
     Args:
         media_urls: List of media URLs to download
