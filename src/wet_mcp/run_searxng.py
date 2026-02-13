@@ -3,6 +3,7 @@ Wrapper script to run SearXNG with runtime patches for Windows compatibility.
 
 This replaces the fragile file-patching mechanism in setup.py.
 """
+
 import os
 import runpy
 import sys
@@ -29,6 +30,7 @@ def patch_windows_compatibility():
                 def __init__(self, name, uid):
                     self.pw_name = name
                     self.pw_uid = uid
+
             return PasswordEntry("searx", uid)
 
         pwd.getpwuid = getpwuid

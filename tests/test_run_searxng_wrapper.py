@@ -19,6 +19,7 @@ def test_patch_windows_compatibility_linux():
             # Verify pwd was NOT added
             assert "pwd" not in sys.modules
 
+
 def test_patch_windows_compatibility_windows():
     """Verify that patches are applied on Windows."""
     with patch("sys.platform", "win32"):
@@ -31,7 +32,7 @@ def test_patch_windows_compatibility_windows():
             with patch("wet_mcp.run_searxng.os", spec=object) as mock_os:
                 # Ensure getuid is missing
                 if hasattr(mock_os, "getuid"):
-                     del mock_os.getuid
+                    del mock_os.getuid
 
                 # Execute the patch
                 patch_windows_compatibility()
