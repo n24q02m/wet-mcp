@@ -180,6 +180,7 @@ async def test_web_invalid_action():
 @pytest.mark.asyncio
 async def test_web_timeout():
     """Test web action timeout."""
+
     async def slow_search(*args, **kwargs):
         await asyncio.sleep(0.2)
         return "Slow Result"
