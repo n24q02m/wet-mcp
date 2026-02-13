@@ -281,6 +281,7 @@ async def crawl(
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
 
+
 async def sitemap(
     urls: list[str],
     depth: int = 2,
@@ -347,6 +348,8 @@ async def sitemap(
 
     logger.info(f"Mapped {len(all_urls)} URLs")
     return json.dumps(all_urls, ensure_ascii=False, indent=2)
+
+
 async def list_media(
     url: str,
     media_type: str = "all",
