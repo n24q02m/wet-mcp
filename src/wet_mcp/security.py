@@ -1,8 +1,32 @@
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
+
+
+def is_safe_path(path: str | Path, allowed_dirs: list[str | Path]) -> bool:
+    """
+    Check if a path is safe (inside allowed directories).
+    Resolves symlinks and handles relative paths.
+    """
+    try:
+        path_obj = Path(path).expanduser().resolve()
+    except Exception as e:
+        logger.error(f"Error resolving path {path}: {e}")
+        return False
+
+    for allowed_dir in allowed_dirs:
+        try:
+            allowed_path = Path(allowed_dir).expanduser().resolve()
+            if path_obj == allowed_path or path_obj.is_relative_to(allowed_path):
+                return True
+        except Exception:
+            continue
+
+    logger.warning(f"Blocked unsafe path: {path} (not in allowed dirs)")
+    return False
 
 
 def is_safe_url(url: str) -> bool:
