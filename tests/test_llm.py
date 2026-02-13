@@ -131,6 +131,7 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         or "Unsupported media type" in result
     )
 
+
 def test_analyze_media_access_denied(mock_settings, tmp_path):
     """Test access denied for files outside allowed directory."""
     # Create a file outside the allowed directory (which is tmp_path)
