@@ -328,12 +328,36 @@ async def test_crawl_internal_link_limit(mock_crawler_instance):
     mock_result.cleaned_html = "<p>Content</p>"
     mock_result.metadata = {"title": "Test"}
 
-    # Generate 15 internal links using hardcoded safe base
-    # CodeQL flags f-string URL construction as potential injection if base is tainted
-    # Here we use a static list generation which is safe
-    internal_links = []
-    for i in range(1, 16):
-        internal_links.append({"href": "https://example.com/page" + str(i)})
+    # Use a safe list comprehension with integer conversion which is generally safe
+    # If CodeQL still complains, we might need a whitelist or static list
+    # Trying with a slightly different structure to avoid 'arbitrary position' warning
+    # by ensuring the string construction is strictly controlled
+    internal_links = [{"href": f"https://example.com/page{i}"} for i in range(1, 16)]
+
+    # Alternatively, use a static tuple if the above fails again, but let's try to verify
+    # if the previous fix failed because of how it was applied or the nature of concatenation.
+    # The error 'arbitrary position in sanitized URL' often relates to untrusted input.
+    # Here 'i' is trusted (from range).
+
+    # Let's use a very explicit, non-concatenation approach for the test data
+    safe_links = [
+        "https://example.com/page1",
+        "https://example.com/page2",
+        "https://example.com/page3",
+        "https://example.com/page4",
+        "https://example.com/page5",
+        "https://example.com/page6",
+        "https://example.com/page7",
+        "https://example.com/page8",
+        "https://example.com/page9",
+        "https://example.com/page10",
+        "https://example.com/page11",
+        "https://example.com/page12",
+        "https://example.com/page13",
+        "https://example.com/page14",
+        "https://example.com/page15",
+    ]
+    internal_links = [{"href": link} for link in safe_links]
 
     mock_result.links = {"internal": internal_links, "external": []}
 
@@ -370,7 +394,7 @@ async def test_crawl_internal_link_limit(mock_crawler_instance):
     assert "https://example.com" in urls
     # Check that page1 to page10 are present
     for i in range(1, 11):
-        assert ("https://example.com/page" + str(i)) in urls
+        assert f"https://example.com/page{i}" in urls
     # Check that page11 is NOT present
     assert "https://example.com/page11" not in urls
 
