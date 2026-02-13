@@ -14,6 +14,7 @@ import os
 import tempfile
 from pathlib import Path
 
+# Global httpx import for connection pooling and efficient resource usage
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
