@@ -21,6 +21,10 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from loguru import logger
 
+# Bump this whenever discovery scoring or crawl logic changes.
+# Libraries cached with an older version are automatically re-indexed.
+DISCOVERY_VERSION = 2
+
 # ---------------------------------------------------------------------------
 # Registry discovery — find docs URL from library name
 # ---------------------------------------------------------------------------

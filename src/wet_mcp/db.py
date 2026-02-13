@@ -17,6 +17,9 @@ from pathlib import Path
 
 from loguru import logger
 
+# Bump this when discovery scoring changes to invalidate stale caches.
+from wet_mcp.sources.docs import DISCOVERY_VERSION
+
 
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize float vector for sqlite-vec."""
@@ -76,6 +79,16 @@ class DocsDB:
             CREATE INDEX IF NOT EXISTS idx_libraries_name
             ON libraries(name)
         """)
+
+        # Migration: add discovery_version column if missing
+        try:
+            self._conn.execute(
+                "ALTER TABLE libraries ADD COLUMN discovery_version INTEGER DEFAULT 0"
+            )
+            self._conn.commit()
+            logger.debug("Migrated libraries table: added discovery_version")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
         # Versions
         self._conn.execute("""
@@ -181,7 +194,10 @@ class DocsDB:
         registry: str | None = None,
         description: str | None = None,
     ) -> str:
-        """Create or update a library. Returns library ID."""
+        """Create or update a library. Returns library ID.
+
+        Automatically stamps the current ``DISCOVERY_VERSION``.
+        """
         now = _now_ts()
         # Normalize name to lowercase
         norm_name = name.lower().strip()
@@ -203,6 +219,8 @@ class DocsDB:
             if description is not None:
                 updates.append("description = ?")
                 params.append(description)
+            updates.append("discovery_version = ?")
+            params.append(DISCOVERY_VERSION)
             updates.append("updated_at = ?")
             params.append(now)
             params.append(lib_id)
@@ -216,9 +234,20 @@ class DocsDB:
 
         lib_id = uuid.uuid4().hex[:12]
         self._conn.execute(
-            """INSERT INTO libraries (id, name, docs_url, registry, description, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (lib_id, norm_name, docs_url, registry, description, now, now),
+            """INSERT INTO libraries
+               (id, name, docs_url, registry, description, discovery_version,
+                created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                lib_id,
+                norm_name,
+                docs_url,
+                registry,
+                description,
+                DISCOVERY_VERSION,
+                now,
+                now,
+            ),
         )
         self._conn.commit()
         return lib_id
