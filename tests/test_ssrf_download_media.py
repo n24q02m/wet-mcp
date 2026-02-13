@@ -22,7 +22,9 @@ async def test_download_media_ssrf_protection():
     with patch("httpx.AsyncClient", mock_client_cls):
         url = "http://localhost/secret.txt"
         with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_bytes"):
-            result_json = await download_media([url], "/tmp/downloads")
+            # Patch settings.download_dir to allow the output_dir used in test
+            with patch("wet_mcp.config.settings.download_dir", "/tmp/downloads"):
+                result_json = await download_media([url], "/tmp/downloads")
 
         # The request was NOT made because it's unsafe
         mock_client.get.assert_not_called()
