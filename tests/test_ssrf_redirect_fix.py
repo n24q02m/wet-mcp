@@ -1,5 +1,6 @@
 import json
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import httpx
 import pytest
@@ -17,11 +18,12 @@ async def test_ssrf_redirect_protection():
     class MockTransport(httpx.AsyncBaseTransport):
         async def handle_async_request(self, request):
             url = str(request.url)
-            if "safe.com" in url:
+            parsed = urlparse(url)
+            if parsed.hostname == "safe.com":
                 return httpx.Response(
                     302, headers={"Location": "http://localhost/secret.txt"}
                 )
-            elif "localhost" in url:
+            elif parsed.hostname == "localhost":
                 return httpx.Response(200, content=b"SECRET_DATA_LEAKED")
             return httpx.Response(404)
 
@@ -40,7 +42,13 @@ async def test_ssrf_redirect_protection():
         # Also patch is_safe_url to ensure initial check passes
         with patch("wet_mcp.sources.crawler.is_safe_url") as mock_safe:
             # Allow safe.com, block localhost (simulating real behavior)
-            mock_safe.side_effect = lambda u: "safe.com" in str(u)
+            def _mock_is_safe(u):
+                try:
+                    return urlparse(str(u)).hostname == "safe.com"
+                except Exception:
+                    return False
+
+            mock_safe.side_effect = _mock_is_safe
 
             # Patch filesystem ops to avoid actual writes
             with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_bytes"):
