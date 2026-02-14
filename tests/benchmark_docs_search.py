@@ -1,4 +1,4 @@
-"""Benchmark test suite for docs search quality (100 libraries).
+"""Benchmark test suite for docs search quality (120 libraries).
 
 Run manually or via CI to validate docs search quality after changes.
 Each test case specifies a library, query, and expected quality signals.
@@ -652,6 +652,132 @@ BENCHMARK_CASES = [
         "library": "tauri",
         "query": "commands events window IPC plugins",
         "tests_aspect": "npm + crates.io cross-ecosystem, tauri.app",
+    },
+    # =====================================================================
+    # Category K: Cloud & Infrastructure (10) — SDKs, CLIs, cloud tools
+    # =====================================================================
+    {
+        "id": "terraform-cdk",
+        "library": "cdktf",
+        "query": "providers stacks constructs synth deploy",
+        "tests_aspect": "npm, Terraform CDK for TypeScript",
+    },
+    {
+        "id": "pulumi",
+        "library": "pulumi",
+        "query": "stack resource output config provider",
+        "tests_aspect": "npm/pypi, pulumi.com (IaC tool)",
+    },
+    {
+        "id": "boto3",
+        "library": "boto3",
+        "query": "s3 client resource session ec2",
+        "tests_aspect": "PyPI, AWS SDK for Python",
+    },
+    {
+        "id": "supabase-js",
+        "library": "supabase",
+        "query": "auth database storage realtime edge functions",
+        "tests_aspect": "npm, supabase.com (BaaS)",
+    },
+    {
+        "id": "firebase-admin",
+        "library": "firebase-admin",
+        "query": "auth firestore messaging cloud functions",
+        "tests_aspect": "npm/pypi, Firebase Admin SDK",
+    },
+    {
+        "id": "redis-py",
+        "library": "redis",
+        "query": "connection pool pipeline pub sub cluster",
+        "tests_aspect": "PyPI, redis.io (generic name collision npm vs pypi)",
+    },
+    {
+        "id": "celery-beat",
+        "library": "django-celery-beat",
+        "query": "periodic tasks schedule crontab interval",
+        "tests_aspect": "PyPI, django-celery-beat (long name, unique)",
+    },
+    {
+        "id": "docker-py",
+        "library": "docker",
+        "query": "containers images volumes networks build",
+        "tests_aspect": "PyPI docker SDK (generic name)",
+    },
+    {
+        "id": "kubernetes-client",
+        "library": "kubernetes",
+        "query": "pods deployments services config client",
+        "tests_aspect": "PyPI, kubernetes.io (generic name)",
+    },
+    {
+        "id": "httpie",
+        "library": "httpie",
+        "query": "request headers auth plugins sessions",
+        "tests_aspect": "PyPI, httpie.io (CLI HTTP client)",
+    },
+    # =====================================================================
+    # Category L: Emerging & Niche (10) — newer/niche libraries
+    # =====================================================================
+    {
+        "id": "pnpm",
+        "library": "pnpm",
+        "query": "workspace install link peer dependencies",
+        "tests_aspect": "npm, pnpm.io (package manager, unique name)",
+    },
+    {
+        "id": "deno",
+        "library": "deno",
+        "query": "permissions runtime deploy fresh",
+        "tests_aspect": "npm, deno.land (JS runtime)",
+    },
+    {
+        "id": "lodash",
+        "library": "lodash",
+        "query": "debounce throttle merge cloneDeep",
+        "tests_aspect": "npm, lodash.com (JS utility, well-known)",
+    },
+    {
+        "id": "motion",
+        "library": "motion",
+        "query": "animate transition gesture spring keyframes",
+        "tests_aspect": "npm, motion.dev (animation library, ex-framer-motion)",
+    },
+    {
+        "id": "cheerio",
+        "library": "cheerio",
+        "query": "selector parse html load find",
+        "tests_aspect": "npm, cheerio.js.org (HTML parser)",
+    },
+    {
+        "id": "sqlx",
+        "library": "sqlx",
+        "query": "query pool connection migrate transaction",
+        "tests_aspect": "crates.io, github.com/launchbadge/sqlx (Rust async SQL)",
+    },
+    {
+        "id": "salvo",
+        "library": "salvo",
+        "query": "router handler depot request response",
+        "tests_aspect": "crates.io, salvo.rs (Rust web framework)",
+    },
+    {
+        "id": "sea-orm",
+        "library": "sea-orm",
+        "query": "entity model migration query builder",
+        "tests_aspect": "crates.io, sea-ql.org (Rust ORM, unique name)",
+    },
+    {
+        "id": "dayjs",
+        "library": "dayjs",
+        "query": "format parse timezone locale plugin",
+        "tests_aspect": "npm, day.js.org (date library, unique name)",
+    },
+    {
+        "id": "ultralytics",
+        "library": "ultralytics",
+        "query": "yolo detect train predict export model",
+        "tests_aspect": "PyPI, ultralytics.com (YOLO object detection)",
     },
 ]
 

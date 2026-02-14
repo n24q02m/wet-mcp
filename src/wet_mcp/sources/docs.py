@@ -24,7 +24,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 13
+DISCOVERY_VERSION = 14
 
 
 def _github_headers() -> dict[str, str]:
@@ -126,17 +126,23 @@ async def _discover_from_crates(name: str) -> dict | None:
             docs_url = crate.get("documentation") or ""
             hp_url = crate.get("homepage") or ""
             # Prefer homepage over docs.rs auto-generated documentation
-            if docs_url and "docs.rs" in docs_url and hp_url:
+            if hp_url:
                 explicit_url = hp_url
+            elif docs_url and "docs.rs" not in docs_url:
+                explicit_url = docs_url
             else:
-                explicit_url = hp_url or docs_url
+                explicit_url = ""
+            # Use docs.rs fallback when no custom homepage/docs URL exists
+            is_fallback = not explicit_url
+            final_url = explicit_url or docs_url or f"https://docs.rs/{name}"
             return {
                 "name": crate.get("name", name),
                 "description": crate.get("description") or "",
-                "homepage": explicit_url or f"https://docs.rs/{name}",
+                "homepage": final_url,
                 "repository": crate.get("repository") or "",
                 "registry": "crates",
-                "docs_rs_fallback": not explicit_url,  # auto-generated URL
+                "docs_rs_fallback": is_fallback,
+                "downloads": crate.get("downloads") or 0,
             }
     except Exception as e:
         logger.debug(f"crates.io lookup failed for {name}: {e}")
@@ -292,20 +298,23 @@ async def discover_library(name: str) -> dict | None:
             # Non-GitHub homepage = established project with custom domain
             parsed_hp = urlparse(homepage)
             if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
-                # Penalize auto-generated docs.rs URLs (fallback, not custom)
+                lib_norm = name.lower().replace("-", "")
                 if parsed_hp.netloc == "docs.rs":
-                    score += 1  # Minimal boost (auto-generated)
+                    score += 1  # Auto-generated docs, minimal boost
+                    # Don't give name-in-path bonus: docs.rs/{name} is always true
                 else:
                     score += 3
-                # Library name appears in the domain → likely official site
-                # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
-                lib_norm = name.lower().replace("-", "")
-                host_norm = parsed_hp.netloc.lower().replace("-", "")
-                if lib_norm in host_norm:
-                    score += 3
-                # Known dedicated docs platforms (not generic hosts like docs.rs)
+                    # Library name appears in the domain → likely official site
+                    # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
+                    host_norm = parsed_hp.netloc.lower().replace("-", "")
+                    if lib_norm in host_norm:
+                        score += 3
+                # ReadTheDocs bonus: only when subdomain exactly matches lib name
+                # Prevents e.g. "app-turbo.readthedocs.org" scoring for "turbo"
                 if any(p in parsed_hp.netloc for p in ("readthedocs", "rtfd.io")):
-                    score += 2
+                    subdomain = parsed_hp.netloc.split(".")[0].lower().replace("-", "")
+                    if subdomain == lib_norm:
+                        score += 2
         # Description quality (longer = more established)
         desc = r.get("description", "")
         if desc:
@@ -328,7 +337,7 @@ async def discover_library(name: str) -> dict | None:
 
         # Penalize crates.io auto-generated docs.rs fallback URLs
         if r.get("docs_rs_fallback"):
-            score -= 5
+            score -= 2
 
         # Popularity boost for packages with star count data (Go, GitHub)
         # Helps disambiguate generic names like "echo", "gin", etc.
@@ -338,6 +347,18 @@ async def discover_library(name: str) -> dict | None:
         elif stars >= 1000:
             score += 2
         elif stars >= 100:
+            score += 1
+
+        # Download count boost for crates.io packages
+        # Helps disambiguate generic names: clap (668M), diesel (22M), etc.
+        # Higher bonuses than stars because download counts are more reliable
+        # for popularity (no manual curation needed).
+        downloads = r.get("downloads", 0)
+        if downloads >= 50_000_000:
+            score += 5
+        elif downloads >= 5_000_000:
+            score += 3
+        elif downloads >= 500_000:
             score += 1
 
         scored.append((score, r))
