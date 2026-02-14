@@ -319,6 +319,8 @@ def _clean_doc_content(content: str) -> str:
 
 # Heading pattern for markdown
 _HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$", re.MULTILINE)
+# Fenced code block pattern (opening/closing ```)
+_CODE_FENCE_RE = re.compile(r"^```")
 
 
 def chunk_markdown(
@@ -330,7 +332,8 @@ def chunk_markdown(
     """Split markdown content into semantic chunks by headings.
 
     Splits on ## and ### headings, keeping heading hierarchy.
-    Chunks that are too large are further split by paragraphs.
+    Chunks that are too large are further split by paragraphs,
+    but never inside fenced code blocks.
     """
     if not content or not content.strip():
         return []
@@ -349,34 +352,17 @@ def chunk_markdown(
         nonlocal current_lines
         text = "\n".join(current_lines).strip()
         if len(text) >= min_chunk_size:
-            # Split oversized chunks by double newline
+            # Split oversized chunks by double newline, preserving code blocks
             if len(text) > max_chunk_size:
-                parts = text.split("\n\n")
-                buffer = ""
-                for part in parts:
-                    if len(buffer) + len(part) + 2 > max_chunk_size and buffer:
-                        chunks.append(
-                            {
-                                "content": buffer.strip(),
-                                "title": current_title,
-                                "heading_path": heading_path,
-                                "url": url,
-                                "chunk_index": len(chunks),
-                            }
-                        )
-                        buffer = part
-                    else:
-                        buffer = f"{buffer}\n\n{part}" if buffer else part
-                if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
-                    chunks.append(
-                        {
-                            "content": buffer.strip(),
-                            "title": current_title,
-                            "heading_path": heading_path,
-                            "url": url,
-                            "chunk_index": len(chunks),
-                        }
-                    )
+                _split_preserving_code(
+                    text,
+                    chunks,
+                    current_title,
+                    heading_path,
+                    url,
+                    max_chunk_size,
+                    min_chunk_size,
+                )
             else:
                 chunks.append(
                     {
@@ -423,6 +409,69 @@ def chunk_markdown(
     return chunks
 
 
+def _split_preserving_code(
+    text: str,
+    chunks: list[dict],
+    title: str,
+    heading_path: str,
+    url: str,
+    max_chunk_size: int,
+    min_chunk_size: int,
+) -> None:
+    """Split oversized text by paragraphs without breaking code blocks.
+
+    Groups lines into segments separated by blank lines, but treats
+    fenced code blocks (``` ... ```) as atomic units that are never split.
+    """
+    lines = text.split("\n")
+    segments: list[str] = []
+    current_segment: list[str] = []
+    in_code_block = False
+
+    for line in lines:
+        if _CODE_FENCE_RE.match(line.strip()):
+            in_code_block = not in_code_block
+
+        if not in_code_block and line.strip() == "" and current_segment:
+            # Paragraph boundary — flush segment
+            segments.append("\n".join(current_segment))
+            current_segment = []
+        else:
+            current_segment.append(line)
+
+    if current_segment:
+        segments.append("\n".join(current_segment))
+
+    # Merge segments into chunks respecting max_chunk_size
+    buffer = ""
+    for seg in segments:
+        if buffer and len(buffer) + len(seg) + 2 > max_chunk_size:
+            if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
+                chunks.append(
+                    {
+                        "content": buffer.strip(),
+                        "title": title,
+                        "heading_path": heading_path,
+                        "url": url,
+                        "chunk_index": len(chunks),
+                    }
+                )
+            buffer = seg
+        else:
+            buffer = f"{buffer}\n\n{seg}" if buffer else seg
+
+    if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
+        chunks.append(
+            {
+                "content": buffer.strip(),
+                "title": title,
+                "heading_path": heading_path,
+                "url": url,
+                "chunk_index": len(chunks),
+            }
+        )
+
+
 def chunk_llms_txt(content: str, base_url: str = "") -> list[dict]:
     """Chunk llms.txt / llms-full.txt content.
 
@@ -444,7 +493,7 @@ _DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
 
 async def _try_github_raw_docs(
     repo_url: str,
-    max_files: int = 30,
+    max_files: int = 50,
 ) -> list[dict] | None:
     """Fetch raw markdown docs from a GitHub repository.
 
@@ -629,7 +678,7 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
 async def fetch_docs_pages(
     docs_url: str,
     query: str = "",
-    max_pages: int = 30,
+    max_pages: int = 50,
 ) -> list[dict]:
     """Fetch documentation pages from a docs site.
 

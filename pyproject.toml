@@ -39,6 +39,15 @@ vector = [
     # Vector search for docs (optional, FTS5-only works without)
     "sqlite-vec",
 ]
+local = [
+    # Local ONNX embedding + reranking (no API keys needed)
+    "qwen3-embed>=0.2.0",
+]
+full = [
+    # All optional features
+    "sqlite-vec",
+    "qwen3-embed>=0.2.0",
+]
 
 [dependency-groups]
 dev = [

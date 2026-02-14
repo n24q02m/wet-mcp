@@ -148,7 +148,15 @@ Remote is configured via env vars — works in any environment (local, Docker, C
 ### Without uvx
 
 ```bash
+# Standard (cloud embedding via LiteLLM)
 pip install wet-mcp
+
+# With local Qwen3 ONNX embedding & reranking (no API keys needed)
+pip install wet-mcp[local]
+
+# Full (local + all optional dependencies)
+pip install wet-mcp[full]
+
 wet-mcp
 ```
 
@@ -193,8 +201,13 @@ wet-mcp
 | `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
 | `API_KEYS` | - | LLM API keys (optional, format: `ENV_VAR:key,...`) |
 | `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
+| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3 ONNX). Auto: local > litellm > FTS5-only |
 | `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model for docs vector search (optional) |
 | `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
+| `RERANK_ENABLED` | `true` | Enable reranking after search (auto-disabled if no backend) |
+| `RERANK_BACKEND` | (follows embedding) | `litellm` or `local`. Defaults to match `EMBEDDING_BACKEND` |
+| `RERANK_MODEL` | (auto-detect) | LiteLLM rerank model, e.g. `cohere/rerank-v3.5` (optional) |
+| `RERANK_TOP_N` | `10` | Return top N results after reranking |
 | `CACHE_DIR` | `~/.wet-mcp` | Data directory for cache DB, docs DB, downloads (optional) |
 | `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location (optional) |
 | `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory (optional) |
@@ -217,6 +230,33 @@ LLM_MODELS=gemini/gemini-3-flash-preview
 
 The server auto-detects embedding models from configured API keys (Gemini > OpenAI > Mistral > Cohere).
 
+### Local Embedding & Reranking (Optional)
+
+Run embedding and reranking entirely offline using Qwen3 ONNX models — no API keys needed:
+
+```bash
+# Install with local ONNX support
+pip install wet-mcp[local]
+
+# Or full (local + all dependencies)
+pip install wet-mcp[full]
+```
+
+With `uvx`:
+```jsonc
+{
+  "mcpServers": {
+    "wet": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "wet-mcp[local]@latest"]
+      // No API_KEYS needed — local Qwen3-Embedding-0.6B runs on CPU
+    }
+  }
+}
+```
+
+The server auto-detects `qwen3-embed` when installed and uses it for both embedding and reranking. Override with `EMBEDDING_BACKEND=litellm` to force cloud API.
+
 ---
 
 ## Architecture
@@ -238,12 +278,12 @@ The server auto-detects embedding models from configured API keys (Gemini > Open
 │  └──┬───┬───┘  └────┬─────┘  └──┬────┘  └──────────┘   │
 │     │   │           │           │                       │
 │     v   v           v           v                       │
-│  ┌──────┐ ┌──────┐ ┌──────────┐                         │
-│  │SearX │ │DocsDB│ │ Crawl4AI │                         │
-│  │NG    │ │FTS5+ │ │(Playwrgt)│                         │
-│  │      │ │sqlite│ │          │                         │
-│  │      │ │-vec  │ │          │                         │
-│  └──────┘ └──────┘ └──────────┘                         │
+│  ┌──────┐ ┌──────┐ ┌──────────┐ ┌──────────┐             │
+│  │SearX │ │DocsDB│ │ Crawl4AI │ │ Reranker │             │
+│  │NG    │ │FTS5+ │ │(Playwrgt)│ │(LiteLLM/ │             │
+│  │      │ │sqlite│ │          │ │ Qwen3    │             │
+│  │      │ │-vec  │ │          │ │ local)   │             │
+│  └──────┘ └──────┘ └──────────┘ └──────────┘             │
 │                                                         │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │  WebCache (SQLite, TTL)  │  rclone sync (docs)   │   │

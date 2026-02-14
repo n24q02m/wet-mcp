@@ -1,16 +1,15 @@
 """Tests for src/wet_mcp/db.py — DocsDB with FTS5 hybrid search.
 
-Covers library/version CRUD, FTS5 search scoring, JSONL export/import,
-edge cases (Unicode, empty queries, special characters), and recency
-decay validation.
+Covers library/version CRUD, FTS5 search scoring (phrase/AND/OR tiers),
+JSONL export/import, edge cases (Unicode, empty queries, special characters),
+chunk quality scoring, and cross-chunk context retrieval.
 """
 
 import json
-import math
 
 import pytest
 
-from wet_mcp.db import DocsDB
+from wet_mcp.db import DocsDB, _build_fts_queries, _chunk_quality_score
 
 
 @pytest.fixture
@@ -278,35 +277,161 @@ class TestSearch:
 
 
 class TestRecencyScoring:
-    """Verify the exponential decay recency scoring."""
+    """Verify scoring components (recency decay removed — docs chunks
+    share the same indexing timestamp, making recency meaningless).
 
-    def test_recency_fresh_content(self, db):
-        """Recently added content should have high recency score."""
-        lib_id = db.upsert_library(name="fresh")
+    Tests now cover chunk quality scoring and phrase tier queries.
+    """
+
+    def test_chunk_quality_with_code(self):
+        """Chunks with code blocks get higher quality scores."""
+        code_content = "Example:\n```python\napp = FastAPI()\n```\nSome text after."
+        no_code = "This is plain documentation text without code examples."
+        assert _chunk_quality_score(code_content) > _chunk_quality_score(no_code)
+
+    def test_chunk_quality_long_content(self):
+        """Longer content gets moderate quality boost."""
+        short = "Short text."
+        medium = "x " * 150  # ~300 chars
+        long = "x " * 300  # ~600 chars
+        assert _chunk_quality_score(long) >= _chunk_quality_score(medium)
+        assert _chunk_quality_score(medium) >= _chunk_quality_score(short)
+
+    def test_chunk_quality_link_heavy_penalty(self):
+        """Link-heavy TOC chunks are penalized."""
+        toc = "\n".join(f"- [Link {i}](https://example.com/{i})" for i in range(10))
+        content = "This is real documentation with examples and explanations. " * 5
+        assert _chunk_quality_score(content) > _chunk_quality_score(toc)
+
+
+class TestPhraseTierQueries:
+    """Verify the tiered FTS5 query builder (PHRASE > AND > OR)."""
+
+    def test_single_word(self):
+        """Single word returns a single prefix query."""
+        queries = _build_fts_queries("routing")
+        assert len(queries) == 1
+        assert queries[0] == '"routing"*'
+
+    def test_multi_word_tiers(self):
+        """Multi-word query returns 3 tiers: PHRASE, AND, OR."""
+        queries = _build_fts_queries("path parameters")
+        assert len(queries) == 3
+        # Tier 0: exact phrase
+        assert queries[0] == '"path parameters"'
+        # Tier 1: AND
+        assert "AND" in queries[1]
+        # Tier 2: OR
+        assert "OR" in queries[2]
+
+    def test_empty_query(self):
+        """Empty query returns no tiers."""
+        assert _build_fts_queries("") == []
+        assert _build_fts_queries("   ") == []
+
+    def test_quotes_escaped(self):
+        """Double quotes in input are escaped."""
+        queries = _build_fts_queries('say "hello"')
+        # Should not break FTS syntax
+        assert len(queries) == 3
+
+    def test_phrase_search_ranks_higher(self, db_with_data):
+        """Exact phrase match should rank higher than scattered terms."""
+        db = db_with_data[0]
+        # "path parameters" appears together in routing chunk
+        results = db.search(query="path parameters", library_name="fastapi")
+        assert len(results) > 0
+        # First result should contain both words
+        assert "path" in results[0]["content"].lower()
+
+
+class TestCrossChunkContext:
+    """Verify adjacent chunk retrieval in search results."""
+
+    def test_context_before_and_after(self, db):
+        """Search results include adjacent chunk content."""
+        lib_id = db.upsert_library(name="ctx-test")
         ver_id = db.upsert_version(lib_id)
-        db.add_chunks(
-            ver_id,
-            lib_id,
-            [
-                {"content": "This is fresh content about routing."},
-            ],
-        )
-        results = db.search(query="routing", library_name="fresh")
-        assert len(results) == 1
-        # Fresh content: recency should be close to 1.0
-        # score = fts * 0.6 + recency * 0.4 (FTS-only mode)
-        assert results[0]["score"] > 0.3
+        chunks = [
+            {
+                "content": "Chapter 1: Introduction to the framework.",
+                "url": "https://example.com/docs",
+                "chunk_index": 0,
+            },
+            {
+                "content": "Chapter 2: Routing and path parameters.",
+                "url": "https://example.com/docs",
+                "chunk_index": 1,
+            },
+            {
+                "content": "Chapter 3: Dependency injection patterns.",
+                "url": "https://example.com/docs",
+                "chunk_index": 2,
+            },
+        ]
+        db.add_chunks(ver_id, lib_id, chunks)
 
-    def test_recency_decay_formula(self):
-        """Validate the exponential decay formula directly."""
-        # 0 days old -> recency = 1.0
-        assert math.isclose(2.0 ** (0 / 30.0), 1.0)
-        # 30 days old -> recency = 0.5
-        assert math.isclose(2.0 ** (-30 / 30.0), 0.5)
-        # 60 days old -> recency = 0.25
-        assert math.isclose(2.0 ** (-60 / 30.0), 0.25)
-        # 90 days old -> recency = 0.125
-        assert math.isclose(2.0 ** (-90 / 30.0), 0.125)
+        results = db.search(query="routing path", library_name="ctx-test")
+        assert len(results) > 0
+        # Chunk 1 should match "routing path"
+        routing_result = next(
+            (r for r in results if "routing" in r["content"].lower()), None
+        )
+        assert routing_result is not None
+        # Should have context from adjacent chunks
+        assert "context_before" in routing_result
+        assert "Introduction" in routing_result["context_before"]
+        assert "context_after" in routing_result
+        assert "Dependency" in routing_result["context_after"]
+
+    def test_first_chunk_no_context_before(self, db):
+        """First chunk has no context_before."""
+        lib_id = db.upsert_library(name="first-chunk")
+        ver_id = db.upsert_version(lib_id)
+        chunks = [
+            {
+                "content": "First chapter about routing setup.",
+                "url": "https://example.com/page",
+                "chunk_index": 0,
+            },
+            {
+                "content": "Second chapter about middleware.",
+                "url": "https://example.com/page",
+                "chunk_index": 1,
+            },
+        ]
+        db.add_chunks(ver_id, lib_id, chunks)
+
+        results = db.search(query="routing setup", library_name="first-chunk")
+        assert len(results) > 0
+        first = results[0]
+        assert "context_before" not in first
+        assert "context_after" in first
+
+    def test_last_chunk_no_context_after(self, db):
+        """Last chunk has no context_after."""
+        lib_id = db.upsert_library(name="last-chunk")
+        ver_id = db.upsert_version(lib_id)
+        chunks = [
+            {
+                "content": "Previous chapter about configuration.",
+                "url": "https://example.com/page",
+                "chunk_index": 0,
+            },
+            {
+                "content": "Final chapter about deployment and routing.",
+                "url": "https://example.com/page",
+                "chunk_index": 1,
+            },
+        ]
+        db.add_chunks(ver_id, lib_id, chunks)
+
+        results = db.search(query="deployment routing", library_name="last-chunk")
+        assert len(results) > 0
+        last = next((r for r in results if "deployment" in r["content"].lower()), None)
+        assert last is not None
+        assert "context_before" in last
+        assert "context_after" not in last
 
 
 class TestChunksCRUD:
