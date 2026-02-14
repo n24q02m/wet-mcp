@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.8](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.7...v2.5.0-beta.8) (2026-02-14)
+
+
+### Bug Fixes
+
+* **cd:** make scripts executable and clean working tree before promote merge ([9d94df1](https://github.com/n24q02m/wet-mcp/commit/9d94df10e21cf746eb5d15b06ccb9b9ee3811b67))
+
 ## [2.5.0-beta.7](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.6...v2.5.0-beta.7) (2026-02-14)
 
 
