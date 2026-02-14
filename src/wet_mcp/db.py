@@ -35,6 +35,17 @@ def _now_ts() -> float:
 # Patterns for chunk quality scoring
 _CODE_BLOCK_RE = re.compile(r"```")
 _LINK_LINE_RE = re.compile(r"^\s*[-*]?\s*\[.+?\]\(.+?\)\s*$|^\s*https?://\S+\s*$")
+# Function/class/type definitions (common across languages)
+_DEF_RE = re.compile(
+    r"^\s*(?:def |class |fn |func |function |interface |type |struct |enum |const |let |var |export )",
+    re.MULTILINE,
+)
+# Docstring / doc comment patterns
+_DOCSTRING_RE = re.compile(
+    r'"""|\'\'\'|/\*\*|///|#\s+(?:Args|Returns|Raises|Example|Usage|Parameters|Note)'
+)
+# Directive-heavy content (mkdocs leftover, rst directives)
+_DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
 
 
 def _build_fts_queries(query: str) -> list[str]:
@@ -65,13 +76,23 @@ def _build_fts_queries(query: str) -> list[str]:
 def _chunk_quality_score(content: str) -> float:
     """Score chunk content quality for docs ranking (0.0 to 1.0).
 
-    Boosts chunks with code examples, penalizes link-heavy TOC chunks.
+    Boosts chunks with code examples, function/class definitions, and
+    docstrings. Penalizes link-heavy TOC chunks, directive-heavy content,
+    and very short chunks.
     """
     score = 0.0
 
     # Code blocks signal practical documentation
     code_blocks = len(_CODE_BLOCK_RE.findall(content)) // 2
     score += min(code_blocks, 3) * 2.0  # up to +6
+
+    # Function/class definitions signal API documentation
+    defs = len(_DEF_RE.findall(content))
+    score += min(defs, 4) * 1.5  # up to +6
+
+    # Docstrings/doc comments signal well-documented code
+    docstrings = len(_DOCSTRING_RE.findall(content))
+    score += min(docstrings, 3) * 1.0  # up to +3
 
     # Longer content tends to be more informative
     length = len(content)
@@ -90,8 +111,15 @@ def _chunk_quality_score(content: str) -> float:
         elif ratio > 0.3:
             score -= 2.0
 
-    # Normalize to 0-1 range
-    return max(0.0, min(score / 8.0, 1.0))
+    # Directive-heavy content (leftover mkdocs/rst noise)
+    directives = len(_DIRECTIVE_RE.findall(content))
+    if directives > 3:
+        score -= 2.0
+    elif directives > 1:
+        score -= 1.0
+
+    # Normalize to 0-1 range (wider range due to more signals)
+    return max(0.0, min(score / 12.0, 1.0))
 
 
 class DocsDB:
@@ -566,7 +594,10 @@ class DocsDB:
         candidate_limit = limit * 3
 
         # --- FTS5 search with tiered queries + BM25 column weights ---
-        # Weights: id(0), content(1), title(5), heading_path(10)
+        # Weights: id(0), content(2), title(3), heading_path(2)
+        # Flattened: content is the primary signal, title gets a moderate
+        # boost, heading_path gets minimal boost (BM25 already naturally
+        # up-weights matches in short fields via tf-idf).
         fts_queries = _build_fts_queries(query)
         fts_scores: dict[str, float] = {}
         fts_chunks: dict[str, dict] = {}
@@ -575,7 +606,7 @@ class DocsDB:
             try:
                 fts_sql = """
                     SELECT c.*,
-                           bm25(doc_chunks_fts, 0.0, 1.0, 5.0, 10.0) AS bm25_score
+                           bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
                     FROM doc_chunks_fts f
                     JOIN doc_chunks c ON f.id = c.id
                     WHERE doc_chunks_fts MATCH ?
@@ -597,10 +628,14 @@ class DocsDB:
                     for row in rows:
                         chunk = dict(row)
                         cid = chunk["id"]
-                        # BM25 is negative; negate so higher = better
-                        fts_scores[cid] = -chunk.pop("bm25_score", 0)
-                        fts_chunks[cid] = chunk
-                    break  # Got results from this tier, skip broader query
+                        score = -chunk.pop("bm25_score", 0)
+                        # Keep the best score across tiers (PHRASE > AND > OR)
+                        if cid not in fts_scores or score > fts_scores[cid]:
+                            fts_scores[cid] = score
+                            fts_chunks[cid] = chunk
+                    # Stop once we have enough candidates across all tiers
+                    if len(fts_scores) >= candidate_limit:
+                        break
             except Exception as e:
                 logger.debug(f"FTS search error: {e}")
                 continue
@@ -687,12 +722,22 @@ class DocsDB:
         # Sort by score descending
         scored.sort(key=lambda x: x[1], reverse=True)
 
-        # Build results with cross-chunk context
+        # Build results with cross-chunk context + URL diversity limit
+        # Cap results per URL to avoid returning 4-5 chunks from the same page
+        max_per_url = 2
+        url_counts: dict[str, int] = {}
         results = []
-        for cid, score in scored[:limit]:
+        for cid, score in scored:
+            if len(results) >= limit:
+                break
             chunk = fts_chunks.get(cid)
             if not chunk:
                 continue
+            chunk_url = chunk.get("url", "")
+            if chunk_url:
+                url_counts[chunk_url] = url_counts.get(chunk_url, 0) + 1
+                if url_counts[chunk_url] > max_per_url:
+                    continue
 
             # Resolve library name
             lib_row = self._conn.execute(

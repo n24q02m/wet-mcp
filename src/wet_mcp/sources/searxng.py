@@ -6,6 +6,8 @@ import json
 import httpx
 from loguru import logger
 
+from wet_mcp.config import settings
+
 # Default retry configuration
 _MAX_RETRIES = 3
 _BASE_DELAY = 1.0  # seconds
@@ -93,7 +95,7 @@ async def search(
 
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=settings.searxng_timeout) as client:
                 headers = {
                     "X-Real-IP": "127.0.0.1",
                     "X-Forwarded-For": "127.0.0.1",
@@ -106,7 +108,7 @@ async def search(
                 response.raise_for_status()
                 data = response.json()
 
-            results = data.get("results", [])[:max_results]
+            results = data.get("results", [])[: max_results * 2]
 
             # Format results
             formatted = []
@@ -120,13 +122,36 @@ async def search(
                     }
                 )
 
+            # Deduplicate by URL: with multiple engines, the same page
+            # may appear several times.  Keep the entry with the longest
+            # snippet (most informative) and merge engine sources.
+            seen: dict[str, dict] = {}
+            deduped: list[dict] = []
+            for item in formatted:
+                url = item["url"]
+                if url in seen:
+                    existing = seen[url]
+                    # Merge engine sources
+                    if item["source"] and item["source"] not in existing["source"]:
+                        existing["source"] += f", {item['source']}"
+                    # Keep longer snippet
+                    if len(item.get("snippet", "")) > len(existing.get("snippet", "")):
+                        existing["snippet"] = item["snippet"]
+                        existing["title"] = item["title"] or existing["title"]
+                else:
+                    seen[url] = item
+                    deduped.append(item)
+
+            # Trim to requested limit after dedup
+            deduped = deduped[:max_results]
+
             output = {
-                "results": formatted,
-                "total": len(formatted),
+                "results": deduped,
+                "total": len(deduped),
                 "query": query,
             }
 
-            logger.info(f"Found {len(formatted)} results for: {query}")
+            logger.info(f"Found {len(deduped)} results for: {query}")
             return json.dumps(output, ensure_ascii=False, indent=2)
 
         except httpx.HTTPStatusError as e:

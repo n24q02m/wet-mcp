@@ -5,6 +5,7 @@ import json
 import sys
 from contextlib import asynccontextmanager
 from importlib.resources import files
+from urllib.parse import urlparse
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
@@ -241,15 +242,28 @@ async def _init_reranker_backend() -> None:
 # --- Helpers ---
 
 
-async def _embed(text: str) -> list[float] | None:
-    """Embed text if backend is available, truncated to fixed dims."""
-    from wet_mcp.embedder import get_backend
+async def _embed(text: str, is_query: bool = False) -> list[float] | None:
+    """Embed text if backend is available, truncated to fixed dims.
+
+    Args:
+        text: Text to embed.
+        is_query: If True, prepend Qwen3 instruction prefix for query
+            embedding (asymmetric retrieval). Document embeddings stay raw.
+    """
+    from wet_mcp.embedder import Qwen3EmbedBackend, get_backend
 
     backend = get_backend()
     if not backend:
         return None
     try:
-        vec = await asyncio.to_thread(backend.embed_single, text, _embedding_dims)
+        # Qwen3 instruction-aware embedding: prepend instruction for queries
+        # so the model produces query-optimized vectors (asymmetric retrieval).
+        embed_text = text
+        if is_query and isinstance(backend, Qwen3EmbedBackend):
+            embed_text = (
+                f"Instruct: Retrieve relevant technical documentation\nQuery: {text}"
+            )
+        vec = await asyncio.to_thread(backend.embed_single, embed_text, _embedding_dims)
         # Truncate to fixed dims so switching models never breaks the DB
         if _embedding_dims > 0 and len(vec) > _embedding_dims:
             vec = vec[:_embedding_dims]
@@ -688,11 +702,16 @@ async def _do_research(query: str, max_results: int = 10) -> str:
 # Docs helpers (extracted from _do_docs_search for clarity)
 # ---------------------------------------------------------------------------
 
+# Minimum number of chunks required from llms.txt or GitHub raw docs.
+# If fewer are produced, the tier is skipped in favor of crawling.
+_MIN_GH_CHUNKS = 20
+
 
 async def _fetch_and_chunk_docs(
     docs_url: str,
     repo_url: str = "",
     query: str = "",
+    library_hint: str = "",
 ) -> tuple[list[dict], int]:
     """Fetch library documentation and split into searchable chunks.
 
@@ -716,12 +735,21 @@ async def _fetch_and_chunk_docs(
     llms_content = await try_llms_txt(docs_url)
     if llms_content:
         chunks = chunk_llms_txt(llms_content, base_url=docs_url)
-        logger.info(f"Indexed {len(chunks)} chunks from llms.txt")
-        return chunks, 1
+        # Quality gate: skip llms.txt if it's too small (likely a TOC/meta file)
+        if len(chunks) >= _MIN_GH_CHUNKS:
+            logger.info(f"Indexed {len(chunks)} chunks from llms.txt")
+            return chunks, 1
+        else:
+            logger.info(
+                f"llms.txt produced only {len(chunks)} chunks "
+                f"(min {_MIN_GH_CHUNKS}), falling through"
+            )
 
     # Tier 1: Try GitHub raw markdown (clean content, no JS rendering)
     gh_target = repo_url or docs_url
-    gh_pages = await _try_github_raw_docs(gh_target, max_files=50)
+    gh_pages = await _try_github_raw_docs(
+        gh_target, max_files=50, library_hint=library_hint
+    )
     if gh_pages:
         chunks: list[dict] = []
         for page in gh_pages:
@@ -733,11 +761,22 @@ async def _fetch_and_chunk_docs(
                 if not chunk.get("title") and page.get("title"):
                     chunk["title"] = page["title"]
             chunks.extend(page_chunks)
-        logger.info(
-            f"Indexed {len(chunks)} chunks from {len(gh_pages)} "
-            "GitHub raw markdown files"
-        )
-        return chunks, len(gh_pages)
+
+        # Quality gate: if GitHub raw produced too few meaningful chunks,
+        # fall through to Tier 2 (crawl docs site). This handles repos
+        # where docs use template macros (Polars), RST, or other formats
+        # that produce poor raw markdown.
+        if len(chunks) >= _MIN_GH_CHUNKS:
+            logger.info(
+                f"Indexed {len(chunks)} chunks from {len(gh_pages)} "
+                "GitHub raw markdown files"
+            )
+            return chunks, len(gh_pages)
+        else:
+            logger.info(
+                f"GitHub raw produced only {len(chunks)} chunks "
+                f"(min {_MIN_GH_CHUNKS}), falling through to crawl"
+            )
 
     # Tier 2: Crawl docs pages (rendered HTML -> markdown)
     pages = await fetch_docs_pages(
@@ -795,7 +834,7 @@ async def _do_docs_search(
         ver = _docs_db.get_best_version(lib["id"], version)
         if ver and ver.get("chunk_count", 0) > 0:
             # Search existing index — retrieve extra candidates for reranking
-            query_embedding = await _embed(query)
+            query_embedding = await _embed(query, is_query=True)
             retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
             results = _docs_db.search(
@@ -884,9 +923,54 @@ async def _do_docs_search(
     _docs_db.clear_version_chunks(ver_id)
 
     # Step 3: Fetch and chunk docs (tiered: llms.txt > GitHub raw > crawl)
+    # Normalize docs URL (strip overly-specific paths for better crawl coverage)
+    from wet_mcp.sources.docs import _normalize_docs_url
+
+    docs_url = _normalize_docs_url(docs_url)
+
     all_chunks, page_count = await _fetch_and_chunk_docs(
-        docs_url=docs_url, repo_url=repo_url, query=query
+        docs_url=docs_url,
+        repo_url=repo_url,
+        query=query,
+        library_hint=library,
     )
+
+    # Fallback: if too few pages (likely wrong/insufficient docs URL),
+    # try SearXNG to discover a better documentation URL.
+    if page_count <= 2 and len(all_chunks) < 100:
+        logger.info(
+            f"Only {page_count} pages found for '{library}', "
+            "trying SearXNG fallback..."
+        )
+        try:
+            searxng_url = await ensure_searxng()
+            fallback_result = await searxng_search(
+                searxng_url=searxng_url,
+                query=f"{library} documentation",
+                categories="general",
+                max_results=3,
+            )
+            fallback_data = json.loads(fallback_result)
+            for fr in fallback_data.get("results", []):
+                alt_url = fr.get("url", "")
+                if not alt_url or not alt_url.startswith("http"):
+                    continue
+                alt_parsed = urlparse(alt_url)
+                orig_parsed = urlparse(docs_url)
+                if alt_parsed.netloc == orig_parsed.netloc:
+                    continue
+                alt_chunks, alt_pages = await _fetch_and_chunk_docs(alt_url, "", query)
+                if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
+                    logger.info(
+                        f"SearXNG fallback: {alt_url} "
+                        f"({alt_pages} pages, {len(alt_chunks)} chunks)"
+                    )
+                    docs_url = alt_url
+                    all_chunks = alt_chunks
+                    page_count = alt_pages
+                    break
+        except Exception as e:
+            logger.debug(f"SearXNG fallback failed: {e}")
 
     if not all_chunks:
         return json.dumps(
@@ -928,7 +1012,7 @@ async def _do_docs_search(
     _docs_db.mark_version_indexed(ver_id, page_count, len(all_chunks))
 
     # Step 6: Search the freshly indexed content
-    query_embedding = await _embed(query)
+    query_embedding = await _embed(query, is_query=True)
     retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
     results = _docs_db.search(
