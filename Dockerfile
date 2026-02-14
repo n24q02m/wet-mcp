@@ -1,8 +1,16 @@
+# syntax=docker/dockerfile:1
 # Multi-stage build for wet-mcp
 # Python 3.13 + SearXNG + Playwright chromium
 # All-in-one: no external Docker or services needed
 
-FROM python:3.13-slim-bookworm AS builder
+# ========================
+# Stage 1: Builder
+# ========================
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS builder
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /app
 
@@ -10,19 +18,21 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+# Install dependencies first (cached when deps don't change)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --frozen --no-install-project --no-dev
 
-# Copy project files
-COPY pyproject.toml uv.lock README.md ./
-COPY src/ ./src/
-
-# Install dependencies
-RUN uv sync --frozen --no-dev
+# Copy application code and install the project
+COPY . /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
 
 # Install SearXNG from GitHub (zip archive + no-build-isolation for speed)
 # Then patch version_frozen.py (zip has no .git for version detection)
-RUN uv pip install --quiet msgspec setuptools wheel pyyaml \
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --quiet msgspec setuptools wheel pyyaml \
     && uv pip install --quiet --no-build-isolation \
     https://github.com/searxng/searxng/archive/refs/heads/master.zip \
     && uv run python -c "\
@@ -33,8 +43,12 @@ vf.write_text('VERSION_STRING = \"0.0.0\"\nVERSION_TAG = \"v0.0.0\"\nDOCKER_TAG 
 print(f'Created {vf}')"
 
 # Install Playwright chromium browser
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN uv run python -m playwright install chromium
 
+# ========================
+# Stage 2: Runtime
+# ========================
 FROM python:3.13-slim-bookworm
 
 WORKDIR /app
@@ -67,24 +81,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy virtual environment from builder
+# Copy virtual environment and Playwright browsers from builder
 COPY --from=builder /app/.venv /app/.venv
 COPY --from=builder /app/src /app/src
+COPY --from=builder /opt/playwright /opt/playwright
 
-# Copy Playwright browsers from builder
-COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
+# Set environment variables
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app/src \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright \
+    CACHE_DIR=/data \
+    DOWNLOAD_DIR=/data/downloads
 
-# Activate venv
-ENV PATH="/app/.venv/bin:$PATH"
-ENV PYTHONPATH=/app/src
+# Create non-root user and set permissions
+RUN groupadd -r appuser && useradd -r -g appuser -d /home/appuser -m appuser \
+    && mkdir -p /data/downloads /home/appuser/.wet-mcp \
+    && touch /home/appuser/.wet-mcp/.setup-complete \
+    && chown -R appuser:appuser /app /data /home/appuser /opt/playwright
 
-# Mark setup as complete (everything pre-installed)
-RUN mkdir -p /root/.wet-mcp && touch /root/.wet-mcp/.setup-complete
-
-# Default data directory (cache, docs DB, downloads)
-ENV CACHE_DIR=/data
-ENV DOWNLOAD_DIR=/data/downloads
 VOLUME /data
+USER appuser
 
 # Stdio transport by default
 CMD ["python", "-m", "wet_mcp"]
