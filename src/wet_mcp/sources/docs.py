@@ -25,7 +25,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 15
+DISCOVERY_VERSION = 16
 
 
 def _github_headers() -> dict[str, str]:
@@ -187,8 +187,11 @@ async def _discover_from_go(name: str) -> dict | None:
                 homepage = item.get("homepage") or ""
                 description = item.get("description") or ""
                 repo_url = item.get("html_url") or ""
-                # Use homepage if available, else pkg.go.dev docs
-                docs_url = homepage or f"https://pkg.go.dev/github.com/{full_name}"
+                # Use homepage if it's a real docs domain (not github.com itself)
+                if homepage and "github.com" not in homepage.lower():
+                    docs_url = homepage
+                else:
+                    docs_url = f"https://pkg.go.dev/github.com/{full_name}"
                 return {
                     "name": name,
                     "description": description,
@@ -235,6 +238,203 @@ async def _get_github_homepage(url: str) -> str | None:
         logger.debug(f"GitHub homepage check failed for {owner}/{repo}: {e}")
 
     return None
+
+
+async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> str:
+    """Probe for a better documentation URL than the project homepage.
+
+    Many libraries list their marketing/landing page in package registries,
+    but actual documentation lives at a different URL:
+
+    - ``docs.{domain}`` subdomain (e.g., docs.solidjs.com, docs.nestjs.com)
+    - ``{name}.readthedocs.io`` (validated via ``objects.inv`` project name)
+    - ``{homepage}/docs/`` path (e.g., remix.run/docs/)
+
+    Probes these alternatives in parallel. Returns the best URL found,
+    preferring URLs with Sphinx ``objects.inv`` (guaranteed rich docs).
+    Falls back to ``homepage`` if no better alternative exists.
+
+    ReadTheDocs results are validated by parsing the ``objects.inv`` header
+    project name — must match the library name to prevent false positives
+    (e.g., ``chi.readthedocs.io`` being an unrelated Python project).
+    """
+    parsed = urlparse(homepage)
+    netloc = parsed.netloc
+    base_domain = netloc.removeprefix("www.") if netloc.startswith("www.") else netloc
+    # Normalize lib name for probing:
+    # "@nestjs/core" → scope="nestjs", pkg="core"
+    # "solid-js" → scope="", pkg="solid-js"
+    scope_part = ""
+    pkg_part = lib_name.lower().lstrip("@")
+    if "/" in pkg_part:
+        scope_part = pkg_part.split("/")[0]
+        pkg_part = pkg_part.split("/")[-1]
+    clean_name = pkg_part
+    # Normalized for matching (no hyphens/underscores)
+    clean_name_norm = clean_name.replace("-", "").replace("_", "")
+    # Generic package names that collide with unrelated RTD projects
+    _GENERIC_NAMES = frozenset(
+        {
+            "core",
+            "react",
+            "cli",
+            "common",
+            "utils",
+            "types",
+            "client",
+            "server",
+            "api",
+            "app",
+            "config",
+            "test",
+            "ui",
+            "web",
+        }
+    )
+
+    candidates: list[tuple[str, str]] = []
+
+    # 1. docs.{domain} subdomain — skip for generic hosting domains
+    # (docs.github.com is GitHub's own docs, not project docs)
+    _skip_docs_subdomain = {"github.com", "github.io", "gitlab.com", "bitbucket.org"}
+    if not base_domain.startswith("docs.") and base_domain not in _skip_docs_subdomain:
+        candidates.append(("docs_subdomain", f"https://docs.{base_domain}/"))
+
+    # 2. ReadTheDocs: probe {name}.readthedocs.io when not already on RTD.
+    # Skip for generic package names and very short names (<=4 chars).
+    # Validated via objects.inv: project name must match + object count >= 50
+    # to reject squatter/placeholder projects (real docs have 50+ objects).
+    if "readthedocs" not in base_domain and clean_name not in _GENERIC_NAMES:
+        rtd_name = scope_part or clean_name
+        if len(rtd_name) > 4:
+            candidates.append(
+                ("readthedocs", f"https://{rtd_name}.readthedocs.io/en/latest/")
+            )
+
+    # 3. {homepage}/docs/ path (only if homepage has no path or short path)
+    if len(parsed.path.strip("/")) <= 1:
+        docs_path_url = f"{parsed.scheme}://{parsed.netloc}/docs/"
+        candidates.append(("docs_path", docs_path_url))
+
+    if not candidates:
+        return homepage
+
+    async def _check(label: str, url: str) -> tuple[str, str, int, bool] | None:
+        try:
+            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    return None
+                content = resp.text
+                content_len = len(content)
+                # Must be substantial HTML/text, not an error page
+                if content_len < 500:
+                    return None
+                final_url = str(resp.url)
+                # Avoid redirect loops back to the original homepage
+                if urlparse(final_url).netloc == parsed.netloc and label != "docs_path":
+                    final_parsed = urlparse(final_url)
+                    if not final_parsed.path.startswith("/docs"):
+                        if "docs" not in final_parsed.netloc:
+                            return None
+                # Check for objects.inv (Sphinx docs indicator)
+                has_inv = False
+                inv_url = final_url.rstrip("/") + "/objects.inv"
+                try:
+                    inv_resp = await client.get(inv_url)
+                    if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
+                        b"# Sphinx inventory version"
+                    ):
+                        # For ReadTheDocs: validate project name matches lib
+                        # and has enough objects (>= 50) to be real docs,
+                        # not a squatter/placeholder project.
+                        if label == "readthedocs":
+                            inv_content = inv_resp.content
+                            inv_text = inv_content[:500].decode(
+                                "utf-8", errors="replace"
+                            )
+                            proj_match = re.search(
+                                r"^# Project:\s*(.+)$", inv_text, re.MULTILINE
+                            )
+                            if proj_match:
+                                proj_name = (
+                                    proj_match.group(1)
+                                    .strip()
+                                    .lower()
+                                    .replace("-", "")
+                                    .replace("_", "")
+                                    .replace(" ", "")
+                                )
+                                if clean_name_norm not in proj_name:
+                                    logger.debug(
+                                        f"RTD project '{proj_match.group(1).strip()}'"
+                                        f" doesn't match '{lib_name}', skipping"
+                                    )
+                                    return None
+                            # Count objects: real docs have 50+, squatters < 30
+                            try:
+                                # Find end of header (4 lines starting with #)
+                                hdr_pos = 0
+                                for _ in range(4):
+                                    hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
+                                decompressed = zlib.decompress(inv_content[hdr_pos:])
+                                obj_count = len(decompressed.split(b"\n")) - 1
+                                if obj_count < 50:
+                                    logger.debug(
+                                        f"RTD {lib_name}: only {obj_count} "
+                                        f"objects, likely squatter — skipping"
+                                    )
+                                    return None
+                            except Exception:
+                                # Can't count objects — reject for safety
+                                return None
+                        has_inv = True
+                except Exception:
+                    pass
+                # ReadTheDocs without objects.inv is unreliable — skip
+                if label == "readthedocs" and not has_inv:
+                    return None
+                return (label, final_url, content_len, has_inv)
+        except Exception:
+            return None
+
+    results = await asyncio.gather(
+        *[_check(label, url) for label, url in candidates],
+        return_exceptions=True,
+    )
+
+    valid = [r for r in results if isinstance(r, tuple)]
+    if not valid:
+        return homepage
+
+    # Pick best: objects.inv > large content > small content
+    best: tuple[str, str] | None = None
+    best_score = 0
+    for label, final_url, size, has_inv in valid:
+        score = 0
+        if has_inv:
+            score += 100  # Sphinx docs = gold standard
+        if size > 10000:
+            score += 10
+        elif size > 2000:
+            score += 5
+        elif size > 500:
+            score += 2
+        # docs subdomain gets small bonus (same org, high confidence)
+        if label == "docs_subdomain":
+            score += 3
+        if score > best_score:
+            best_score = score
+            best = (label, final_url)
+
+    if best:
+        logger.info(
+            f"Probed better docs URL for {lib_name}: {best[1]} "
+            f"(via {best[0]}, score={best_score})"
+        )
+        return best[1]
+
+    return homepage
 
 
 async def discover_library(name: str) -> dict | None:
@@ -300,9 +500,9 @@ async def discover_library(name: str) -> dict | None:
             parsed_hp = urlparse(homepage)
             if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
                 lib_norm = name.lower().replace("-", "")
-                if parsed_hp.netloc == "docs.rs":
+                if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
                     score += 1  # Auto-generated docs, minimal boost
-                    # Don't give name-in-path bonus: docs.rs/{name} is always true
+                    # Don't give name-in-path bonus: always true for these
                 else:
                     score += 3
                     # Library name appears in the domain → likely official site
@@ -362,6 +562,13 @@ async def discover_library(name: str) -> dict | None:
         elif downloads >= 500_000:
             score += 1
 
+        # Registry trust: npm/PyPI are direct package registries (exact API match),
+        # while Go uses GitHub search (may return tangentially related repos).
+        # Give primary registries a small bonus to break ties.
+        reg = r.get("registry", "")
+        if reg in ("npm", "pypi"):
+            score += 2
+
         scored.append((score, r))
 
     # Sort by score descending, pick best
@@ -383,6 +590,15 @@ async def discover_library(name: str) -> dict | None:
                 best["homepage"] = gh_homepage
 
         if best.get("homepage"):
+            # Probe for better docs URL (docs subdomain, ReadTheDocs, /docs/)
+            original_hp = best["homepage"]
+            probed_url = await _probe_docs_url(
+                original_hp, name, registry=best.get("registry", "")
+            )
+            if probed_url != original_hp:
+                logger.info(f"Upgraded {name} docs URL: {original_hp} -> {probed_url}")
+                best["homepage"] = probed_url
+
             logger.info(
                 f"Discovered {name} docs: {best['homepage']} "
                 f"(via {best['registry']}, score={best_score})"
@@ -1668,9 +1884,18 @@ async def fetch_docs_pages(
     """
     from wet_mcp.sources.crawler import extract
 
+    # SPA-friendly crawl settings: scroll full page to trigger lazy-loaded
+    # content and add a small delay for JS rendering before capture.
+    _SPA_KWARGS: dict = {
+        "scan_full_page": True,
+        "delay_before_return_html": 1.0,
+    }
+
     # Step 1: Fetch root page
     logger.info(f"Fetching docs root: {docs_url}")
-    root_result_str = await extract(urls=[docs_url], format="markdown", stealth=True)
+    root_result_str = await extract(
+        urls=[docs_url], format="markdown", stealth=True, **_SPA_KWARGS
+    )
     root_results = json.loads(root_result_str)
 
     pages: list[dict] = []
@@ -1826,7 +2051,9 @@ async def fetch_docs_pages(
         pending_urls = pending_urls[round1_limit:]
 
         logger.info(f"Fetching {len(batch1_urls)} docs pages (round 1)...")
-        batch1_str = await extract(urls=batch1_urls, format="markdown", stealth=True)
+        batch1_str = await extract(
+            urls=batch1_urls, format="markdown", stealth=True, **_SPA_KWARGS
+        )
         batch1_results = json.loads(batch1_str)
 
         for br in batch1_results:
@@ -1849,7 +2076,7 @@ async def fetch_docs_pages(
         if batch2_urls:
             logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
             batch2_str = await extract(
-                urls=batch2_urls, format="markdown", stealth=True
+                urls=batch2_urls, format="markdown", stealth=True, **_SPA_KWARGS
             )
             batch2_results = json.loads(batch2_str)
             for br in batch2_results:

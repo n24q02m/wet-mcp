@@ -1,4 +1,4 @@
-"""Benchmark test suite for docs search quality (120 libraries).
+"""Benchmark test suite for docs search quality (200 libraries).
 
 Run manually or via CI to validate docs search quality after changes.
 Each test case specifies a library, query, and expected quality signals.
@@ -778,6 +778,510 @@ BENCHMARK_CASES = [
         "library": "ultralytics",
         "query": "yolo detect train predict export model",
         "tests_aspect": "PyPI, ultralytics.com (YOLO object detection)",
+    },
+    # =====================================================================
+    # Category M: Auth & Security (10) — authentication/authorization libs
+    # =====================================================================
+    {
+        "id": "passportjs",
+        "library": "passport",
+        "query": "strategy authenticate session serialize",
+        "tests_aspect": "npm, passportjs.org (Node.js auth middleware)",
+    },
+    {
+        "id": "nextauth",
+        "library": "next-auth",
+        "query": "providers session callbacks credentials JWT",
+        "tests_aspect": "npm, authjs.dev (Next.js auth, renamed)",
+    },
+    {
+        "id": "jose",
+        "library": "jose",
+        "query": "JWT sign verify encrypt JWK JWS",
+        "tests_aspect": "npm, JOSE/JWT library (short generic name)",
+    },
+    {
+        "id": "bcrypt",
+        "library": "bcrypt",
+        "query": "hash compare salt rounds password",
+        "tests_aspect": "npm, bcrypt (password hashing, generic name)",
+    },
+    {
+        "id": "authlib",
+        "library": "authlib",
+        "query": "OAuth2 client OIDC JWT bearer token",
+        "tests_aspect": "PyPI, authlib.org (Python OAuth library)",
+    },
+    {
+        "id": "python-jose",
+        "library": "python-jose",
+        "query": "JWT encode decode claims algorithms",
+        "tests_aspect": "PyPI, python-jose (Python JWT, hyphenated name)",
+    },
+    {
+        "id": "helmet",
+        "library": "helmet",
+        "query": "CSP headers security HSTS frameguard",
+        "tests_aspect": "npm, helmetjs.github.io (HTTP security headers)",
+    },
+    {
+        "id": "cors",
+        "library": "cors",
+        "query": "origin methods headers credentials preflight",
+        "tests_aspect": "npm, expressjs/cors (very short generic name)",
+    },
+    {
+        "id": "cryptography",
+        "library": "cryptography",
+        "query": "Fernet symmetric asymmetric certificates X509",
+        "tests_aspect": "PyPI, cryptography.io (Python crypto library)",
+    },
+    {
+        "id": "argon2",
+        "library": "argon2-cffi",
+        "query": "hash verify password PasswordHasher",
+        "tests_aspect": "PyPI, argon2-cffi (Argon2 bindings, hyphenated)",
+    },
+    # =====================================================================
+    # Category N: Database & ORM (10) — database drivers and ORMs
+    # =====================================================================
+    {
+        "id": "typeorm",
+        "library": "typeorm",
+        "query": "entity repository migration query builder",
+        "tests_aspect": "npm, typeorm.io (TypeScript ORM)",
+    },
+    {
+        "id": "sequelize",
+        "library": "sequelize",
+        "query": "model define associations migration findAll",
+        "tests_aspect": "npm, sequelize.org (Node.js ORM)",
+    },
+    {
+        "id": "mongoose",
+        "library": "mongoose",
+        "query": "schema model query populate middleware",
+        "tests_aspect": "npm, mongoosejs.com (MongoDB ODM)",
+    },
+    {
+        "id": "sqlmodel",
+        "library": "sqlmodel",
+        "query": "table model select session relationship",
+        "tests_aspect": "PyPI, sqlmodel.tiangolo.com (Pydantic + SQLAlchemy)",
+    },
+    {
+        "id": "peewee",
+        "library": "peewee",
+        "query": "model fields query select create",
+        "tests_aspect": "PyPI, docs.peewee-orm.com (lightweight Python ORM)",
+    },
+    {
+        "id": "knex",
+        "library": "knex",
+        "query": "query builder migration schema join where",
+        "tests_aspect": "npm, knexjs.org (SQL query builder)",
+    },
+    {
+        "id": "kysely",
+        "library": "kysely",
+        "query": "query builder type-safe select insert migration",
+        "tests_aspect": "npm, kysely.dev (type-safe TS SQL builder)",
+    },
+    {
+        "id": "alembic",
+        "library": "alembic",
+        "query": "migration revision upgrade downgrade autogenerate",
+        "tests_aspect": "PyPI, alembic.sqlalchemy.org (SQLAlchemy migrations)",
+    },
+    {
+        "id": "motor",
+        "library": "motor",
+        "query": "async MongoDB client collection find insert",
+        "tests_aspect": "PyPI, motor.readthedocs.io (async MongoDB driver)",
+    },
+    {
+        "id": "ioredis",
+        "library": "ioredis",
+        "query": "client cluster pipeline subscribe pub",
+        "tests_aspect": "npm, ioredis (Redis client for Node.js)",
+    },
+    # =====================================================================
+    # Category O: CLI & Terminal (10) — command line tools & TUI libs
+    # =====================================================================
+    {
+        "id": "click",
+        "library": "click",
+        "query": "command group option argument callback",
+        "tests_aspect": "PyPI, click.palletsprojects.com (Python CLI, very popular)",
+    },
+    {
+        "id": "rich",
+        "library": "rich",
+        "query": "console table progress panel syntax",
+        "tests_aspect": "PyPI, rich.readthedocs.io (terminal formatting)",
+    },
+    {
+        "id": "inquirer",
+        "library": "@inquirer/prompts",
+        "query": "input select confirm checkbox password",
+        "tests_aspect": "scoped npm, inquirer (interactive CLI prompts)",
+    },
+    {
+        "id": "commander",
+        "library": "commander",
+        "query": "program command option argument action",
+        "tests_aspect": "npm, commander.js (Node.js CLI framework)",
+    },
+    {
+        "id": "yargs",
+        "library": "yargs",
+        "query": "command options positional middleware help",
+        "tests_aspect": "npm, yargs.js.org (CLI parser)",
+    },
+    {
+        "id": "textual",
+        "library": "textual",
+        "query": "App Widget Screen compose mount",
+        "tests_aspect": "PyPI, textual.textualize.io (Python TUI framework)",
+    },
+    {
+        "id": "tqdm",
+        "library": "tqdm",
+        "query": "progress bar iterator wrap notebook",
+        "tests_aspect": "PyPI, tqdm.github.io (progress bar, short name)",
+    },
+    {
+        "id": "chalk",
+        "library": "chalk",
+        "query": "color red green bold underline hex",
+        "tests_aspect": "npm, chalk (terminal colors, generic name)",
+    },
+    {
+        "id": "argparse",
+        "library": "argparse",
+        "query": "parser argument add subparser",
+        "tests_aspect": "PyPI/stdlib, very generic name",
+    },
+    {
+        "id": "blessed",
+        "library": "blessed",
+        "query": "screen box terminal cursor input",
+        "tests_aspect": "npm, blessed (terminal UI, generic name)",
+    },
+    # =====================================================================
+    # Category P: Testing & QA (10) — test frameworks and tools
+    # =====================================================================
+    {
+        "id": "mocha",
+        "library": "mocha",
+        "query": "describe it before after hooks reporter",
+        "tests_aspect": "npm, mochajs.org (Node.js test framework)",
+    },
+    {
+        "id": "chai",
+        "library": "chai",
+        "query": "expect should assert deep equal include",
+        "tests_aspect": "npm, chaijs.com (assertion library, short name)",
+    },
+    {
+        "id": "supertest",
+        "library": "supertest",
+        "query": "request app get post expect status",
+        "tests_aspect": "npm, supertest (HTTP assertions)",
+    },
+    {
+        "id": "nock",
+        "library": "nock",
+        "query": "intercept mock HTTP scope reply",
+        "tests_aspect": "npm, nock (HTTP mocking, short name)",
+    },
+    {
+        "id": "faker",
+        "library": "@faker-js/faker",
+        "query": "name email address phone random seed",
+        "tests_aspect": "scoped npm, fakerjs.dev (data generation)",
+    },
+    {
+        "id": "hypothesis",
+        "library": "hypothesis",
+        "query": "given strategies example settings assume",
+        "tests_aspect": "PyPI, hypothesis.readthedocs.io (property-based testing)",
+    },
+    {
+        "id": "factory-boy",
+        "library": "factory-boy",
+        "query": "Factory SubFactory Sequence LazyAttribute",
+        "tests_aspect": "PyPI, factory-boy (test fixtures, hyphenated)",
+    },
+    {
+        "id": "responses",
+        "library": "responses",
+        "query": "mock activate add callback passthrough",
+        "tests_aspect": "PyPI, responses (HTTP mocking for requests)",
+    },
+    {
+        "id": "coverage",
+        "library": "coverage",
+        "query": "run report html combine source branch",
+        "tests_aspect": "PyPI, coverage.readthedocs.io (code coverage)",
+    },
+    {
+        "id": "storybook",
+        "library": "storybook",
+        "query": "stories args decorators addon controls",
+        "tests_aspect": "npm, storybook.js.org (UI component testing)",
+    },
+    # =====================================================================
+    # Category Q: State Management & Data Flow (10) — state, stores, events
+    # =====================================================================
+    {
+        "id": "zustand",
+        "library": "zustand",
+        "query": "create store set get subscribe middleware",
+        "tests_aspect": "npm, zustand (React state, unique name)",
+    },
+    {
+        "id": "redux-toolkit",
+        "library": "@reduxjs/toolkit",
+        "query": "createSlice configureStore createAsyncThunk",
+        "tests_aspect": "scoped npm, redux-toolkit.js.org",
+    },
+    {
+        "id": "jotai",
+        "library": "jotai",
+        "query": "atom useAtom Provider atomWithStorage",
+        "tests_aspect": "npm, jotai.org (atomic state, unique name)",
+    },
+    {
+        "id": "pinia",
+        "library": "pinia",
+        "query": "defineStore state getters actions plugins",
+        "tests_aspect": "npm, pinia.vuejs.org (Vue state management)",
+    },
+    {
+        "id": "mobx",
+        "library": "mobx",
+        "query": "observable action computed reaction autorun",
+        "tests_aspect": "npm, mobx.js.org (reactive state)",
+    },
+    {
+        "id": "rxjs",
+        "library": "rxjs",
+        "query": "Observable pipe map filter switchMap Subject",
+        "tests_aspect": "npm, rxjs.dev (reactive extensions)",
+    },
+    {
+        "id": "recoil",
+        "library": "recoil",
+        "query": "atom selector useRecoilState RecoilRoot",
+        "tests_aspect": "npm, recoiljs.org (React state by Meta)",
+    },
+    {
+        "id": "valtio",
+        "library": "valtio",
+        "query": "proxy useSnapshot subscribe ref",
+        "tests_aspect": "npm, valtio (proxy-based state, unique name)",
+    },
+    {
+        "id": "ngrx-store",
+        "library": "@ngrx/store",
+        "query": "reducer action selector effects createFeature",
+        "tests_aspect": "scoped npm, ngrx.io (Angular state management)",
+    },
+    {
+        "id": "xstate",
+        "library": "xstate",
+        "query": "machine state transition context actions guards",
+        "tests_aspect": "npm, xstate.js.org (state machines)",
+    },
+    # =====================================================================
+    # Category R: Networking & HTTP (10) — HTTP clients, WebSocket, gRPC
+    # =====================================================================
+    {
+        "id": "axios",
+        "library": "axios",
+        "query": "get post interceptors config instance",
+        "tests_aspect": "npm, axios-http.com (HTTP client)",
+    },
+    {
+        "id": "got",
+        "library": "got",
+        "query": "request retry hooks pagination stream",
+        "tests_aspect": "npm, got (HTTP client, very short name)",
+    },
+    {
+        "id": "undici",
+        "library": "undici",
+        "query": "fetch request client pool dispatcher",
+        "tests_aspect": "npm, undici (Node.js HTTP/1.1 client)",
+    },
+    {
+        "id": "ws",
+        "library": "ws",
+        "query": "WebSocket server client send message",
+        "tests_aspect": "npm, ws (WebSocket, ultra-short 2-char name)",
+    },
+    {
+        "id": "grpcio",
+        "library": "grpcio",
+        "query": "server channel stub service interceptor",
+        "tests_aspect": "PyPI, grpc.io (gRPC Python bindings)",
+    },
+    {
+        "id": "urllib3",
+        "library": "urllib3",
+        "query": "pool manager request retry timeout",
+        "tests_aspect": "PyPI, urllib3.readthedocs.io (HTTP library)",
+    },
+    {
+        "id": "node-fetch",
+        "library": "node-fetch",
+        "query": "fetch response headers body stream",
+        "tests_aspect": "npm, node-fetch (polyfill, hyphenated name)",
+    },
+    {
+        "id": "twisted",
+        "library": "twisted",
+        "query": "reactor protocol factory deferred endpoint",
+        "tests_aspect": "PyPI, twisted.org (async networking)",
+    },
+    {
+        "id": "httptools",
+        "library": "httptools",
+        "query": "parser HttpRequestParser protocol",
+        "tests_aspect": "PyPI, httptools (HTTP parser, generic name)",
+    },
+    {
+        "id": "ky",
+        "library": "ky",
+        "query": "get post hooks retry timeout prefixUrl",
+        "tests_aspect": "npm, ky (HTTP client, ultra-short 2-char name)",
+    },
+    # =====================================================================
+    # Category S: Validation & Serialization (10) — schemas, parsing, codegen
+    # =====================================================================
+    {
+        "id": "joi",
+        "library": "joi",
+        "query": "schema object string number validate alternatives",
+        "tests_aspect": "npm, joi.dev (validation, very short name)",
+    },
+    {
+        "id": "yup",
+        "library": "yup",
+        "query": "schema object string required validate cast",
+        "tests_aspect": "npm, yup (validation, very short name)",
+    },
+    {
+        "id": "ajv",
+        "library": "ajv",
+        "query": "schema validate compile error format",
+        "tests_aspect": "npm, ajv.js.org (JSON Schema validator, short name)",
+    },
+    {
+        "id": "marshmallow",
+        "library": "marshmallow",
+        "query": "Schema fields dump load validate nested",
+        "tests_aspect": "PyPI, marshmallow.readthedocs.io (serialization)",
+    },
+    {
+        "id": "msgpack",
+        "library": "msgpack",
+        "query": "pack unpack Packer Unpacker raw",
+        "tests_aspect": "PyPI/npm, msgpack.org (binary serialization)",
+    },
+    {
+        "id": "protobuf",
+        "library": "protobuf",
+        "query": "message field service enum compile",
+        "tests_aspect": "PyPI/npm, protobuf.dev (Protocol Buffers)",
+    },
+    {
+        "id": "valibot",
+        "library": "valibot",
+        "query": "schema object string parse safeParse pipe",
+        "tests_aspect": "npm, valibot.dev (TS schema validation, unique name)",
+    },
+    {
+        "id": "typebox",
+        "library": "@sinclair/typebox",
+        "query": "Type Object String Number Static Value",
+        "tests_aspect": "scoped npm, typebox (JSON Schema type builder)",
+    },
+    {
+        "id": "cattrs",
+        "library": "cattrs",
+        "query": "structure unstructure converter hook",
+        "tests_aspect": "PyPI, cattrs.readthedocs.io (attrs serialization)",
+    },
+    {
+        "id": "orjson",
+        "library": "orjson",
+        "query": "dumps loads OPT_INDENT OPT_SORT_KEYS",
+        "tests_aspect": "PyPI, orjson (fast JSON, unique name)",
+    },
+    # =====================================================================
+    # Category T: Logging, Config & Utilities (10) — cross-cutting concerns
+    # =====================================================================
+    {
+        "id": "winston",
+        "library": "winston",
+        "query": "logger transport format level createLogger",
+        "tests_aspect": "npm, winston (Node.js logging, unique name)",
+    },
+    {
+        "id": "pino",
+        "library": "pino",
+        "query": "logger child transport destination level",
+        "tests_aspect": "npm, getpino.io (fast Node.js logging)",
+    },
+    {
+        "id": "loguru",
+        "library": "loguru",
+        "query": "logger add sink format level filter",
+        "tests_aspect": "PyPI, loguru.readthedocs.io (Python logging)",
+    },
+    {
+        "id": "dotenv",
+        "library": "dotenv",
+        "query": "config parse load env process.env",
+        "tests_aspect": "npm, dotenv (env vars, generic name collision)",
+    },
+    {
+        "id": "pydantic-settings",
+        "library": "pydantic-settings",
+        "query": "BaseSettings env_prefix env_file dotenv",
+        "tests_aspect": "PyPI, pydantic-settings (settings management)",
+    },
+    {
+        "id": "python-dotenv",
+        "library": "python-dotenv",
+        "query": "load_dotenv find_dotenv set_key dotenv_values",
+        "tests_aspect": "PyPI, python-dotenv (env file loading)",
+    },
+    {
+        "id": "date-fns",
+        "library": "date-fns",
+        "query": "format parse add differenceIn isValid",
+        "tests_aspect": "npm, date-fns.org (date utility, hyphenated)",
+    },
+    {
+        "id": "nanoid",
+        "library": "nanoid",
+        "query": "nanoid customAlphabet urlAlphabet random",
+        "tests_aspect": "npm, nanoid (ID generator, unique name)",
+    },
+    {
+        "id": "structlog",
+        "library": "structlog",
+        "query": "get_logger configure processors bind event",
+        "tests_aspect": "PyPI, structlog.readthedocs.io (structured logging)",
+    },
+    {
+        "id": "uuid",
+        "library": "uuid",
+        "query": "v4 v5 v7 parse validate NIL",
+        "tests_aspect": "npm, uuid (UUID generator, ultra-generic name)",
     },
 ]
 
