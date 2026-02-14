@@ -15,14 +15,20 @@ search:
     - html
     - json
 
-# Disable rate limiting for local use
+# Optimize for reliability: retry on transient failures,
+# increase pool size for concurrent engine requests.
 outgoing:
   request_timeout: 10.0
   max_request_timeout: 30.0
+  retries: 1
+  pool_maxsize: 20
+  keepalive_expiry: 10.0
+  enable_http2: true
 
 # Engines to enable
+# More general engines = higher reliability when some get rate-limited.
 engines:
-  # General search engines
+  # General search engines (primary)
   - name: google
     disabled: false
   - name: bing
@@ -30,6 +36,16 @@ engines:
   - name: duckduckgo
     disabled: false
   - name: brave
+    disabled: false
+
+  # General search engines (fallback — increase resilience)
+  - name: qwant
+    disabled: false
+  - name: mojeek
+    disabled: false
+  - name: yahoo
+    disabled: false
+  - name: startpage
     disabled: false
 
   # Academic / Science engines (category: science)

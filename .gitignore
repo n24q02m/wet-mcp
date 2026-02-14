@@ -52,3 +52,4 @@ htmlcov/
 *.whl
 node_modules/
 temp/
+tests/benchmark_results.jsonl

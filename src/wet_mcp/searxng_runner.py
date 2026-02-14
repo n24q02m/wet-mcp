@@ -132,9 +132,13 @@ async def _wait_for_service(url: str, timeout: float = _STARTUP_HEALTH_TIMEOUT) 
 
 
 def _is_searxng_installed() -> bool:
-    """Check if the SearXNG Python package is installed."""
+    """Check if the SearXNG Python package is fully installed.
+
+    Checks for ``searx.webapp`` instead of just ``searx`` to detect
+    broken installations where only ``version_frozen.py`` exists.
+    """
     try:
-        import searx  # noqa: F401
+        import searx.webapp  # noqa: F401
 
         return True
     except ImportError:

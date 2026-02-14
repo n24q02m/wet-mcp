@@ -15,6 +15,7 @@ Content fetching:
 
 import asyncio
 import json
+import os
 import re
 from urllib.parse import urljoin, urlparse
 
@@ -23,7 +24,17 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 4
+DISCOVERY_VERSION = 12
+
+
+def _github_headers() -> dict[str, str]:
+    """Return GitHub API headers, including auth token if available."""
+    headers: dict[str, str] = {}
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        headers["Authorization"] = f"token {token}"
+    return headers
+
 
 # ---------------------------------------------------------------------------
 # Registry discovery — find docs URL from library name
@@ -38,14 +49,25 @@ async def _discover_from_npm(name: str) -> dict | None:
             if resp.status_code != 200:
                 return None
             data = resp.json()
+
+            # Detect deprecated packages (npm deprecate-holder, squatted names)
+            is_deprecated = False
+            dist_tags = data.get("dist-tags", {})
+            latest_ver = dist_tags.get("latest", "")
+            if latest_ver and isinstance(data.get("versions"), dict):
+                ver_info = data["versions"].get(latest_ver, {})
+                if ver_info.get("deprecated"):
+                    is_deprecated = True
+
             return {
                 "name": data.get("name", name),
                 "description": data.get("description", ""),
-                "homepage": data.get("homepage", ""),
+                "homepage": data.get("homepage") or "",
                 "repository": data.get("repository", {}).get("url", "")
                 if isinstance(data.get("repository"), dict)
-                else data.get("repository", ""),
+                else (data.get("repository") or ""),
                 "registry": "npm",
+                "deprecated": is_deprecated,
             }
     except Exception as e:
         logger.debug(f"npm lookup failed for {name}: {e}")
@@ -62,20 +84,27 @@ async def _discover_from_pypi(name: str) -> dict | None:
             data = resp.json()
             info = data.get("info", {})
             project_urls = info.get("project_urls") or {}
+            # Case-insensitive project_urls lookup (PyPI has inconsistent casing)
+            project_urls_lower = {k.lower(): v for k, v in project_urls.items() if v}
             docs_url = (
-                project_urls.get("Documentation")
-                or project_urls.get("Docs")
-                or project_urls.get("docs")
+                project_urls_lower.get("documentation")
+                or project_urls_lower.get("docs")
+                or project_urls_lower.get("homepage")
                 or info.get("docs_url")
                 or info.get("home_page")
                 or ""
             )
+            repo_url = (
+                project_urls_lower.get("repository")
+                or project_urls_lower.get("source")
+                or project_urls_lower.get("source code")
+                or ""
+            )
             return {
                 "name": info.get("name", name),
-                "description": info.get("summary", ""),
-                "homepage": docs_url or info.get("home_page", ""),
-                "repository": project_urls.get("Repository", "")
-                or project_urls.get("Source", ""),
+                "description": info.get("summary") or "",
+                "homepage": docs_url or info.get("home_page") or "",
+                "repository": repo_url,
                 "registry": "pypi",
             }
     except Exception as e:
@@ -94,18 +123,110 @@ async def _discover_from_crates(name: str) -> dict | None:
             if resp.status_code != 200:
                 return None
             crate = resp.json().get("crate", {})
+            docs_url = crate.get("documentation") or ""
+            hp_url = crate.get("homepage") or ""
+            # Prefer homepage over docs.rs auto-generated documentation
+            if docs_url and "docs.rs" in docs_url and hp_url:
+                explicit_url = hp_url
+            else:
+                explicit_url = hp_url or docs_url
             return {
                 "name": crate.get("name", name),
-                "description": crate.get("description", ""),
-                "homepage": crate.get("documentation")
-                or crate.get("homepage")
-                or f"https://docs.rs/{name}",
-                "repository": crate.get("repository", ""),
+                "description": crate.get("description") or "",
+                "homepage": explicit_url or f"https://docs.rs/{name}",
+                "repository": crate.get("repository") or "",
                 "registry": "crates",
+                "docs_rs_fallback": not explicit_url,  # auto-generated URL
             }
     except Exception as e:
         logger.debug(f"crates.io lookup failed for {name}: {e}")
         return None
+
+
+async def _discover_from_go(name: str) -> dict | None:
+    """Query pkg.go.dev for Go module metadata.
+
+    Searches pkg.go.dev for the package name and returns the top result.
+    Falls back to GitHub API search for Go repositories if no direct match.
+    This enables discovery of Go-only libraries like gin, echo, etc.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            # Try GitHub search for Go repos with this name
+            resp = await client.get(
+                "https://api.github.com/search/repositories",
+                params={"q": f"{name} language:go", "sort": "stars", "per_page": 3},
+                headers=_github_headers(),
+            )
+            if resp.status_code != 200:
+                return None
+            items = resp.json().get("items", [])
+            if not items:
+                return None
+
+            # Find the most relevant Go repo
+            for item in items:
+                repo_name = item.get("name", "").lower()
+                full_name = item.get("full_name", "")
+                # Name must match (case-insensitive)
+                if repo_name != name.lower():
+                    continue
+                if item.get("language", "").lower() != "go":
+                    continue
+                # Require minimum popularity to avoid junk/clone repos
+                stars = item.get("stargazers_count", 0)
+                if stars < 50:
+                    continue
+                homepage = item.get("homepage") or ""
+                description = item.get("description") or ""
+                repo_url = item.get("html_url") or ""
+                # Use homepage if available, else pkg.go.dev docs
+                docs_url = homepage or f"https://pkg.go.dev/github.com/{full_name}"
+                return {
+                    "name": name,
+                    "description": description,
+                    "homepage": docs_url,
+                    "repository": repo_url,
+                    "registry": "go",
+                }
+    except Exception as e:
+        logger.debug(f"Go module lookup failed for {name}: {e}")
+        return None
+
+
+async def _get_github_homepage(url: str) -> str | None:
+    """Fetch the GitHub repository's homepage URL via the API.
+
+    When a package registry (npm) lists a GitHub URL as the homepage
+    (e.g. ``github.com/vuejs/core/tree/main/packages/vue#readme``),
+    the repo often has a dedicated docs site in its ``homepage`` field
+    (e.g. ``https://vuejs.org/``).
+
+    Returns the homepage URL if it's non-GitHub, else None.
+    """
+    # Extract owner/repo from various GitHub URL formats
+    cleaned = url.replace("git+", "").replace(".git", "")
+    m = re.search(r"github\.com[/:]([^/]+)/([^/#?]+)", cleaned)
+    if not m:
+        return None
+    owner, repo = m.group(1), m.group(2)
+
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(
+                f"https://api.github.com/repos/{owner}/{repo}",
+                headers=_github_headers(),
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            gh_homepage = data.get("homepage", "")
+            if gh_homepage and "github.com" not in gh_homepage.lower():
+                return gh_homepage.rstrip("/")
+    except Exception as e:
+        logger.debug(f"GitHub homepage check failed for {owner}/{repo}: {e}")
+
+    return None
 
 
 async def discover_library(name: str) -> dict | None:
@@ -125,14 +246,40 @@ async def discover_library(name: str) -> dict | None:
         _discover_from_npm(name),
         _discover_from_pypi(name),
         _discover_from_crates(name),
+        _discover_from_go(name),
         return_exceptions=True,
     )
 
+    # Pre-upgrade: for results with a GitHub homepage or repo but no
+    # non-GitHub homepage, try to fill homepage from the GitHub API
+    # before scoring.  This catches PyPI packages that only list their
+    # GitHub page as "homepage" (e.g. crawl4ai → crawl4ai.com).
+    upgrade_tasks = []
+    upgrade_indices = []
+    valid_results = [r for r in results if isinstance(r, dict)]
+    for i, r in enumerate(valid_results):
+        homepage = r.get("homepage") or ""
+        repo_url = r.get("repository") or ""
+        hp_is_github = "github.com" in homepage
+        # Upgrade when NO homepage at all, OR homepage IS a GitHub URL
+        if (not homepage or hp_is_github) and (repo_url or homepage):
+            gh_url = repo_url if "github.com" in repo_url else homepage
+            if "github.com" in gh_url:
+                upgrade_tasks.append(_get_github_homepage(gh_url))
+                upgrade_indices.append(i)
+
+    if upgrade_tasks:
+        gh_results = await asyncio.gather(*upgrade_tasks, return_exceptions=True)
+        for idx, gh_hp in zip(upgrade_indices, gh_results, strict=False):
+            if isinstance(gh_hp, str) and gh_hp:
+                valid_results[idx]["homepage"] = gh_hp
+                logger.debug(
+                    f"Pre-upgraded {valid_results[idx].get('name')} homepage from GitHub: {gh_hp}"
+                )
+
     # Score each result for relevance
     scored: list[tuple[int, dict]] = []
-    for r in results:
-        if not isinstance(r, dict):
-            continue
+    for r in valid_results:
         score = 0
         # Exact name match is the strongest signal
         if r.get("name", "").lower() == name.lower():
@@ -144,7 +291,11 @@ async def discover_library(name: str) -> dict | None:
             # Non-GitHub homepage = established project with custom domain
             parsed_hp = urlparse(homepage)
             if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
-                score += 3
+                # Penalize auto-generated docs.rs URLs (fallback, not custom)
+                if parsed_hp.netloc == "docs.rs":
+                    score += 1  # Minimal boost (auto-generated)
+                else:
+                    score += 3
                 # Library name appears in the domain → likely official site
                 # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
                 lib_norm = name.lower().replace("-", "")
@@ -164,6 +315,20 @@ async def discover_library(name: str) -> dict | None:
                 score += 2
             elif desc_len > 20:
                 score += 1
+
+        # Penalize deprecated packages (npm deprecate-holder, squatted names)
+        if r.get("deprecated"):
+            score -= 20
+
+        # Penalize known placeholder/junk homepage patterns
+        all_urls = ((homepage or "") + " " + (r.get("repository") or "")).lower()
+        if any(p in all_urls for p in ("deprecate-holder", "placeholder")):
+            score -= 15
+
+        # Penalize crates.io auto-generated docs.rs fallback URLs
+        if r.get("docs_rs_fallback"):
+            score -= 5
+
         scored.append((score, r))
 
     # Sort by score descending, pick best
@@ -171,6 +336,19 @@ async def discover_library(name: str) -> dict | None:
 
     if scored:
         best_score, best = scored[0]
+
+        # GitHub homepage upgrade: when the homepage is a GitHub URL,
+        # check the GitHub API for a better homepage (e.g. vuejs.org).
+        homepage = best.get("homepage", "")
+        repo_url = best.get("repository", "")
+        if homepage and "github.com" in urlparse(homepage).netloc:
+            # Try to extract owner/repo from either homepage or repo URL
+            gh_url = repo_url if repo_url else homepage
+            gh_homepage = await _get_github_homepage(gh_url)
+            if gh_homepage:
+                logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_homepage}")
+                best["homepage"] = gh_homepage
+
         if best.get("homepage"):
             logger.info(
                 f"Discovered {name} docs: {best['homepage']} "
@@ -181,6 +359,34 @@ async def discover_library(name: str) -> dict | None:
         return best
 
     return None
+
+
+def _normalize_docs_url(url: str) -> str:
+    """Normalize an overly-specific docs URL to a broader docs root.
+
+    When a package registry returns a deeply nested page URL
+    (e.g., ``/docs/stable/clients/python/overview``), normalize it to the
+    docs root for better crawler coverage (e.g., ``/docs/stable/``).
+
+    Only normalizes when there are 3+ path segments after a docs marker.
+    """
+    parsed = urlparse(url)
+    path = parsed.path.rstrip("/")
+    parts = path.split("/")
+
+    doc_markers = ("docs", "doc", "documentation")
+    for i, p in enumerate(parts):
+        if p.lower() in doc_markers:
+            remaining = len(parts) - i - 1
+            if remaining >= 3:
+                keep_up_to = i + 2  # docs + one level (version/section)
+                normalized_path = "/".join(parts[:keep_up_to]) + "/"
+                normalized = f"{parsed.scheme}://{parsed.netloc}{normalized_path}"
+                logger.info(f"Normalized docs URL: {url} -> {normalized}")
+                return normalized
+            break
+
+    return url
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +470,23 @@ _BADGE_RE = re.compile(
     r"!\[.*?\]\(https?://(?:img\.shields\.io|badge\.|badges\.|github\.com/.*?/badge).*?\)",
     re.IGNORECASE,
 )
+# YAML frontmatter (--- ... ---)
+_FRONTMATTER_RE = re.compile(r"\A---\s*\n.*?\n---\s*\n", re.DOTALL)
+# mkdocs admonition blocks (!!! note "Title" ... indented content)
+_ADMONITION_RE = re.compile(
+    r"^!!!?\s+(?:note|tip|warning|info|danger|example|quote|abstract|"
+    r"success|failure|bug|todo|question|hint|caution|attention|important|seealso)"
+    r"(?:\s+\"[^\"]*\")?\s*\n(?:(?:\s{4}|\t).*\n)*",
+    re.MULTILINE | re.IGNORECASE,
+)
+# mkdocstrings directives (::: module.path)
+_MKDOCSTRINGS_RE = re.compile(r"^:::.*$", re.MULTILINE)
+# HTML tags (standalone, not inside code blocks)
+_HTML_TAG_RE = re.compile(
+    r"<(?!code|pre)[a-z][^>]*>|</(?!code|pre)[a-z][^>]*>", re.IGNORECASE
+)
+# TOC anchor links (- [Title](#anchor))
+_TOC_LINK_RE = re.compile(r"^\s*[-*]\s*\[.*?\]\(#[^)]*\)\s*$", re.MULTILINE)
 # Navigation line patterns
 _NAV_RE = re.compile(
     r"^\s*(?:"
@@ -285,16 +508,149 @@ _FOOTER_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+# Navigation link line: bullet or number + markdown link with full URL
+_NAV_LINK_LINE_RE = re.compile(
+    r"^\s*[-*]\s+(?:\[.*?\]\s*)?\[.*?\]\(https?://.*?\)\s*$"
+    r"|^\s*\d+\.\s+\[.*?\]\(https?://.*?\)\s*$",
+)
+# MkDocs UI artifacts that leak into crawled markdown
+_MKDOCS_UI_RE = re.compile(
+    r"^\s*(?:"
+    r"Initializing search|Toggle (?:navigation|search)|Search"
+    r"|Back to top|Share\b|Go to repository"
+    r")\s*$",
+    re.IGNORECASE,
+)
+# Minimum consecutive nav-link lines to consider it a navigation block
+_NAV_BLOCK_MIN_LINES = 8
+
+
+def _strip_nav_blocks(content: str) -> str:
+    """Remove navigation sidebar blocks from crawled content.
+
+    Detects blocks of 8+ consecutive lines that look like site navigation
+    (bullet/numbered lists with full-URL markdown links) and removes them.
+    This targets MkDocs Material sidebars, Sphinx toctrees, and similar
+    navigation structures that leak into crawled markdown.
+    """
+    lines = content.splitlines()
+    result: list[str] = []
+    nav_block: list[str] = []
+
+    for line in lines:
+        if _NAV_LINK_LINE_RE.match(line):
+            nav_block.append(line)
+        else:
+            if len(nav_block) >= _NAV_BLOCK_MIN_LINES:
+                # Navigation block detected — discard it
+                pass
+            else:
+                # Short link list — keep it (could be legitimate content)
+                result.extend(nav_block)
+            nav_block = []
+            result.append(line)
+
+    # Handle trailing nav block
+    if len(nav_block) < _NAV_BLOCK_MIN_LINES:
+        result.extend(nav_block)
+
+    return "\n".join(result)
+
+
+def _strip_nav_heading_blocks(content: str) -> str:
+    """Remove navigation-like blocks of consecutive headings.
+
+    Navigation sidebars from rendered HTML sometimes produce long sequences
+    of same-level headings with no meaningful content between them::
+
+        ## Flexbox & Grid
+        ## Spacing
+        ## Sizing
+        ## Typography
+        ## Tables
+
+    When 5+ consecutive headings at the same level have <= 50 chars of text
+    between them, they are stripped as navigation artifacts.
+    """
+    lines = content.splitlines()
+    heading_re = re.compile(r"^(#{1,6})\s+(.+)$")
+
+    # Build heading map: line_index -> (level, text)
+    headings: dict[int, tuple[int, str]] = {}
+    for i, line in enumerate(lines):
+        m = heading_re.match(line.lstrip())
+        if m:
+            headings[i] = (len(m.group(1)), m.group(2))
+
+    if len(headings) < 5:
+        return content
+
+    # Find runs of same-level headings with minimal content between them
+    nav_lines: set[int] = set()
+    heading_indices = sorted(headings.keys())
+
+    i = 0
+    while i < len(heading_indices):
+        start_idx = heading_indices[i]
+        level = headings[start_idx][0]
+        run = [start_idx]
+
+        j = i + 1
+        while j < len(heading_indices):
+            idx = heading_indices[j]
+            if headings[idx][0] != level:
+                break
+            # Content between this heading and previous must be minimal
+            prev_idx = run[-1]
+            between = "\n".join(lines[k] for k in range(prev_idx + 1, idx)).strip()
+            if len(between) > 50:
+                break
+            run.append(idx)
+            j += 1
+
+        if len(run) >= 5:
+            nav_lines.update(run)
+            i = j
+        else:
+            i += 1
+
+    if not nav_lines:
+        return content
+
+    return "\n".join(line for i, line in enumerate(lines) if i not in nav_lines)
 
 
 def _clean_doc_content(content: str) -> str:
     """Strip noise from crawled documentation content.
 
-    Removes badges, navigation elements, footer boilerplate.
+    Removes badges, YAML frontmatter, mkdocs directives, mkdocstrings,
+    HTML tags, TOC anchor links, navigation elements, footer boilerplate,
+    navigation sidebar blocks, and navigation heading blocks.
     Applied before chunking to reduce index noise.
     """
+    # Remove YAML frontmatter (must be at start of content)
+    content = _FRONTMATTER_RE.sub("", content)
+
     # Remove badge images
     content = _BADGE_RE.sub("", content)
+
+    # Remove mkdocs admonition blocks (keep content readable)
+    content = _ADMONITION_RE.sub("", content)
+
+    # Remove mkdocstrings directives
+    content = _MKDOCSTRINGS_RE.sub("", content)
+
+    # Remove standalone HTML tags (not code/pre)
+    content = _HTML_TAG_RE.sub("", content)
+
+    # Remove TOC anchor links (- [Title](#section))
+    content = _TOC_LINK_RE.sub("", content)
+
+    # Remove navigation sidebar blocks (MkDocs Material, Sphinx, etc.)
+    content = _strip_nav_blocks(content)
+
+    # Remove navigation heading blocks (## Topic A / ## Topic B / ...)
+    content = _strip_nav_heading_blocks(content)
 
     # Filter noise lines
     lines = content.splitlines()
@@ -307,6 +663,8 @@ def _clean_doc_content(content: str) -> str:
         if _NAV_RE.match(stripped):
             continue
         if _FOOTER_RE.match(stripped):
+            continue
+        if _MKDOCS_UI_RE.match(stripped):
             continue
         cleaned.append(line)
 
@@ -490,22 +848,392 @@ _GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
 # Common docs directory names in repos
 _DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
 
+# Non-documentation files to skip (case-insensitive stem matching)
+_SKIP_FILES = frozenset(
+    {
+        "changelog",
+        "changes",
+        "history",
+        "contributing",
+        "contributors",
+        "code_of_conduct",
+        "code-of-conduct",
+        "license",
+        "licence",
+        "security",
+        "release",
+        "releases",
+        "release-notes",
+        "release_notes",
+        "authors",
+        "funding",
+        "sponsors",
+        "support",
+        "codeowners",
+        "pull_request_template",
+        "issue_template",
+        "bug_report",
+        "feature_request",
+    }
+)
+
+# ISO 639-1 language codes commonly used for i18n docs directories
+_I18N_LANG_CODES = frozenset(
+    {
+        "af",
+        "am",
+        "ar",
+        "az",
+        "be",
+        "bg",
+        "bn",
+        "bs",
+        "ca",
+        "cs",
+        "cy",
+        "da",
+        "de",
+        "el",
+        "en",
+        "eo",
+        "es",
+        "et",
+        "eu",
+        "fa",
+        "fi",
+        "fr",
+        "ga",
+        "gl",
+        "gu",
+        "ha",
+        "he",
+        "hi",
+        "hr",
+        "hu",
+        "hy",
+        "id",
+        "is",
+        "it",
+        "ja",
+        "ka",
+        "kk",
+        "km",
+        "kn",
+        "ko",
+        "ku",
+        "ky",
+        "lo",
+        "lt",
+        "lv",
+        "mk",
+        "ml",
+        "mn",
+        "mr",
+        "ms",
+        "my",
+        "nb",
+        "ne",
+        "nl",
+        "nn",
+        "no",
+        "pa",
+        "pl",
+        "ps",
+        "pt",
+        "ro",
+        "ru",
+        "si",
+        "sk",
+        "sl",
+        "sq",
+        "sr",
+        "sv",
+        "sw",
+        "ta",
+        "te",
+        "th",
+        "tl",
+        "tr",
+        "uk",
+        "ur",
+        "uz",
+        "vi",
+        "zh",
+        # Common regional variants
+        "pt-br",
+        "zh-cn",
+        "zh-tw",
+        "zh-hans",
+        "zh-hant",
+    }
+)
+
+# Template/macro pattern (Jinja2, mkdocs-macros, etc.)
+_TEMPLATE_MACRO_RE = re.compile(r"\{\{.*?\}\}")
+
+# Frameworks commonly used in monorepo docs with framework/* subdirectories
+_KNOWN_FRAMEWORKS = frozenset(
+    {"react", "angular", "vue", "svelte", "solid", "qwik", "lit", "preact"}
+)
+
+
+def _filter_framework_paths(paths: list[str], library_hint: str) -> list[str]:
+    """Filter docs paths to matching framework variant in monorepo docs.
+
+    Detects patterns like ``docs/framework/react/...`` vs
+    ``docs/framework/angular/...`` and keeps only the one matching
+    the library name (e.g., ``@tanstack/react-query`` -> keep ``react``).
+    """
+    framework_dir_re = re.compile(r"(?:^|/)framework/(\w+)/")
+    framework_paths: dict[str, list[str]] = {}
+    non_framework_paths: list[str] = []
+
+    for p in paths:
+        match = framework_dir_re.search(p.lower())
+        if match and match.group(1) in _KNOWN_FRAMEWORKS:
+            fw = match.group(1)
+            framework_paths.setdefault(fw, []).append(p)
+        else:
+            non_framework_paths.append(p)
+
+    if len(framework_paths) < 2:
+        return paths
+
+    # Extract framework hint from library name
+    # e.g., "@tanstack/react-query" -> "react", "vue-router" -> "vue"
+    hint_parts = library_hint.lower().replace("@", "").replace("/", "-").split("-")
+    matching_fw = None
+    for part in hint_parts:
+        if part in framework_paths:
+            matching_fw = part
+            break
+
+    if matching_fw:
+        logger.info(
+            f"Framework filter: keeping '{matching_fw}' docs "
+            f"({len(framework_paths[matching_fw])} files), "
+            f"skipping {', '.join(f for f in framework_paths if f != matching_fw)}"
+        )
+        return non_framework_paths + framework_paths[matching_fw]
+
+    return paths
+
+
+def _filter_doc_paths(
+    md_paths: list[str], library_hint: str = ""
+) -> tuple[list[str], bool]:
+    """Smart filtering of markdown file paths from a GitHub repository tree.
+
+    Handles three key problems:
+    1. i18n directories — only keeps English or language-neutral docs
+    2. Deeply nested docs — prefers top-level docs/ over packages/*/docs/
+    3. README deprioritization — moves README.md to end of list
+
+    Args:
+        md_paths: List of file paths from GitHub tree API.
+
+    Returns:
+        Tuple of (filtered paths, has_primary_docs). ``has_primary_docs`` is
+        True when the repo has a top-level ``docs/`` or similar directory,
+        indicating the raw markdown is likely user-facing documentation
+        rather than internal/tooling docs.
+    """
+    if not md_paths:
+        return [], False
+
+    # Separate README from docs
+    readme_paths: list[str] = []
+    doc_paths: list[str] = []
+    for p in md_paths:
+        if p.rsplit("/", 1)[-1].lower() in ("readme.md", "readme.mdx"):
+            readme_paths.append(p)
+        else:
+            doc_paths.append(p)
+
+    # --- Step 1: Detect and filter i18n structure ---
+    # Look for sibling directories that are ISO 639-1 codes
+    # e.g. docs/en/, docs/de/, docs/ja/ → keep only docs/en/
+    i18n_filtered = _filter_i18n_paths(doc_paths)
+
+    # --- Step 2: Prioritize top-level docs over deeply nested ---
+    primary: list[str] = []  # docs/file.md, doc/guide/file.md
+    nested: list[str] = []  # packages/foo/docs/file.md
+
+    for p in i18n_filtered:
+        parts = p.split("/")
+        # Check if the FIRST segment is a doc directory
+        if parts and parts[0].lower() in _DOC_DIRS:
+            primary.append(p)
+        else:
+            nested.append(p)
+
+    has_primary = len(primary) >= 5
+
+    # Use nested docs only if primary docs has <5 files
+    if has_primary:
+        result = primary
+    else:
+        result = primary + nested
+
+    # --- Step 3: Append README(s) at end (lowest priority) ---
+    # Only include root README, not every sub-package README
+    root_readmes = [p for p in readme_paths if "/" not in p]
+    result.extend(root_readmes)
+
+    # --- Step 4: Framework-specific filtering ---
+    if library_hint:
+        result = _filter_framework_paths(result, library_hint)
+
+    return result, has_primary
+
+
+def _filter_i18n_paths(paths: list[str]) -> list[str]:
+    """Filter out non-English i18n documentation paths.
+
+    Detects i18n structure by finding sibling directories under a common
+    parent that match ISO 639-1 language codes. When i18n is detected,
+    keeps only English (``en``) paths and language-neutral paths.
+
+    Handles common patterns:
+    - ``docs/en/...``, ``docs/de/...`` (direct lang subdirs)
+    - ``docs/i18n/en/...``, ``docs/i18n/de/...`` (i18n subdir)
+    - ``i18n/en/...``, ``i18n/de/...`` (top-level i18n)
+    """
+    if not paths:
+        return paths
+
+    # Group paths by their first two segments to detect i18n siblings
+    # e.g. "docs/de/tutorial.md" → parent="docs", child_dir="de"
+    parent_children: dict[str, set[str]] = {}
+    for p in paths:
+        parts = p.split("/")
+        if len(parts) >= 3:
+            parent = parts[0]
+            child = parts[1].lower()
+            parent_children.setdefault(parent, set()).add(child)
+
+    # Find parents that have ≥2 children matching language codes
+    i18n_parents: set[str] = set()
+    for parent, children in parent_children.items():
+        lang_codes = children & _I18N_LANG_CODES
+        if len(lang_codes) >= 2:
+            i18n_parents.add(parent)
+
+    if not i18n_parents:
+        return paths
+
+    # Filter: for i18n parents, only keep English or language-neutral paths
+    filtered: list[str] = []
+    for p in paths:
+        parts = p.split("/")
+        if len(parts) >= 3 and parts[0] in i18n_parents:
+            child = parts[1].lower()
+            if child in _I18N_LANG_CODES:
+                # Language directory — only keep English
+                if child == "en":
+                    filtered.append(p)
+                # else: skip non-English translation
+            else:
+                # Not a language dir (e.g. docs/api/, docs/guide/) — keep
+                filtered.append(p)
+        else:
+            # Path not under an i18n parent — keep
+            filtered.append(p)
+
+    logger.info(
+        f"i18n filter: {len(paths)} paths → {len(filtered)} "
+        f"(skipped translations under: {', '.join(sorted(i18n_parents))})"
+    )
+    return filtered
+
+
+def _has_excessive_macros(content: str, threshold: float = 0.15) -> bool:
+    """Check if content has too many template macros to be useful.
+
+    Returns True if >15% of non-empty lines contain ``{{...}}`` patterns,
+    indicating unrendered Jinja2/mkdocs-macros content.
+    """
+    lines = [ln for ln in content.splitlines() if ln.strip()]
+    if len(lines) < 5:
+        return False
+    macro_lines = sum(1 for ln in lines if _TEMPLATE_MACRO_RE.search(ln))
+    return macro_lines / len(lines) > threshold
+
+
+def _strip_template_macros(content: str) -> str:
+    """Strip lines containing unrendered template macros.
+
+    Removes lines with ``{{...}}`` patterns (Jinja2/mkdocs-macros) that
+    produce noise in raw markdown. Keeps the rest of the content intact.
+    """
+    lines = content.splitlines()
+    cleaned = [ln for ln in lines if not _TEMPLATE_MACRO_RE.search(ln)]
+    return "\n".join(cleaned)
+
+
+# Regex matching a URL path segment that is a language code (non-English)
+# Matches: /ja/, /de/, /zh-cn/, /pt-br/, /zh-hans/
+# Does NOT match: /en/, /api/, /docs/, /v2/
+_I18N_URL_SEGMENT_RE = re.compile(
+    r"/(?!en(?:[/-]|$))"  # Not English
+    r"("
+    + "|".join(
+        re.escape(str(code))
+        for code in sorted(_I18N_LANG_CODES, key=len, reverse=True)
+        if code != "en"
+    )
+    + r")(?=/|$)",
+    re.IGNORECASE,
+)
+
+
+def _is_i18n_url(path: str, root_path: str) -> bool:
+    """Check if a URL path is a translated (non-English) page.
+
+    Compares the link path against the root docs path to detect language
+    code segments that appear in the link but not in the root.
+    This avoids false positives when ``en`` appears in the root path.
+
+    Examples::
+
+        _is_i18n_url("/ja/6.0/tutorial/", "/en/6.0/")  -> True
+        _is_i18n_url("/en/6.0/tutorial/", "/en/6.0/")  -> False
+        _is_i18n_url("/docs/tutorial/",   "/docs/")     -> False
+        _is_i18n_url("/de/docs/models/",  "/")          -> True
+    """
+    # Only flag as i18n if the lang segment is NOT in the root path
+    match = _I18N_URL_SEGMENT_RE.search(path)
+    if not match:
+        return False
+
+    lang_segment = match.group(1).lower()
+    # If the root path also has this segment, it's not a translation branch
+    # (e.g. the site IS the German version)
+    return f"/{lang_segment}/" not in root_path.lower()
+
 
 async def _try_github_raw_docs(
     repo_url: str,
     max_files: int = 50,
+    library_hint: str = "",
 ) -> list[dict] | None:
     """Fetch raw markdown docs from a GitHub repository.
 
-    Uses GitHub API to list docs directories and fetch raw .md files.
+    Uses GitHub API to list docs directories and fetch raw ``.md`` files.
     Produces cleaner content than crawling rendered HTML pages.
 
+    Smart filtering:
+    - Skips non-English translations (i18n detection)
+    - Prefers top-level ``docs/`` over deeply nested doc directories
+    - Deprioritizes README.md (appended last)
+    - Skips files with excessive template macros (unrendered Jinja2)
+
     Args:
-        repo_url: URL containing github.com/owner/repo
+        repo_url: URL containing ``github.com/owner/repo``
         max_files: Maximum number of markdown files to fetch
 
     Returns:
-        List of {url, title, content} dicts if successful, None otherwise.
+        List of ``{url, title, content}`` dicts if successful, ``None`` otherwise.
     """
     match = _GH_REPO_RE.search(repo_url)
     if not match:
@@ -520,7 +1248,10 @@ async def _try_github_raw_docs(
         try:
             resp = await client.get(
                 api_base,
-                headers={"Accept": "application/vnd.github.v3+json"},
+                headers={
+                    "Accept": "application/vnd.github.v3+json",
+                    **_github_headers(),
+                },
             )
             if resp.status_code != 200:
                 return None
@@ -528,12 +1259,15 @@ async def _try_github_raw_docs(
         except Exception:
             return None
 
-        # Find docs directories via tree API
-        md_files: list[str] = []
+        # Collect all candidate markdown files from tree API
+        candidate_paths: list[str] = []
         try:
             resp = await client.get(
                 f"{api_base}/git/trees/{default_branch}?recursive=1",
-                headers={"Accept": "application/vnd.github.v3+json"},
+                headers={
+                    "Accept": "application/vnd.github.v3+json",
+                    **_github_headers(),
+                },
             )
             if resp.status_code != 200:
                 return None
@@ -545,26 +1279,59 @@ async def _try_github_raw_docs(
                 path = item.get("path", "")
                 path_lower = path.lower()
 
-                # README.md at root
-                if path_lower == "readme.md":
-                    md_files.insert(0, path)  # Prioritize README
+                # Skip .github/ directory files (templates, workflows)
+                if path_lower.startswith(".github/"):
                     continue
 
-                # Markdown files in docs-like directories
+                # Skip known non-doc files by stem
+                fname = path.rsplit("/", 1)[-1]
+                stem = fname.rsplit(".", 1)[0].lower()
+                if stem in _SKIP_FILES:
+                    continue
+
+                # Include root README.md
+                if path_lower == "readme.md":
+                    candidate_paths.append(path)
+                    continue
+
+                # Only markdown files
                 if not path_lower.endswith((".md", ".mdx")):
                     continue
+
+                # Must be in a docs-like directory
                 parts = path.split("/")
                 if any(p.lower() in _DOC_DIRS for p in parts):
-                    md_files.append(path)
+                    candidate_paths.append(path)
         except Exception:
             return None
 
-        if not md_files:
+        if not candidate_paths:
+            return None
+
+        # Apply smart filtering (i18n, depth priority, README last, framework)
+        filtered_paths, has_primary = _filter_doc_paths(
+            candidate_paths, library_hint=library_hint
+        )
+
+        if not filtered_paths:
+            return None
+
+        # If no top-level docs/ directory found, the repo likely keeps
+        # user-facing docs on a separate site (e.g. react.dev, angular.dev).
+        # Skip GitHub raw fallback so Tier 2 (crawl docs site) is used.
+        if not has_primary:
+            logger.info(
+                f"Skipping GitHub raw docs for {owner}/{repo}: "
+                "no top-level docs directory found (only nested/internal docs)"
+            )
             return None
 
         # Fetch raw content for each markdown file
         pages: list[dict] = []
-        for fpath in md_files[:max_files]:
+        skipped_macros = 0
+        fetch_original_bytes = 0
+        fetch_stripped_bytes = 0
+        for fpath in filtered_paths[:max_files]:
             raw_url = f"{raw_base}/{default_branch}/{fpath}"
             try:
                 resp = await client.get(raw_url)
@@ -573,6 +1340,17 @@ async def _try_github_raw_docs(
                 content = resp.text
                 if len(content) < 50:
                     continue
+
+                # Skip files with excessive template macros;
+                # strip scattered macros from otherwise useful files
+                if _has_excessive_macros(content):
+                    skipped_macros += 1
+                    continue
+
+                original_len = len(content)
+                content = _strip_template_macros(content)
+                fetch_original_bytes += original_len
+                fetch_stripped_bytes += len(content)
 
                 # Derive title from filename
                 fname = fpath.rsplit("/", 1)[-1]
@@ -591,9 +1369,35 @@ async def _try_github_raw_docs(
             except Exception:
                 continue
 
+        if skipped_macros:
+            logger.info(
+                f"Skipped {skipped_macros} files with excessive template macros"
+            )
+
+        # Quality gate: if the repo uses heavy templating (many files skipped
+        # or significant content lost to macro stripping), fall through to
+        # Tier 2 crawl where the docs build system renders macros properly.
+        total_files = skipped_macros + len(pages)
+        if total_files >= 5 and skipped_macros > 0:
+            skip_ratio = skipped_macros / total_files
+            content_loss = (
+                1 - fetch_stripped_bytes / fetch_original_bytes
+                if fetch_original_bytes > 0
+                else 0
+            )
+            if skip_ratio > 0.25 or content_loss > 0.10:
+                logger.info(
+                    f"Heavy templating in {owner}/{repo}: "
+                    f"{skipped_macros}/{total_files} files skipped, "
+                    f"{content_loss:.0%} content lost to macros. "
+                    "Falling through to crawl"
+                )
+                return None
+
         if pages:
             logger.info(
-                f"Fetched {len(pages)} raw markdown docs from github.com/{owner}/{repo}"
+                f"Fetched {len(pages)} raw markdown docs from "
+                f"github.com/{owner}/{repo}"
             )
             return pages
 
@@ -653,6 +1457,11 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     "/sitemap",
                     "/robots.txt",
                     "/search",
+                    "/genindex",
+                    "/searchindex",
+                    "/modindex",
+                    "/_modules/",
+                    "/_sources/",
                 )
                 filtered = [
                     u
@@ -680,13 +1489,14 @@ async def fetch_docs_pages(
     query: str = "",
     max_pages: int = 50,
 ) -> list[dict]:
-    """Fetch documentation pages from a docs site.
+    """Fetch documentation pages from a docs site with depth-2 crawling.
 
     Strategy:
-    1. Fetch the root docs page
-    2. Extract internal links (likely docs pages)
-    3. Filter to most relevant pages based on query
-    4. Fetch remaining pages
+    1. Fetch the root docs page, extract internal links
+    2. Discover more URLs from sitemap.xml
+    3. Fetch first batch of pages (round 1)
+    4. Extract links from round-1 results (depth-2 discovery)
+    5. Fetch second batch from newly discovered URLs (round 2)
 
     Returns list of {url, title, content} dicts.
     """
@@ -699,13 +1509,12 @@ async def fetch_docs_pages(
 
     pages: list[dict] = []
     seen_urls: set[str] = {docs_url}
+    pending_urls: list[str] = []
 
     # For GitHub URLs, restrict crawl to the same repo path
     docs_parsed = urlparse(docs_url)
     _is_github = "github.com" in docs_parsed.netloc
-    # Extract /org/repo prefix for GitHub URLs
     _gh_path_prefix = "/".join(docs_parsed.path.strip("/").split("/")[:2])
-    # Known non-docs GitHub paths to skip
     _gh_skip_paths = {
         "features",
         "enterprise",
@@ -721,6 +1530,89 @@ async def fetch_docs_pages(
         "why-github",
     }
 
+    # Generated/index pages to skip (Sphinx, MkDocs, etc.)
+    _skip_url_patterns = (
+        "/genindex",
+        "/searchindex",
+        "/modindex",
+        "/_modules/",
+        "/_sources/",
+        "/blog/",
+        "/changelog",
+        "/releases",
+    )
+
+    # Detect redirect: if actual URL differs from docs_url (e.g., versioned
+    # docs), use the redirected path as prefix to restrict crawling to that
+    # version.  Prevents crawling sibling version pages (/en/13/, /en/14/).
+    _version_prefix = ""
+    for r in root_results:
+        actual_url = r.get("url", "")
+        if actual_url and actual_url != docs_url:
+            actual_parsed = urlparse(actual_url)
+            if actual_parsed.netloc == docs_parsed.netloc:
+                actual_path = actual_parsed.path.rstrip("/")
+                actual_parts = [s for s in actual_path.split("/") if s]
+                if len(actual_parts) >= 2:
+                    _version_prefix = "/" + "/".join(actual_parts) + "/"
+                    seen_urls.add(actual_url)
+                    logger.info(f"Detected version prefix: {_version_prefix}")
+            break
+
+    def _collect_links(result: dict) -> list[str]:
+        """Extract valid doc URLs from a crawl result."""
+        urls: list[str] = []
+        internal = result.get("links", {}).get("internal", [])
+        for link in internal:
+            href = link.get("href", "") if isinstance(link, dict) else link
+            if not href:
+                continue
+            parsed = urlparse(href)
+            if parsed.netloc and parsed.netloc != docs_parsed.netloc:
+                continue
+            full_url = urljoin(docs_url, href)
+            if full_url in seen_urls:
+                continue
+            full_parsed = urlparse(full_url)
+
+            # Skip generated index/module pages
+            if any(pat in full_parsed.path.lower() for pat in _skip_url_patterns):
+                continue
+
+            # GitHub-specific: stay within same repo
+            if _is_github:
+                path_parts = full_parsed.path.strip("/").split("/")
+                if path_parts and path_parts[0] in _gh_skip_paths:
+                    continue
+                if "/".join(path_parts[:2]) != _gh_path_prefix:
+                    continue
+
+            # Skip translated (non-English) pages
+            if _is_i18n_url(full_parsed.path, docs_parsed.path):
+                continue
+
+            # Versioned docs: restrict to same version path prefix
+            if _version_prefix and not full_parsed.path.startswith(_version_prefix):
+                continue
+
+            urls.append(full_url)
+            seen_urls.add(full_url)
+        return urls
+
+    def _sort_by_query(urls: list[str]) -> list[str]:
+        """Sort URLs by query term overlap (highest first)."""
+        if not query or not urls:
+            return urls
+        query_words = set(query.lower().split())
+        scored = []
+        for url in urls:
+            path_words = set(re.split(r"[-_/.]", urlparse(url).path.lower()))
+            overlap = len(query_words & path_words)
+            scored.append((url, overlap))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [u for u, _ in scored]
+
+    # Process root page results
     for r in root_results:
         if r.get("content") and not r.get("error"):
             pages.append(
@@ -730,70 +1622,68 @@ async def fetch_docs_pages(
                     "content": r["content"],
                 }
             )
+            pending_urls.extend(_collect_links(r))
 
-            # Collect internal links for further crawling
-            internal_links = r.get("links", {}).get("internal", [])
-            link_urls = []
-            for link in internal_links:
-                href = link.get("href", "") if isinstance(link, dict) else link
-                if href and href not in seen_urls:
-                    # Only follow docs-like paths
-                    parsed = urlparse(href)
-                    if parsed.netloc == docs_parsed.netloc or not parsed.netloc:
-                        full_url = urljoin(docs_url, href)
-                        full_parsed = urlparse(full_url)
+    # Sitemap discovery (finds URLs not linked from root page)
+    sitemap_urls = await _try_sitemap(docs_url, max_urls=max_pages)
+    for su in sitemap_urls:
+        su_parsed = urlparse(su)
+        if su in seen_urls:
+            continue
+        if _is_i18n_url(su_parsed.path, docs_parsed.path):
+            continue
+        if _version_prefix and not su_parsed.path.startswith(_version_prefix):
+            continue
+        pending_urls.append(su)
+        seen_urls.add(su)
 
-                        # GitHub-specific: stay within same repo
-                        if _is_github:
-                            path_parts = full_parsed.path.strip("/").split("/")
-                            # Skip known non-docs paths
-                            if path_parts and path_parts[0] in _gh_skip_paths:
-                                continue
-                            # Must be within same org/repo
-                            link_prefix = "/".join(path_parts[:2])
-                            if link_prefix != _gh_path_prefix:
-                                continue
+    # Sort by query relevance
+    pending_urls = _sort_by_query(pending_urls)
 
-                        if full_url not in seen_urls:
-                            link_urls.append(full_url)
-                            seen_urls.add(full_url)
+    # --- Fetch round 1 ---
+    remaining = max_pages - len(pages)
+    if remaining > 0 and pending_urls:
+        # Reserve some capacity for depth-2 round
+        round1_limit = min(len(pending_urls), remaining * 2 // 3 or remaining)
+        batch1_urls = pending_urls[:round1_limit]
+        pending_urls = pending_urls[round1_limit:]
 
-            # Try sitemap.xml for additional URL discovery (helps SPA sites)
-            sitemap_urls = await _try_sitemap(docs_url, max_urls=max_pages)
-            for su in sitemap_urls:
-                if su not in seen_urls:
-                    link_urls.append(su)
-                    seen_urls.add(su)
+        logger.info(f"Fetching {len(batch1_urls)} docs pages (round 1)...")
+        batch1_str = await extract(urls=batch1_urls, format="markdown", stealth=True)
+        batch1_results = json.loads(batch1_str)
 
-            # If we have a query, prioritize relevant links
-            if query and link_urls:
-                query_words = set(query.lower().split())
-                scored = []
-                for url in link_urls:
-                    path_words = set(re.split(r"[-_/.]", urlparse(url).path.lower()))
-                    overlap = len(query_words & path_words)
-                    scored.append((url, overlap))
-                scored.sort(key=lambda x: x[1], reverse=True)
-                link_urls = [u for u, _ in scored]
-
-            # Fetch additional pages (limited)
-            remaining = max_pages - len(pages)
-            if remaining > 0 and link_urls:
-                batch_urls = link_urls[:remaining]
-                logger.info(f"Fetching {len(batch_urls)} additional docs pages...")
-                batch_str = await extract(
-                    urls=batch_urls, format="markdown", stealth=True
+        for br in batch1_results:
+            if br.get("content") and not br.get("error"):
+                pages.append(
+                    {
+                        "url": br["url"],
+                        "title": br.get("title", ""),
+                        "content": br["content"],
+                    }
                 )
-                batch_results = json.loads(batch_str)
-                for br in batch_results:
-                    if br.get("content") and not br.get("error"):
-                        pages.append(
-                            {
-                                "url": br["url"],
-                                "title": br.get("title", ""),
-                                "content": br["content"],
-                            }
-                        )
+                # Depth-2: discover links from fetched pages
+                pending_urls.extend(_collect_links(br))
+
+    # --- Fetch round 2 (depth-2 discovery) ---
+    remaining = max_pages - len(pages)
+    if remaining > 0 and pending_urls:
+        pending_urls = _sort_by_query(pending_urls)
+        batch2_urls = pending_urls[:remaining]
+        if batch2_urls:
+            logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
+            batch2_str = await extract(
+                urls=batch2_urls, format="markdown", stealth=True
+            )
+            batch2_results = json.loads(batch2_str)
+            for br in batch2_results:
+                if br.get("content") and not br.get("error"):
+                    pages.append(
+                        {
+                            "url": br["url"],
+                            "title": br.get("title", ""),
+                            "content": br["content"],
+                        }
+                    )
 
     logger.info(f"Fetched {len(pages)} docs pages from {docs_url}")
     return pages
