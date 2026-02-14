@@ -24,7 +24,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 12
+DISCOVERY_VERSION = 13
 
 
 def _github_headers() -> dict[str, str]:
@@ -188,6 +188,7 @@ async def _discover_from_go(name: str) -> dict | None:
                     "homepage": docs_url,
                     "repository": repo_url,
                     "registry": "go",
+                    "stars": stars,
                 }
     except Exception as e:
         logger.debug(f"Go module lookup failed for {name}: {e}")
@@ -328,6 +329,16 @@ async def discover_library(name: str) -> dict | None:
         # Penalize crates.io auto-generated docs.rs fallback URLs
         if r.get("docs_rs_fallback"):
             score -= 5
+
+        # Popularity boost for packages with star count data (Go, GitHub)
+        # Helps disambiguate generic names like "echo", "gin", etc.
+        stars = r.get("stars", 0)
+        if stars >= 10000:
+            score += 3
+        elif stars >= 1000:
+            score += 2
+        elif stars >= 100:
+            score += 1
 
         scored.append((score, r))
 
