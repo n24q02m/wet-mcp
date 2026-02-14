@@ -1,4 +1,4 @@
-"""Benchmark test suite for docs search quality (50 libraries).
+"""Benchmark test suite for docs search quality (100 libraries).
 
 Run manually or via CI to validate docs search quality after changes.
 Each test case specifies a library, query, and expected quality signals.
@@ -306,7 +306,7 @@ BENCHMARK_CASES = [
         "id": "echo-go",
         "library": "echo",
         "query": "routes middleware context request response",
-        "tests_aspect": "Go web framework (npm collision likely)",
+        "tests_aspect": "Go web framework (npm/pypi collision, star-count disambiguation)",
     },
     {
         "id": "trpc",
@@ -337,6 +337,321 @@ BENCHMARK_CASES = [
         "library": "playwright",
         "query": "page locator click assertions browser",
         "tests_aspect": "PyPI playwright, cross-lang (same name as npm)",
+    },
+    # =====================================================================
+    # Category F: Frontend frameworks & UI (10) — npm scoped + UI libs
+    # =====================================================================
+    {
+        "id": "solidjs",
+        "library": "solid-js",
+        "query": "createSignal createEffect reactivity",
+        "tests_aspect": "npm, solidjs.com (hyphenated name)",
+    },
+    {
+        "id": "qwik",
+        "library": "@builder.io/qwik",
+        "query": "component$ useSignal routing",
+        "tests_aspect": "deeply scoped npm, qwik.dev",
+    },
+    {
+        "id": "nuxt",
+        "library": "nuxt",
+        "query": "pages routing composables useFetch",
+        "tests_aspect": "npm, nuxt.com (Vue meta-framework)",
+    },
+    {
+        "id": "preact",
+        "library": "preact",
+        "query": "hooks useState component rendering",
+        "tests_aspect": "npm, preactjs.com (lightweight React alternative)",
+    },
+    {
+        "id": "alpinejs",
+        "library": "alpinejs",
+        "query": "x-data x-on x-bind directives",
+        "tests_aspect": "npm, alpinejs.dev (minimal JS framework)",
+    },
+    {
+        "id": "lit",
+        "library": "lit",
+        "query": "LitElement html css reactive properties",
+        "tests_aspect": "npm, lit.dev (Web Components)",
+    },
+    {
+        "id": "mui-material",
+        "library": "@mui/material",
+        "query": "Button TextField theme customization",
+        "tests_aspect": "scoped npm, mui.com (large component lib)",
+    },
+    {
+        "id": "mantine",
+        "library": "@mantine/core",
+        "query": "Button Input Modal hooks theme",
+        "tests_aspect": "scoped npm, mantine.dev",
+    },
+    {
+        "id": "chakra-ui",
+        "library": "@chakra-ui/react",
+        "query": "Box Flex theme provider responsive",
+        "tests_aspect": "scoped npm, chakra-ui.com",
+    },
+    {
+        "id": "threejs",
+        "library": "three",
+        "query": "scene camera renderer mesh geometry",
+        "tests_aspect": "npm, threejs.org (WebGL, name != pkg)",
+    },
+    # =====================================================================
+    # Category G: Backend & API (10) — diverse server frameworks
+    # =====================================================================
+    {
+        "id": "express",
+        "library": "express",
+        "query": "middleware routing error handling",
+        "tests_aspect": "npm, expressjs.com (most popular Node.js)",
+    },
+    {
+        "id": "koa",
+        "library": "koa",
+        "query": "context middleware cascade error",
+        "tests_aspect": "npm, koajs.com (lightweight Node.js)",
+    },
+    {
+        "id": "nestjs",
+        "library": "@nestjs/core",
+        "query": "controllers providers modules guards",
+        "tests_aspect": "scoped npm, docs.nestjs.com",
+    },
+    {
+        "id": "starlette",
+        "library": "starlette",
+        "query": "routes middleware WebSocket responses",
+        "tests_aspect": "PyPI, ASGI framework (fastapi base)",
+    },
+    {
+        "id": "sanic",
+        "library": "sanic",
+        "query": "handlers blueprints middleware streaming",
+        "tests_aspect": "PyPI, sanicframework.org (async Python)",
+    },
+    {
+        "id": "aiohttp",
+        "library": "aiohttp",
+        "query": "client session server routes WebSocket",
+        "tests_aspect": "PyPI, aiohttp.readthedocs.io",
+    },
+    {
+        "id": "drf",
+        "library": "djangorestframework",
+        "query": "serializers viewsets routers permissions",
+        "tests_aspect": "PyPI, django-rest-framework.org (name != import)",
+    },
+    {
+        "id": "graphql-js",
+        "library": "graphql",
+        "query": "schema types resolvers queries mutations",
+        "tests_aspect": "npm graphql, graphql.org (generic name)",
+    },
+    {
+        "id": "socketio",
+        "library": "socket.io",
+        "query": "emit rooms namespaces events broadcast",
+        "tests_aspect": "npm, socket.io (dotted package name)",
+    },
+    {
+        "id": "actix-web",
+        "library": "actix-web",
+        "query": "handlers extractors middleware state",
+        "tests_aspect": "crates.io, actix.rs (Rust web framework)",
+    },
+    # =====================================================================
+    # Category H: Data & ML (10) — Python scientific ecosystem
+    # =====================================================================
+    {
+        "id": "transformers",
+        "library": "transformers",
+        "query": "pipeline AutoModel tokenizer training",
+        "tests_aspect": "PyPI, huggingface.co (large docs)",
+    },
+    {
+        "id": "tensorflow",
+        "library": "tensorflow",
+        "query": "keras model layers training compile",
+        "tests_aspect": "PyPI, tensorflow.org (massive docs)",
+    },
+    {
+        "id": "scipy",
+        "library": "scipy",
+        "query": "optimize interpolate integrate stats",
+        "tests_aspect": "PyPI, scipy.org (scientific computing)",
+    },
+    {
+        "id": "matplotlib",
+        "library": "matplotlib",
+        "query": "plot figure axes subplot legend",
+        "tests_aspect": "PyPI, matplotlib.org (visualization)",
+    },
+    {
+        "id": "seaborn",
+        "library": "seaborn",
+        "query": "heatmap scatter violin distribution",
+        "tests_aspect": "PyPI, seaborn.pydata.org (stats viz)",
+    },
+    {
+        "id": "spacy",
+        "library": "spacy",
+        "query": "nlp pipeline ner tokenization models",
+        "tests_aspect": "PyPI, spacy.io (NLP library)",
+    },
+    {
+        "id": "opencv",
+        "library": "opencv-python",
+        "query": "image processing video capture contours",
+        "tests_aspect": "PyPI, opencv.org (name != import)",
+    },
+    {
+        "id": "pillow",
+        "library": "pillow",
+        "query": "Image open resize filter save",
+        "tests_aspect": "PyPI, pillow.readthedocs.io (PIL fork)",
+    },
+    {
+        "id": "sympy",
+        "library": "sympy",
+        "query": "symbols solve integrate simplify",
+        "tests_aspect": "PyPI, sympy.org (symbolic math)",
+    },
+    {
+        "id": "nltk",
+        "library": "nltk",
+        "query": "tokenize corpus pos_tag sentiment",
+        "tests_aspect": "PyPI, nltk.org (classic NLP toolkit)",
+    },
+    # =====================================================================
+    # Category I: DevTools & Build (10) — JavaScript tooling
+    # =====================================================================
+    {
+        "id": "webpack",
+        "library": "webpack",
+        "query": "loaders plugins entry output config",
+        "tests_aspect": "npm, webpack.js.org (bundler)",
+    },
+    {
+        "id": "esbuild",
+        "library": "esbuild",
+        "query": "build transform bundle plugins",
+        "tests_aspect": "npm, esbuild.github.io (Go-based bundler)",
+    },
+    {
+        "id": "vite",
+        "library": "vite",
+        "query": "dev server plugins HMR config build",
+        "tests_aspect": "npm, vite.dev (modern build tool)",
+    },
+    {
+        "id": "jest",
+        "library": "jest",
+        "query": "matchers mocks describe expect beforeEach",
+        "tests_aspect": "npm, jestjs.io (testing framework)",
+    },
+    {
+        "id": "cypress",
+        "library": "cypress",
+        "query": "commands visit click intercept assertions",
+        "tests_aspect": "npm, docs.cypress.io (E2E testing)",
+    },
+    {
+        "id": "prettier",
+        "library": "prettier",
+        "query": "options plugins configuration ignore",
+        "tests_aspect": "npm, prettier.io (code formatter)",
+    },
+    {
+        "id": "biome",
+        "library": "@biomejs/biome",
+        "query": "lint format rules configuration",
+        "tests_aspect": "scoped npm, biomejs.dev (linter+formatter)",
+    },
+    {
+        "id": "turbo",
+        "library": "turbo",
+        "query": "pipeline tasks caching remote cache",
+        "tests_aspect": "npm, turbo.build (monorepo build)",
+    },
+    {
+        "id": "rollup",
+        "library": "rollup",
+        "query": "plugins input output format treeshaking",
+        "tests_aspect": "npm, rollupjs.org (ES module bundler)",
+    },
+    {
+        "id": "vitest",
+        "library": "vitest",
+        "query": "describe it expect mock coverage",
+        "tests_aspect": "npm, vitest.dev (Vite test runner)",
+    },
+    # =====================================================================
+    # Category J: Rust & Go ecosystem (10) — crates.io / Go edge cases
+    # =====================================================================
+    {
+        "id": "fiber",
+        "library": "fiber",
+        "query": "router middleware handlers context JSON",
+        "tests_aspect": "Go, gofiber.io (generic name like echo)",
+    },
+    {
+        "id": "chi",
+        "library": "chi",
+        "query": "router middleware mux handlers subrouter",
+        "tests_aspect": "Go, go-chi.io (very generic name)",
+    },
+    {
+        "id": "bevy",
+        "library": "bevy",
+        "query": "ECS components systems queries plugins",
+        "tests_aspect": "crates.io, bevyengine.org (game engine)",
+    },
+    {
+        "id": "clap",
+        "library": "clap",
+        "query": "derive arguments subcommand parser",
+        "tests_aspect": "crates.io, clap.rs (CLI arg parser)",
+    },
+    {
+        "id": "reqwest",
+        "library": "reqwest",
+        "query": "client get post async request",
+        "tests_aspect": "crates.io (similar to requests, unique name)",
+    },
+    {
+        "id": "diesel",
+        "library": "diesel",
+        "query": "query schema migrations insert select",
+        "tests_aspect": "crates.io, diesel.rs (Rust ORM)",
+    },
+    {
+        "id": "rocket",
+        "library": "rocket",
+        "query": "routes handlers guards state fairings",
+        "tests_aspect": "crates.io, rocket.rs (Rust web, generic name)",
+    },
+    {
+        "id": "warp",
+        "library": "warp",
+        "query": "filters routes rejection handlers",
+        "tests_aspect": "crates.io (Rust web, very generic name)",
+    },
+    {
+        "id": "iced",
+        "library": "iced",
+        "query": "Application widget view update message",
+        "tests_aspect": "crates.io (Rust GUI, generic name)",
+    },
+    {
+        "id": "tauri-rs",
+        "library": "tauri",
+        "query": "commands events window IPC plugins",
+        "tests_aspect": "npm + crates.io cross-ecosystem, tauri.app",
     },
 ]
 

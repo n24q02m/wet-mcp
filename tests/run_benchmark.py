@@ -210,6 +210,11 @@ async def main():
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--end", type=int, default=len(BENCHMARK_CASES))
     parser.add_argument("--ids", type=str, default="")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force re-index by deleting the benchmark DB before running",
+    )
     args = parser.parse_args()
 
     # Select cases
@@ -228,6 +233,12 @@ async def main():
 
     db_path = settings.get_db_path()
     db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Force re-index: delete existing DB to start fresh
+    if args.force and db_path.exists():
+        db_path.unlink()
+        print(f"Deleted existing DB: {db_path}")
+
     docs_db = DocsDB(db_path, embedding_dims=768)
 
     # Pre-load crawl4ai
