@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     - API_KEYS: Provider API keys (format: ENV_VAR:key,ENV_VAR:key)
     - EMBEDDING_MODEL: LiteLLM embedding model (auto-detected if not set)
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
+    - EMBEDDING_BACKEND: "litellm" (cloud) | "local" (qwen3-embed ONNX)
+        - auto: local if qwen3-embed installed, else litellm if API keys, else none
+    - RERANK_ENABLED: Enable reranking (default: true)
+    - RERANK_BACKEND: "litellm" | "local" (default: matches EMBEDDING_BACKEND)
+    - RERANK_MODEL: LiteLLM rerank model (for litellm backend)
+    - RERANK_TOP_N: Return top N results after reranking (default: 10)
     - SYNC_ENABLED: Enable rclone sync (default: false)
     - SYNC_REMOTE: Rclone remote name (e.g., "gdrive")
     - SYNC_FOLDER: Remote folder name (default: "wet-mcp")
@@ -55,9 +61,16 @@ class Settings(BaseSettings):
     # Docs storage
     docs_db_path: str = ""  # Default: ~/.wet-mcp/docs.db
 
-    # Embedding (for docs vector search, optional)
+    # Embedding
     embedding_model: str = ""  # LiteLLM format, auto-detect if empty
     embedding_dims: int = 0  # 0 = use server default (768)
+    embedding_backend: str = ""  # "litellm" | "local" | "" (auto-detect)
+
+    # Reranking
+    rerank_enabled: bool = True  # Enable reranking (auto-disabled if no backend)
+    rerank_backend: str = ""  # "litellm" | "local" | "" (follows embedding_backend)
+    rerank_model: str = ""  # LiteLLM rerank model (e.g., "cohere/rerank-v3.5")
+    rerank_top_n: int = 10  # Return top N after reranking
 
     # Docs sync (rclone)
     sync_enabled: bool = False
@@ -155,6 +168,65 @@ class Settings(BaseSettings):
     def resolve_embedding_dims(self) -> int:
         """Return explicit EMBEDDING_DIMS or 0 for auto-detect."""
         return self.embedding_dims
+
+    def resolve_embedding_backend(self) -> str:
+        """Resolve embedding backend: 'local', 'litellm', or ''.
+
+        Auto-detect order:
+        1. Explicit EMBEDDING_BACKEND setting
+        2. 'local' if qwen3-embed is installed
+        3. 'litellm' if API keys are configured
+        4. '' (no embedding, FTS5-only)
+        """
+        if self.embedding_backend:
+            return self.embedding_backend
+
+        # Auto-detect: prefer local if available
+        try:
+            import qwen3_embed  # noqa: F401
+
+            return "local"
+        except ImportError:
+            pass
+
+        if self.api_keys:
+            return "litellm"
+
+        return ""
+
+    def resolve_rerank_backend(self) -> str:
+        """Resolve reranking backend: 'local', 'litellm', or ''.
+
+        Returns '' if reranking is disabled.
+        Follows embedding backend if not explicitly set.
+        """
+        if not self.rerank_enabled:
+            return ""
+
+        if self.rerank_backend:
+            return self.rerank_backend
+
+        # Follow embedding backend
+        embed_backend = self.resolve_embedding_backend()
+        if embed_backend == "local":
+            try:
+                import qwen3_embed  # noqa: F401
+
+                return "local"
+            except ImportError:
+                pass
+        if embed_backend == "litellm" and self.rerank_model:
+            return "litellm"
+
+        # Local reranking available even without explicit embed backend
+        try:
+            import qwen3_embed  # noqa: F401
+
+            return "local"
+        except ImportError:
+            pass
+
+        return ""
 
 
 settings = Settings()

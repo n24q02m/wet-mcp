@@ -38,10 +38,11 @@ _LINK_LINE_RE = re.compile(r"^\s*[-*]?\s*\[.+?\]\(.+?\)\s*$|^\s*https?://\S+\s*$
 
 
 def _build_fts_queries(query: str) -> list[str]:
-    """Build tiered FTS5 queries: AND (precise) -> OR (broad).
+    """Build tiered FTS5 queries: PHRASE -> AND -> OR.
 
     No stop-word filtering — BM25's IDF naturally down-weights common
-    words (any language) and the AND->OR fallback ensures recall.
+    words (any language) and the PHRASE->AND->OR fallback ensures precision
+    first, then recall.
     """
     words = [w.strip() for w in query.split() if w.strip()]
     safe = [w.replace('"', '""') for w in words]
@@ -52,7 +53,9 @@ def _build_fts_queries(query: str) -> list[str]:
         return [f'"{safe[0]}"*']
 
     return [
-        # Tier 1: AND — all terms must appear (most precise)
+        # Tier 0: PHRASE — exact phrase match (highest precision)
+        '"' + " ".join(safe) + '"',
+        # Tier 1: AND — all terms must appear
         " AND ".join(f'"{w}"*' for w in safe),
         # Tier 2: OR — any term matches (broadest fallback)
         " OR ".join(f'"{w}"*' for w in safe),
@@ -189,6 +192,10 @@ class DocsDB:
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_library
             ON doc_chunks(library_id)
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_chunks_url_order
+            ON doc_chunks(url, version_id, chunk_index)
         """)
 
         # FTS5 (content-sync mode)
@@ -680,7 +687,7 @@ class DocsDB:
         # Sort by score descending
         scored.sort(key=lambda x: x[1], reverse=True)
 
-        # Build results
+        # Build results with cross-chunk context
         results = []
         for cid, score in scored[:limit]:
             chunk = fts_chunks.get(cid)
@@ -692,16 +699,37 @@ class DocsDB:
                 "SELECT name FROM libraries WHERE id = ?", (chunk["library_id"],)
             ).fetchone()
 
-            results.append(
-                {
-                    "content": chunk["content"],
-                    "title": chunk.get("title", ""),
-                    "url": chunk.get("url", ""),
-                    "heading_path": chunk.get("heading_path", ""),
-                    "library": lib_row["name"] if lib_row else "",
-                    "score": round(score, 4),
-                }
-            )
+            result: dict = {
+                "content": chunk["content"],
+                "title": chunk.get("title", ""),
+                "url": chunk.get("url", ""),
+                "heading_path": chunk.get("heading_path", ""),
+                "library": lib_row["name"] if lib_row else "",
+                "score": round(score, 4),
+            }
+
+            # Cross-chunk context: include adjacent chunks for better RAG
+            chunk_url = chunk.get("url", "")
+            chunk_idx = chunk.get("chunk_index", -1)
+            ver_id_val = chunk.get("version_id", "")
+            if chunk_url and ver_id_val and chunk_idx >= 0:
+                prev = self._conn.execute(
+                    "SELECT content FROM doc_chunks "
+                    "WHERE url = ? AND version_id = ? AND chunk_index = ?",
+                    (chunk_url, ver_id_val, chunk_idx - 1),
+                ).fetchone()
+                if prev:
+                    result["context_before"] = prev["content"]
+
+                nxt = self._conn.execute(
+                    "SELECT content FROM doc_chunks "
+                    "WHERE url = ? AND version_id = ? AND chunk_index = ?",
+                    (chunk_url, ver_id_val, chunk_idx + 1),
+                ).fetchone()
+                if nxt:
+                    result["context_after"] = nxt["content"]
+
+            results.append(result)
 
         return results
 

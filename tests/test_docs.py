@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from wet_mcp.sources.docs import (
+    _split_preserving_code,
     chunk_llms_txt,
     chunk_markdown,
     discover_library,
@@ -385,3 +386,118 @@ class TestTryLlmsTxt:
             result = await try_llms_txt("https://example.com")
 
         assert result is None
+
+
+# -----------------------------------------------------------------------
+# _split_preserving_code
+# -----------------------------------------------------------------------
+
+
+class TestSplitPreservingCode:
+    """Verify code-block-aware splitting of oversized chunks."""
+
+    def test_does_not_split_inside_code_block(self):
+        """Fenced code blocks are kept as atomic units."""
+        text = (
+            "Introduction text.\n\n"
+            "```python\n"
+            "def hello():\n"
+            "    print('hello')\n"
+            "\n"  # blank line inside code block
+            "    print('world')\n"
+            "```\n\n"
+            "Conclusion text with enough content to matter."
+        )
+        chunks: list[dict] = []
+        _split_preserving_code(
+            text,
+            chunks,
+            "title",
+            "heading",
+            "url",
+            max_chunk_size=100,
+            min_chunk_size=20,
+        )
+        # Code block should be intact in one chunk
+        code_chunks = [c for c in chunks if "```python" in c["content"]]
+        assert len(code_chunks) >= 1
+        assert "print('world')" in code_chunks[0]["content"]
+
+    def test_splits_at_paragraph_boundaries(self):
+        """Splits happen at empty lines between paragraphs."""
+        text = "\n\n".join(
+            [f"Paragraph {i} with enough text to fill. " * 3 for i in range(10)]
+        )
+        chunks: list[dict] = []
+        _split_preserving_code(
+            text,
+            chunks,
+            "t",
+            "h",
+            "u",
+            max_chunk_size=200,
+            min_chunk_size=20,
+        )
+        assert len(chunks) > 1
+        # No chunk should exceed max by much
+        for c in chunks:
+            assert len(c["content"]) <= 400  # allow some margin for merging
+
+    def test_preserves_metadata(self):
+        """Each produced chunk has correct title, heading_path, url."""
+        text = "Some content. " * 50
+        chunks: list[dict] = []
+        _split_preserving_code(
+            text,
+            chunks,
+            "My Title",
+            "Section > Sub",
+            "https://example.com",
+            max_chunk_size=100,
+            min_chunk_size=10,
+        )
+        assert len(chunks) >= 1
+        for c in chunks:
+            assert c["title"] == "My Title"
+            assert c["heading_path"] == "Section > Sub"
+            assert c["url"] == "https://example.com"
+
+    def test_chunk_index_continues_from_existing(self):
+        """chunk_index continues from len(chunks) passed in."""
+        existing_chunks: list[dict] = [
+            {"content": "existing", "chunk_index": 0},
+            {"content": "existing2", "chunk_index": 1},
+        ]
+        text = "New content paragraph. " * 20
+        _split_preserving_code(
+            text,
+            existing_chunks,
+            "t",
+            "h",
+            "u",
+            max_chunk_size=100,
+            min_chunk_size=10,
+        )
+        # New chunk indices should start from 2
+        new_chunks = existing_chunks[2:]
+        assert new_chunks[0]["chunk_index"] == 2
+
+    def test_integration_with_chunk_markdown(self):
+        """chunk_markdown uses _split_preserving_code for oversized sections."""
+        # Create content with a large section containing code
+        content = "## Large Section\n\n"
+        content += "Intro paragraph.\n\n"
+        content += "```python\ndef func():\n    pass\n```\n\n"
+        content += ("Explanation paragraph. " * 20) + "\n\n"
+        content += "```javascript\nconst x = 1;\n```\n\n"
+        content += ("More explanation. " * 20) + "\n"
+
+        chunks = chunk_markdown(content, max_chunk_size=200, min_chunk_size=50)
+        assert len(chunks) >= 2
+        # Code blocks should be intact
+        py_chunks = [c for c in chunks if "```python" in c["content"]]
+        js_chunks = [c for c in chunks if "```javascript" in c["content"]]
+        for c in py_chunks:
+            assert "def func():" in c["content"]
+        for c in js_chunks:
+            assert "const x = 1;" in c["content"]

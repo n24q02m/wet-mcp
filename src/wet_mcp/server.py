@@ -8,6 +8,7 @@ from importlib.resources import files
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from wet_mcp.cache import WebCache
 from wet_mcp.config import settings
@@ -31,8 +32,8 @@ from wet_mcp.sources.searxng import search as searxng_search
 logger.remove()
 logger.add(sys.stderr, level=settings.log_level)
 
-# Embedding models to try during auto-detection (in priority order).
-# LiteLLM validates each against its API key -- first success wins.
+# Embedding models to try during LiteLLM auto-detection (in priority order).
+# Validated against API keys -- first success wins.
 _EMBEDDING_CANDIDATES = [
     "gemini/gemini-embedding-001",
     "text-embedding-3-small",
@@ -45,17 +46,19 @@ _EMBEDDING_CANDIDATES = [
 # breaks the vector table. Override via EMBEDDING_DIMS env var.
 _DEFAULT_EMBEDDING_DIMS = 768
 
+# Reranking: retrieve more candidates than final limit, then rerank.
+_RERANK_CANDIDATE_MULTIPLIER = 3
+
 # Module-level state (set during lifespan)
 _web_cache: WebCache | None = None
 _docs_db: DocsDB | None = None
-_embedding_model: str | None = None
 _embedding_dims: int = 0
 
 
 @asynccontextmanager
 async def _lifespan(_server: FastMCP):
     """Server lifespan: startup SearXNG, init cache/docs DB, cleanup on shutdown."""
-    global _web_cache, _docs_db, _embedding_model, _embedding_dims
+    global _web_cache, _docs_db, _embedding_dims
 
     from wet_mcp.setup import run_auto_setup
 
@@ -73,8 +76,8 @@ async def _lifespan(_server: FastMCP):
     await asyncio.to_thread(__import__, "crawl4ai")
     logger.info("Crawl4AI loaded")
 
-    searxng_url = await ensure_searxng()
-    logger.info(f"SearXNG URL: {searxng_url}")
+    # SearXNG is initialized lazily on first search call via ensure_searxng()
+    # to avoid blocking startup when docs-only usage is needed.
 
     # 2. Initialize web cache
     if settings.wet_cache:
@@ -83,50 +86,14 @@ async def _lifespan(_server: FastMCP):
         _web_cache = WebCache(cache_path)
         logger.info("Web cache enabled")
 
-    # 3. Resolve embedding model + dims
-    _embedding_model = settings.resolve_embedding_model()
+    # 3. Initialize embedding backend (dual-backend: litellm or local)
     _embedding_dims = settings.resolve_embedding_dims()
+    await _init_embedding_backend(keys)
 
-    if _embedding_model:
-        # Explicit model -- validate it
-        from wet_mcp.embedder import check_embedding_available
+    # 4. Initialize reranker backend
+    await _init_reranker_backend()
 
-        native_dims = await asyncio.to_thread(
-            check_embedding_available, _embedding_model
-        )
-        if native_dims > 0:
-            if _embedding_dims == 0:
-                _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-            logger.info(
-                f"Embedding: {_embedding_model} "
-                f"(native={native_dims}, stored={_embedding_dims})"
-            )
-        else:
-            logger.warning(
-                f"Embedding model {_embedding_model} not available, using FTS5-only"
-            )
-            _embedding_model = None
-    elif keys:
-        # Auto-detect: try candidate models
-        from wet_mcp.embedder import check_embedding_available
-
-        for candidate in _EMBEDDING_CANDIDATES:
-            native_dims = await asyncio.to_thread(check_embedding_available, candidate)
-            if native_dims > 0:
-                _embedding_model = candidate
-                if _embedding_dims == 0:
-                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                logger.info(
-                    f"Embedding: {_embedding_model} "
-                    f"(native={native_dims}, stored={_embedding_dims})"
-                )
-                break
-        if not _embedding_model:
-            logger.warning("No embedding model available, using FTS5-only")
-    else:
-        logger.info("No API keys configured, using FTS5-only search")
-
-    # 4. Initialize docs DB
+    # 5. Initialize docs DB
     docs_path = settings.get_db_path()
     docs_path.parent.mkdir(parents=True, exist_ok=True)
     _docs_db = DocsDB(docs_path, embedding_dims=_embedding_dims)
@@ -166,19 +133,123 @@ async def _lifespan(_server: FastMCP):
     stop_searxng()
 
 
+async def _init_embedding_backend(keys: dict) -> None:
+    """Initialize the embedding backend based on config.
+
+    Resolution order:
+    1. Explicit EMBEDDING_BACKEND + EMBEDDING_MODEL
+    2. Auto-detect: local (qwen3-embed) > litellm (API keys) > none
+    """
+    global _embedding_dims
+    from wet_mcp.embedder import init_backend
+
+    backend_type = settings.resolve_embedding_backend()
+
+    if backend_type == "local":
+        try:
+            backend = await asyncio.to_thread(
+                init_backend, "local", settings.embedding_model or None
+            )
+            native_dims = await asyncio.to_thread(backend.check_available)
+            if native_dims > 0:
+                if _embedding_dims == 0:
+                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+                logger.info(
+                    f"Embedding: local ONNX "
+                    f"(native={native_dims}, stored={_embedding_dims})"
+                )
+                return
+            else:
+                logger.warning("Local embedding model not available")
+        except Exception as e:
+            logger.warning(f"Local embedding init failed: {e}")
+
+        # Fall through to litellm if local failed and we have keys
+        if keys:
+            backend_type = "litellm"
+        else:
+            logger.info("No embedding backend available, using FTS5-only search")
+            return
+
+    if backend_type == "litellm":
+        model = settings.resolve_embedding_model()
+        if model:
+            # Explicit model -- validate it
+            backend = await asyncio.to_thread(init_backend, "litellm", model)
+            native_dims = await asyncio.to_thread(backend.check_available)
+            if native_dims > 0:
+                if _embedding_dims == 0:
+                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+                logger.info(
+                    f"Embedding: {model} "
+                    f"(native={native_dims}, stored={_embedding_dims})"
+                )
+            else:
+                logger.warning(
+                    f"Embedding model {model} not available, using FTS5-only"
+                )
+        elif keys:
+            # Auto-detect: try candidate models
+            for candidate in _EMBEDDING_CANDIDATES:
+                try:
+                    backend = await asyncio.to_thread(
+                        init_backend, "litellm", candidate
+                    )
+                    native_dims = await asyncio.to_thread(backend.check_available)
+                    if native_dims > 0:
+                        if _embedding_dims == 0:
+                            _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+                        logger.info(
+                            f"Embedding: {candidate} "
+                            f"(native={native_dims}, stored={_embedding_dims})"
+                        )
+                        return
+                except Exception:
+                    continue
+            logger.warning("No embedding model available, using FTS5-only")
+        else:
+            logger.info("No API keys configured, using FTS5-only search")
+    elif not backend_type:
+        logger.info("No embedding backend available, using FTS5-only search")
+
+
+async def _init_reranker_backend() -> None:
+    """Initialize the reranker backend based on config."""
+    rerank_backend_type = settings.resolve_rerank_backend()
+
+    if not rerank_backend_type:
+        logger.info("Reranking disabled or no backend available")
+        return
+
+    from wet_mcp.reranker import init_reranker
+
+    try:
+        reranker = await asyncio.to_thread(
+            init_reranker,
+            rerank_backend_type,
+            settings.rerank_model or None,
+        )
+        available = await asyncio.to_thread(reranker.check_available)
+        if available:
+            logger.info(f"Reranker: {rerank_backend_type} backend initialized")
+        else:
+            logger.warning(f"Reranker {rerank_backend_type} not available, skipping")
+    except Exception as e:
+        logger.warning(f"Reranker init failed: {e}")
+
+
 # --- Helpers ---
 
 
 async def _embed(text: str) -> list[float] | None:
-    """Embed text if model is available, truncated to fixed dims."""
-    if not _embedding_model:
-        return None
-    from wet_mcp.embedder import embed_single
+    """Embed text if backend is available, truncated to fixed dims."""
+    from wet_mcp.embedder import get_backend
 
+    backend = get_backend()
+    if not backend:
+        return None
     try:
-        vec = await asyncio.to_thread(
-            embed_single, text, _embedding_model, _embedding_dims
-        )
+        vec = await asyncio.to_thread(backend.embed_single, text, _embedding_dims)
         # Truncate to fixed dims so switching models never breaks the DB
         if _embedding_dims > 0 and len(vec) > _embedding_dims:
             vec = vec[:_embedding_dims]
@@ -189,15 +260,14 @@ async def _embed(text: str) -> list[float] | None:
 
 
 async def _embed_batch(texts: list[str]) -> list[list[float]] | None:
-    """Embed batch of texts if model is available, truncated to fixed dims."""
-    if not _embedding_model:
-        return None
-    from wet_mcp.embedder import embed_texts
+    """Embed batch of texts if backend is available, truncated to fixed dims."""
+    from wet_mcp.embedder import get_backend
 
+    backend = get_backend()
+    if not backend:
+        return None
     try:
-        vecs = await asyncio.to_thread(
-            embed_texts, texts, _embedding_model, _embedding_dims
-        )
+        vecs = await asyncio.to_thread(backend.embed_texts, texts, _embedding_dims)
         # Truncate to fixed dims
         if _embedding_dims > 0:
             vecs = [
@@ -207,6 +277,38 @@ async def _embed_batch(texts: list[str]) -> list[list[float]] | None:
     except Exception as e:
         logger.debug(f"Batch embedding failed: {e}")
         return None
+
+
+async def _rerank_results(
+    query: str,
+    results: list[dict],
+    top_n: int,
+) -> list[dict]:
+    """Rerank search results if reranker is available.
+
+    Falls back to original results if reranking fails or is unavailable.
+    """
+    from wet_mcp.reranker import get_reranker
+
+    reranker = get_reranker()
+    if not reranker or len(results) <= top_n:
+        return results[:top_n]
+
+    try:
+        documents = [r["content"] for r in results]
+        ranked = await asyncio.to_thread(reranker.rerank, query, documents, top_n)
+        if ranked:
+            reranked = []
+            for idx, score in ranked:
+                if idx < len(results):
+                    result = results[idx].copy()
+                    result["score"] = round(score, 4)
+                    reranked.append(result)
+            return reranked
+    except Exception as e:
+        logger.debug(f"Reranking failed, using original order: {e}")
+
+    return results[:top_n]
 
 
 # Initialize MCP server
@@ -273,7 +375,13 @@ async def _with_timeout(coro, action: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        openWorldHint=True,
+        idempotentHint=True,
+    ),
+)
 async def search(
     action: str,
     query: str | None = None,
@@ -359,7 +467,12 @@ async def search(
 # ---------------------------------------------------------------------------
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        openWorldHint=True,
+    ),
+)
 async def extract(
     action: str,
     urls: list[str] | None = None,
@@ -443,7 +556,12 @@ async def extract(
             )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        openWorldHint=True,
+    ),
+)
 async def media(
     action: str,
     url: str | None = None,
@@ -501,7 +619,13 @@ async def media(
             return f"Error: Unknown action '{action}'. Valid actions: list, download, analyze"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=True,
+        openWorldHint=False,
+        idempotentHint=True,
+    ),
+)
 async def help(tool_name: str = "search") -> str:
     """Get full documentation for a tool.
     Use when compressed descriptions are insufficient.
@@ -561,6 +685,82 @@ async def _do_research(query: str, max_results: int = 10) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Docs helpers (extracted from _do_docs_search for clarity)
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_and_chunk_docs(
+    docs_url: str,
+    repo_url: str = "",
+    query: str = "",
+) -> tuple[list[dict], int]:
+    """Fetch library documentation and split into searchable chunks.
+
+    Tries content sources in priority order:
+    1. llms.txt / llms-full.txt (fastest, AI-optimized)
+    2. GitHub raw markdown (clean, no JS rendering needed)
+    3. Crawl4AI page crawling (rendered HTML -> markdown)
+
+    Returns:
+        Tuple of (chunks, page_count).
+    """
+    from wet_mcp.sources.docs import (
+        _try_github_raw_docs,
+        chunk_llms_txt,
+        chunk_markdown,
+        fetch_docs_pages,
+        try_llms_txt,
+    )
+
+    # Tier 0: Try llms.txt (fastest, best quality)
+    llms_content = await try_llms_txt(docs_url)
+    if llms_content:
+        chunks = chunk_llms_txt(llms_content, base_url=docs_url)
+        logger.info(f"Indexed {len(chunks)} chunks from llms.txt")
+        return chunks, 1
+
+    # Tier 1: Try GitHub raw markdown (clean content, no JS rendering)
+    gh_target = repo_url or docs_url
+    gh_pages = await _try_github_raw_docs(gh_target, max_files=50)
+    if gh_pages:
+        chunks: list[dict] = []
+        for page in gh_pages:
+            page_chunks = chunk_markdown(
+                content=page["content"],
+                url=page.get("url", ""),
+            )
+            for chunk in page_chunks:
+                if not chunk.get("title") and page.get("title"):
+                    chunk["title"] = page["title"]
+            chunks.extend(page_chunks)
+        logger.info(
+            f"Indexed {len(chunks)} chunks from {len(gh_pages)} "
+            "GitHub raw markdown files"
+        )
+        return chunks, len(gh_pages)
+
+    # Tier 2: Crawl docs pages (rendered HTML -> markdown)
+    pages = await fetch_docs_pages(
+        docs_url=docs_url,
+        query=query,
+        max_pages=50,
+    )
+    chunks = []
+    for page in pages:
+        page_chunks = chunk_markdown(
+            content=page["content"],
+            url=page.get("url", ""),
+        )
+        for chunk in page_chunks:
+            if not chunk.get("title") and page.get("title"):
+                chunk["title"] = page["title"]
+        chunks.extend(page_chunks)
+
+    logger.info(f"Indexed {len(chunks)} chunks from {len(pages)} pages")
+    return chunks, len(pages)
+
+
+# ---------------------------------------------------------------------------
 # Docs search (library documentation with auto-indexing)
 # ---------------------------------------------------------------------------
 
@@ -594,18 +794,21 @@ async def _do_docs_search(
         # Check if we have indexed chunks
         ver = _docs_db.get_best_version(lib["id"], version)
         if ver and ver.get("chunk_count", 0) > 0:
-            # Search existing index
+            # Search existing index — retrieve extra candidates for reranking
             query_embedding = await _embed(query)
+            retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
             results = _docs_db.search(
                 query=query,
                 library_name=library,
                 version=version,
-                limit=limit,
+                limit=retrieve_limit,
                 query_embedding=query_embedding,
             )
 
             if results:
+                # Rerank if available, otherwise truncate to limit
+                results = await _rerank_results(query, results, limit)
                 return json.dumps(
                     {
                         "library": library,
@@ -622,12 +825,7 @@ async def _do_docs_search(
     logger.info(f"Library '{library}' not indexed, discovering docs...")
 
     from wet_mcp.sources.docs import (
-        _try_github_raw_docs,
-        chunk_llms_txt,
-        chunk_markdown,
         discover_library,
-        fetch_docs_pages,
-        try_llms_txt,
     )
 
     # Discover library metadata from registries
@@ -685,56 +883,10 @@ async def _do_docs_search(
     # Clear old chunks for re-indexing
     _docs_db.clear_version_chunks(ver_id)
 
-    # Step 3: Fetch and chunk docs
-    all_chunks: list[dict] = []
-    page_count = 0
-
-    # Tier 0: Try llms.txt (fastest, best quality)
-    llms_content = await try_llms_txt(docs_url)
-    if llms_content:
-        all_chunks = chunk_llms_txt(llms_content, base_url=docs_url)
-        page_count = 1
-        logger.info(f"Indexed {len(all_chunks)} chunks from llms.txt")
-    else:
-        # Tier 1: Try GitHub raw markdown (clean content, no JS rendering)
-        gh_target = repo_url or docs_url
-        gh_pages = await _try_github_raw_docs(gh_target, max_files=30)
-        if gh_pages:
-            page_count = len(gh_pages)
-            for page in gh_pages:
-                page_chunks = chunk_markdown(
-                    content=page["content"],
-                    url=page.get("url", ""),
-                )
-                for chunk in page_chunks:
-                    if not chunk.get("title") and page.get("title"):
-                        chunk["title"] = page["title"]
-                all_chunks.extend(page_chunks)
-            logger.info(
-                f"Indexed {len(all_chunks)} chunks from {page_count} "
-                "GitHub raw markdown files"
-            )
-        else:
-            # Tier 2: Crawl docs pages (rendered HTML -> markdown)
-            pages = await fetch_docs_pages(
-                docs_url=docs_url,
-                query=query,
-                max_pages=30,
-            )
-            page_count = len(pages)
-
-            for page in pages:
-                page_chunks = chunk_markdown(
-                    content=page["content"],
-                    url=page.get("url", ""),
-                )
-                # Set title from page if chunk doesn't have one
-                for chunk in page_chunks:
-                    if not chunk.get("title") and page.get("title"):
-                        chunk["title"] = page["title"]
-                all_chunks.extend(page_chunks)
-
-            logger.info(f"Indexed {len(all_chunks)} chunks from {page_count} pages")
+    # Step 3: Fetch and chunk docs (tiered: llms.txt > GitHub raw > crawl)
+    all_chunks, page_count = await _fetch_and_chunk_docs(
+        docs_url=docs_url, repo_url=repo_url, query=query
+    )
 
     if not all_chunks:
         return json.dumps(
@@ -747,11 +899,24 @@ async def _do_docs_search(
 
     # Step 4: Generate embeddings (optional)
     embeddings = None
-    if _embedding_model and all_chunks:
-        texts = [c["content"][:500] for c in all_chunks]  # Truncate for embedding
-        embeddings = await _embed_batch(texts)
-        if embeddings:
-            logger.info(f"Generated {len(embeddings)} embeddings")
+    if all_chunks:
+        from wet_mcp.embedder import get_backend
+
+        if get_backend() is not None:
+            # Build embedding text: prepend title + heading for context, then content
+            # Truncate to 2000 chars to balance quality vs cost
+            embed_texts_list = []
+            for c in all_chunks:
+                parts = []
+                if c.get("title"):
+                    parts.append(c["title"])
+                if c.get("heading_path") and c.get("heading_path") != c.get("title"):
+                    parts.append(c["heading_path"])
+                parts.append(c["content"])
+                embed_texts_list.append(" | ".join(parts)[:2000])
+            embeddings = await _embed_batch(embed_texts_list)
+            if embeddings:
+                logger.info(f"Generated {len(embeddings)} embeddings")
 
     # Step 5: Store chunks
     _docs_db.add_chunks(
@@ -764,14 +929,18 @@ async def _do_docs_search(
 
     # Step 6: Search the freshly indexed content
     query_embedding = await _embed(query)
+    retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
     results = _docs_db.search(
         query=query,
         library_name=library,
         version=version,
-        limit=limit,
+        limit=retrieve_limit,
         query_embedding=query_embedding,
     )
+
+    # Rerank if available
+    results = await _rerank_results(query, results, limit)
 
     return json.dumps(
         {
