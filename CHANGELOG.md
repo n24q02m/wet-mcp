@@ -5,6 +5,13 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.7](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.6...v2.5.0-beta.7) (2026-02-14)
+
+
+### Bug Fixes
+
+* optimize Docker build with BuildKit cache and non-root user ([9114ada](https://github.com/n24q02m/wet-mcp/commit/9114adabcbd6e7b662f0338bcd4041845a726b0e))
+
 ## [2.5.0-beta.6](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.5...v2.5.0-beta.6) (2026-02-14)
 
 
