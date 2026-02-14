@@ -7,6 +7,7 @@ from importlib.resources import files
 
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from wet_mcp.config import settings
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
@@ -104,7 +105,7 @@ async def _with_timeout(coro, action: str) -> str:
     )
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def web(
     action: str,
     query: str | None = None,
@@ -172,7 +173,11 @@ async def web(
             return f"Error: Unknown action '{action}'. Valid actions: search, extract, crawl, map"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=True
+    )
+)
 async def media(
     action: str,
     url: str | None = None,
@@ -230,7 +235,7 @@ async def media(
             return f"Error: Unknown action '{action}'. Valid actions: list, download, analyze"
 
 
-@mcp.tool()
+@mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True))
 async def help(tool_name: str = "web") -> str:
     """Get full documentation for a tool.
     Use when compressed descriptions are insufficient.
