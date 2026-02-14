@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import re
+import zlib
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -24,7 +25,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 14
+DISCOVERY_VERSION = 15
 
 
 def _github_headers() -> dict[str, str]:
@@ -1511,6 +1512,139 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
     return []
 
 
+async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
+    """Try fetching Sphinx ``objects.inv`` to discover doc page URLs.
+
+    Sphinx-based sites (ReadTheDocs, Pallets, etc.) publish an
+    ``objects.inv`` file listing every documented object and its URL.
+    This is far more reliable than sitemap.xml for Sphinx sites, which
+    often serve a minimal root sitemap with only version-level entries.
+
+    Tries multiple candidate paths to handle cases like boto3 where the
+    docs URL is ``/api/`` but objects.inv lives at ``/api/latest/``.
+    """
+    # Resolve the actual base URL (handle redirects like / -> /en/latest/)
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            resp = await client.get(base_url)
+            actual_url = str(resp.url).rstrip("/") + "/"
+    except Exception:
+        actual_url = base_url.rstrip("/") + "/"
+
+    # Build candidate URLs for objects.inv:
+    # 1. At the resolved URL (most common: /en/latest/objects.inv)
+    # 2. At /latest/ subdirectory (boto3: /api/latest/objects.inv)
+    # 3. At /stable/ subdirectory (some projects use stable by default)
+    candidates = [
+        f"{actual_url}objects.inv",
+        f"{actual_url}latest/objects.inv",
+        f"{actual_url}stable/objects.inv",
+    ]
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique_candidates = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            unique_candidates.append(c)
+
+    try:
+        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            for inv_url in unique_candidates:
+                try:
+                    resp = await client.get(inv_url)
+                except Exception:
+                    continue
+                if resp.status_code != 200:
+                    continue
+                data = resp.content
+                if not data.startswith(b"# Sphinx inventory version"):
+                    continue
+
+                # Determine the base URL for constructing page URLs:
+                # objects.inv path minus "objects.inv" = doc root
+                inv_base = inv_url.rsplit("objects.inv", 1)[0]
+
+                result = _parse_objects_inv(data, inv_base)
+                if result:
+                    logger.info(
+                        f"Found {len(result)} URLs from objects.inv at {inv_url}"
+                    )
+                    return result[:max_urls]
+    except Exception:
+        pass
+
+    return []
+
+
+def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
+    """Parse Sphinx objects.inv binary data and extract doc page URLs.
+
+    The binary format is:
+    - 4 header lines (text)
+    - Remaining bytes: zlib-compressed entries
+    - Each entry: ``name domain:type priority uri displayname``
+    """
+    # Find header end (4 newlines)
+    header_end = 0
+    newline_count = 0
+    for i, b in enumerate(data):
+        if b == ord("\n"):
+            newline_count += 1
+            if newline_count == 4:
+                header_end = i + 1
+                break
+
+    # Decompress rest
+    compressed = data[header_end:]
+    try:
+        decompressed = zlib.decompress(compressed)
+        text = decompressed.decode("utf-8", errors="replace")
+    except Exception:
+        return []
+
+    # Parse entries — only std:doc (pages) and std:label (sections)
+    doc_urls: set[str] = set()
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split(" ", 4)
+        if len(parts) < 4:
+            continue
+        name = parts[0]
+        domain_type = parts[1]
+        uri = parts[3]
+
+        if domain_type not in ("std:doc", "std:label"):
+            continue
+        if uri.endswith("$"):
+            uri = name
+        # Remove fragment, keep path only
+        uri = uri.split("#")[0]
+        if not uri or uri.startswith("http"):
+            continue
+        # Skip non-doc paths
+        uri_lower = uri.lower()
+        if any(
+            skip in uri_lower
+            for skip in (
+                "changelog",
+                "changes",
+                "genindex",
+                "modindex",
+                "searchindex",
+                "_modules/",
+                "_sources/",
+            )
+        ):
+            continue
+        doc_urls.add(f"{base_url}{uri}")
+
+    return sorted(doc_urls)
+
+    return []
+
+
 # ---------------------------------------------------------------------------
 # Docs fetching with Crawl4AI
 # ---------------------------------------------------------------------------
@@ -1656,16 +1790,27 @@ async def fetch_docs_pages(
             )
             pending_urls.extend(_collect_links(r))
 
-    # Sitemap discovery (finds URLs not linked from root page)
-    sitemap_urls = await _try_sitemap(docs_url, max_urls=max_pages)
-    for su in sitemap_urls:
+    # Sitemap + objects.inv discovery (finds URLs not linked from root page)
+    # Run both in parallel — objects.inv is more reliable for Sphinx sites,
+    # sitemap.xml works for non-Sphinx sites
+    sitemap_task = _try_sitemap(docs_url, max_urls=max_pages)
+    inv_task = _try_objects_inv(docs_url, max_urls=max_pages)
+    sitemap_urls, inv_urls = await asyncio.gather(sitemap_task, inv_task)
+
+    # Merge: objects.inv URLs first (more reliable for Sphinx), then sitemap
+    inv_url_set = set(inv_urls)
+    extra_urls = list(inv_urls) + [u for u in sitemap_urls if u not in inv_url_set]
+    for su in extra_urls:
         su_parsed = urlparse(su)
         if su in seen_urls:
             continue
         if _is_i18n_url(su_parsed.path, docs_parsed.path):
             continue
-        if _version_prefix and not su_parsed.path.startswith(_version_prefix):
-            continue
+        # objects.inv URLs already include the correct version path from
+        # redirect resolution; only apply version prefix filter to sitemap URLs
+        if su not in inv_url_set:
+            if _version_prefix and not su_parsed.path.startswith(_version_prefix):
+                continue
         pending_urls.append(su)
         seen_urls.add(su)
 
