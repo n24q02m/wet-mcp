@@ -427,10 +427,36 @@ async def download_media(
                 if target_url.startswith("//"):
                     target_url = f"https:{target_url}"
 
-                if not is_safe_url(target_url):
-                    return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                # Manually handle redirects to check each URL for SSRF
+                # Max 10 redirects to prevent infinite loops
+                redirect_count = 0
+                max_redirects = 10
 
-                response = await client.get(target_url, follow_redirects=True)
+                while True:
+                    if not is_safe_url(target_url):
+                        return {
+                            "url": url,
+                            "error": "Security Alert: Unsafe URL blocked",
+                        }
+
+                    if redirect_count >= max_redirects:
+                        return {"url": url, "error": "Too many redirects"}
+
+                    response = await client.get(target_url, follow_redirects=False)
+
+                    if response.is_redirect:
+                        redirect_count += 1
+                        location = response.headers.get("Location")
+                        if not location:
+                            break  # Treat as final response if no Location header
+
+                        # Resolve relative URL
+                        target_url = str(httpx.URL(target_url).join(location))
+                        await response.aclose()  # Close the response as we won't use it
+                        continue
+
+                    break
+
                 response.raise_for_status()
 
                 filename = target_url.split("/")[-1].split("?")[0] or "download"
