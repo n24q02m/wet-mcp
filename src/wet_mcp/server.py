@@ -759,8 +759,9 @@ async def _fetch_and_chunk_docs(
     gh_pages = await _try_github_raw_docs(
         gh_target, max_files=50, library_hint=library_hint
     )
+    gh_chunks: list[dict] = []
+    gh_page_count = 0
     if gh_pages:
-        chunks: list[dict] = []
         for page in gh_pages:
             page_chunks = chunk_markdown(
                 content=page["content"],
@@ -769,21 +770,22 @@ async def _fetch_and_chunk_docs(
             for chunk in page_chunks:
                 if not chunk.get("title") and page.get("title"):
                     chunk["title"] = page["title"]
-            chunks.extend(page_chunks)
+            gh_chunks.extend(page_chunks)
+        gh_page_count = len(gh_pages)
 
         # Quality gate: if GitHub raw produced too few meaningful chunks,
         # fall through to Tier 2 (crawl docs site). This handles repos
         # where docs use template macros (Polars), RST, or other formats
         # that produce poor raw markdown.
-        if len(chunks) >= _MIN_GH_CHUNKS:
+        if len(gh_chunks) >= _MIN_GH_CHUNKS:
             logger.info(
-                f"Indexed {len(chunks)} chunks from {len(gh_pages)} "
+                f"Indexed {len(gh_chunks)} chunks from {len(gh_pages)} "
                 "GitHub raw markdown files"
             )
-            return chunks, len(gh_pages)
+            return gh_chunks, len(gh_pages)
         else:
             logger.info(
-                f"GitHub raw produced only {len(chunks)} chunks "
+                f"GitHub raw produced only {len(gh_chunks)} chunks "
                 f"(min {_MIN_GH_CHUNKS}), falling through to crawl"
             )
 
@@ -793,7 +795,7 @@ async def _fetch_and_chunk_docs(
         query=query,
         max_pages=50,
     )
-    chunks = []
+    chunks: list[dict] = []
     for page in pages:
         page_chunks = chunk_markdown(
             content=page["content"],
@@ -803,6 +805,17 @@ async def _fetch_and_chunk_docs(
             if not chunk.get("title") and page.get("title"):
                 chunk["title"] = page["title"]
         chunks.extend(page_chunks)
+
+    # If Tier 2 crawl produced no results (e.g. Cloudflare blocked) but
+    # Tier 1 GitHub raw had some content (below threshold), use it instead
+    # of returning nothing.  Some docs are better than no docs.
+    if not chunks and gh_chunks:
+        logger.info(
+            f"Crawl produced 0 chunks, using {len(gh_chunks)} GitHub raw "
+            f"chunks from {gh_page_count} files (below threshold but "
+            "better than nothing)"
+        )
+        return gh_chunks, gh_page_count
 
     logger.info(f"Indexed {len(chunks)} chunks from {len(pages)} pages")
     return chunks, len(pages)
@@ -932,13 +945,20 @@ async def _do_docs_search(
             pass
 
     if not docs_url:
-        return json.dumps(
-            {
-                "error": f"Could not find documentation URL for '{library}'",
-                "hint": "Try providing the docs URL directly via extract action",
-            },
-            ensure_ascii=False,
-        )
+        # When no docs URL found but we have a GitHub repo URL,
+        # use it as the docs source — _fetch_and_chunk_docs will
+        # try GitHub raw docs (Tier 1) which often has good docs/.
+        if repo_url and "github.com" in repo_url:
+            docs_url = repo_url
+            logger.info(f"No docs URL for '{library}', using GitHub repo: {repo_url}")
+        else:
+            return json.dumps(
+                {
+                    "error": f"Could not find documentation URL for '{library}'",
+                    "hint": "Try providing the docs URL directly via extract action",
+                },
+                ensure_ascii=False,
+            )
 
     # Create/update library record
     lib_id = _docs_db.upsert_library(

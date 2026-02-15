@@ -99,6 +99,7 @@ BENCHMARK_CASES = [
         "id": "effect",
         "library": "effect",
         "query": "error handling pipe effect",
+        "language": "typescript",
         "tests_aspect": "TypeScript functional (llms.txt)",
     },
     {
@@ -639,6 +640,7 @@ BENCHMARK_CASES = [
         "id": "warp",
         "library": "warp",
         "query": "filters routes rejection handlers",
+        "language": "rust",
         "tests_aspect": "crates.io (Rust web, very generic name)",
     },
     {
@@ -690,6 +692,7 @@ BENCHMARK_CASES = [
         "id": "redis-py",
         "library": "redis",
         "query": "connection pool pipeline pub sub cluster",
+        "language": "python",
         "tests_aspect": "PyPI, redis.io (generic name collision npm vs pypi)",
     },
     {
@@ -1227,6 +1230,7 @@ BENCHMARK_CASES = [
         "id": "winston",
         "library": "winston",
         "query": "logger transport format level createLogger",
+        "language": "javascript",
         "tests_aspect": "npm, winston (Node.js logging, unique name)",
     },
     {
@@ -1281,6 +1285,7 @@ BENCHMARK_CASES = [
         "id": "uuid",
         "library": "uuid",
         "query": "v4 v5 v7 parse validate NIL",
+        "language": "javascript",
         "tests_aspect": "npm, uuid (UUID generator, ultra-generic name)",
     },
     # =====================================================================
@@ -1296,12 +1301,14 @@ BENCHMARK_CASES = [
         "id": "phaser",
         "library": "phaser",
         "query": "Scene Sprite Physics Arcade Tilemap",
+        "language": "javascript",
         "tests_aspect": "npm, phaser.io (HTML5 game framework)",
     },
     {
         "id": "konva",
         "library": "konva",
         "query": "Stage Layer Shape Rect Circle drag",
+        "language": "javascript",
         "tests_aspect": "npm, konvajs.org (canvas 2D library)",
     },
     {
@@ -1731,6 +1738,7 @@ BENCHMARK_CASES = [
         "id": "anyhow",
         "library": "anyhow",
         "query": "Result Context Error bail ensure anyhow!",
+        "language": "rust",
         "tests_aspect": "crates.io, anyhow (error handling, unique name)",
     },
     {
@@ -1749,6 +1757,7 @@ BENCHMARK_CASES = [
         "id": "rayon",
         "library": "rayon",
         "query": "par_iter into_par_iter join scope ThreadPool",
+        "language": "rust",
         "tests_aspect": "crates.io, rayon (data parallelism, unique name)",
     },
     {
@@ -1794,6 +1803,7 @@ BENCHMARK_CASES = [
         "id": "cobra",
         "library": "cobra",
         "query": "Command Args Flags PersistentFlags RunE",
+        "language": "go",
         "tests_aspect": "Go, cobra.dev (CLI framework, generic name)",
     },
     {
@@ -1806,6 +1816,7 @@ BENCHMARK_CASES = [
         "id": "zap",
         "library": "zap",
         "query": "Logger Sugar NewProduction Field Info Error",
+        "language": "go",
         "tests_aspect": "Go, uber-go/zap (structured logging, generic name)",
     },
     {
@@ -1848,6 +1859,7 @@ BENCHMARK_CASES = [
         "id": "gorilla-mux",
         "library": "gorilla/mux",
         "query": "Router HandleFunc PathPrefix Vars Subrouter",
+        "language": "go",
         "tests_aspect": "Go, gorilla/mux (HTTP router, slash in name)",
     },
     # =====================================================================
@@ -1857,6 +1869,7 @@ BENCHMARK_CASES = [
         "id": "react-native",
         "library": "react-native",
         "query": "View Text StyleSheet FlatList navigation",
+        "language": "javascript",
         "tests_aspect": "npm, reactnative.dev (mobile framework, hyphenated)",
     },
     {
@@ -1879,8 +1892,9 @@ BENCHMARK_CASES = [
     },
     {
         "id": "neutralinojs",
-        "library": "@aspect/neutralino",
+        "library": "@neutralinojs/lib",
         "query": "app os filesystem window events computer",
+        "language": "javascript",
         "tests_aspect": "npm, neutralino.js.org (lightweight desktop alt)",
     },
     {
@@ -1911,6 +1925,7 @@ BENCHMARK_CASES = [
         "id": "toga",
         "library": "toga",
         "query": "App MainWindow Box Button TextInput handler",
+        "language": "python",
         "tests_aspect": "PyPI, toga.readthedocs.io (Python native UI, BeeWare)",
     },
 ]

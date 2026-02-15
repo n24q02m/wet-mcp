@@ -26,7 +26,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 18
+DISCOVERY_VERSION = 19
 
 
 def _github_headers() -> dict[str, str]:
@@ -61,13 +61,24 @@ async def _discover_from_npm(name: str) -> dict | None:
                 if ver_info.get("deprecated"):
                     is_deprecated = True
 
+            repo_url = (
+                data.get("repository", {}).get("url", "")
+                if isinstance(data.get("repository"), dict)
+                else (data.get("repository") or "")
+            )
+            # npm shorthand "owner/repo" → full GitHub URL
+            if (
+                repo_url
+                and "/" in repo_url
+                and "://" not in repo_url
+                and not repo_url.startswith("git+")
+            ):
+                repo_url = f"https://github.com/{repo_url}"
             return {
                 "name": data.get("name", name),
                 "description": data.get("description", ""),
                 "homepage": data.get("homepage") or "",
-                "repository": data.get("repository", {}).get("url", "")
-                if isinstance(data.get("repository"), dict)
-                else (data.get("repository") or ""),
+                "repository": repo_url,
                 "registry": "npm",
                 "deprecated": is_deprecated,
             }
@@ -100,8 +111,22 @@ async def _discover_from_pypi(name: str) -> dict | None:
                 project_urls_lower.get("repository")
                 or project_urls_lower.get("source")
                 or project_urls_lower.get("source code")
+                or project_urls_lower.get("code")
                 or ""
             )
+            # Fallback: extract GitHub URL from any project_urls value
+            # Many PyPI packages list GitHub under "Homepage", "Bug Tracker",
+            # "Changelog", etc. without a dedicated "Repository" key.
+            if not repo_url or "github.com" not in repo_url:
+                for _key, url_val in project_urls_lower.items():
+                    if url_val and "github.com" in url_val:
+                        repo_url = url_val
+                        break
+            # Last resort: check top-level home_page field
+            if not repo_url or "github.com" not in repo_url:
+                hp = info.get("home_page") or ""
+                if "github.com" in hp:
+                    repo_url = hp
             return {
                 "name": info.get("name", name),
                 "description": info.get("summary") or "",
@@ -163,10 +188,17 @@ async def _discover_from_go(name: str) -> dict | None:
     """
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            # For Go packages with slash (e.g. "gorilla/mux"), search by
+            # org or full name; for simple names, search by name alone.
+            search_name = name.split("/")[-1] if "/" in name else name
             # Try GitHub search for Go repos with this name
             resp = await client.get(
                 "https://api.github.com/search/repositories",
-                params={"q": f"{name} language:go", "sort": "stars", "per_page": 3},
+                params={
+                    "q": f"{search_name} language:go",
+                    "sort": "stars",
+                    "per_page": 5,
+                },
                 headers=_github_headers(),
             )
             if resp.status_code != 200:
@@ -176,11 +208,19 @@ async def _discover_from_go(name: str) -> dict | None:
                 return None
 
             # Find the most relevant Go repo
+            name_lower = name.lower()
             for item in items:
                 repo_name = item.get("name", "").lower()
                 full_name = item.get("full_name", "")
-                # Name must match (case-insensitive)
-                if repo_name != name.lower():
+                full_name_lower = full_name.lower()
+                # Match by repo name OR full_name for org/repo style
+                name_match = False
+                if "/" in name_lower:
+                    # "gorilla/mux" should match full_name "gorilla/mux"
+                    name_match = full_name_lower == name_lower
+                else:
+                    name_match = repo_name == name_lower
+                if not name_match:
                     continue
                 if item.get("language", "").lower() != "go":
                     continue
@@ -327,9 +367,17 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
 
     # 2. ReadTheDocs: probe {name}.readthedocs.io when not already on RTD.
     # Skip for generic package names and very short names (<=4 chars).
+    # Skip for non-Python registries (npm, crates, go) — RTD is almost
+    # exclusively used by Python projects, so probing for React/Rust/Go
+    # libs would match unrelated Python packages with the same name.
     # Validated via objects.inv: project name must match + object count >= 50
     # to reject squatter/placeholder projects (real docs have 50+ objects).
-    if "readthedocs" not in base_domain and clean_name not in _GENERIC_NAMES:
+    _rtd_skip_registries = {"npm", "crates", "go"}
+    if (
+        "readthedocs" not in base_domain
+        and clean_name not in _GENERIC_NAMES
+        and registry not in _rtd_skip_registries
+    ):
         rtd_name = scope_part or clean_name
         if len(rtd_name) > 4:
             candidates.append(
