@@ -13,6 +13,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -427,11 +428,39 @@ async def download_media(
                 if target_url.startswith("//"):
                     target_url = f"https:{target_url}"
 
-                if not is_safe_url(target_url):
-                    return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                # Manually handle redirects to check is_safe_url at each hop
+                redirects = 0
+                max_redirects = 10
+                history = set()
 
-                response = await client.get(target_url, follow_redirects=True)
-                response.raise_for_status()
+                while redirects < max_redirects:
+                    if target_url in history:
+                        return {"url": url, "error": "Redirect loop detected"}
+                    history.add(target_url)
+
+                    if not is_safe_url(target_url):
+                        return {
+                            "url": url,
+                            "error": "Security Alert: Unsafe URL blocked",
+                        }
+
+                    # Disable auto-redirects
+                    response = await client.get(target_url, follow_redirects=False)
+
+                    if response.is_redirect:
+                        location = response.headers.get("Location")
+                        if not location:
+                            break
+
+                        # Resolve relative URLs
+                        target_url = urljoin(target_url, location)
+                        redirects += 1
+                        continue
+                    else:
+                        response.raise_for_status()
+                        break
+                else:
+                    return {"url": url, "error": "Too many redirects"}
 
                 filename = target_url.split("/")[-1].split("?")[0] or "download"
                 filepath = (output_path / filename).resolve()
