@@ -6,7 +6,7 @@
 [tools]
 python = "3.13"
 node = "24"
-uv = "latest"
+uv = "0.9.25"
 
 [settings]
 trusted_config_paths = ["."]
