@@ -41,14 +41,22 @@ Search library/framework documentation with auto-indexing. First call indexes do
 **Parameters:**
 - `query` (required): What to search for in docs
 - `library` (required): Library name (e.g., "react", "fastapi", "pytorch")
+- `language`: Programming language for disambiguation (e.g., "python", "java", "rust"). Guides which registries to search and improves discovery for cross-language names. Supports: python/py, javascript/js/ts, rust/rs, go/golang, java, kotlin, csharp/c#, php, ruby, swift, c, cpp/c++, zig, dart, elixir, haskell, scala, and more.
 - `version`: Specific version (default: latest)
 - `limit`: Maximum results (default: 10)
 
 **Discovery order:** llms.txt > npm/PyPI/crates.io registry > SearXNG fallback > Crawl4AI fetch.
 
+**When to specify `language`:**
+- Cross-language name collisions: "redis" (Python vs Node.js), "protobuf" (Python vs JS)
+- Languages without registry: Java, C#, PHP, Ruby, C/C++, Swift, Zig
+- Tools and system packages: "cmake", "boost", "openssl"
+
 **Example:**
 ```json
 {"action": "docs", "query": "how to create a router", "library": "fastapi"}
+{"action": "docs", "query": "dependency injection", "library": "spring-boot", "language": "java"}
+{"action": "docs", "query": "entity framework migrations", "library": "efcore", "language": "csharp"}
 ```
 
 **Returns:** Relevant documentation chunks with title, content, URL, and relevance score.

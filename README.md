@@ -178,6 +178,7 @@ wet-mcp
 {"action": "search", "query": "python web scraping", "max_results": 10}
 {"action": "research", "query": "transformer attention mechanism"}
 {"action": "docs", "query": "how to create routes", "library": "fastapi"}
+{"action": "docs", "query": "dependency injection", "library": "spring-boot", "language": "java"}
 
 // extract tool
 {"action": "extract", "urls": ["https://example.com"]}
@@ -196,8 +197,8 @@ wet-mcp
 | Variable | Default | Description |
 |:---------|:--------|:------------|
 | `WET_AUTO_SEARXNG` | `true` | Auto-start embedded SearXNG subprocess |
-| `WET_SEARXNG_PORT` | `8080` | SearXNG port (optional) |
-| `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL (optional, when auto disabled) |
+| `WET_SEARXNG_PORT` | `41592` | SearXNG port (optional) |
+| `SEARXNG_URL` | `http://localhost:41592` | External SearXNG URL (optional, when auto disabled) |
 | `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
 | `API_KEYS` | - | LLM API keys (optional, format: `ENV_VAR:key,...`) |
 | `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |

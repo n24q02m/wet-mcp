@@ -18,6 +18,7 @@ import json
 import os
 import re
 import zlib
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -437,26 +438,126 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     return homepage
 
 
-async def discover_library(name: str) -> dict | None:
+# ---------------------------------------------------------------------------
+# Language → registry mapping for targeted discovery
+# ---------------------------------------------------------------------------
+
+_LANGUAGE_ALIASES: dict[str, str] = {
+    "py": "python",
+    "js": "javascript",
+    "ts": "typescript",
+    "node": "javascript",
+    "nodejs": "javascript",
+    "rs": "rust",
+    "golang": "go",
+    "kt": "kotlin",
+    "c#": "csharp",
+    "dotnet": "csharp",
+    ".net": "csharp",
+    "c++": "cpp",
+    "rb": "ruby",
+}
+
+# Map normalized language to supported registries.
+# Empty list = language known but no registry integration (use SearXNG).
+_LANGUAGE_REGISTRIES: dict[str, list[str]] = {
+    "python": ["pypi"],
+    "javascript": ["npm"],
+    "typescript": ["npm"],
+    "rust": ["crates"],
+    "go": ["go"],
+    # Languages without integrated registry — rely on SearXNG fallback
+    "java": [],
+    "kotlin": [],
+    "csharp": [],
+    "php": [],
+    "ruby": [],
+    "swift": [],
+    "c": [],
+    "cpp": [],
+    "zig": [],
+    "dart": [],
+    "elixir": [],
+    "haskell": [],
+    "scala": [],
+    "lua": [],
+    "perl": [],
+    "r": [],
+    "julia": [],
+}
+
+# Registry name → discovery function
+_REGISTRY_FUNCTIONS: dict[str, Any] = {
+    "npm": _discover_from_npm,
+    "pypi": _discover_from_pypi,
+    "crates": _discover_from_crates,
+    "go": _discover_from_go,
+}
+
+
+def _normalize_language(language: str) -> str:
+    """Normalize language name to canonical form."""
+    lang = language.strip().lower()
+    return _LANGUAGE_ALIASES.get(lang, lang)
+
+
+async def discover_library(name: str, language: str | None = None) -> dict | None:
     """Discover library metadata from package registries.
 
-    Queries npm, PyPI, and crates.io in parallel. Scores by:
+    Queries npm, PyPI, crates.io, and Go in parallel. Scores by:
     1. Exact name match (case-insensitive)
     2. Has valid docs/homepage URL
     3. Non-GitHub homepage (custom domain = established project)
     4. Description length (longer = more established)
     5. Dedicated docs URL pattern (readthedocs, docs.*, etc.)
 
+    When ``language`` is specified, only queries matching registries:
+    - python → PyPI only
+    - javascript/typescript → npm only
+    - rust → crates.io only
+    - go → Go module search only
+    - Other languages (java, c#, php, etc.) → returns None so SearXNG
+      fallback handles discovery with language context.
+
     This prevents e.g. npm's obscure "fastapi" package from shadowing
     Python's FastAPI, or npm "torch" from shadowing PyTorch.
     """
-    results = await asyncio.gather(
-        _discover_from_npm(name),
-        _discover_from_pypi(name),
-        _discover_from_crates(name),
-        _discover_from_go(name),
-        return_exceptions=True,
-    )
+    # Build registry tasks based on language filter
+    if language:
+        lang = _normalize_language(language)
+        registry_names = _LANGUAGE_REGISTRIES.get(lang)
+        if registry_names is not None:
+            if not registry_names:
+                # Known language but no registry support — let SearXNG handle
+                logger.info(
+                    f"No registry for language '{language}', "
+                    "falling back to SearXNG discovery"
+                )
+                return None
+            # Query only matching registries
+            tasks = [
+                _REGISTRY_FUNCTIONS[r](name)
+                for r in registry_names
+                if r in _REGISTRY_FUNCTIONS
+            ]
+        else:
+            # Unknown language — query all registries as fallback
+            tasks = [
+                _discover_from_npm(name),
+                _discover_from_pypi(name),
+                _discover_from_crates(name),
+                _discover_from_go(name),
+            ]
+    else:
+        # No language specified — query all registries (default)
+        tasks = [
+            _discover_from_npm(name),
+            _discover_from_pypi(name),
+            _discover_from_crates(name),
+            _discover_from_go(name),
+        ]
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # Pre-upgrade: for results with a GitHub homepage or repo but no
     # non-GitHub homepage, try to fill homepage from the GitHub API
