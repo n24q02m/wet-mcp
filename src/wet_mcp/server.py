@@ -173,7 +173,11 @@ async def web(
             return f"Error: Unknown action '{action}'. Valid actions: search, extract, crawl, map"
 
 
-@mcp.tool(annotations=ToolAnnotations(destructiveHint=True, readOnlyHint=False, idempotentHint=False))
+@mcp.tool(
+    annotations=ToolAnnotations(
+        destructiveHint=True, readOnlyHint=False, idempotentHint=False
+    )
+)
 async def media(
     action: str,
     url: str | None = None,
