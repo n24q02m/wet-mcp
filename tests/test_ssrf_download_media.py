@@ -11,7 +11,7 @@ async def test_download_media_ssrf_redirect(tmp_path):
     # Setup mocks
     mock_is_safe_url = MagicMock()
     # Initial URL is safe
-    mock_is_safe_url.side_effect = lambda url: url.startswith("http://safe.com")
+    mock_is_safe_url.side_effect = lambda url: url == "http://safe.com/image.png"
 
     # Mock httpx response to simulate a redirect if follow_redirects was False,
     # OR simulate the final response if follow_redirects was True.
