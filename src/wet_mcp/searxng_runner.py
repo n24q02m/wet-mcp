@@ -227,7 +227,7 @@ def _get_settings_path(port: int) -> Path:
 
     # Inject the actual port
     content = content.replace(
-        "port: 8080",
+        "port: 41592",
         f"port: {port}",
     )
 

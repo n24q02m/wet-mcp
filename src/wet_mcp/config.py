@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     """
 
     # SearXNG
-    searxng_url: str = "http://localhost:8080"
+    searxng_url: str = "http://localhost:41592"
     searxng_timeout: int = 30
 
     # Crawler
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
 
     # SearXNG Management
     wet_auto_searxng: bool = True
-    wet_searxng_port: int = 8080
+    wet_searxng_port: int = 41592
 
     # Tool execution timeout (seconds, 0 = no timeout)
     tool_timeout: int = 120

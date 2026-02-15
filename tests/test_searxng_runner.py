@@ -22,7 +22,7 @@ def test_get_settings_path():
     mock_files = MagicMock()
     mock_bundled_file = MagicMock()
     mock_files.joinpath.return_value = mock_bundled_file
-    mock_bundled_file.read_text.return_value = "server:\n  port: 8080\n"
+    mock_bundled_file.read_text.return_value = "server:\n  port: 41592\n"
 
     with (
         patch("wet_mcp.searxng_runner.Path") as mock_path_cls,

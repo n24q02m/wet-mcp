@@ -401,6 +401,7 @@ async def search(
     query: str | None = None,
     library: str | None = None,
     version: str | None = None,
+    language: str | None = None,
     categories: str = "general",
     max_results: int = 10,
     limit: int = 10,
@@ -408,7 +409,7 @@ async def search(
     """Search the web, academic papers, or library documentation.
     - search: Web search via SearXNG (requires query)
     - research: Academic/scientific search (requires query)
-    - docs: Search library documentation with auto-indexing (requires library + query)
+    - docs: Search library documentation with auto-indexing (requires library + query, specify language for disambiguation)
     Use `help` tool for full documentation.
     """
     match action:
@@ -463,6 +464,7 @@ async def search(
                 _do_docs_search(
                     library=library,
                     query=query,
+                    language=language,
                     version=version,
                     limit=limit,
                 ),
@@ -807,6 +809,7 @@ async def _fetch_and_chunk_docs(
 async def _do_docs_search(
     library: str,
     query: str,
+    language: str | None = None,
     version: str | None = None,
     limit: int = 10,
 ) -> str:
@@ -814,17 +817,21 @@ async def _do_docs_search(
     if not _docs_db:
         return "Error: Docs database not initialized"
 
+    # Build library identity — include language for DB disambiguation
+    # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
+    lib_key = f"{library}:{language.lower()}" if language else library
+
     from wet_mcp.sources.docs import DISCOVERY_VERSION
 
     # Step 1: Check if library is already indexed
-    lib = _docs_db.get_library(library)
+    lib = _docs_db.get_library(lib_key)
 
     if lib:
         # Invalidate cache if discovery scoring has been updated
         cached_version = lib.get("discovery_version", 0)
         if cached_version < DISCOVERY_VERSION:
             logger.info(
-                f"Library '{library}' cached with discovery v{cached_version} "
+                f"Library '{lib_key}' cached with discovery v{cached_version} "
                 f"(current v{DISCOVERY_VERSION}), forcing re-index"
             )
             lib = None  # Force re-discovery below
@@ -839,7 +846,7 @@ async def _do_docs_search(
 
             results = _docs_db.search(
                 query=query,
-                library_name=library,
+                library_name=lib_key,
                 version=version,
                 limit=retrieve_limit,
                 query_embedding=query_embedding,
@@ -861,14 +868,14 @@ async def _do_docs_search(
                 )
 
     # Step 2: Auto-discover and index
-    logger.info(f"Library '{library}' not indexed, discovering docs...")
+    logger.info(f"Library '{lib_key}' not indexed, discovering docs...")
 
     from wet_mcp.sources.docs import (
         discover_library,
     )
 
     # Discover library metadata from registries
-    discovery = await discover_library(library)
+    discovery = await discover_library(library, language=language)
     docs_url = ""
     repo_url = ""
     registry = ""
@@ -881,11 +888,17 @@ async def _do_docs_search(
         description = discovery.get("description", "")
     else:
         # Fallback: use SearXNG to find docs
+        # Include language context for better results
+        search_query = (
+            f"{library} {language} documentation"
+            if language
+            else f"{library} official documentation"
+        )
         logger.info(f"Registry lookup failed, trying SearXNG for '{library}'...")
         searxng_url = await ensure_searxng()
         search_result = await searxng_search(
             searxng_url=searxng_url,
-            query=f"{library} official documentation",
+            query=search_query,
             categories="general",
             max_results=3,
         )
@@ -908,7 +921,7 @@ async def _do_docs_search(
 
     # Create/update library record
     lib_id = _docs_db.upsert_library(
-        name=library,
+        name=lib_key,
         docs_url=docs_url,
         registry=registry,
         description=description,
@@ -938,6 +951,11 @@ async def _do_docs_search(
     # Fallback: if too few pages (likely wrong/insufficient docs URL),
     # try SearXNG to discover a better documentation URL.
     if page_count <= 2 and len(all_chunks) < 100:
+        fallback_query = (
+            f"{library} {language} documentation"
+            if language
+            else f"{library} documentation"
+        )
         logger.info(
             f"Only {page_count} pages found for '{library}', "
             "trying SearXNG fallback..."
@@ -946,7 +964,7 @@ async def _do_docs_search(
             searxng_url = await ensure_searxng()
             fallback_result = await searxng_search(
                 searxng_url=searxng_url,
-                query=f"{library} documentation",
+                query=fallback_query,
                 categories="general",
                 max_results=3,
             )
@@ -1017,7 +1035,7 @@ async def _do_docs_search(
 
     results = _docs_db.search(
         query=query,
-        library_name=library,
+        library_name=lib_key,
         version=version,
         limit=retrieve_limit,
         query_embedding=query_embedding,
