@@ -41,12 +41,16 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
     library = case["library"]
     query = case["query"]
     case_id = case["id"]
+    language = case.get("language")
     limit = 5
 
     t0 = time.time()
 
+    # Build library identity — include language for DB disambiguation
+    lib_key = f"{library}:{language.lower()}" if language else library
+
     # Check cache
-    lib = docs_db.get_library(library)
+    lib = docs_db.get_library(lib_key)
     if lib:
         cached_version = lib.get("discovery_version", 0)
         if cached_version < DISCOVERY_VERSION:
@@ -58,7 +62,7 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
             query_embedding = await embed_fn(query, is_query=True) if embed_fn else None
             results = docs_db.search(
                 query=query,
-                library_name=library,
+                library_name=lib_key,
                 limit=limit * 3,
                 query_embedding=query_embedding,
             )
@@ -79,7 +83,7 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
             }
 
     # Discover
-    discovery = await discover_library(library)
+    discovery = await discover_library(library, language=language)
     docs_url = ""
     repo_url = ""
 
@@ -93,21 +97,25 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
         description = ""
 
     if not docs_url:
-        elapsed = time.time() - t0
-        return {
-            "id": case_id,
-            "library": library,
-            "source": "NOT_FOUND",
-            "docs_url": "",
-            "pages": 0,
-            "chunks": 0,
-            "results": [],
-            "elapsed": elapsed,
-        }
+        # Fallback: use GitHub repo URL as docs source if available
+        if repo_url and "github.com" in repo_url:
+            docs_url = repo_url
+        else:
+            elapsed = time.time() - t0
+            return {
+                "id": case_id,
+                "library": library,
+                "source": "NOT_FOUND",
+                "docs_url": "",
+                "pages": 0,
+                "chunks": 0,
+                "results": [],
+                "elapsed": elapsed,
+            }
 
     # Upsert
     lib_id = docs_db.upsert_library(
-        name=library,
+        name=lib_key,
         docs_url=docs_url,
         registry=registry,
         description=description,
@@ -127,6 +135,7 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
         docs_url=docs_url,
         repo_url=repo_url,
         query=query,
+        library_hint=library,
     )
 
     # NOTE: SearXNG "few pages" fallback is skipped in benchmark mode
@@ -181,7 +190,7 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
     query_embedding = await embed_fn(query, is_query=True) if embed_fn else None
     results = docs_db.search(
         query=query,
-        library_name=library,
+        library_name=lib_key,
         limit=limit * 3,
         query_embedding=query_embedding,
     )
