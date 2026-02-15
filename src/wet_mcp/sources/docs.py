@@ -2007,6 +2007,7 @@ async def fetch_docs_pages(
     docs_url: str,
     query: str = "",
     max_pages: int = 50,
+    batch_timeout: int = 45,
 ) -> list[dict]:
     """Fetch documentation pages from a docs site with depth-2 crawling.
 
@@ -2016,6 +2017,10 @@ async def fetch_docs_pages(
     3. Fetch first batch of pages (round 1)
     4. Extract links from round-1 results (depth-2 discovery)
     5. Fetch second batch from newly discovered URLs (round 2)
+
+    Args:
+        batch_timeout: Per-batch crawl timeout in seconds. Each round
+            (root, round1, round2) is bounded by this limit.
 
     Returns list of {url, title, content} dicts.
     """
@@ -2030,9 +2035,14 @@ async def fetch_docs_pages(
 
     # Step 1: Fetch root page
     logger.info(f"Fetching docs root: {docs_url}")
-    root_result_str = await extract(
-        urls=[docs_url], format="markdown", stealth=True, **_SPA_KWARGS
-    )
+    try:
+        root_result_str = await asyncio.wait_for(
+            extract(urls=[docs_url], format="markdown", stealth=True, **_SPA_KWARGS),
+            timeout=batch_timeout,
+        )
+    except TimeoutError:
+        logger.warning(f"Root page fetch timed out after {batch_timeout}s: {docs_url}")
+        return []
     root_results = json.loads(root_result_str)
 
     pages: list[dict] = []
@@ -2155,9 +2165,19 @@ async def fetch_docs_pages(
     # Sitemap + objects.inv discovery (finds URLs not linked from root page)
     # Run both in parallel — objects.inv is more reliable for Sphinx sites,
     # sitemap.xml works for non-Sphinx sites
+    # Bounded by batch_timeout to prevent hanging on slow servers
     sitemap_task = _try_sitemap(docs_url, max_urls=max_pages)
     inv_task = _try_objects_inv(docs_url, max_urls=max_pages)
-    sitemap_urls, inv_urls = await asyncio.gather(sitemap_task, inv_task)
+    try:
+        sitemap_urls, inv_urls = await asyncio.wait_for(
+            asyncio.gather(sitemap_task, inv_task),
+            timeout=batch_timeout,
+        )
+    except TimeoutError:
+        logger.warning(
+            f"Sitemap/objects.inv discovery timed out after {batch_timeout}s"
+        )
+        sitemap_urls, inv_urls = [], []
 
     # Merge: objects.inv URLs first (more reliable for Sphinx), then sitemap
     inv_url_set = set(inv_urls)
@@ -2188,35 +2208,16 @@ async def fetch_docs_pages(
         pending_urls = pending_urls[round1_limit:]
 
         logger.info(f"Fetching {len(batch1_urls)} docs pages (round 1)...")
-        batch1_str = await extract(
-            urls=batch1_urls, format="markdown", stealth=True, **_SPA_KWARGS
-        )
-        batch1_results = json.loads(batch1_str)
-
-        for br in batch1_results:
-            if br.get("content") and not br.get("error"):
-                pages.append(
-                    {
-                        "url": br["url"],
-                        "title": br.get("title", ""),
-                        "content": br["content"],
-                    }
-                )
-                # Depth-2: discover links from fetched pages
-                pending_urls.extend(_collect_links(br))
-
-    # --- Fetch round 2 (depth-2 discovery) ---
-    remaining = max_pages - len(pages)
-    if remaining > 0 and pending_urls:
-        pending_urls = _sort_by_query(pending_urls)
-        batch2_urls = pending_urls[:remaining]
-        if batch2_urls:
-            logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
-            batch2_str = await extract(
-                urls=batch2_urls, format="markdown", stealth=True, **_SPA_KWARGS
+        try:
+            batch1_str = await asyncio.wait_for(
+                extract(
+                    urls=batch1_urls, format="markdown", stealth=True, **_SPA_KWARGS
+                ),
+                timeout=batch_timeout,
             )
-            batch2_results = json.loads(batch2_str)
-            for br in batch2_results:
+            batch1_results = json.loads(batch1_str)
+
+            for br in batch1_results:
                 if br.get("content") and not br.get("error"):
                     pages.append(
                         {
@@ -2225,6 +2226,43 @@ async def fetch_docs_pages(
                             "content": br["content"],
                         }
                     )
+                    # Depth-2: discover links from fetched pages
+                    pending_urls.extend(_collect_links(br))
+        except TimeoutError:
+            logger.warning(
+                f"Round 1 crawl timed out after {batch_timeout}s "
+                f"({len(batch1_urls)} pages)"
+            )
+
+    # --- Fetch round 2 (depth-2 discovery) ---
+    remaining = max_pages - len(pages)
+    if remaining > 0 and pending_urls:
+        pending_urls = _sort_by_query(pending_urls)
+        batch2_urls = pending_urls[:remaining]
+        if batch2_urls:
+            logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
+            try:
+                batch2_str = await asyncio.wait_for(
+                    extract(
+                        urls=batch2_urls, format="markdown", stealth=True, **_SPA_KWARGS
+                    ),
+                    timeout=batch_timeout,
+                )
+                batch2_results = json.loads(batch2_str)
+                for br in batch2_results:
+                    if br.get("content") and not br.get("error"):
+                        pages.append(
+                            {
+                                "url": br["url"],
+                                "title": br.get("title", ""),
+                                "content": br["content"],
+                            }
+                        )
+            except TimeoutError:
+                logger.warning(
+                    f"Round 2 crawl timed out after {batch_timeout}s "
+                    f"({len(batch2_urls)} pages)"
+                )
 
     logger.info(f"Fetched {len(pages)} docs pages from {docs_url}")
     return pages
