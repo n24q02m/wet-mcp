@@ -26,7 +26,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 16
+DISCOVERY_VERSION = 17
 
 
 def _github_headers() -> dict[str, str]:
@@ -127,6 +127,9 @@ async def _discover_from_crates(name: str) -> dict | None:
             crate = resp.json().get("crate", {})
             docs_url = crate.get("documentation") or ""
             hp_url = crate.get("homepage") or ""
+            # Filter self-referencing crates.io URLs (listing page, not docs)
+            if hp_url and "crates.io" in hp_url:
+                hp_url = ""
             # Prefer homepage over docs.rs auto-generated documentation
             if hp_url:
                 explicit_url = hp_url
@@ -234,6 +237,17 @@ async def _get_github_homepage(url: str) -> str | None:
             data = resp.json()
             gh_homepage = data.get("homepage", "")
             if gh_homepage and "github.com" not in gh_homepage.lower():
+                # Filter registry listing pages (uninformative, not docs)
+                gh_lower = gh_homepage.lower()
+                if any(
+                    reg in gh_lower
+                    for reg in (
+                        "crates.io/crates/",
+                        "pypi.org/project/",
+                        "npmjs.com/package/",
+                    )
+                ):
+                    return None
                 return gh_homepage.rstrip("/")
     except Exception as e:
         logger.debug(f"GitHub homepage check failed for {owner}/{repo}: {e}")
@@ -297,7 +311,17 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
 
     # 1. docs.{domain} subdomain — skip for generic hosting domains
     # (docs.github.com is GitHub's own docs, not project docs)
-    _skip_docs_subdomain = {"github.com", "github.io", "gitlab.com", "bitbucket.org"}
+    # (docs.pypi.org is PyPI's own API docs, not project docs)
+    _skip_docs_subdomain = {
+        "github.com",
+        "github.io",
+        "gitlab.com",
+        "bitbucket.org",
+        "pypi.org",
+        "npmjs.com",
+        "npmjs.org",
+        "crates.io",
+    }
     if not base_domain.startswith("docs.") and base_domain not in _skip_docs_subdomain:
         candidates.append(("docs_subdomain", f"https://docs.{base_domain}/"))
 
@@ -332,6 +356,18 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
                 if content_len < 500:
                     return None
                 final_url = str(resp.url)
+                # Reject login/auth/account pages (false positive redirects)
+                final_path = urlparse(final_url).path.lower()
+                _auth_segments = (
+                    "/login",
+                    "/signin",
+                    "/signup",
+                    "/account",
+                    "/auth",
+                    "/register",
+                )
+                if any(seg in final_path for seg in _auth_segments):
+                    return None
                 # Avoid redirect loops back to the original homepage
                 if urlparse(final_url).netloc == parsed.netloc and label != "docs_path":
                     final_parsed = urlparse(final_url)
