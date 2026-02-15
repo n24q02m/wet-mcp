@@ -1,7 +1,8 @@
 """Tests for src/wet_mcp/sources/docs.py — Docs discovery and chunking.
 
 Covers chunk_markdown splitting, heading hierarchy, oversized content,
-chunk_llms_txt, discover_library with mocked registries, try_llms_txt.
+chunk_llms_txt, discover_library with mocked registries, try_llms_txt,
+blocked content detection, and RST to markdown conversion.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from wet_mcp.sources.docs import (
+    _is_blocked_content,
+    _rst_to_markdown,
     _split_preserving_code,
     chunk_llms_txt,
     chunk_markdown,
@@ -501,3 +504,127 @@ class TestSplitPreservingCode:
             assert "def func():" in c["content"]
         for c in js_chunks:
             assert "const x = 1;" in c["content"]
+
+
+# -----------------------------------------------------------------------
+# _is_blocked_content
+# -----------------------------------------------------------------------
+
+
+class TestIsBlockedContent:
+    def test_cloudflare_english(self):
+        content = (
+            "## Performing security verification\n"
+            "This website uses a security service to protect against "
+            "malicious bots. This page is displayed while the website "
+            "verifies your request.\nRay ID: abc123"
+        )
+        assert _is_blocked_content(content)
+
+    def test_cloudflare_german(self):
+        content = (
+            "## Sicherheitsüberprüfung wird durchgeführt\n"
+            "Diese Website nutzt einen Sicherheitsservice, um sich vor "
+            "böswilligen Bots zu schützen.\n"
+            "Performance und Sicherheit von Cloudflare"
+        )
+        assert _is_blocked_content(content)
+
+    def test_cloudflare_dutch(self):
+        content = (
+            "## Beveiliging wordt geverifieerd\n"
+            "Deze website gebruikt een beveiligingsservice.\n"
+            "Ray ID: xyz789"
+        )
+        assert _is_blocked_content(content)
+
+    def test_captcha_page(self):
+        content = (
+            "Please verify you are human\n"
+            "hcaptcha.com widget\n"
+            "Enable JavaScript and cookies to continue"
+        )
+        assert _is_blocked_content(content)
+
+    def test_normal_page_not_blocked(self):
+        content = (
+            "# pytest documentation\n\n"
+            "## Getting Started\n\n"
+            "pytest is a framework for building tests.\n\n"
+            "## Fixtures\n\n"
+            "Fixtures are used for setup and teardown.\n"
+            "```python\n"
+            "@pytest.fixture\n"
+            "def my_fixture():\n"
+            "    return 42\n"
+            "```\n"
+        )
+        assert not _is_blocked_content(content)
+
+    def test_long_page_with_ray_id_not_blocked(self):
+        """A real docs page mentioning 'Ray ID' in passing shouldn't be blocked."""
+        content = "Documentation about Cloudflare integration.\n" * 50
+        content += "You can find the Ray ID: in the response headers."
+        assert not _is_blocked_content(content)
+
+    def test_empty_not_blocked(self):
+        assert not _is_blocked_content("")
+
+    def test_short_turnstile_blocked(self):
+        content = "Loading turnstile widget..."
+        assert _is_blocked_content(content)
+
+
+# -----------------------------------------------------------------------
+# _rst_to_markdown
+# -----------------------------------------------------------------------
+
+
+class TestRstToMarkdown:
+    def test_rst_headings(self):
+        rst = "Main Title\n==========\n\nSubtitle\n--------\n\nSubsub\n~~~~~~\n"
+        md = _rst_to_markdown(rst)
+        assert "# Main Title" in md
+        assert "## Subtitle" in md
+        assert "### Subsub" in md
+
+    def test_rst_code_block(self):
+        rst = (
+            "Example:\n\n"
+            ".. code-block:: python\n\n"
+            "   def hello():\n"
+            "       print('world')\n\n"
+            "After code.\n"
+        )
+        md = _rst_to_markdown(rst)
+        assert "```python" in md
+        assert "def hello():" in md
+
+    def test_rst_roles(self):
+        rst = "See :ref:`my-label` and :class:`MyClass` for details."
+        md = _rst_to_markdown(rst)
+        assert "`my-label`" in md
+        assert "`MyClass`" in md
+        assert ":ref:" not in md
+        assert ":class:" not in md
+
+    def test_rst_note_directive(self):
+        rst = ".. note::\n\n   This is important.\n   Very important.\n\nAfter.\n"
+        md = _rst_to_markdown(rst)
+        assert "**Note:**" in md
+        assert "This is important." in md
+
+    def test_rst_literal_block(self):
+        rst = "Example::\n\n   x = 1\n   y = 2\n\nAfter.\n"
+        md = _rst_to_markdown(rst)
+        assert "```" in md
+        assert "x = 1" in md
+
+    def test_empty_rst(self):
+        assert _rst_to_markdown("") == ""
+
+    def test_rst_inline_code(self):
+        rst = "Use ``my_function()`` to do things."
+        md = _rst_to_markdown(rst)
+        assert "`my_function()`" in md
+        assert "``" not in md

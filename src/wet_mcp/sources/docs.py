@@ -26,7 +26,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 17
+DISCOVERY_VERSION = 18
 
 
 def _github_headers() -> dict[str, str]:
@@ -1006,6 +1006,50 @@ def _strip_nav_heading_blocks(content: str) -> str:
     return "\n".join(line for i, line in enumerate(lines) if i not in nav_lines)
 
 
+# Patterns that indicate a page was blocked by bot protection (Cloudflare,
+# hCaptcha, reCAPTCHA, etc.).  When all crawled pages match these patterns
+# the content is useless; filtering them lets fallback tiers take over.
+_BLOCKED_MARKERS = (
+    "performing security verification",
+    "sicherheitsüberprüfung",  # German CF
+    "przeprowadzanie weryfikacji",  # Polish CF
+    "biztonsági ellenőrzés",  # Hungarian CF
+    "beveiliging wordt geverifieerd",  # Dutch CF
+    "vérification de sécurité",  # French CF
+    "verificación de seguridad",  # Spanish CF
+    "verifica di sicurezza",  # Italian CF
+    "enable javascript and cookies to continue",
+    "just a moment...",  # legacy CF interstitial
+    "challenges.cloudflare.com",
+    "cf-chl-widget",
+    "_cf_chl_opt",
+    "turnstile",  # CF Turnstile widget
+    "hcaptcha.com",
+    "g-recaptcha",
+    "ray id:",  # CF Ray ID (alone is weak, combined with short content)
+)
+
+
+def _is_blocked_content(content: str) -> bool:
+    """Detect Cloudflare / CAPTCHA challenge pages.
+
+    Returns True when the crawled content appears to be a bot-protection
+    interstitial rather than real documentation.
+    """
+    if not content:
+        return False
+    lower = content.lower()
+    # Count how many blocked markers appear
+    hits = sum(1 for marker in _BLOCKED_MARKERS if marker in lower)
+    # A single "Ray ID" in a long page isn't enough; require 2+ markers
+    # or a single strong marker in a short page (< 2000 chars).
+    if hits >= 2:
+        return True
+    if hits == 1 and len(content) < 2000:
+        return True
+    return False
+
+
 def _clean_doc_content(content: str) -> str:
     """Strip noise from crawled documentation content.
 
@@ -1225,6 +1269,180 @@ def chunk_llms_txt(content: str, base_url: str = "") -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# RST to Markdown (basic conversion for GitHub raw docs)
+# ---------------------------------------------------------------------------
+
+# RST heading underline characters (in decreasing priority)
+_RST_HEADING_CHARS = set("=-~^\"'+`:._;,#*!?/\\|")
+
+# RST directive pattern: .. directive:: args
+_RST_DIRECTIVE_RE = re.compile(r"^\.\.\s+(\w[\w-]*)::(.*)$")
+# RST role pattern: :role:`text`
+_RST_ROLE_RE = re.compile(r":(\w+):`([^`]*)`")
+# RST substitution: |text|
+_RST_SUBST_RE = re.compile(r"\|(\w[\w\s]*)\|")
+
+
+def _rst_to_markdown(content: str) -> str:
+    """Convert RST content to rough Markdown for indexing.
+
+    Not a full parser — handles the most common patterns:
+    - Headings (underlined titles)
+    - Code blocks (``.. code-block::``, ``.. code::``, literal blocks)
+    - Cross-references (`:ref:`, `:doc:`, `:class:`, etc.)
+    - Directives (stripped except code blocks)
+    - Bold/italic/code inline markup
+    """
+    if not content:
+        return ""
+
+    lines = content.split("\n")
+    out: list[str] = []
+    i = 0
+    in_code_block = False
+    code_indent = 0
+
+    while i < len(lines):
+        line = lines[i]
+
+        # Handle literal blocks (indented after ::)
+        if in_code_block:
+            stripped = line.strip()
+            if stripped and not line.startswith(" " * code_indent) and not line == "":
+                # End of indented block
+                in_code_block = False
+                out.append("```")
+                out.append("")
+                # Don't increment — reprocess this line
+                continue
+            out.append(line)
+            i += 1
+            continue
+
+        # Detect RST headings: line followed by underline of same length
+        if (
+            i + 1 < len(lines)
+            and line.strip()
+            and len(lines[i + 1].strip()) >= len(line.strip())
+            and lines[i + 1].strip()
+            and all(c in _RST_HEADING_CHARS for c in lines[i + 1].strip())
+            and len(set(lines[i + 1].strip())) == 1
+        ):
+            underline_char = lines[i + 1].strip()[0]
+            # Also check for overline + title + underline
+            if underline_char == "=":
+                level = "#"
+            elif underline_char == "-":
+                level = "##"
+            elif underline_char == "~":
+                level = "###"
+            else:
+                level = "####"
+
+            # Check if there's an overline (line before is same underline char)
+            if (
+                i > 0
+                and out
+                and out[-1].strip()
+                and all(c in _RST_HEADING_CHARS for c in out[-1].strip())
+                and len(set(out[-1].strip())) == 1
+            ):
+                out[-1] = ""  # Remove overline
+
+            out.append(f"{level} {line.strip()}")
+            i += 2  # Skip underline
+            continue
+
+        # Detect code-block directive
+        directive_match = _RST_DIRECTIVE_RE.match(line.strip())
+        if directive_match:
+            directive = directive_match.group(1).lower()
+            args = directive_match.group(2).strip()
+            if directive in ("code-block", "code", "sourcecode", "highlight"):
+                lang = args or ""
+                out.append(f"```{lang}")
+                # Skip any directive options (indented lines starting with :)
+                i += 1
+                while i < len(lines) and (
+                    not lines[i].strip() or lines[i].strip().startswith(":")
+                ):
+                    i += 1
+                # Remaining indented lines are the code
+                if i < len(lines):
+                    code_indent = len(lines[i]) - len(lines[i].lstrip())
+                    if code_indent < 2:
+                        code_indent = 3
+                in_code_block = True
+                continue
+            elif directive in (
+                "literalinclude",
+                "image",
+                "figure",
+                "raw",
+                "include",
+                "toctree",
+                "contents",
+                "moduleauthor",
+                "sectionauthor",
+                "meta",
+                "deprecated",
+            ):
+                # Skip these directives entirely
+                i += 1
+                while i < len(lines) and (
+                    not lines[i].strip() or lines[i].startswith("   ")
+                ):
+                    i += 1
+                continue
+            elif directive in ("note", "warning", "tip", "important", "seealso"):
+                out.append(f"> **{directive.title()}:** {args}")
+                i += 1
+                # Include indented body
+                while i < len(lines) and (
+                    not lines[i].strip() or lines[i].startswith("   ")
+                ):
+                    body = lines[i].strip()
+                    if body:
+                        out.append(f"> {body}")
+                    i += 1
+                continue
+            # Other directives: skip header, keep body
+            i += 1
+            while i < len(lines) and lines[i].strip().startswith(":"):
+                i += 1  # Skip options
+            continue
+
+        # Detect literal block ending with ::
+        if line.rstrip().endswith("::"):
+            out.append(line.rstrip()[:-2] + ":" if len(line.rstrip()) > 2 else "")
+            i += 1
+            # Skip blank lines
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+            if i < len(lines):
+                code_indent = len(lines[i]) - len(lines[i].lstrip())
+                if code_indent < 2:
+                    code_indent = 3
+                out.append("```")
+                in_code_block = True
+            continue
+
+        # Process inline RST markup
+        processed = line
+        # :role:`text` → `text`
+        processed = _RST_ROLE_RE.sub(r"`\2`", processed)
+        # ``code`` → `code`
+        processed = processed.replace("``", "`")
+        out.append(processed)
+        i += 1
+
+    if in_code_block:
+        out.append("```")
+
+    return "\n".join(out)
+
+
+# ---------------------------------------------------------------------------
 # GitHub raw markdown — fetch docs directly from repo
 # ---------------------------------------------------------------------------
 
@@ -1431,7 +1649,11 @@ def _filter_doc_paths(
     readme_paths: list[str] = []
     doc_paths: list[str] = []
     for p in md_paths:
-        if p.rsplit("/", 1)[-1].lower() in ("readme.md", "readme.mdx"):
+        if p.rsplit("/", 1)[-1].lower() in (
+            "readme.md",
+            "readme.mdx",
+            "readme.rst",
+        ):
             readme_paths.append(p)
         else:
             doc_paths.append(p)
@@ -1676,12 +1898,12 @@ async def _try_github_raw_docs(
                     continue
 
                 # Include root README.md
-                if path_lower == "readme.md":
+                if path_lower == "readme.md" or path_lower == "readme.rst":
                     candidate_paths.append(path)
                     continue
 
-                # Only markdown files
-                if not path_lower.endswith((".md", ".mdx")):
+                # Only markdown and RST files
+                if not path_lower.endswith((".md", ".mdx", ".rst")):
                     continue
 
                 # Must be in a docs-like directory
@@ -1737,6 +1959,10 @@ async def _try_github_raw_docs(
                 content = _strip_template_macros(content)
                 fetch_original_bytes += original_len
                 fetch_stripped_bytes += len(content)
+
+                # Convert RST to Markdown for consistent chunking
+                if fpath.lower().endswith(".rst"):
+                    content = _rst_to_markdown(content)
 
                 # Derive title from filename
                 fname = fpath.rsplit("/", 1)[-1]
@@ -2151,8 +2377,12 @@ async def fetch_docs_pages(
         return [u for u, _ in scored]
 
     # Process root page results
+    blocked_count = 0
     for r in root_results:
         if r.get("content") and not r.get("error"):
+            if _is_blocked_content(r["content"]):
+                blocked_count += 1
+                continue
             pages.append(
                 {
                     "url": r["url"],
@@ -2161,6 +2391,15 @@ async def fetch_docs_pages(
                 }
             )
             pending_urls.extend(_collect_links(r))
+
+    # Early exit: if root page was blocked, all other pages on the same
+    # domain will also be blocked — skip expensive crawling and return
+    # empty so that upstream fallback (GitHub raw, SearXNG) can take over.
+    if blocked_count > 0 and not pages:
+        logger.warning(
+            f"Root page blocked by bot protection, skipping crawl: {docs_url}"
+        )
+        return pages
 
     # Sitemap + objects.inv discovery (finds URLs not linked from root page)
     # Run both in parallel — objects.inv is more reliable for Sphinx sites,
@@ -2219,6 +2458,9 @@ async def fetch_docs_pages(
 
             for br in batch1_results:
                 if br.get("content") and not br.get("error"):
+                    if _is_blocked_content(br["content"]):
+                        blocked_count += 1
+                        continue
                     pages.append(
                         {
                             "url": br["url"],
@@ -2251,6 +2493,9 @@ async def fetch_docs_pages(
                 batch2_results = json.loads(batch2_str)
                 for br in batch2_results:
                     if br.get("content") and not br.get("error"):
+                        if _is_blocked_content(br["content"]):
+                            blocked_count += 1
+                            continue
                         pages.append(
                             {
                                 "url": br["url"],
@@ -2264,5 +2509,7 @@ async def fetch_docs_pages(
                     f"({len(batch2_urls)} pages)"
                 )
 
+    if blocked_count:
+        logger.warning(f"Filtered {blocked_count} bot-protected pages from {docs_url}")
     logger.info(f"Fetched {len(pages)} docs pages from {docs_url}")
     return pages
