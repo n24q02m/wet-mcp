@@ -342,6 +342,13 @@ mcp = FastMCP(
 # (e.g. close browser tabs) before we abandon it entirely.
 _CANCEL_GRACE_PERIOD = 5.0
 
+# Sub-operation timeouts (seconds) within docs search.
+# These prevent any single step from consuming the entire tool_timeout budget.
+_DISCOVERY_TIMEOUT = 30  # discover_library() — registry + probe
+_FETCH_TIMEOUT = 90  # _fetch_and_chunk_docs() — llms.txt + GH raw + crawl
+_EMBED_TIMEOUT = 60  # _embed_batch() — ONNX for all chunks
+_FALLBACK_TIMEOUT = 60  # SearXNG fallback fetch
+
 
 async def _with_timeout(coro, action: str) -> str:
     """Wrap coroutine with hard timeout.
@@ -874,12 +881,21 @@ async def _do_docs_search(
         discover_library,
     )
 
-    # Discover library metadata from registries
-    discovery = await discover_library(library, language=language)
+    # Discover library metadata from registries (with sub-timeout)
     docs_url = ""
     repo_url = ""
     registry = ""
     description = ""
+    try:
+        discovery = await asyncio.wait_for(
+            discover_library(library, language=language),
+            timeout=_DISCOVERY_TIMEOUT,
+        )
+    except TimeoutError:
+        logger.warning(
+            f"Discovery timed out after {_DISCOVERY_TIMEOUT}s for '{library}'"
+        )
+        discovery = None
 
     if discovery:
         docs_url = discovery.get("homepage", "")
@@ -895,18 +911,23 @@ async def _do_docs_search(
             else f"{library} official documentation"
         )
         logger.info(f"Registry lookup failed, trying SearXNG for '{library}'...")
-        searxng_url = await ensure_searxng()
-        search_result = await searxng_search(
-            searxng_url=searxng_url,
-            query=search_query,
-            categories="general",
-            max_results=3,
-        )
         try:
+            searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=15)
+            search_result = await asyncio.wait_for(
+                searxng_search(
+                    searxng_url=searxng_url,
+                    query=search_query,
+                    categories="general",
+                    max_results=3,
+                ),
+                timeout=15,
+            )
             search_data = json.loads(search_result)
             top_results = search_data.get("results", [])
             if top_results:
                 docs_url = top_results[0].get("url", "")
+        except TimeoutError:
+            logger.warning("SearXNG discovery fallback timed out")
         except json.JSONDecodeError:
             pass
 
@@ -941,12 +962,20 @@ async def _do_docs_search(
 
     docs_url = _normalize_docs_url(docs_url)
 
-    all_chunks, page_count = await _fetch_and_chunk_docs(
-        docs_url=docs_url,
-        repo_url=repo_url,
-        query=query,
-        library_hint=library,
-    )
+    logger.info(f"Fetching docs for '{library}' from {docs_url}...")
+    try:
+        all_chunks, page_count = await asyncio.wait_for(
+            _fetch_and_chunk_docs(
+                docs_url=docs_url,
+                repo_url=repo_url,
+                query=query,
+                library_hint=library,
+            ),
+            timeout=_FETCH_TIMEOUT,
+        )
+    except TimeoutError:
+        logger.warning(f"Docs fetch timed out after {_FETCH_TIMEOUT}s for '{library}'")
+        all_chunks, page_count = [], 0
 
     # Fallback: if too few pages (likely wrong/insufficient docs URL),
     # try SearXNG to discover a better documentation URL.
@@ -961,12 +990,15 @@ async def _do_docs_search(
             "trying SearXNG fallback..."
         )
         try:
-            searxng_url = await ensure_searxng()
-            fallback_result = await searxng_search(
-                searxng_url=searxng_url,
-                query=fallback_query,
-                categories="general",
-                max_results=3,
+            searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=15)
+            fallback_result = await asyncio.wait_for(
+                searxng_search(
+                    searxng_url=searxng_url,
+                    query=fallback_query,
+                    categories="general",
+                    max_results=3,
+                ),
+                timeout=15,
             )
             fallback_data = json.loads(fallback_result)
             for fr in fallback_data.get("results", []):
@@ -977,7 +1009,14 @@ async def _do_docs_search(
                 orig_parsed = urlparse(docs_url)
                 if alt_parsed.netloc == orig_parsed.netloc:
                     continue
-                alt_chunks, alt_pages = await _fetch_and_chunk_docs(alt_url, "", query)
+                try:
+                    alt_chunks, alt_pages = await asyncio.wait_for(
+                        _fetch_and_chunk_docs(alt_url, "", query),
+                        timeout=_FALLBACK_TIMEOUT,
+                    )
+                except TimeoutError:
+                    logger.warning(f"SearXNG fallback fetch timed out for {alt_url}")
+                    continue
                 if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
                     logger.info(
                         f"SearXNG fallback: {alt_url} "
@@ -987,6 +1026,8 @@ async def _do_docs_search(
                     all_chunks = alt_chunks
                     page_count = alt_pages
                     break
+        except TimeoutError:
+            logger.warning("SearXNG fallback timed out")
         except Exception as e:
             logger.debug(f"SearXNG fallback failed: {e}")
 
@@ -999,7 +1040,7 @@ async def _do_docs_search(
             ensure_ascii=False,
         )
 
-    # Step 4: Generate embeddings (optional)
+    # Step 4: Generate embeddings (optional, with sub-timeout)
     embeddings = None
     if all_chunks:
         from wet_mcp.embedder import get_backend
@@ -1016,7 +1057,18 @@ async def _do_docs_search(
                     parts.append(c["heading_path"])
                 parts.append(c["content"])
                 embed_texts_list.append(" | ".join(parts)[:2000])
-            embeddings = await _embed_batch(embed_texts_list)
+            logger.info(f"Generating embeddings for {len(embed_texts_list)} chunks...")
+            try:
+                embeddings = await asyncio.wait_for(
+                    _embed_batch(embed_texts_list),
+                    timeout=_EMBED_TIMEOUT,
+                )
+            except TimeoutError:
+                logger.warning(
+                    f"Embedding timed out after {_EMBED_TIMEOUT}s "
+                    f"for {len(embed_texts_list)} chunks, skipping"
+                )
+                embeddings = None
             if embeddings:
                 logger.info(f"Generated {len(embeddings)} embeddings")
 

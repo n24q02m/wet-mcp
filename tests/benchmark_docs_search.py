@@ -1,4 +1,4 @@
-"""Benchmark test suite for docs search quality (200 libraries).
+"""Benchmark test suite for docs search quality (300 libraries).
 
 Run manually or via CI to validate docs search quality after changes.
 Each test case specifies a library, query, and expected quality signals.
@@ -1282,6 +1282,636 @@ BENCHMARK_CASES = [
         "library": "uuid",
         "query": "v4 v5 v7 parse validate NIL",
         "tests_aspect": "npm, uuid (UUID generator, ultra-generic name)",
+    },
+    # =====================================================================
+    # Category U: Graphics & Media (10) — canvas, image processing, charting
+    # =====================================================================
+    {
+        "id": "pixijs",
+        "library": "pixi.js",
+        "query": "Application Sprite Container Texture renderer",
+        "tests_aspect": "npm, pixijs.com (2D WebGL engine, dotted name)",
+    },
+    {
+        "id": "phaser",
+        "library": "phaser",
+        "query": "Scene Sprite Physics Arcade Tilemap",
+        "tests_aspect": "npm, phaser.io (HTML5 game framework)",
+    },
+    {
+        "id": "konva",
+        "library": "konva",
+        "query": "Stage Layer Shape Rect Circle drag",
+        "tests_aspect": "npm, konvajs.org (canvas 2D library)",
+    },
+    {
+        "id": "fabricjs",
+        "library": "fabric",
+        "query": "Canvas Object Rect Circle path event",
+        "tests_aspect": "npm, fabricjs.com (canvas library, generic name)",
+    },
+    {
+        "id": "sharp",
+        "library": "sharp",
+        "query": "resize rotate crop composite format metadata",
+        "tests_aspect": "npm, sharp.pixelplumbing.com (image processing)",
+    },
+    {
+        "id": "jimp",
+        "library": "jimp",
+        "query": "read resize crop blur composite write",
+        "tests_aspect": "npm, jimp (JS image manipulation, unique name)",
+    },
+    {
+        "id": "p5js",
+        "library": "p5",
+        "query": "setup draw createCanvas ellipse rect fill",
+        "tests_aspect": "npm, p5js.org (creative coding, short name)",
+    },
+    {
+        "id": "d3",
+        "library": "d3",
+        "query": "select scale axis transition svg path",
+        "tests_aspect": "npm, d3js.org (data viz, ultra-short 2-char name)",
+    },
+    {
+        "id": "chartjs",
+        "library": "chart.js",
+        "query": "Chart config data options plugins scales",
+        "tests_aspect": "npm, chartjs.org (charting library, dotted name)",
+    },
+    {
+        "id": "plotly",
+        "library": "plotly",
+        "query": "scatter bar heatmap layout figure subplot",
+        "tests_aspect": "PyPI, plotly.com (interactive plots, multi-lang)",
+    },
+    # =====================================================================
+    # Category V: Documentation & Static Site Generators (10)
+    # =====================================================================
+    {
+        "id": "docusaurus",
+        "library": "@docusaurus/core",
+        "query": "docs blog sidebar plugin theme config",
+        "tests_aspect": "scoped npm, docusaurus.io (Meta docs framework)",
+    },
+    {
+        "id": "mkdocs",
+        "library": "mkdocs",
+        "query": "nav theme plugins markdown extensions",
+        "tests_aspect": "PyPI, mkdocs.org (Python docs generator)",
+    },
+    {
+        "id": "sphinx",
+        "library": "sphinx",
+        "query": "toctree directive extension conf.py autodoc",
+        "tests_aspect": "PyPI, sphinx-doc.org (Python docs, objects.inv)",
+    },
+    {
+        "id": "vuepress",
+        "library": "vuepress",
+        "query": "theme plugins config markdown frontmatter",
+        "tests_aspect": "npm, vuepress.vuejs.org (Vue docs generator)",
+    },
+    {
+        "id": "nextra",
+        "library": "nextra",
+        "query": "pages _meta.json callout steps tabs",
+        "tests_aspect": "npm, nextra.site (Next.js docs framework)",
+    },
+    {
+        "id": "typedoc",
+        "library": "typedoc",
+        "query": "entry points plugin theme options reflection",
+        "tests_aspect": "npm, typedoc.org (TypeScript documentation)",
+    },
+    {
+        "id": "starlight",
+        "library": "@astrojs/starlight",
+        "query": "sidebar navigation i18n components config",
+        "tests_aspect": "scoped npm, starlight.astro.build (Astro docs)",
+    },
+    {
+        "id": "redoc",
+        "library": "redoc",
+        "query": "OpenAPI schema theme config scrollYOffset",
+        "tests_aspect": "npm, redocly.com (API docs from OpenAPI)",
+    },
+    {
+        "id": "mintlify",
+        "library": "mintlify",
+        "query": "navigation api components mint.json groups",
+        "tests_aspect": "npm, mintlify.com (docs platform, SaaS)",
+    },
+    {
+        "id": "fumadocs",
+        "library": "fumadocs-core",
+        "query": "source loader MDX search config page",
+        "tests_aspect": "npm, fumadocs.vercel.app (Next.js docs framework)",
+    },
+    # =====================================================================
+    # Category W: Monorepo & Build Tools (10) — workspace management
+    # =====================================================================
+    {
+        "id": "nx",
+        "library": "nx",
+        "query": "workspace generators executors project.json cache",
+        "tests_aspect": "npm, nx.dev (monorepo build system)",
+    },
+    {
+        "id": "lerna",
+        "library": "lerna",
+        "query": "publish version bootstrap link workspace",
+        "tests_aspect": "npm, lerna.js.org (monorepo manager, Nrwl)",
+    },
+    {
+        "id": "changesets",
+        "library": "@changesets/cli",
+        "query": "changeset version publish status init",
+        "tests_aspect": "scoped npm, changesets (versioning tool)",
+    },
+    {
+        "id": "tsup",
+        "library": "tsup",
+        "query": "entry format dts splitting config",
+        "tests_aspect": "npm, tsup.egoist.dev (TypeScript bundler)",
+    },
+    {
+        "id": "unbuild",
+        "library": "unbuild",
+        "query": "build.config entries rollup mkdist stub",
+        "tests_aspect": "npm, unbuild (unified build system)",
+    },
+    {
+        "id": "concurrently",
+        "library": "concurrently",
+        "query": "run parallel prefix kill-others names",
+        "tests_aspect": "npm, concurrently (run parallel commands)",
+    },
+    {
+        "id": "cross-env",
+        "library": "cross-env",
+        "query": "NODE_ENV set environment variable script",
+        "tests_aspect": "npm, cross-env (cross-platform env vars)",
+    },
+    {
+        "id": "syncpack",
+        "library": "syncpack",
+        "query": "list-mismatches fix-mismatches format semver",
+        "tests_aspect": "npm, syncpack (monorepo dependency sync)",
+    },
+    {
+        "id": "patch-package",
+        "library": "patch-package",
+        "query": "patch postinstall diff apply exclude",
+        "tests_aspect": "npm, patch-package (patch node_modules)",
+    },
+    {
+        "id": "pkgroll",
+        "library": "pkgroll",
+        "query": "exports types bin conditions build",
+        "tests_aspect": "npm, pkgroll (package bundler)",
+    },
+    # =====================================================================
+    # Category X: DevOps & Automation (10) — infra tools & task automation
+    # =====================================================================
+    {
+        "id": "ansible",
+        "library": "ansible",
+        "query": "playbook inventory module task role",
+        "tests_aspect": "PyPI, docs.ansible.com (IaC tool, massive docs)",
+    },
+    {
+        "id": "paramiko",
+        "library": "paramiko",
+        "query": "SSHClient connect SFTPClient channel transport",
+        "tests_aspect": "PyPI, paramiko.org (SSH library)",
+    },
+    {
+        "id": "watchdog",
+        "library": "watchdog",
+        "query": "Observer FileSystemEventHandler events patterns",
+        "tests_aspect": "PyPI, watchdog (filesystem monitoring)",
+    },
+    {
+        "id": "schedule",
+        "library": "schedule",
+        "query": "every day hour minute job do run_pending",
+        "tests_aspect": "PyPI, schedule (job scheduler, generic name)",
+    },
+    {
+        "id": "apscheduler",
+        "library": "apscheduler",
+        "query": "scheduler trigger cron interval job store",
+        "tests_aspect": "PyPI, apscheduler (advanced scheduler)",
+    },
+    {
+        "id": "invoke",
+        "library": "invoke",
+        "query": "task context run collection namespace",
+        "tests_aspect": "PyPI, pyinvoke.org (task runner, generic name)",
+    },
+    {
+        "id": "fabric-py",
+        "library": "fabric",
+        "query": "Connection run sudo put group task",
+        "tests_aspect": "PyPI, fabfile.org (SSH deployment, generic name collision)",
+    },
+    {
+        "id": "psutil",
+        "library": "psutil",
+        "query": "cpu_percent virtual_memory disk_usage process",
+        "tests_aspect": "PyPI, psutil (system monitoring, unique name)",
+    },
+    {
+        "id": "sh",
+        "library": "sh",
+        "query": "Command bake piping redirection background",
+        "tests_aspect": "PyPI, sh (subprocess wrapper, ultra-short 2-char name)",
+    },
+    {
+        "id": "plumbum",
+        "library": "plumbum",
+        "query": "local path command pipeline ProcessExecutionError",
+        "tests_aspect": "PyPI, plumbum (shell combinators, unique name)",
+    },
+    # =====================================================================
+    # Category Y: Message Queues & Real-time (10) — async messaging
+    # =====================================================================
+    {
+        "id": "bullmq",
+        "library": "bullmq",
+        "query": "Queue Worker FlowProducer Job connection",
+        "tests_aspect": "npm, bullmq (Redis-based queue)",
+    },
+    {
+        "id": "amqplib",
+        "library": "amqplib",
+        "query": "connect channel assertQueue sendToQueue consume",
+        "tests_aspect": "npm, amqplib (AMQP 0-9-1 client)",
+    },
+    {
+        "id": "kafka-python",
+        "library": "kafka-python",
+        "query": "KafkaProducer KafkaConsumer topic partition commit",
+        "tests_aspect": "PyPI, kafka-python (Kafka client, hyphenated)",
+    },
+    {
+        "id": "pika",
+        "library": "pika",
+        "query": "BlockingConnection channel basic_publish basic_consume",
+        "tests_aspect": "PyPI, pika (RabbitMQ client, short name)",
+    },
+    {
+        "id": "kombu",
+        "library": "kombu",
+        "query": "Connection Exchange Queue Consumer Producer",
+        "tests_aspect": "PyPI, kombu (messaging library, Celery dep)",
+    },
+    {
+        "id": "dramatiq",
+        "library": "dramatiq",
+        "query": "actor broker middleware message result",
+        "tests_aspect": "PyPI, dramatiq.io (task processing, unique name)",
+    },
+    {
+        "id": "rq",
+        "library": "rq",
+        "query": "Queue Worker job enqueue result timeout",
+        "tests_aspect": "PyPI, python-rq.org (Redis queue, ultra-short name)",
+    },
+    {
+        "id": "huey",
+        "library": "huey",
+        "query": "task periodic crontab RedisHuey storage",
+        "tests_aspect": "PyPI, huey (lightweight task queue, unique name)",
+    },
+    {
+        "id": "nats-py",
+        "library": "nats-py",
+        "query": "connect publish subscribe JetStream KeyValue",
+        "tests_aspect": "PyPI, nats-py (NATS client, hyphenated)",
+    },
+    {
+        "id": "aio-pika",
+        "library": "aio-pika",
+        "query": "connect_robust Queue Exchange Message channel",
+        "tests_aspect": "PyPI, aio-pika (async RabbitMQ, hyphenated)",
+    },
+    # =====================================================================
+    # Category Z: TypeScript Advanced (10) — TS utilities & patterns
+    # =====================================================================
+    {
+        "id": "ts-pattern",
+        "library": "ts-pattern",
+        "query": "match with when exhaustive select P",
+        "tests_aspect": "npm, ts-pattern (pattern matching, hyphenated)",
+    },
+    {
+        "id": "type-fest",
+        "library": "type-fest",
+        "query": "PartialDeep RequiredDeep SetRequired Simplify",
+        "tests_aspect": "npm, type-fest (TS type helpers, hyphenated)",
+    },
+    {
+        "id": "zx",
+        "library": "zx",
+        "query": "$ cd fetch echo question within",
+        "tests_aspect": "npm, zx (Google shell scripts, ultra-short name)",
+    },
+    {
+        "id": "oclif",
+        "library": "oclif",
+        "query": "Command Flags Args Plugin Hook run",
+        "tests_aspect": "npm, oclif.io (CLI framework by Salesforce)",
+    },
+    {
+        "id": "tsyringe",
+        "library": "tsyringe",
+        "query": "container injectable inject singleton scoped",
+        "tests_aspect": "npm, tsyringe (DI container, unique name)",
+    },
+    {
+        "id": "inversify",
+        "library": "inversify",
+        "query": "Container bind injectable inject kernel",
+        "tests_aspect": "npm, inversify.io (IoC container)",
+    },
+    {
+        "id": "ts-morph",
+        "library": "ts-morph",
+        "query": "Project SourceFile Node Type ClassDeclaration",
+        "tests_aspect": "npm, ts-morph (TypeScript AST manipulation)",
+    },
+    {
+        "id": "type-graphql",
+        "library": "type-graphql",
+        "query": "Resolver Query Mutation Field ObjectType",
+        "tests_aspect": "npm, typegraphql.com (GraphQL with TS decorators)",
+    },
+    {
+        "id": "neverthrow",
+        "library": "neverthrow",
+        "query": "ok err Result ResultAsync fromPromise",
+        "tests_aspect": "npm, neverthrow (Result type for TS)",
+    },
+    {
+        "id": "arktype",
+        "library": "arktype",
+        "query": "type scope morph narrow infer union",
+        "tests_aspect": "npm, arktype.io (runtime TS validation)",
+    },
+    # =====================================================================
+    # Category AA: Python Data & Workflow (10) — data processing, caching
+    # =====================================================================
+    {
+        "id": "tenacity",
+        "library": "tenacity",
+        "query": "retry stop wait before after retry_if",
+        "tests_aspect": "PyPI, tenacity (retry library, unique name)",
+    },
+    {
+        "id": "diskcache",
+        "library": "diskcache",
+        "query": "Cache FanoutCache DiskCache memoize Deque",
+        "tests_aspect": "PyPI, grantjenks.com/docs/diskcache (disk-based cache)",
+    },
+    {
+        "id": "cachetools",
+        "library": "cachetools",
+        "query": "LRUCache TTLCache cached cachedmethod",
+        "tests_aspect": "PyPI, cachetools (extensible cache, unique name)",
+    },
+    {
+        "id": "joblib",
+        "library": "joblib",
+        "query": "Parallel delayed Memory dump load hash",
+        "tests_aspect": "PyPI, joblib.readthedocs.io (lightweight pipelining)",
+    },
+    {
+        "id": "dask",
+        "library": "dask",
+        "query": "dataframe array delayed compute scheduler",
+        "tests_aspect": "PyPI, dask.org (parallel computing)",
+    },
+    {
+        "id": "ray",
+        "library": "ray",
+        "query": "remote init get put task actor serve",
+        "tests_aspect": "PyPI, ray.io (distributed computing, generic name)",
+    },
+    {
+        "id": "prefect",
+        "library": "prefect",
+        "query": "flow task deployment schedule parameter",
+        "tests_aspect": "PyPI, prefect.io (workflow orchestration)",
+    },
+    {
+        "id": "airflow",
+        "library": "apache-airflow",
+        "query": "DAG operator task sensor trigger schedule",
+        "tests_aspect": "PyPI, airflow.apache.org (workflow scheduler)",
+    },
+    {
+        "id": "dagster",
+        "library": "dagster",
+        "query": "asset op job schedule sensor io_manager",
+        "tests_aspect": "PyPI, dagster.io (data orchestration, unique name)",
+    },
+    {
+        "id": "luigi",
+        "library": "luigi",
+        "query": "Task Target requires output run Parameter",
+        "tests_aspect": "PyPI, luigi (Spotify workflow, unique name)",
+    },
+    # =====================================================================
+    # Category AB: Rust Ecosystem (10) — error handling, async, parsing
+    # =====================================================================
+    {
+        "id": "anyhow",
+        "library": "anyhow",
+        "query": "Result Context Error bail ensure anyhow!",
+        "tests_aspect": "crates.io, anyhow (error handling, unique name)",
+    },
+    {
+        "id": "thiserror",
+        "library": "thiserror",
+        "query": "Error derive from source transparent display",
+        "tests_aspect": "crates.io, thiserror (derive Error, unique name)",
+    },
+    {
+        "id": "tracing-rs",
+        "library": "tracing",
+        "query": "span event instrument subscriber Layer",
+        "tests_aspect": "crates.io, tracing-rs (instrumentation, generic name collision npm)",
+    },
+    {
+        "id": "rayon",
+        "library": "rayon",
+        "query": "par_iter into_par_iter join scope ThreadPool",
+        "tests_aspect": "crates.io, rayon (data parallelism, unique name)",
+    },
+    {
+        "id": "regex-rust",
+        "library": "regex",
+        "query": "Regex captures find replace is_match",
+        "tests_aspect": "crates.io, regex (ultra-generic name, npm collision)",
+    },
+    {
+        "id": "hyper-rs",
+        "library": "hyper",
+        "query": "Client Server Request Response Body service",
+        "tests_aspect": "crates.io, hyper.rs (HTTP library, npm collision)",
+    },
+    {
+        "id": "tonic",
+        "library": "tonic",
+        "query": "Server Request Response Channel transport codec",
+        "tests_aspect": "crates.io, tonic (gRPC framework, generic name)",
+    },
+    {
+        "id": "prost",
+        "library": "prost",
+        "query": "Message encode decode prost_build Service",
+        "tests_aspect": "crates.io, prost (Protocol Buffers, unique name)",
+    },
+    {
+        "id": "tower",
+        "library": "tower",
+        "query": "Service Layer ServiceBuilder timeout retry",
+        "tests_aspect": "crates.io, tower-rs (middleware abstractions, generic name)",
+    },
+    {
+        "id": "nom",
+        "library": "nom",
+        "query": "tag take_while separated_list IResult many0",
+        "tests_aspect": "crates.io, nom (parser combinators, ultra-short name)",
+    },
+    # =====================================================================
+    # Category AC: Go Packages (10) — popular Go ecosystem tools
+    # =====================================================================
+    {
+        "id": "cobra",
+        "library": "cobra",
+        "query": "Command Args Flags PersistentFlags RunE",
+        "tests_aspect": "Go, cobra.dev (CLI framework, generic name)",
+    },
+    {
+        "id": "viper",
+        "library": "viper",
+        "query": "SetConfigFile ReadInConfig Get Set BindPFlag",
+        "tests_aspect": "Go, viper (config management, generic name collision npm)",
+    },
+    {
+        "id": "zap",
+        "library": "zap",
+        "query": "Logger Sugar NewProduction Field Info Error",
+        "tests_aspect": "Go, uber-go/zap (structured logging, generic name)",
+    },
+    {
+        "id": "gorm",
+        "library": "gorm",
+        "query": "Model Create Find Where Preload AutoMigrate",
+        "tests_aspect": "Go, gorm.io (ORM, unique name)",
+    },
+    {
+        "id": "fx",
+        "library": "fx",
+        "query": "Provide Invoke Module New Supply Lifecycle",
+        "tests_aspect": "Go, uber-go/fx (DI framework, ultra-short name collision npm)",
+    },
+    {
+        "id": "wire",
+        "library": "wire",
+        "query": "Injector Provider Set Bind Value NewSet",
+        "tests_aspect": "Go, google/wire (compile-time DI, generic name)",
+    },
+    {
+        "id": "testify",
+        "library": "testify",
+        "query": "assert require suite mock Equal NotNil",
+        "tests_aspect": "Go, testify (test toolkit, generic name)",
+    },
+    {
+        "id": "mockery-go",
+        "library": "mockery",
+        "query": "mock generate interface expectations Return",
+        "tests_aspect": "Go, mockery (mock generator, generic name collision npm)",
+    },
+    {
+        "id": "air",
+        "library": "air",
+        "query": "live reload .air.toml build cmd tmp",
+        "tests_aspect": "Go, air (hot reload, ultra-generic name collision)",
+    },
+    {
+        "id": "gorilla-mux",
+        "library": "gorilla/mux",
+        "query": "Router HandleFunc PathPrefix Vars Subrouter",
+        "tests_aspect": "Go, gorilla/mux (HTTP router, slash in name)",
+    },
+    # =====================================================================
+    # Category AD: Mobile & Desktop (10) — cross-platform frameworks
+    # =====================================================================
+    {
+        "id": "react-native",
+        "library": "react-native",
+        "query": "View Text StyleSheet FlatList navigation",
+        "tests_aspect": "npm, reactnative.dev (mobile framework, hyphenated)",
+    },
+    {
+        "id": "expo",
+        "library": "expo",
+        "query": "router config plugins assets SDK modules",
+        "tests_aspect": "npm, docs.expo.dev (React Native platform)",
+    },
+    {
+        "id": "capacitor",
+        "library": "@capacitor/core",
+        "query": "Plugins registerPlugin WebPlugin Capacitor bridge",
+        "tests_aspect": "scoped npm, capacitorjs.com (mobile runtime)",
+    },
+    {
+        "id": "electron",
+        "library": "electron",
+        "query": "BrowserWindow ipcMain ipcRenderer app menu",
+        "tests_aspect": "npm, electronjs.org (desktop framework)",
+    },
+    {
+        "id": "neutralinojs",
+        "library": "@aspect/neutralino",
+        "query": "app os filesystem window events computer",
+        "tests_aspect": "npm, neutralino.js.org (lightweight desktop alt)",
+    },
+    {
+        "id": "wails-go",
+        "library": "wails",
+        "query": "Application Window Bind Events menu dialog",
+        "tests_aspect": "Go, wails.io (Go desktop framework)",
+    },
+    {
+        "id": "fyne-go",
+        "library": "fyne",
+        "query": "App Window Canvas Widget Container Entry",
+        "tests_aspect": "Go, fyne.io (Go GUI toolkit)",
+    },
+    {
+        "id": "kivy",
+        "library": "kivy",
+        "query": "App Widget Builder BoxLayout Button Label",
+        "tests_aspect": "PyPI, kivy.org (Python GUI framework)",
+    },
+    {
+        "id": "dearpygui",
+        "library": "dearpygui",
+        "query": "create_viewport add_window add_button callback",
+        "tests_aspect": "PyPI, dearpygui.readthedocs.io (Python GUI, unique name)",
+    },
+    {
+        "id": "toga",
+        "library": "toga",
+        "query": "App MainWindow Box Button TextInput handler",
+        "tests_aspect": "PyPI, toga.readthedocs.io (Python native UI, BeeWare)",
     },
 ]
 
