@@ -218,21 +218,31 @@ async def crawl(
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
+    to_crawl: list[tuple[str, int]] = []
     for root_url in urls:
-        if not is_safe_url(root_url):
+        if is_safe_url(root_url):
+            to_crawl.append((root_url, 0))
+        else:
             logger.warning(f"Skipping unsafe URL: {root_url}")
+
+    while to_crawl and len(all_results) < max_pages:
+        # Prepare batch based on concurrency limit and remaining pages
+        remaining_pages = max_pages - len(all_results)
+        batch_size = min(_MAX_CONCURRENT_OPS, remaining_pages)
+        current_batch: list[tuple[str, int]] = []
+
+        while len(current_batch) < batch_size and to_crawl:
+            url, current_depth = to_crawl.pop(0)
+            if url not in visited and current_depth <= depth:
+                visited.add(url)
+                current_batch.append((url, current_depth))
+
+        if not current_batch:
             continue
 
-        to_crawl: list[tuple[str, int]] = [(root_url, 0)]
-
-        while to_crawl and len(all_results) < max_pages:
-            url, current_depth = to_crawl.pop(0)
-
-            if url in visited or current_depth > depth:
-                continue
-
-            visited.add(url)
-
+        async def process_one(
+            url: str, current_depth: int
+        ) -> tuple[dict | None, list[tuple[str, int]]]:
             async with sem:
                 try:
                     result = await crawler.arun(
@@ -246,30 +256,40 @@ async def crawl(
                             if format == "markdown"
                             else result.cleaned_html
                         )
-                        all_results.append(
-                            {
-                                "url": url,
-                                "depth": current_depth,
-                                "title": result.metadata.get("title", ""),
-                                "content": content[:5000],  # Limit content size
-                            }
-                        )
+                        result_data = {
+                            "url": url,
+                            "depth": current_depth,
+                            "title": result.metadata.get("title", ""),
+                            "content": content[:5000],  # Limit content size
+                        }
 
-                        # Add internal links for next depth
+                        new_links = []
                         if current_depth < depth:
                             internal_links = result.links.get("internal", [])
                             for link_item in internal_links[:10]:
-                                # Crawl4AI returns dicts with 'href' key
                                 link_url = (
                                     link_item.get("href", "")
                                     if isinstance(link_item, dict)
                                     else link_item
                                 )
                                 if link_url and link_url not in visited:
-                                    to_crawl.append((link_url, current_depth + 1))
-
+                                    new_links.append((link_url, current_depth + 1))
+                        return result_data, new_links
+                    else:
+                        return None, []
                 except Exception as e:
                     logger.error(f"Error crawling {url}: {e}")
+                    return None, []
+
+        results = await asyncio.gather(*[process_one(u, d) for u, d in current_batch])
+
+        for res_content, res_links in results:
+            if res_content:
+                all_results.append(res_content)
+                # Respect max_pages strictly
+                if len(all_results) >= max_pages:
+                    break
+                to_crawl.extend(res_links)
 
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
@@ -307,32 +327,63 @@ async def sitemap(
         site_urls: list[dict[str, object]] = []
 
         while to_visit and len(site_urls) < max_pages:
-            url, current_depth = to_visit.pop(0)
+            remaining_pages = max_pages - len(site_urls)
+            batch_size = min(_MAX_CONCURRENT_OPS, remaining_pages)
+            current_batch: list[tuple[str, int]] = []
 
-            if url in visited or current_depth > depth:
+            while len(current_batch) < batch_size and to_visit:
+                url, current_depth = to_visit.pop(0)
+                if url not in visited and current_depth <= depth:
+                    visited.add(url)
+                    current_batch.append((url, current_depth))
+
+            if not current_batch:
                 continue
 
-            visited.add(url)
-            site_urls.append({"url": url, "depth": current_depth})
+            async def process_one(
+                url: str, current_depth: int
+            ) -> tuple[dict, list[tuple[str, int]]]:
+                # Optimistically add to results (will filter failures later if needed,
+                # but sitemap usually records the attempt or success)
+                # Actually, sitemap only records success?
+                # Original code: appended to site_urls BEFORE crawl.
+                # So even if crawl fails, it's in site_urls?
+                # "site_urls.append({"url": url, "depth": current_depth})" happen BEFORE async with sem.
+                # So YES, it records URL even if crawl fails.
 
-            async with sem:
-                try:
-                    result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
+                result_entry = {"url": url, "depth": current_depth}
+                new_links = []
 
-                    if result.success and current_depth < depth:
-                        for link in result.links.get("internal", [])[:20]:
-                            # Extract URL from dict if necessary
-                            link_url = (
-                                link.get("href", "") if isinstance(link, dict) else link
-                            )
-                            if link_url and link_url not in visited:
-                                to_visit.append((link_url, current_depth + 1))
+                async with sem:
+                    try:
+                        result = await crawler.arun(
+                            url,  # ty: ignore[invalid-argument-type]
+                            config=CrawlerRunConfig(verbose=False),
+                        )  # ty: ignore[missing-argument]
 
-                except Exception as e:
-                    logger.debug(f"Error mapping {url}: {e}")
+                        if result.success and current_depth < depth:
+                            for link in result.links.get("internal", [])[:20]:
+                                link_url = (
+                                    link.get("href", "")
+                                    if isinstance(link, dict)
+                                    else link
+                                )
+                                if link_url and link_url not in visited:
+                                    new_links.append((link_url, current_depth + 1))
+                    except Exception as e:
+                        logger.debug(f"Error mapping {url}: {e}")
+
+                return result_entry, new_links
+
+            results = await asyncio.gather(
+                *[process_one(u, d) for u, d in current_batch]
+            )
+
+            for res_entry, res_links in results:
+                site_urls.append(res_entry)
+                if len(site_urls) >= max_pages:
+                    break
+                to_visit.extend(res_links)
 
         all_urls.extend(site_urls)
 
