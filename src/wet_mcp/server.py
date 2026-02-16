@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 import sys
 from contextlib import asynccontextmanager
 from importlib.resources import files
@@ -70,6 +71,13 @@ async def _lifespan(_server: FastMCP):
     keys = settings.setup_api_keys()
     if keys:
         logger.info(f"API keys configured: {', '.join(keys.keys())}")
+
+    # Warn about GitHub token for library docs discovery
+    if not (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")):
+        logger.warning(
+            "No GITHUB_TOKEN set. Library docs discovery will use unauthenticated "
+            "GitHub API (60 req/hr limit). Set GITHUB_TOKEN for 5000 req/hr."
+        )
 
     # Pre-import crawl4ai -- its first import runs heavy synchronous init
     # that would block the event loop if deferred to the first tool call.
@@ -432,7 +440,14 @@ async def search(
                 cached = _web_cache.get("search", cache_params)
                 if cached:
                     return cached
-            searxng_url = await ensure_searxng()
+            try:
+                searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=90)
+            except TimeoutError:
+                return (
+                    "Error: SearXNG startup timed out (90s). Try again or check logs."
+                )
+            except (SystemExit, Exception) as exc:
+                return f"Error: SearXNG startup failed: {exc}"
             result = await _with_timeout(
                 searxng_search(
                     searxng_url=searxng_url,
@@ -670,7 +685,12 @@ async def help(tool_name: str = "search") -> str:
 
 async def _do_research(query: str, max_results: int = 10) -> str:
     """Academic/scientific search using SearXNG science engines."""
-    searxng_url = await ensure_searxng()
+    try:
+        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=90)
+    except TimeoutError:
+        return "Error: SearXNG startup timed out (90s). Try again or check logs."
+    except (SystemExit, Exception) as exc:
+        return f"Error: SearXNG startup failed: {exc}"
 
     result_str = await searxng_search(
         searxng_url=searxng_url,
@@ -1021,8 +1041,7 @@ async def _do_docs_search(
             else f"{library} documentation"
         )
         logger.info(
-            f"Only {page_count} pages found for '{library}', "
-            "trying SearXNG fallback..."
+            f"Only {page_count} pages found for '{library}', trying SearXNG fallback..."
         )
         try:
             searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=15)

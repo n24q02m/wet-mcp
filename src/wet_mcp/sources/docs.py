@@ -26,7 +26,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 21
+DISCOVERY_VERSION = 23
 
 
 def _github_headers() -> dict[str, str]:
@@ -796,6 +796,224 @@ def _normalize_language(language: str) -> str:
     return _LANGUAGE_ALIASES.get(lang, lang)
 
 
+# ---------------------------------------------------------------------------
+# Well-known docs — bypass registry discovery for tools, platforms, and
+# libraries with generic names that cause wrong discovery.
+# ---------------------------------------------------------------------------
+_WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
+    # C++ — generic names shadowed by Python packages
+    "boost": {
+        "homepage": "https://www.boost.org/doc/libs/",
+        "repository": "https://github.com/boostorg/boost",
+        "description": "Boost C++ Libraries — portable, peer-reviewed",
+    },
+    "cmake": {
+        "homepage": "https://cmake.org/cmake/help/latest/",
+        "repository": "https://github.com/Kitware/CMake",
+        "description": "CMake cross-platform build system",
+    },
+    # Multi-lang — ambiguous names on npm/PyPI
+    "protobuf": {
+        "homepage": "https://protobuf.dev/",
+        "repository": "https://github.com/protocolbuffers/protobuf",
+        "description": "Protocol Buffers — Google's data interchange format",
+    },
+    # Java / Spring sub-frameworks (monorepo, not separate packages)
+    "spring-webflux": {
+        "homepage": "https://docs.spring.io/spring-framework/reference/web/webflux.html",
+        "repository": "https://github.com/spring-projects/spring-framework",
+        "description": "Spring WebFlux — reactive web framework for Java",
+    },
+    "kafka-streams": {
+        "homepage": "https://kafka.apache.org/documentation/streams/",
+        "repository": "https://github.com/apache/kafka",
+        "description": "Apache Kafka Streams — stream processing library",
+    },
+    "r2dbc": {
+        "homepage": "https://r2dbc.io/",
+        "repository": "https://github.com/r2dbc/r2dbc-spi",
+        "description": "R2DBC — Reactive Relational Database Connectivity",
+    },
+    "reactor-test": {
+        "homepage": "https://projectreactor.io/docs/core/release/reference/#testing",
+        "repository": "https://github.com/reactor/reactor-core",
+        "description": "Project Reactor test utilities — StepVerifier",
+    },
+    "ehcache": {
+        "homepage": "https://www.ehcache.org/documentation/",
+        "repository": "https://github.com/ehcache/ehcache3",
+        "description": "Ehcache — Java caching library",
+    },
+    # Android Jetpack (monorepo, not on standard registries)
+    "navigation-compose": {
+        "homepage": "https://developer.android.com/develop/ui/compose/navigation",
+        "repository": "https://github.com/androidx/androidx",
+        "description": "Jetpack Navigation for Compose",
+    },
+    "work-manager": {
+        "homepage": "https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started",
+        "repository": "https://github.com/androidx/androidx",
+        "description": "Android WorkManager — background task scheduling",
+    },
+    "datastore": {
+        "homepage": "https://developer.android.com/topic/libraries/architecture/datastore",
+        "repository": "https://github.com/androidx/androidx",
+        "description": "Android Jetpack DataStore — data storage solution",
+    },
+    # CI/CD tools (not libraries)
+    "gitlab-ci": {
+        "homepage": "https://docs.gitlab.com/ci/yaml/",
+        "repository": "https://github.com/gitlabhq/gitlabhq",
+        "description": "GitLab CI/CD pipeline configuration",
+    },
+    # Service mesh / API gateway
+    "linkerd": {
+        "homepage": "https://linkerd.io/2/reference/",
+        "repository": "https://github.com/linkerd/linkerd2",
+        "description": "Linkerd — ultra-light service mesh for Kubernetes",
+    },
+    "apisix": {
+        "homepage": "https://apisix.apache.org/docs/apisix/getting-started/",
+        "repository": "https://github.com/apache/apisix",
+        "description": "Apache APISIX — cloud-native API gateway",
+    },
+    "krakend": {
+        "homepage": "https://www.krakend.io/docs/overview/",
+        "repository": "https://github.com/krakend/krakend-ce",
+        "description": "KrakenD — high-performance API gateway",
+    },
+    "api-platform": {
+        "homepage": "https://api-platform.com/docs/",
+        "repository": "https://github.com/api-platform/api-platform",
+        "description": "API Platform — PHP REST and GraphQL framework",
+    },
+    # Game engines (not on package registries)
+    "defold": {
+        "homepage": "https://defold.com/manuals/introduction/",
+        "repository": "https://github.com/defold/defold",
+        "description": "Defold — cross-platform game engine",
+    },
+    # Database tools
+    "sqitch": {
+        "homepage": "https://sqitch.org/docs/",
+        "repository": "https://github.com/sqitchers/sqitch",
+        "description": "Sqitch — database change management",
+    },
+    # Dart (pub.dev not supported as registry)
+    "json_serializable": {
+        "homepage": "https://pub.dev/packages/json_serializable",
+        "repository": "https://github.com/google/json_serializable.dart",
+        "description": "Dart JSON serialization code generation",
+    },
+    # PHP (Packagist not supported as registry)
+    "league/csv": {
+        "homepage": "https://csv.thephpleague.com/",
+        "repository": "https://github.com/thephpleague/csv",
+        "description": "League CSV — PHP CSV data manipulation",
+    },
+    # Go tools (binaries, not importable packages)
+    "staticcheck": {
+        "homepage": "https://staticcheck.dev/docs/",
+        "repository": "https://github.com/dominikh/go-tools",
+        "description": "Staticcheck — Go static analysis tool",
+    },
+    "mockgen": {
+        "homepage": "https://pkg.go.dev/go.uber.org/mock/mockgen",
+        "repository": "https://github.com/uber-go/mock",
+        "description": "MockGen — Go mock code generator",
+    },
+    "govulncheck": {
+        "homepage": "https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck",
+        "repository": "https://github.com/golang/vuln",
+        "description": "govulncheck — Go vulnerability scanner",
+    },
+    # Kubernetes CI/CD tools
+    "tekton": {
+        "homepage": "https://tekton.dev/docs/",
+        "repository": "https://github.com/tektoncd/pipeline",
+        "description": "Tekton — Kubernetes-native CI/CD pipelines",
+    },
+    # Python video editing
+    "moviepy": {
+        "homepage": "https://zulko.github.io/moviepy/",
+        "repository": "https://github.com/Zulko/moviepy",
+        "description": "MoviePy — video editing with Python",
+    },
+    # Python Excel
+    "openpyxl": {
+        "homepage": "https://openpyxl.readthedocs.io/en/stable/",
+        "repository": "https://github.com/theorchard/openpyxl",
+        "description": "openpyxl — read/write Excel files in Python",
+    },
+    # Haskell config language
+    "dhall": {
+        "homepage": "https://dhall-lang.org/",
+        "repository": "https://github.com/dhall-lang/dhall-haskell",
+        "description": "Dhall — programmable configuration language",
+    },
+    # Design/3D tools
+    "spline": {
+        "homepage": "https://docs.spline.design/",
+        "repository": "",
+        "description": "Spline — 3D design tool for the web",
+    },
+    # npm scoped packages (hard to discover)
+    "@enhance/ssr": {
+        "homepage": "https://enhance.dev/docs/",
+        "repository": "https://github.com/enhance-dev/enhance",
+        "description": "Enhance — HTML-first web framework",
+    },
+    # npm packages with wrong discovery
+    "superjson": {
+        "homepage": "https://github.com/flightcontrolhq/superjson",
+        "repository": "https://github.com/flightcontrolhq/superjson",
+        "description": "SuperJSON — extended JSON serialization for JS/TS",
+    },
+    # Rust small async
+    "smol": {
+        "homepage": "https://docs.rs/smol",
+        "repository": "https://github.com/smol-rs/smol",
+        "description": "smol — small and fast async runtime for Rust",
+    },
+    # Azure SDK
+    "azure-identity": {
+        "homepage": "https://learn.microsoft.com/en-us/python/api/azure-identity/",
+        "repository": "https://github.com/Azure/azure-sdk-for-python",
+        "description": "Azure Identity — authentication library for Python",
+    },
+    # Phaser game framework (bot-protected)
+    "phaser": {
+        "homepage": "https://github.com/phaserjs/phaser",
+        "repository": "https://github.com/phaserjs/phaser",
+        "description": "Phaser — HTML5 game framework",
+    },
+    # Fyne Go UI
+    "fyne": {
+        "homepage": "https://docs.fyne.io/",
+        "repository": "https://github.com/fyne-io/fyne",
+        "description": "Fyne — cross-platform GUI toolkit for Go",
+    },
+    # Konva JS Canvas
+    "konva": {
+        "homepage": "https://konvajs.org/api/",
+        "repository": "https://github.com/konvajs/konva",
+        "description": "Konva — HTML5 2D Canvas library for JavaScript",
+    },
+    # Flux GitOps (not ML)
+    "flux": {
+        "homepage": "https://fluxcd.io/flux/",
+        "repository": "https://github.com/fluxcd/flux2",
+        "description": "Flux — GitOps toolkit for Kubernetes",
+    },
+    # Immutable data structures for Rust
+    "im": {
+        "homepage": "https://docs.rs/im",
+        "repository": "https://github.com/bodil/im-rs",
+        "description": "im — immutable data structures for Rust",
+    },
+}
+
+
 async def discover_library(name: str, language: str | None = None) -> dict | None:
     """Discover library metadata from package registries.
 
@@ -817,6 +1035,16 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
     This prevents e.g. npm's obscure "fastapi" package from shadowing
     Python's FastAPI, or npm "torch" from shadowing PyTorch.
     """
+    # -------------------------------------------------------------------
+    # Priority 0: Well-known docs — handles tools/platforms not on standard
+    # registries, sub-frameworks, and libraries with generic names that
+    # cause wrong discovery (e.g. "boost" → xgboost, "protobuf" → npm pkg).
+    # -------------------------------------------------------------------
+    well_known = _WELL_KNOWN_DOCS.get(name.lower())
+    if well_known:
+        logger.info(f"Using well-known docs for {name}: {well_known['homepage']}")
+        return {**well_known, "name": name, "registry": "well_known"}
+
     # Build registry tasks based on language filter
     if language:
         lang = _normalize_language(language)
