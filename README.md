@@ -39,7 +39,9 @@
       "args": ["--python", "3.13", "wet-mcp@latest"],
       "env": {
         // Optional: API keys for embedding and media analysis
-        "API_KEYS": "GOOGLE_API_KEY:AIza..."
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",
+        // Optional: GitHub token for higher rate limits on library docs discovery
+        "GITHUB_TOKEN": "ghp_..."
       }
     }
   }
@@ -68,7 +70,8 @@
         "n24q02m/wet-mcp:latest"
       ],
       "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza..."
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",
+        "GITHUB_TOKEN": "ghp_..."
       }
     }
   }
@@ -214,6 +217,7 @@ wet-mcp
 | `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory (optional) |
 | `TOOL_TIMEOUT` | `120` | Tool execution timeout in seconds, 0=no timeout (optional) |
 | `WET_CACHE` | `true` | Enable/disable web cache (optional) |
+| `GITHUB_TOKEN` | - | GitHub personal access token for library discovery (optional, increases rate limit from 60 to 5000 req/hr) |
 | `SYNC_ENABLED` | `false` | Enable rclone sync |
 | `SYNC_REMOTE` | - | rclone remote name (required when sync enabled) |
 | `SYNC_FOLDER` | `wet-mcp` | Remote folder name (optional) |

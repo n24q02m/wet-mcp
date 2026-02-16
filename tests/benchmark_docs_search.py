@@ -1,4 +1,4 @@
-"""Benchmark test suite for docs search quality (800 libraries).
+"""Benchmark test suite for docs search quality (1200 libraries).
 
 Run manually or via CI to validate docs search quality after changes.
 Each test case specifies a library, query, and expected quality signals.
@@ -5408,3 +5408,11 @@ def get_case(case_id: str) -> dict:
         if c["id"] == case_id:
             return c
     raise ValueError(f"Unknown benchmark case: {case_id}")
+
+
+# ---------------------------------------------------------------------------
+# Merge 400 new cases (Categories CC-DP) from benchmark_cases_cc_dp.py
+# ---------------------------------------------------------------------------
+from benchmark_cases_cc_dp import NEW_BENCHMARK_CASES  # noqa: E402
+
+BENCHMARK_CASES.extend(NEW_BENCHMARK_CASES)
