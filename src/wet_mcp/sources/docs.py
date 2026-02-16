@@ -26,7 +26,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 19
+DISCOVERY_VERSION = 20
 
 
 def _github_headers() -> dict[str, str]:
@@ -1866,6 +1866,46 @@ def _is_i18n_url(path: str, root_path: str) -> bool:
     # If the root path also has this segment, it's not a translation branch
     # (e.g. the site IS the German version)
     return f"/{lang_segment}/" not in root_path.lower()
+
+
+async def _fetch_github_readme(repo_url: str) -> list[dict] | None:
+    """Fetch just the README.md from a GitHub repository.
+
+    Last-resort fallback when all other tiers fail.  Returns chunked
+    README content so at least *some* documentation is available.
+    """
+    match = _GH_REPO_RE.search(repo_url)
+    if not match:
+        return None
+
+    owner, repo = match.group(1), match.group(2)
+
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        # Try common README filenames on HEAD (avoids an API call to
+        # resolve default branch).
+        for fname in (
+            "README.md",
+            "README.rst",
+            "readme.md",
+            "README.markdown",
+            "Readme.md",
+        ):
+            raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{fname}"
+            try:
+                resp = await client.get(raw_url)
+                if resp.status_code != 200 or len(resp.text) < 50:
+                    continue
+                content = resp.text
+                if fname.lower().endswith(".rst"):
+                    content = _rst_to_markdown(content)
+
+                gh_page_url = f"https://github.com/{owner}/{repo}"
+                chunks = chunk_markdown(content=content, url=gh_page_url)
+                if chunks:
+                    return chunks
+            except Exception:
+                continue
+    return None
 
 
 async def _try_github_raw_docs(

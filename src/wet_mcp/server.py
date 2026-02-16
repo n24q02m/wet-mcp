@@ -817,6 +817,21 @@ async def _fetch_and_chunk_docs(
         )
         return gh_chunks, gh_page_count
 
+    # Tier 3: Last-resort README fallback.
+    # When all tiers fail AND we have a GitHub repo, fetch just the
+    # README.md.  This handles repos without a docs/ directory whose
+    # docs site is also uncrawlable (Cloudflare, JS-rendered, etc.).
+    if not chunks:
+        from wet_mcp.sources.docs import _fetch_github_readme
+
+        readme_chunks = await _fetch_github_readme(repo_url or docs_url)
+        if readme_chunks:
+            logger.info(
+                f"All tiers failed, using {len(readme_chunks)} chunks "
+                "from GitHub README (last resort)"
+            )
+            return readme_chunks, 1
+
     logger.info(f"Indexed {len(chunks)} chunks from {len(pages)} pages")
     return chunks, len(pages)
 
