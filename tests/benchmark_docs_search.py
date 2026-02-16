@@ -1,4 +1,4 @@
-"""Benchmark test suite for docs search quality (300 libraries).
+"""Benchmark test suite for docs search quality (500 libraries).
 
 Run manually or via CI to validate docs search quality after changes.
 Each test case specifies a library, query, and expected quality signals.
@@ -1927,6 +1927,1308 @@ BENCHMARK_CASES = [
         "query": "App MainWindow Box Button TextInput handler",
         "language": "python",
         "tests_aspect": "PyPI, toga.readthedocs.io (Python native UI, BeeWare)",
+    },
+    # =====================================================================
+    # Category AE: Python Web Extensions (10) — Flask/Django plugins, ASGI tools
+    # =====================================================================
+    {
+        "id": "flask-cors",
+        "library": "flask-cors",
+        "query": "CORS cross_origin origins headers methods",
+        "tests_aspect": "PyPI, flask-cors (Flask extension, hyphenated)",
+    },
+    {
+        "id": "flask-sqlalchemy",
+        "library": "flask-sqlalchemy",
+        "query": "db Model init_app session query relationship",
+        "tests_aspect": "PyPI, flask-sqlalchemy.readthedocs.io (Flask ORM integration)",
+    },
+    {
+        "id": "django-ninja",
+        "library": "django-ninja",
+        "query": "api router Schema path query body",
+        "tests_aspect": "PyPI, django-ninja.dev (Django REST alternative)",
+    },
+    {
+        "id": "django-filter",
+        "library": "django-filter",
+        "query": "FilterSet CharFilter NumberFilter filterset_fields",
+        "tests_aspect": "PyPI, django-filter (queryset filtering, hyphenated)",
+    },
+    {
+        "id": "gunicorn",
+        "library": "gunicorn",
+        "query": "workers bind timeout config worker_class",
+        "tests_aspect": "PyPI, gunicorn.org (WSGI HTTP server)",
+    },
+    {
+        "id": "whitenoise",
+        "library": "whitenoise",
+        "query": "static files middleware compression immutable",
+        "tests_aspect": "PyPI, whitenoise (static file serving, unique name)",
+    },
+    {
+        "id": "flask-login",
+        "library": "flask-login",
+        "query": "login_user current_user LoginManager user_loader",
+        "tests_aspect": "PyPI, flask-login (auth extension, hyphenated)",
+    },
+    {
+        "id": "django-debug-toolbar",
+        "library": "django-debug-toolbar",
+        "query": "panels configuration middleware SQL queries",
+        "tests_aspect": "PyPI, django-debug-toolbar (debug tool, long hyphenated name)",
+    },
+    {
+        "id": "flask-restx",
+        "library": "flask-restx",
+        "query": "Namespace Resource fields marshal api.model",
+        "tests_aspect": "PyPI, flask-restx (REST API builder, hyphenated)",
+    },
+    {
+        "id": "django-extensions",
+        "library": "django-extensions",
+        "query": "shell_plus TimeStampedModel runserver_plus graph_models",
+        "tests_aspect": "PyPI, django-extensions (utilities collection, hyphenated)",
+    },
+    # =====================================================================
+    # Category AF: Python Scientific & Numerical (10) — more science libs
+    # =====================================================================
+    {
+        "id": "statsmodels",
+        "library": "statsmodels",
+        "query": "OLS regression ARIMA time series summary",
+        "tests_aspect": "PyPI, statsmodels.org (statistical modeling)",
+    },
+    {
+        "id": "xarray",
+        "library": "xarray",
+        "query": "DataArray Dataset sel isel open_dataset",
+        "tests_aspect": "PyPI, xarray.dev (labeled multi-dim arrays)",
+    },
+    {
+        "id": "networkx",
+        "library": "networkx",
+        "query": "Graph add_edge shortest_path neighbors draw",
+        "tests_aspect": "PyPI, networkx.org (graph algorithms)",
+    },
+    {
+        "id": "astropy",
+        "library": "astropy",
+        "query": "units coordinates FITS Table SkyCoord",
+        "tests_aspect": "PyPI, astropy.org (astronomy library, large docs)",
+    },
+    {
+        "id": "biopython",
+        "library": "biopython",
+        "query": "SeqIO Seq BLAST Entrez PDB alignment",
+        "tests_aspect": "PyPI, biopython.org (bioinformatics toolkit)",
+    },
+    {
+        "id": "shapely",
+        "library": "shapely",
+        "query": "Point Polygon LineString buffer intersection union",
+        "tests_aspect": "PyPI, shapely.readthedocs.io (geometric operations)",
+    },
+    {
+        "id": "numba",
+        "library": "numba",
+        "query": "jit njit vectorize cuda prange parallel",
+        "tests_aspect": "PyPI, numba.readthedocs.io (JIT compiler)",
+    },
+    {
+        "id": "h5py",
+        "library": "h5py",
+        "query": "File create_dataset group attrs dtype",
+        "tests_aspect": "PyPI, h5py.org (HDF5 interface, short name)",
+    },
+    {
+        "id": "pyarrow",
+        "library": "pyarrow",
+        "query": "Table RecordBatch parquet read_table schema",
+        "tests_aspect": "PyPI, arrow.apache.org (Apache Arrow bindings)",
+    },
+    {
+        "id": "scikit-image",
+        "library": "scikit-image",
+        "query": "filters threshold edge detection segmentation",
+        "tests_aspect": "PyPI, scikit-image.org (image processing, hyphenated)",
+    },
+    # =====================================================================
+    # Category AG: JavaScript Animation & Visuals (10) — animation, canvas, WebGL
+    # =====================================================================
+    {
+        "id": "gsap",
+        "library": "gsap",
+        "query": "timeline tween ScrollTrigger fromTo stagger",
+        "tests_aspect": "npm, gsap.com (animation platform, unique name)",
+    },
+    {
+        "id": "animejs",
+        "library": "animejs",
+        "query": "animate targets duration easing keyframes",
+        "tests_aspect": "npm, animejs.com (lightweight animation, unique name)",
+    },
+    {
+        "id": "react-spring",
+        "library": "@react-spring/web",
+        "query": "useSpring animated useTransition config",
+        "tests_aspect": "scoped npm, react-spring.dev (React animation)",
+    },
+    {
+        "id": "lottie-web",
+        "library": "lottie-web",
+        "query": "loadAnimation play stop setSpeed goToAndStop",
+        "tests_aspect": "npm, lottie-web (After Effects animations, hyphenated)",
+    },
+    {
+        "id": "matter-js",
+        "library": "matter-js",
+        "query": "Engine World Bodies Constraint Composite",
+        "tests_aspect": "npm, brm.io/matter-js (2D physics engine, hyphenated)",
+    },
+    {
+        "id": "cytoscape",
+        "library": "cytoscape",
+        "query": "elements nodes edges layout style selector",
+        "tests_aspect": "npm, js.cytoscape.org (graph visualization)",
+    },
+    {
+        "id": "paperjs",
+        "library": "paper",
+        "query": "Path Point Shape Tool Layer PaperScope",
+        "tests_aspect": "npm, paperjs.org (vector graphics, name != pkg)",
+    },
+    {
+        "id": "theatre",
+        "library": "@theatre/core",
+        "query": "project sheet object sequence animation",
+        "tests_aspect": "scoped npm, theatrejs.com (motion design tool)",
+    },
+    {
+        "id": "rive",
+        "library": "@rive-app/canvas",
+        "query": "Rive src stateMachines artboard layout",
+        "tests_aspect": "scoped npm, rive.app (interactive animations)",
+    },
+    {
+        "id": "spline",
+        "library": "@splinetool/runtime",
+        "query": "Application load canvas events mouse",
+        "language": "javascript",
+        "tests_aspect": "scoped npm, spline.design (3D web experiences).",
+    },
+    # =====================================================================
+    # Category AH: CSS & Styling Tools (10) — PostCSS, CSS-in-JS, design tokens
+    # =====================================================================
+    {
+        "id": "postcss",
+        "library": "postcss",
+        "query": "plugin process transform AtRule Declaration",
+        "tests_aspect": "npm, postcss.org (CSS transformer, unique name)",
+    },
+    {
+        "id": "autoprefixer",
+        "library": "autoprefixer",
+        "query": "browsers grid flexbox prefixes config",
+        "tests_aspect": "npm, autoprefixer (vendor prefix, unique name)",
+    },
+    {
+        "id": "sass",
+        "library": "sass",
+        "query": "compile variables mixins nesting modules @use",
+        "tests_aspect": "npm, sass-lang.com (CSS preprocessor, generic name)",
+    },
+    {
+        "id": "less",
+        "library": "less",
+        "query": "variables mixins functions import nesting",
+        "tests_aspect": "npm, lesscss.org (CSS preprocessor, generic name)",
+    },
+    {
+        "id": "styled-components",
+        "library": "styled-components",
+        "query": "styled css ThemeProvider createGlobalStyle attrs",
+        "tests_aspect": "npm, styled-components.com (CSS-in-JS, hyphenated)",
+    },
+    {
+        "id": "emotion",
+        "library": "@emotion/react",
+        "query": "css styled ThemeProvider keyframes Global",
+        "tests_aspect": "scoped npm, emotion.sh (CSS-in-JS framework)",
+    },
+    {
+        "id": "vanilla-extract",
+        "library": "@vanilla-extract/css",
+        "query": "style globalStyle createTheme sprinkles recipe",
+        "tests_aspect": "scoped npm, vanilla-extract.style (zero-runtime CSS-in-TS)",
+    },
+    {
+        "id": "stylelint",
+        "library": "stylelint",
+        "query": "rules config plugins extends fix customSyntax",
+        "tests_aspect": "npm, stylelint.io (CSS linter, unique name)",
+    },
+    {
+        "id": "cssnano",
+        "library": "cssnano",
+        "query": "preset plugins minify optimise advanced",
+        "tests_aspect": "npm, cssnano.github.io (CSS minifier, unique name)",
+    },
+    {
+        "id": "lightningcss",
+        "library": "lightningcss",
+        "query": "transform bundle minify targets features nesting",
+        "tests_aspect": "npm, lightningcss.dev (fast CSS tool, Rust-based)",
+    },
+    # =====================================================================
+    # Category AI: Rust Systems Programming (10) — OS, filesystem, crypto
+    # =====================================================================
+    {
+        "id": "sled",
+        "library": "sled",
+        "query": "Db Tree insert get remove flush open",
+        "tests_aspect": "crates.io, sled (embedded database, unique name)",
+    },
+    {
+        "id": "ring",
+        "library": "ring",
+        "query": "digest signature agreement aead pbkdf2",
+        "language": "rust",
+        "tests_aspect": "crates.io, ring (crypto primitives, generic name)",
+    },
+    {
+        "id": "rustls",
+        "library": "rustls",
+        "query": "ServerConfig ClientConfig Certificate TLS stream",
+        "tests_aspect": "crates.io, rustls (TLS library, unique name)",
+    },
+    {
+        "id": "libc",
+        "library": "libc",
+        "query": "c_int c_char size_t pid_t stat ioctl",
+        "language": "rust",
+        "tests_aspect": "crates.io, libc (FFI bindings, generic name)",
+    },
+    {
+        "id": "nix-rs",
+        "library": "nix",
+        "query": "unistd sys signal mount socket poll",
+        "language": "rust",
+        "tests_aspect": "crates.io, nix (Unix API bindings, name collision with Nix pkg mgr)",
+    },
+    {
+        "id": "memmap2",
+        "library": "memmap2",
+        "query": "MmapOptions Mmap MmapMut map map_mut",
+        "tests_aspect": "crates.io, memmap2 (memory-mapped files, unique name)",
+    },
+    {
+        "id": "notify-rs",
+        "library": "notify",
+        "query": "Watcher RecommendedWatcher Event EventKind RecursiveMode",
+        "language": "rust",
+        "tests_aspect": "crates.io, notify (filesystem watcher, generic name)",
+    },
+    {
+        "id": "walkdir",
+        "library": "walkdir",
+        "query": "WalkDir DirEntry into_iter min_depth max_depth",
+        "language": "rust",
+        "tests_aspect": "crates.io, walkdir (directory traversal, unique name)",
+    },
+    {
+        "id": "tempfile",
+        "library": "tempfile",
+        "query": "NamedTempFile TempDir tempdir Builder persist",
+        "language": "rust",
+        "tests_aspect": "crates.io, tempfile (temp files, generic name)",
+    },
+    {
+        "id": "rand-rs",
+        "library": "rand",
+        "query": "Rng thread_rng gen_range random distributions",
+        "language": "rust",
+        "tests_aspect": "crates.io, rand (random numbers, ultra-generic name)",
+    },
+    # =====================================================================
+    # Category AJ: Go Infrastructure (10) — monitoring, tracing, caching
+    # =====================================================================
+    {
+        "id": "logrus",
+        "library": "logrus",
+        "query": "WithFields Info Warn Error Entry Formatter",
+        "language": "go",
+        "tests_aspect": "Go, sirupsen/logrus (structured logging, generic name)",
+    },
+    {
+        "id": "zerolog",
+        "library": "zerolog",
+        "query": "Logger Str Int Msg Err With Timestamp",
+        "tests_aspect": "Go, rs/zerolog (zero-alloc logging, unique name)",
+    },
+    {
+        "id": "caddy",
+        "library": "caddy",
+        "query": "Caddyfile reverse_proxy tls auto_https handle",
+        "tests_aspect": "Go, caddyserver.com (web server, unique name)",
+    },
+    {
+        "id": "colly",
+        "library": "colly",
+        "query": "Collector OnHTML OnRequest Visit Scrape",
+        "tests_aspect": "Go, go-colly.org (web scraper, unique name)",
+    },
+    {
+        "id": "goquery",
+        "library": "goquery",
+        "query": "Document Selection Find Each Attr Text Html",
+        "tests_aspect": "Go, goquery (jQuery-like HTML parser, unique name)",
+    },
+    {
+        "id": "casbin",
+        "library": "casbin",
+        "query": "Enforcer Model Policy AddPolicy Enforce RBAC",
+        "tests_aspect": "Go, casbin.org (authorization library, unique name)",
+    },
+    {
+        "id": "watermill",
+        "library": "watermill",
+        "query": "Publisher Subscriber Router Handler Message",
+        "language": "go",
+        "tests_aspect": "Go, watermill.io (event-driven, generic name)",
+    },
+    {
+        "id": "sarama",
+        "library": "sarama",
+        "query": "Producer Consumer Client Partition Topic Offset",
+        "language": "go",
+        "tests_aspect": "Go, IBM/sarama (Kafka client, unique name)",
+    },
+    {
+        "id": "go-kit",
+        "library": "go-kit/kit",
+        "query": "endpoint transport middleware service logging",
+        "language": "go",
+        "tests_aspect": "Go, gokit.io (microservices toolkit, hyphenated)",
+    },
+    {
+        "id": "afero",
+        "library": "afero",
+        "query": "Fs MemMapFs OsFs NewOsFs Open ReadFile",
+        "tests_aspect": "Go, spf13/afero (filesystem abstraction, unique name)",
+    },
+    # =====================================================================
+    # Category AK: Node.js Streams & Files (10) — file handling, streams
+    # =====================================================================
+    {
+        "id": "fs-extra",
+        "library": "fs-extra",
+        "query": "copy move remove ensureDir readJson outputFile",
+        "tests_aspect": "npm, fs-extra (filesystem utilities, hyphenated)",
+    },
+    {
+        "id": "glob",
+        "library": "glob",
+        "query": "pattern match sync stream ignore cwd",
+        "tests_aspect": "npm, glob (file matching, ultra-generic name)",
+    },
+    {
+        "id": "chokidar",
+        "library": "chokidar",
+        "query": "watch on add change unlink ready persistent",
+        "language": "javascript",
+        "tests_aspect": "npm, chokidar (file watcher, unique name)",
+    },
+    {
+        "id": "archiver",
+        "library": "archiver",
+        "query": "create pipe append directory finalize zip tar",
+        "language": "javascript",
+        "tests_aspect": "npm, archiver (archive streaming, unique name)",
+    },
+    {
+        "id": "multer",
+        "library": "multer",
+        "query": "upload single array fields storage diskStorage",
+        "language": "javascript",
+        "tests_aspect": "npm, multer (file upload middleware, unique name)",
+    },
+    {
+        "id": "formidable",
+        "library": "formidable",
+        "query": "parse fields files IncomingForm options maxFileSize",
+        "language": "javascript",
+        "tests_aspect": "npm, formidable (form data parsing, unique name)",
+    },
+    {
+        "id": "tmp",
+        "library": "tmp",
+        "query": "tmpName file dir setGracefulCleanup template",
+        "language": "javascript",
+        "tests_aspect": "npm, tmp (temp files, ultra-short generic name)",
+    },
+    {
+        "id": "rimraf",
+        "library": "rimraf",
+        "query": "rimraf sync glob options force recursive",
+        "language": "javascript",
+        "tests_aspect": "npm, rimraf (rm -rf for Node.js, unique name)",
+    },
+    {
+        "id": "mkdirp",
+        "library": "mkdirp",
+        "query": "mkdirp sync mode manual native",
+        "language": "javascript",
+        "tests_aspect": "npm, mkdirp (mkdir -p for Node.js, unique name)",
+    },
+    {
+        "id": "fast-glob",
+        "library": "fast-glob",
+        "query": "pattern ignore cwd dot onlyFiles stats",
+        "language": "javascript",
+        "tests_aspect": "npm, fast-glob (high-perf glob, hyphenated)",
+    },
+    # =====================================================================
+    # Category AL: Python Formatting & Linting (10) — code quality tools
+    # =====================================================================
+    {
+        "id": "black",
+        "library": "black",
+        "query": "format line_length target_version config check diff",
+        "language": "python",
+        "tests_aspect": "PyPI, black.readthedocs.io (code formatter, generic name)",
+    },
+    {
+        "id": "isort",
+        "library": "isort",
+        "query": "profile sections known_third_party multi_line skip",
+        "language": "python",
+        "tests_aspect": "PyPI, pycqa.github.io/isort (import sorter, unique name)",
+    },
+    {
+        "id": "mypy",
+        "library": "mypy",
+        "query": "type checking config strict ignore_errors reveal_type",
+        "language": "python",
+        "tests_aspect": "PyPI, mypy.readthedocs.io (static type checker)",
+    },
+    {
+        "id": "pyright",
+        "library": "pyright",
+        "query": "type checking reportMissingImports config strict diagnostic",
+        "language": "python",
+        "tests_aspect": "PyPI/npm, pyright (MS type checker, cross-ecosystem)",
+    },
+    {
+        "id": "pylint",
+        "library": "pylint",
+        "query": "rcfile disable enable message convention refactor",
+        "language": "python",
+        "tests_aspect": "PyPI, pylint.readthedocs.io (code analyzer)",
+    },
+    {
+        "id": "flake8",
+        "library": "flake8",
+        "query": "select ignore max-line-length extend plugins",
+        "language": "python",
+        "tests_aspect": "PyPI, flake8.pycqa.org (style checker, unique name)",
+    },
+    {
+        "id": "bandit",
+        "library": "bandit",
+        "query": "security scan severity confidence skip tests",
+        "language": "python",
+        "tests_aspect": "PyPI, bandit.readthedocs.io (security linter, generic name)",
+    },
+    {
+        "id": "autopep8",
+        "library": "autopep8",
+        "query": "fix_code aggressive max_line_length in_place",
+        "language": "python",
+        "tests_aspect": "PyPI, autopep8 (PEP8 formatter, unique name)",
+    },
+    {
+        "id": "pre-commit",
+        "library": "pre-commit",
+        "query": "hooks repos rev install run autoupdate",
+        "language": "python",
+        "tests_aspect": "PyPI, pre-commit.com (git hook manager, hyphenated)",
+    },
+    {
+        "id": "pycodestyle",
+        "library": "pycodestyle",
+        "query": "check max_line_length ignore select statistics",
+        "tests_aspect": "PyPI, pycodestyle (PEP8 checker, formerly pep8)",
+    },
+    # =====================================================================
+    # Category AM: Email & Notifications (10) — email, push, SMS libs
+    # =====================================================================
+    {
+        "id": "nodemailer",
+        "library": "nodemailer",
+        "query": "createTransport sendMail SMTP attachments html",
+        "tests_aspect": "npm, nodemailer.com (email sending, unique name)",
+    },
+    {
+        "id": "sendgrid",
+        "library": "@sendgrid/mail",
+        "query": "send setApiKey MailService personalizations",
+        "tests_aspect": "scoped npm, sendgrid.com (email API service)",
+    },
+    {
+        "id": "email-validator",
+        "library": "email-validator",
+        "query": "validate_email check_deliverability normalize EmailNotValidError",
+        "tests_aspect": "PyPI, email-validator (validation, hyphenated)",
+    },
+    {
+        "id": "yagmail",
+        "library": "yagmail",
+        "query": "SMTP send to subject contents attachments",
+        "tests_aspect": "PyPI, yagmail (simple Gmail sender, unique name)",
+    },
+    {
+        "id": "web-push",
+        "library": "web-push",
+        "query": "sendNotification setVapidDetails generateVAPIDKeys",
+        "tests_aspect": "npm, web-push (push notifications, hyphenated)",
+    },
+    {
+        "id": "postmark",
+        "library": "postmark",
+        "query": "ServerClient sendEmail template batch bounce",
+        "tests_aspect": "npm, postmarkapp.com (transactional email, unique name)",
+    },
+    {
+        "id": "resend",
+        "library": "resend",
+        "query": "emails send from to subject html react",
+        "tests_aspect": "npm, resend.com (developer email API, unique name)",
+    },
+    {
+        "id": "mailparser",
+        "library": "mailparser",
+        "query": "simpleParser MailParser headers attachments html text",
+        "tests_aspect": "npm, mailparser (email parser, unique name)",
+    },
+    {
+        "id": "aiosmtpd",
+        "library": "aiosmtpd",
+        "query": "Controller handler SMTP AUTH STARTTLS",
+        "tests_aspect": "PyPI, aiosmtpd.readthedocs.io (async SMTP server)",
+    },
+    {
+        "id": "notifiers",
+        "library": "notifiers",
+        "query": "notify provider slack email telegram pushover",
+        "tests_aspect": "PyPI, notifiers (multi-channel notifications, unique name)",
+    },
+    # =====================================================================
+    # Category AN: Template Engines & Rendering (10) — EJS, Handlebars, Jinja
+    # =====================================================================
+    {
+        "id": "ejs",
+        "library": "ejs",
+        "query": "render template include locals compile data",
+        "tests_aspect": "npm, ejs.co (embedded JavaScript templates, short name)",
+    },
+    {
+        "id": "handlebars",
+        "library": "handlebars",
+        "query": "compile template helper partial registerHelper",
+        "language": "javascript",
+        "tests_aspect": "npm, handlebarsjs.com (template engine, unique name)",
+    },
+    {
+        "id": "nunjucks",
+        "library": "nunjucks",
+        "query": "render Environment configure filter macro extends",
+        "tests_aspect": "npm, mozilla.github.io/nunjucks (Jinja2-inspired, unique name)",
+    },
+    {
+        "id": "pug",
+        "library": "pug",
+        "query": "render compile template mixin include extends",
+        "tests_aspect": "npm, pugjs.org (indent-based HTML, short name)",
+    },
+    {
+        "id": "mustache",
+        "library": "mustache",
+        "query": "render template tags partials sections lambdas",
+        "language": "javascript",
+        "tests_aspect": "npm, mustache.github.io (logic-less templates, unique name)",
+    },
+    {
+        "id": "eta",
+        "library": "eta",
+        "query": "render renderAsync configure partial layout include",
+        "tests_aspect": "npm, eta.js.org (lightweight template engine, short name)",
+    },
+    {
+        "id": "jinja2",
+        "library": "jinja2",
+        "query": "Environment render template filter extends macro",
+        "tests_aspect": "PyPI, jinja.palletsprojects.com (Python templates)",
+    },
+    {
+        "id": "mako",
+        "library": "mako",
+        "query": "Template render_unicode TemplateLookup def include",
+        "tests_aspect": "PyPI, makotemplates.org (Python templates, unique name)",
+    },
+    {
+        "id": "liquidjs",
+        "library": "liquidjs",
+        "query": "Liquid parse render tag filter plugin",
+        "tests_aspect": "npm, liquidjs.com (Shopify Liquid in JS, unique name)",
+    },
+    {
+        "id": "react-email",
+        "library": "@react-email/components",
+        "query": "Html Head Body Container Section Button",
+        "tests_aspect": "scoped npm, react.email (email components with React)",
+    },
+    # =====================================================================
+    # Category AO: Reactive & Event Systems (10) — event emitters, signals
+    # =====================================================================
+    {
+        "id": "eventemitter3",
+        "library": "eventemitter3",
+        "query": "on emit once removeListener listeners eventNames",
+        "tests_aspect": "npm, eventemitter3 (high-perf event emitter, unique name)",
+    },
+    {
+        "id": "mitt",
+        "library": "mitt",
+        "query": "on off emit all handler type",
+        "tests_aspect": "npm, mitt (tiny 200B event emitter, short name)",
+    },
+    {
+        "id": "immer",
+        "library": "immer",
+        "query": "produce draft enableMapSet original freeze",
+        "tests_aspect": "npm, immerjs.github.io (immutable state, unique name)",
+    },
+    {
+        "id": "effector",
+        "library": "effector",
+        "query": "createStore createEvent createEffect sample combine",
+        "tests_aspect": "npm, effector.dev (reactive state manager, unique name)",
+    },
+    {
+        "id": "preact-signals",
+        "library": "@preact/signals-core",
+        "query": "signal computed effect batch untracked",
+        "tests_aspect": "scoped npm, preactjs.com/signals (fine-grained reactivity)",
+    },
+    {
+        "id": "nanostores",
+        "library": "nanostores",
+        "query": "atom map computed action onMount listen",
+        "tests_aspect": "npm, nanostores (tiny state, framework-agnostic, unique name)",
+    },
+    {
+        "id": "emittery",
+        "library": "emittery",
+        "query": "on emit once onAny clearListeners events",
+        "tests_aspect": "npm, emittery (async event emitter, unique name)",
+    },
+    {
+        "id": "p-queue",
+        "library": "p-queue",
+        "query": "PQueue add concurrency priority onIdle size",
+        "tests_aspect": "npm, p-queue (promise queue, hyphenated, short name)",
+    },
+    {
+        "id": "rxdb",
+        "library": "rxdb",
+        "query": "createRxDatabase addCollections find insert subscribe",
+        "tests_aspect": "npm, rxdb.info (reactive database, unique name)",
+    },
+    {
+        "id": "tinybase",
+        "library": "tinybase",
+        "query": "createStore setCell getCell addRow Queries",
+        "tests_aspect": "npm, tinybase.org (reactive data store, unique name)",
+    },
+    # =====================================================================
+    # Category AP: Machine Learning Extras (10) — more ML libs
+    # =====================================================================
+    {
+        "id": "xgboost",
+        "library": "xgboost",
+        "query": "XGBClassifier train DMatrix feature_importance cv",
+        "tests_aspect": "PyPI, xgboost.readthedocs.io (gradient boosting)",
+    },
+    {
+        "id": "lightgbm",
+        "library": "lightgbm",
+        "query": "LGBMClassifier train Dataset feature_importance cv",
+        "tests_aspect": "PyPI, lightgbm.readthedocs.io (gradient boosting, unique name)",
+    },
+    {
+        "id": "catboost",
+        "library": "catboost",
+        "query": "CatBoostClassifier Pool fit predict feature_importance",
+        "tests_aspect": "PyPI, catboost.ai (gradient boosting, unique name)",
+    },
+    {
+        "id": "optuna",
+        "library": "optuna",
+        "query": "create_study trial suggest_float optimize pruner",
+        "tests_aspect": "PyPI, optuna.org (hyperparameter optimization, unique name)",
+    },
+    {
+        "id": "mlflow",
+        "library": "mlflow",
+        "query": "log_metric log_param start_run autolog register_model",
+        "tests_aspect": "PyPI, mlflow.org (experiment tracking, unique name)",
+    },
+    {
+        "id": "wandb",
+        "library": "wandb",
+        "query": "init log watch config sweep artifact",
+        "tests_aspect": "PyPI, wandb.ai (experiment tracking, unique name)",
+    },
+    {
+        "id": "onnxruntime",
+        "library": "onnxruntime",
+        "query": "InferenceSession run get_inputs SessionOptions providers",
+        "tests_aspect": "PyPI, onnxruntime.ai (ONNX inference, unique name)",
+    },
+    {
+        "id": "gradio",
+        "library": "gradio",
+        "query": "Interface launch Blocks Textbox Image Button",
+        "tests_aspect": "PyPI, gradio.app (ML demos, unique name)",
+    },
+    {
+        "id": "streamlit",
+        "library": "streamlit",
+        "query": "write title sidebar dataframe chart button",
+        "tests_aspect": "PyPI, streamlit.io (data apps, unique name)",
+    },
+    {
+        "id": "sentence-transformers",
+        "library": "sentence-transformers",
+        "query": "SentenceTransformer encode similarity models util",
+        "tests_aspect": "PyPI, sbert.net (embeddings, long hyphenated name)",
+    },
+    # =====================================================================
+    # Category AQ: API Clients & SDKs (10) — stripe, OpenAI, etc.
+    # =====================================================================
+    {
+        "id": "stripe",
+        "library": "stripe",
+        "query": "Checkout Session PaymentIntent Customer Subscription",
+        "tests_aspect": "npm, docs.stripe.com (payment API, short name)",
+    },
+    {
+        "id": "openai",
+        "library": "openai",
+        "query": "ChatCompletion create messages model stream",
+        "language": "python",
+        "tests_aspect": "PyPI, platform.openai.com (AI API SDK, npm collision)",
+    },
+    {
+        "id": "octokit",
+        "library": "@octokit/rest",
+        "query": "repos issues pulls actions createRelease",
+        "tests_aspect": "scoped npm, octokit.github.io (GitHub API client)",
+    },
+    {
+        "id": "twilio",
+        "library": "twilio",
+        "query": "messages create send verify voice client",
+        "tests_aspect": "npm, twilio.com (communication API, unique name)",
+    },
+    {
+        "id": "slack-sdk",
+        "library": "slack-sdk",
+        "query": "WebClient chat_postMessage events socket_mode",
+        "tests_aspect": "PyPI, slack.dev (Slack API SDK, hyphenated)",
+    },
+    {
+        "id": "anthropic",
+        "library": "anthropic",
+        "query": "messages create model max_tokens stream",
+        "tests_aspect": "PyPI, docs.anthropic.com (AI API SDK, unique name)",
+    },
+    {
+        "id": "sentry-sdk",
+        "library": "sentry-sdk",
+        "query": "init capture_exception set_user traces_sample_rate",
+        "tests_aspect": "PyPI, docs.sentry.io (error tracking, hyphenated)",
+    },
+    {
+        "id": "replicate",
+        "library": "replicate",
+        "query": "run predictions create model version stream",
+        "tests_aspect": "PyPI, replicate.com (ML API client, unique name)",
+    },
+    {
+        "id": "cohere",
+        "library": "cohere",
+        "query": "chat embed rerank classify generate",
+        "language": "python",
+        "tests_aspect": "PyPI, docs.cohere.com (AI API SDK, unique name)",
+    },
+    {
+        "id": "mistralai",
+        "library": "mistralai",
+        "query": "chat complete models agents embeddings",
+        "tests_aspect": "PyPI, docs.mistral.ai (AI API SDK, unique name)",
+    },
+    # =====================================================================
+    # Category AR: Rust Async & Concurrency (10) — async runtime, channels
+    # =====================================================================
+    {
+        "id": "crossbeam",
+        "library": "crossbeam",
+        "query": "channel select scope epoch queue deque",
+        "tests_aspect": "crates.io, crossbeam-rs (concurrency tools, unique name)",
+    },
+    {
+        "id": "parking-lot",
+        "library": "parking_lot",
+        "query": "Mutex RwLock Condvar Once ReentrantMutex",
+        "tests_aspect": "crates.io, parking_lot (sync primitives, underscore name)",
+    },
+    {
+        "id": "async-trait",
+        "library": "async-trait",
+        "query": "async_trait trait impl async fn Send",
+        "tests_aspect": "crates.io, async-trait (async in traits, hyphenated)",
+    },
+    {
+        "id": "futures-rs",
+        "library": "futures",
+        "query": "Stream Future join select pin_mut executor",
+        "language": "rust",
+        "tests_aspect": "crates.io, futures (async abstractions, ultra-generic name)",
+    },
+    {
+        "id": "mio",
+        "library": "mio",
+        "query": "Poll Token Events Interest TcpListener Registry",
+        "language": "rust",
+        "tests_aspect": "crates.io, mio (low-level async I/O, unique name)",
+    },
+    {
+        "id": "bytes-rs",
+        "library": "bytes",
+        "query": "Bytes BytesMut Buf BufMut put get slice",
+        "language": "rust",
+        "tests_aspect": "crates.io, bytes (byte buffer, ultra-generic name)",
+    },
+    {
+        "id": "dashmap",
+        "library": "dashmap",
+        "query": "DashMap DashSet insert get entry iter",
+        "tests_aspect": "crates.io, dashmap (concurrent HashMap, unique name)",
+    },
+    {
+        "id": "flume",
+        "library": "flume",
+        "query": "unbounded bounded Sender Receiver select recv",
+        "tests_aspect": "crates.io, flume (MPMC channel, unique name)",
+    },
+    {
+        "id": "smol",
+        "library": "smol",
+        "query": "block_on spawn Executor Timer Async Unblock",
+        "tests_aspect": "crates.io, smol (small async runtime, unique name)",
+    },
+    {
+        "id": "async-std",
+        "library": "async-std",
+        "query": "task spawn block_on File TcpListener stream",
+        "tests_aspect": "crates.io, async-std (async stdlib, hyphenated)",
+    },
+    # =====================================================================
+    # Category AS: Go Database & Storage (10) — Go DB drivers, caches
+    # =====================================================================
+    {
+        "id": "pgx",
+        "library": "pgx",
+        "query": "Connect Query QueryRow Exec Pool Scan Rows",
+        "language": "go",
+        "tests_aspect": "Go, jackc/pgx (PostgreSQL driver, short name)",
+    },
+    {
+        "id": "ent",
+        "library": "ent",
+        "query": "Schema Fields Edges Mixin Client Create Query",
+        "language": "go",
+        "tests_aspect": "Go, entgo.io (entity framework, ultra-short name)",
+    },
+    {
+        "id": "bbolt",
+        "library": "bbolt",
+        "query": "DB Open Bucket Put Get Cursor Tx",
+        "tests_aspect": "Go, bbolt (embedded KV store, unique name)",
+    },
+    {
+        "id": "badger-go",
+        "library": "badger",
+        "query": "DB Open Set Get Delete Txn Iterator",
+        "language": "go",
+        "tests_aspect": "Go, dgraph-io/badger (embedded KV, generic name)",
+    },
+    {
+        "id": "go-redis",
+        "library": "go-redis",
+        "query": "Client Set Get Pipeline Subscribe Cluster",
+        "tests_aspect": "Go, redis/go-redis (Redis client, prefixed name)",
+    },
+    {
+        "id": "sqlboiler",
+        "library": "sqlboiler",
+        "query": "model query relationship eager loading Bind",
+        "tests_aspect": "Go, sqlboiler (ORM from DB schema, unique name)",
+    },
+    {
+        "id": "migrate-go",
+        "library": "migrate",
+        "query": "Up Down Steps Version Force source database",
+        "language": "go",
+        "tests_aspect": "Go, golang-migrate (DB migrations, ultra-generic name)",
+    },
+    {
+        "id": "groupcache",
+        "library": "groupcache",
+        "query": "Group Get Sink ByteView Getter peer",
+        "tests_aspect": "Go, golang/groupcache (distributed cache, unique name)",
+    },
+    {
+        "id": "rqlite",
+        "library": "rqlite",
+        "query": "Execute Query node cluster Raft consensus",
+        "tests_aspect": "Go, rqlite.io (distributed SQLite, unique name)",
+    },
+    {
+        "id": "xorm",
+        "library": "xorm",
+        "query": "Engine Find Insert Update Delete Session",
+        "tests_aspect": "Go, xorm.io (ORM engine, unique name)",
+    },
+    # =====================================================================
+    # Category AT: Python Async & Concurrency (10) — async libs
+    # =====================================================================
+    {
+        "id": "anyio",
+        "library": "anyio",
+        "query": "create_task_group run sleep open_file Event",
+        "tests_aspect": "PyPI, anyio.readthedocs.io (async compatibility, unique name)",
+    },
+    {
+        "id": "trio",
+        "library": "trio",
+        "query": "open_nursery sleep run open_tcp_stream Event",
+        "tests_aspect": "PyPI, trio.readthedocs.io (structured concurrency, unique name)",
+    },
+    {
+        "id": "asyncpg",
+        "library": "asyncpg",
+        "query": "connect fetch fetchrow execute create_pool",
+        "tests_aspect": "PyPI, asyncpg (async PostgreSQL, unique name)",
+    },
+    {
+        "id": "aiofiles",
+        "library": "aiofiles",
+        "query": "open read write tempfile os wrap",
+        "tests_aspect": "PyPI, aiofiles (async file I/O, unique name)",
+    },
+    {
+        "id": "uvloop",
+        "library": "uvloop",
+        "query": "install EventLoopPolicy run loop libuv",
+        "tests_aspect": "PyPI, uvloop (fast event loop, unique name)",
+    },
+    {
+        "id": "asyncssh",
+        "library": "asyncssh",
+        "query": "connect create_server SSHClient run SFTP keys",
+        "language": "python",
+        "tests_aspect": "PyPI, asyncssh.readthedocs.io (async SSH, unique name)",
+    },
+    {
+        "id": "aiocache",
+        "library": "aiocache",
+        "query": "cached Cache RedisCache SimpleMemoryCache serializer",
+        "tests_aspect": "PyPI, aiocache (async caching, unique name)",
+    },
+    {
+        "id": "aiomysql",
+        "library": "aiomysql",
+        "query": "connect create_pool cursor execute fetchone",
+        "tests_aspect": "PyPI, aiomysql (async MySQL driver, unique name)",
+    },
+    {
+        "id": "granian",
+        "library": "granian",
+        "query": "Granian serve workers threads interface ASGI RSGI",
+        "tests_aspect": "PyPI, granian (Rust ASGI server, unique name)",
+    },
+    {
+        "id": "greenlet",
+        "library": "greenlet",
+        "query": "greenlet switch getcurrent GreenletExit parent",
+        "tests_aspect": "PyPI, greenlet (lightweight coroutines, unique name)",
+    },
+    # =====================================================================
+    # Category AU: JavaScript Forms & Validation (10) — form libs, validation
+    # =====================================================================
+    {
+        "id": "react-hook-form",
+        "library": "react-hook-form",
+        "query": "useForm register handleSubmit watch errors Controller",
+        "tests_aspect": "npm, react-hook-form.com (React form lib, hyphenated)",
+    },
+    {
+        "id": "formik",
+        "library": "formik",
+        "query": "Formik Form Field useFormik validationSchema",
+        "tests_aspect": "npm, formik.org (React form management, unique name)",
+    },
+    {
+        "id": "tanstack-form",
+        "library": "@tanstack/react-form",
+        "query": "useForm form.Field validators onChange onBlur",
+        "tests_aspect": "scoped npm, tanstack.com/form (headless form lib)",
+    },
+    {
+        "id": "final-form",
+        "library": "final-form",
+        "query": "createForm subscribe reset submit Field Form",
+        "tests_aspect": "npm, final-form.org (framework-agnostic forms, hyphenated)",
+    },
+    {
+        "id": "superstruct",
+        "library": "superstruct",
+        "query": "object string number validate assert create",
+        "tests_aspect": "npm, superstruct (struct validation, unique name)",
+    },
+    {
+        "id": "class-validator",
+        "library": "class-validator",
+        "query": "IsEmail IsString MinLength validate ValidateNested",
+        "tests_aspect": "npm, class-validator (decorator validation, hyphenated)",
+    },
+    {
+        "id": "io-ts",
+        "library": "io-ts",
+        "query": "type string number decode encode intersection",
+        "tests_aspect": "npm, io-ts (runtime type system, hyphenated)",
+    },
+    {
+        "id": "class-transformer",
+        "library": "class-transformer",
+        "query": "plainToInstance Expose Exclude Type Transform",
+        "tests_aspect": "npm, class-transformer (object transform, hyphenated)",
+    },
+    {
+        "id": "conform",
+        "library": "@conform-to/react",
+        "query": "useForm getFormProps getInputProps submission",
+        "tests_aspect": "scoped npm, conform.guide (progressive form validation)",
+    },
+    {
+        "id": "vest",
+        "library": "vest",
+        "query": "create test enforce only skip warn",
+        "tests_aspect": "npm, vestjs.dev (validation framework, unique name)",
+    },
+    # =====================================================================
+    # Category AV: Container & Cloud SDKs (10) — Docker, K8s, cloud SDKs
+    # =====================================================================
+    {
+        "id": "aws-sdk-s3",
+        "library": "@aws-sdk/client-s3",
+        "query": "S3Client PutObjectCommand GetObjectCommand Bucket",
+        "tests_aspect": "scoped npm, AWS SDK v3 (deeply scoped modular SDK)",
+    },
+    {
+        "id": "gcs-python",
+        "library": "google-cloud-storage",
+        "query": "Client Bucket Blob upload_from_string download",
+        "tests_aspect": "PyPI, cloud.google.com (GCS Python SDK, long name)",
+    },
+    {
+        "id": "azure-id-node",
+        "library": "@azure/identity",
+        "query": "DefaultAzureCredential ClientSecretCredential token",
+        "tests_aspect": "scoped npm, azure.github.io (Azure auth SDK)",
+    },
+    {
+        "id": "gcs-node",
+        "library": "@google-cloud/storage",
+        "query": "Storage Bucket File upload download createReadStream",
+        "tests_aspect": "scoped npm, cloud.google.com (GCS Node.js SDK)",
+    },
+    {
+        "id": "azure-id-python",
+        "library": "azure-identity",
+        "query": "DefaultAzureCredential ClientSecretCredential token",
+        "tests_aspect": "PyPI, azure-identity (Azure auth Python SDK, hyphenated)",
+    },
+    {
+        "id": "minio-client",
+        "library": "minio",
+        "query": "Minio put_object get_object make_bucket fput_object",
+        "language": "python",
+        "tests_aspect": "PyPI, min.io (S3-compatible client, generic name collision npm)",
+    },
+    {
+        "id": "pulumi-aws",
+        "library": "@pulumi/aws",
+        "query": "s3 ec2 lambda iam Bucket Function",
+        "tests_aspect": "scoped npm, pulumi.com/registry (AWS provider)",
+    },
+    {
+        "id": "aws-cdk",
+        "library": "aws-cdk-lib",
+        "query": "Stack App Construct s3 lambda ec2 CfnOutput",
+        "tests_aspect": "npm, docs.aws.amazon.com/cdk (AWS CDK v2, long name)",
+    },
+    {
+        "id": "google-api-python",
+        "library": "google-api-python-client",
+        "query": "build discovery service execute credentials",
+        "tests_aspect": "PyPI, google-api-python-client (Google API, very long name)",
+    },
+    {
+        "id": "cdk8s",
+        "library": "cdk8s",
+        "query": "App Chart ApiObject Helm include synth",
+        "tests_aspect": "npm, cdk8s.io (Kubernetes CDK, unique name)",
+    },
+    # =====================================================================
+    # Category AW: Markdown & Content (10) — markdown parsers, content tools
+    # =====================================================================
+    {
+        "id": "remark",
+        "library": "remark",
+        "query": "remark process use plugin remarkParse stringify",
+        "tests_aspect": "npm, remark.js.org (markdown processor, unified ecosystem)",
+    },
+    {
+        "id": "rehype",
+        "library": "rehype",
+        "query": "rehype process use plugin rehypeParse stringify",
+        "tests_aspect": "npm, rehype (HTML processor, unified ecosystem, unique name)",
+    },
+    {
+        "id": "unified",
+        "library": "unified",
+        "query": "unified use process parse stringify run plugin",
+        "tests_aspect": "npm, unifiedjs.com (content processing, unique name)",
+    },
+    {
+        "id": "markdown-it",
+        "library": "markdown-it",
+        "query": "render renderInline use plugin enable disable",
+        "tests_aspect": "npm, markdown-it (markdown parser, hyphenated)",
+    },
+    {
+        "id": "marked",
+        "library": "marked",
+        "query": "parse Renderer Tokenizer use extensions",
+        "tests_aspect": "npm, marked.js.org (markdown compiler, unique name)",
+    },
+    {
+        "id": "mdx",
+        "library": "@mdx-js/mdx",
+        "query": "compile evaluate run createProcessor MDXProvider",
+        "tests_aspect": "scoped npm, mdxjs.com (Markdown + JSX)",
+    },
+    {
+        "id": "turndown",
+        "library": "turndown",
+        "query": "TurndownService turndown addRule keep remove",
+        "tests_aspect": "npm, turndown (HTML to Markdown, unique name)",
+    },
+    {
+        "id": "gray-matter",
+        "library": "gray-matter",
+        "query": "matter data content excerpt engines stringify",
+        "tests_aspect": "npm, gray-matter (frontmatter parser, hyphenated)",
+    },
+    {
+        "id": "mistune",
+        "library": "mistune",
+        "query": "create_markdown html renderer plugins BlockParser",
+        "tests_aspect": "PyPI, mistune (fast markdown parser, unique name)",
+    },
+    {
+        "id": "python-docx",
+        "library": "python-docx",
+        "query": "Document add_paragraph add_table add_heading style",
+        "tests_aspect": "PyPI, python-docx (Word documents, hyphenated)",
+    },
+    # =====================================================================
+    # Category AX: Miscellaneous Popular (10) — remaining popular libs
+    # =====================================================================
+    {
+        "id": "tanstack-table",
+        "library": "@tanstack/react-table",
+        "query": "useReactTable getCoreRowModel columnHelper flexRender",
+        "tests_aspect": "scoped npm, tanstack.com/table (headless table)",
+    },
+    {
+        "id": "tanstack-router",
+        "library": "@tanstack/react-router",
+        "query": "createRouter createRoute Outlet Link useParams",
+        "tests_aspect": "scoped npm, tanstack.com/router (type-safe routing)",
+    },
+    {
+        "id": "i18next",
+        "library": "i18next",
+        "query": "init t use changeLanguage namespace interpolation",
+        "tests_aspect": "npm, i18next.com (internationalization, unique name)",
+    },
+    {
+        "id": "headlessui",
+        "library": "@headlessui/react",
+        "query": "Dialog Menu Listbox Combobox Transition Tab",
+        "tests_aspect": "scoped npm, headlessui.com (unstyled UI components)",
+    },
+    {
+        "id": "radix-themes",
+        "library": "@radix-ui/themes",
+        "query": "Theme Button Card Flex Text Select Dialog",
+        "tests_aspect": "scoped npm, radix-ui.com (design system components)",
+    },
+    {
+        "id": "clsx",
+        "library": "clsx",
+        "query": "clsx classnames conditional string object array",
+        "tests_aspect": "npm, clsx (className utility, ultra-short name)",
+    },
+    {
+        "id": "tailwind-merge",
+        "library": "tailwind-merge",
+        "query": "twMerge extendTailwindMerge config override",
+        "tests_aspect": "npm, tailwind-merge (class merging, hyphenated)",
+    },
+    {
+        "id": "cva",
+        "library": "class-variance-authority",
+        "query": "cva variants compoundVariants defaultVariants cx",
+        "tests_aspect": "npm, cva.style (variant utilities, id != pkg name)",
+    },
+    {
+        "id": "cmdk",
+        "library": "cmdk",
+        "query": "Command Input List Item Group Dialog Empty",
+        "tests_aspect": "npm, cmdk.paco.me (command palette, short name)",
+    },
+    {
+        "id": "sonner",
+        "library": "sonner",
+        "query": "toast Toaster success error promise loading",
+        "tests_aspect": "npm, sonner.emilkowal.ski (toast notifications, unique name)",
     },
 ]
 
