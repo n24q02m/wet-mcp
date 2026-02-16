@@ -26,7 +26,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 20
+DISCOVERY_VERSION = 21
 
 
 def _github_headers() -> dict[str, str]:
@@ -247,6 +247,213 @@ async def _discover_from_go(name: str) -> dict | None:
     except Exception as e:
         logger.debug(f"Go module lookup failed for {name}: {e}")
         return None
+
+
+# Map canonical language names to GitHub language filters.
+# GitHub uses specific casing/naming for its language: filter.
+_GITHUB_LANGUAGE_NAMES: dict[str, str] = {
+    "python": "python",
+    "javascript": "javascript",
+    "typescript": "typescript",
+    "rust": "rust",
+    "go": "go",
+    "java": "java",
+    "kotlin": "kotlin",
+    "csharp": "c#",
+    "php": "php",
+    "ruby": "ruby",
+    "swift": "swift",
+    "c": "c",
+    "cpp": "c++",
+    "zig": "zig",
+    "dart": "dart",
+    "elixir": "elixir",
+    "haskell": "haskell",
+    "scala": "scala",
+    "lua": "lua",
+    "perl": "perl",
+    "r": "r",
+    "julia": "julia",
+    "nim": "nim",
+    "ocaml": "ocaml",
+    "clojure": "clojure",
+    "erlang": "erlang",
+}
+
+
+# Map of user-facing languages to acceptable GitHub primary languages.
+# Many libraries have a primary GitHub language that differs from the
+# language developers use to write code with them (e.g. nokogiri is a
+# Ruby gem whose GitHub primary language is C because of native extensions).
+_GITHUB_LANGUAGE_ACCEPT: dict[str, set[str]] = {
+    "java": {"java", "groovy", "kotlin", "html", "javascript"},
+    "kotlin": {"kotlin", "java"},
+    "csharp": {"c#", "f#"},
+    "php": {"php", "c", "c++"},
+    "ruby": {"ruby", "c", "c++"},
+    "swift": {"swift", "objective-c", "objective-c++", "c"},
+    "lua": {"lua", "c", "c++", "objective-c", "moonscript"},
+    "erlang": {"erlang", "elixir", "javascript"},
+    "elixir": {"elixir", "erlang"},
+    "dart": {"dart", "c++"},
+    "cpp": {"c++", "c"},
+    "c": {"c", "c++"},
+    "rust": {"rust", "zig"},
+    "go": {"go", "typescript", "javascript"},
+    "scala": {"scala", "java"},
+    "javascript": {"javascript", "typescript"},
+    "typescript": {"typescript", "javascript"},
+    "ocaml": {"ocaml", "reason"},
+    "zig": {"zig", "c", "c++"},
+    "haskell": {"haskell"},
+    "nim": {"nim"},
+    "clojure": {"clojure", "java"},
+    "perl": {"perl"},
+    "r": {"r"},
+    "julia": {"julia"},
+}
+
+
+async def _discover_from_github_search(name: str, language: str) -> dict | None:
+    """Search GitHub for a library repo by name and language.
+
+    Generic fallback for languages without a dedicated package registry
+    (Java, PHP, Ruby, Swift, Kotlin, C#, Dart, Elixir, etc.).
+
+    Uses the GitHub search API sorted by stars.  Two passes:
+      1. With ``language:{lang}`` filter — fast, targeted.
+      2. Without the language filter — catches repos whose *primary*
+         GitHub language differs from the user-facing language (e.g.
+         nokogiri is Ruby but GitHub marks it as C).
+
+    Language verification is relaxed: instead of requiring the primary
+    language to match exactly, we accept members of the
+    ``_GITHUB_LANGUAGE_ACCEPT`` set, and very popular repos (>=5 000
+    stars) are accepted with no language check at all.
+    """
+    gh_lang = _GITHUB_LANGUAGE_NAMES.get(language)
+    if not gh_lang:
+        return None
+
+    # For scoped names like "gorilla/mux", search the last part
+    search_name = name.split("/")[-1] if "/" in name else name
+    name_lower = name.lower()
+
+    # Languages accepted for this user-facing language
+    accept_langs = _GITHUB_LANGUAGE_ACCEPT.get(language, {gh_lang.lower()})
+
+    async def _search_github(query: str) -> list[dict]:
+        """Execute a single GitHub search and return items."""
+        try:
+            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                resp = await client.get(
+                    "https://api.github.com/search/repositories",
+                    params={
+                        "q": query,
+                        "sort": "stars",
+                        "per_page": 10,
+                    },
+                    headers=_github_headers(),
+                )
+                if resp.status_code != 200:
+                    logger.debug(
+                        f"GitHub search returned {resp.status_code} for q={query}"
+                    )
+                    return []
+                return resp.json().get("items", [])
+        except Exception as e:
+            logger.debug(f"GitHub search failed for q={query}: {e}")
+            return []
+
+    def _is_lang_ok(repo_lang: str, stars: int) -> bool:
+        """Check if repository language is acceptable."""
+        lang = repo_lang.lower()
+        # Very popular repos are always accepted (>= 5000 stars)
+        if stars >= 5000:
+            return True
+        # Otherwise, must be in the accept set
+        return lang in accept_langs
+
+    def _build_result(item: dict, match_type: str) -> dict:
+        """Build a discovery result dict from a GitHub API item."""
+        homepage = item.get("homepage") or ""
+        repo_url = item.get("html_url") or ""
+        stars = item.get("stargazers_count", 0)
+        docs_url = (
+            homepage
+            if (homepage and "github.com" not in homepage.lower())
+            else repo_url
+        )
+        logger.info(
+            f"GitHub search {match_type} {name} ({language}): "
+            f"{repo_url} ({stars} stars)"
+        )
+        return {
+            "name": name,
+            "description": item.get("description") or "",
+            "homepage": docs_url,
+            "repository": repo_url,
+            "registry": "github",
+            "stars": stars,
+        }
+
+    # Build search queries:
+    #   Pass 1: primary language filter  (e.g. ``language:elixir``)
+    #   Pass 1b…: alt-language filters   (e.g. ``language:erlang`` for elixir)
+    #   Pass 2: no language filter        (catches very popular mismatches)
+    queries = [f"{search_name} language:{gh_lang}"]
+    for alt in sorted(accept_langs):
+        alt_gh = _GITHUB_LANGUAGE_NAMES.get(alt) or alt
+        if alt_gh.lower() != gh_lang.lower():
+            queries.append(f"{search_name} language:{alt_gh}")
+    queries.append(search_name)
+
+    for query in queries:
+        items = await _search_github(query)
+        if not items:
+            continue
+
+        # Exact name match
+        for item in items:
+            repo_name = item.get("name", "").lower()
+            full_name = item.get("full_name", "").lower()
+
+            if "/" in name_lower:
+                name_match = full_name == name_lower
+            else:
+                name_match = repo_name == name_lower
+
+            if not name_match:
+                continue
+
+            repo_lang = item.get("language") or ""
+            stars = item.get("stargazers_count", 0)
+
+            if not _is_lang_ok(repo_lang, stars):
+                continue
+            if stars < 20:
+                continue
+
+            return _build_result(item, "found")
+
+        # Fuzzy match: name contained in repo name (top result only)
+        top = items[0]
+        top_name = top.get("name", "").lower()
+        top_lang = top.get("language") or ""
+        top_stars = top.get("stargazers_count", 0)
+
+        if (
+            _is_lang_ok(top_lang, top_stars)
+            and top_stars >= 100
+            and (
+                name_lower in top_name
+                or top_name in name_lower
+                or name_lower.replace("-", "") == top_name.replace("-", "")
+            )
+        ):
+            return _build_result(top, "fuzzy match")
+
+    return None
 
 
 async def _get_github_homepage(url: str) -> str | None:
@@ -550,7 +757,7 @@ _LANGUAGE_REGISTRIES: dict[str, list[str]] = {
     "typescript": ["npm"],
     "rust": ["crates"],
     "go": ["go"],
-    # Languages without integrated registry — rely on SearXNG fallback
+    # Languages without integrated registry — use GitHub search fallback
     "java": [],
     "kotlin": [],
     "csharp": [],
@@ -562,12 +769,16 @@ _LANGUAGE_REGISTRIES: dict[str, list[str]] = {
     "zig": [],
     "dart": [],
     "elixir": [],
+    "erlang": [],
     "haskell": [],
     "scala": [],
     "lua": [],
     "perl": [],
     "r": [],
     "julia": [],
+    "clojure": [],
+    "nim": [],
+    "ocaml": [],
 }
 
 # Registry name → discovery function
@@ -600,8 +811,8 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
     - javascript/typescript → npm only
     - rust → crates.io only
     - go → Go module search only
-    - Other languages (java, c#, php, etc.) → returns None so SearXNG
-      fallback handles discovery with language context.
+    - Other languages (java, c#, php, etc.) → GitHub search fallback,
+      then SearXNG if GitHub search finds nothing.
 
     This prevents e.g. npm's obscure "fastapi" package from shadowing
     Python's FastAPI, or npm "torch" from shadowing PyTorch.
@@ -612,11 +823,37 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
         registry_names = _LANGUAGE_REGISTRIES.get(lang)
         if registry_names is not None:
             if not registry_names:
-                # Known language but no registry support — let SearXNG handle
+                # Known language but no registry — try GitHub search
                 logger.info(
                     f"No registry for language '{language}', "
-                    "falling back to SearXNG discovery"
+                    "trying GitHub search fallback"
                 )
+                gh_result = await _discover_from_github_search(name, lang)
+                if gh_result:
+                    # Probe for better docs URL
+                    homepage = gh_result.get("homepage", "")
+                    if homepage and "github.com" not in urlparse(homepage).netloc:
+                        probed = await _probe_docs_url(
+                            homepage, name, registry="github"
+                        )
+                        if probed != homepage:
+                            logger.info(f"Probed {name} docs: {homepage} -> {probed}")
+                            gh_result["homepage"] = probed
+                    # Try to upgrade GitHub-only homepage via API
+                    repo_url = gh_result.get("repository", "")
+                    if (
+                        homepage
+                        and "github.com" in urlparse(homepage).netloc
+                        and repo_url
+                    ):
+                        gh_hp = await _get_github_homepage(repo_url)
+                        if gh_hp:
+                            logger.info(
+                                f"Upgraded {name} homepage: {homepage} -> {gh_hp}"
+                            )
+                            gh_result["homepage"] = gh_hp
+                    return gh_result
+                # GitHub search failed — let SearXNG handle
                 return None
             # Query only matching registries
             tasks = [
@@ -791,6 +1028,30 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
             return best
         # No homepage but has some data
         return best
+
+    # All registries failed — try GitHub search as last resort
+    if language:
+        lang = _normalize_language(language)
+        if lang in _GITHUB_LANGUAGE_NAMES:
+            logger.info(
+                f"All registries failed for {name} ({language}), "
+                "trying GitHub search as last resort"
+            )
+            gh_result = await _discover_from_github_search(name, lang)
+            if gh_result:
+                homepage = gh_result.get("homepage", "")
+                if homepage and "github.com" not in urlparse(homepage).netloc:
+                    probed = await _probe_docs_url(homepage, name, registry="github")
+                    if probed != homepage:
+                        logger.info(f"Probed {name} docs: {homepage} -> {probed}")
+                        gh_result["homepage"] = probed
+                repo_url = gh_result.get("repository", "")
+                if homepage and "github.com" in urlparse(homepage).netloc and repo_url:
+                    gh_hp = await _get_github_homepage(repo_url)
+                    if gh_hp:
+                        logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_hp}")
+                        gh_result["homepage"] = gh_hp
+                return gh_result
 
     return None
 
@@ -2096,8 +2357,7 @@ async def _try_github_raw_docs(
 
         if pages:
             logger.info(
-                f"Fetched {len(pages)} raw markdown docs from "
-                f"github.com/{owner}/{repo}"
+                f"Fetched {len(pages)} raw markdown docs from github.com/{owner}/{repo}"
             )
             return pages
 

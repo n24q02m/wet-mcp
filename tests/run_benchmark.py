@@ -101,6 +101,9 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
         if repo_url and "github.com" in repo_url:
             docs_url = repo_url
         else:
+            # SearXNG fallback disabled in benchmark mode: subprocess
+            # management conflicts with Python 3.13 asyncio on Windows.
+            # In production, server.py handles SearXNG discovery.
             elapsed = time.time() - t0
             return {
                 "id": case_id,
@@ -138,9 +141,9 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
         library_hint=library,
     )
 
-    # NOTE: SearXNG "few pages" fallback is skipped in benchmark mode
-    # to avoid subprocess lifecycle issues on Windows.
-    # The server.py fallback still works in production via MCP.
+    # NOTE: SearXNG "few pages" fallback (post-fetch quality gate) is
+    # skipped in benchmark mode as it mirrors the initial discovery only.
+    # The per-library SearXNG discovery fallback above handles NOT_FOUND.
 
     if not all_chunks:
         elapsed = time.time() - t0
@@ -293,10 +296,53 @@ async def main():
     # Output path for incremental save
     out_path = os.path.join(os.path.dirname(__file__), "benchmark_results.jsonl")
 
-    # If appending (start > 0 or ids), keep existing; otherwise truncate
-    write_mode = "a" if (args.start > 0 or args.ids) else "w"
-    if write_mode == "w" and os.path.exists(out_path):
-        os.remove(out_path)
+    # Load existing IDs to skip duplicates (unless --force or --ids)
+    existing_ids: set[str] = set()
+    rerun_ids: set[str] = set()
+    if os.path.exists(out_path) and not args.force:
+        case_ids = {c["id"] for c in cases}
+        kept_lines: list[str] = []
+        with open(out_path, encoding="utf-8") as f:
+            for line in f:
+                line_s = line.strip()
+                if not line_s:
+                    continue
+                try:
+                    row = json.loads(line_s)
+                    rid = row["id"]
+                except (json.JSONDecodeError, KeyError):
+                    kept_lines.append(line_s)
+                    continue
+
+                if args.ids and rid in case_ids:
+                    # When using --ids, remove old results for those IDs
+                    # so they get re-run
+                    rerun_ids.add(rid)
+                    continue
+
+                existing_ids.add(rid)
+                kept_lines.append(line_s)
+
+        # Rewrite file without the IDs we want to re-run
+        if rerun_ids:
+            with open(out_path, "w", encoding="utf-8") as f:
+                for line_s in kept_lines:
+                    f.write(line_s + "\n")
+            print(
+                f"Removed {len(rerun_ids)} old results for re-run: {sorted(rerun_ids)}"
+            )
+
+    # Filter out already-completed cases
+    cases = [c for c in cases if c["id"] not in existing_ids]
+    if not cases:
+        print("All cases already have results. Nothing to run.")
+        return
+
+    skipped = len(existing_ids)
+    if skipped:
+        print(
+            f"Skipping {skipped} existing results, running {len(cases)} remaining cases"
+        )
 
     def _save_result(result: dict):
         """Save a single result to JSONL incrementally."""
@@ -330,12 +376,12 @@ async def main():
                     title = (r.get("title") or "")[:50]
                     url = (r.get("url") or "")[:75]
                     score = r.get("score", 0)
-                    print(f"    [{j+1}] score={score} | {title} | {url}")
+                    print(f"    [{j + 1}] score={score} | {title} | {url}")
             else:
                 print("    NO RESULTS")
             summary.append(result)
             _save_result(result)
-        except TimeoutError:
+        except (TimeoutError, asyncio.CancelledError):
             print("  TIMEOUT (180s)")
             r = {
                 "id": case["id"],
@@ -378,7 +424,7 @@ async def main():
         if r["results"]:
             top_url = (r["results"][0].get("url") or "")[:40]
         print(
-            f"{i+1:<3} {r['id']:<20} {r['source']:<10} "
+            f"{i + 1:<3} {r['id']:<20} {r['source']:<10} "
             f"{r['pages']:<4} {r['chunks']:<6} {r['elapsed']:<6.0f} {top_url}"
         )
 
