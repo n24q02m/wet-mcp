@@ -43,6 +43,10 @@ local = [
     # Local ONNX embedding + reranking (no API keys needed)
     "qwen3-embed>=0.2.0",
 ]
+gguf = [
+    # Local GGUF embedding + reranking (GPU support via llama-cpp-python)
+    "qwen3-embed[gguf]>=0.2.0",
+]
 full = [
     # All optional features
     "sqlite-vec",

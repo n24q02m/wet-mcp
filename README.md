@@ -157,6 +157,9 @@ pip install wet-mcp
 # With local Qwen3 ONNX embedding & reranking (no API keys needed)
 pip install wet-mcp[local]
 
+# With local GGUF embedding & reranking (GPU support via llama-cpp-python)
+pip install wet-mcp[gguf]
+
 # Full (local + all optional dependencies)
 pip install wet-mcp[full]
 
@@ -206,8 +209,8 @@ wet-mcp
 | `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
 | `API_KEYS` | - | LLM API keys (optional, format: `ENV_VAR:key,...`) |
 | `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
-| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3 ONNX). Auto: local > litellm > FTS5-only |
-| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model for docs vector search (optional) |
+| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3 ONNX/GGUF). Auto: local > litellm > FTS5-only |
+| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model, or `Qwen/Qwen3-Embedding-0.6B-GGUF` for GGUF (optional) |
 | `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
 | `RERANK_ENABLED` | `true` | Enable reranking after search (auto-disabled if no backend) |
 | `RERANK_BACKEND` | (follows embedding) | `litellm` or `local`. Defaults to match `EMBEDDING_BACKEND` |
@@ -276,13 +279,13 @@ The server auto-detects `qwen3-embed` when installed and uses it for both embedd
                       v
 ┌─────────────────────────────────────────────────────────┐
 │                   WET MCP Server                        │
-│  ┌──────────┐  ┌──────────┐  ┌───────┐  ┌──────────┐   │
-│  │  search  │  │ extract  │  │ media │  │  config  │   │
-│  │ (search, │  │(extract, │  │(list, │  │(status,  │   │
-│  │ research,│  │ crawl,   │  │downld,│  │ set,     │   │
-│  │ docs)    │  │ map)     │  │analyz)│  │ cache)   │   │
-│  └──┬───┬───┘  └────┬─────┘  └──┬────┘  └──────────┘   │
-│     │   │           │           │                       │
+│  ┌──────────┐  ┌──────────┐  ┌───────┐  ┌────────┐      │
+│  │  search  │  │ extract  │  │ media │  │ config │      │
+│  │ (search, │  │(extract, │  │(list, │  │(status,│      │
+│  │ research,│  │ crawl,   │  │downld,│  │ set,   │      │
+│  │ docs)    │  │ map)     │  │analyz)│  │ cache) │      │
+│  └──┬───┬───┘  └────┬─────┘  └──┬────┘  └────────┘      │
+│     │   │           │           │        + help tool     │
 │     v   v           v           v                       │
 │  ┌──────┐ ┌──────┐ ┌──────────┐ ┌──────────┐             │
 │  │SearX │ │DocsDB│ │ Crawl4AI │ │ Reranker │             │

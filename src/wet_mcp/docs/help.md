@@ -9,6 +9,7 @@ Welcome to **WET** (Web Extended Toolkit) MCP Server.
 | `search` | Web search, academic research, library documentation search |
 | `extract` | Content extraction, deep crawling, site mapping |
 | `media` | Media discovery (images, videos, audio) and download |
+| `config` | Server configuration and cache management |
 | `help` | Get full documentation for any tool |
 
 ## Quick Reference
@@ -52,6 +53,22 @@ Welcome to **WET** (Web Extended Toolkit) MCP Server.
 {"action": "analyze", "url": "/path/to/image.jpg", "prompt": "Describe this image"}
 ```
 
+### config tool
+
+```json
+// Show server status
+{"action": "status"}
+
+// Clear web cache
+{"action": "cache_clear"}
+
+// Force re-index a library
+{"action": "docs_reindex", "key": "fastapi"}
+
+// Update a setting
+{"action": "set", "key": "log_level", "value": "DEBUG"}
+```
+
 ## Getting Full Documentation
 
 Call `help` with the tool name:
@@ -60,6 +77,7 @@ Call `help` with the tool name:
 {"tool_name": "search"}   // Search tool documentation
 {"tool_name": "extract"}  // Extract tool documentation
 {"tool_name": "media"}    // Media tool documentation
+{"tool_name": "config"}   // Config tool documentation
 ```
 
 ## Features
