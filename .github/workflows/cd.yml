@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
   id-token: write
 
 env:
@@ -58,16 +59,16 @@ jobs:
     needs: release
     if: needs.release.outputs.released == 'true'
     runs-on: ubuntu-latest
-    environment: pypi
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ needs.release.outputs.tag }}
       - uses: astral-sh/setup-uv@v6
       - run: uv build
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - name: Publish to PyPI
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
 
   # =================== Build Docker ===================
   build-docker:
