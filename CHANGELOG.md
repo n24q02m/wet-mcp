@@ -5,6 +5,30 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.9](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.8...v2.5.0-beta.9) (2026-02-17)
+
+
+### Features
+
+* **discovery:** star-count scoring + expand benchmark to 100 libs ([ed95e61](https://github.com/n24q02m/wet-mcp/commit/ed95e61ebee145dfd5775aca2b3ec99370ff6f47))
+* **docs:** improve library discovery with Go modules, GitHub homepage upgrade, and scoring fixes ([167afc9](https://github.com/n24q02m/wet-mcp/commit/167afc9ef0729f7f676b5e17f943a5d59da8a955))
+* **docs:** v14 discovery scoring - crates.io downloads, docs.rs fix, 120-lib benchmark ([1c6ceec](https://github.com/n24q02m/wet-mcp/commit/1c6ceecca25c7df16b56935f3df540818bf197fe))
+* **docs:** v15 sphinx objects.inv discovery for url enumeration ([a501851](https://github.com/n24q02m/wet-mcp/commit/a50185144df063a6c4e880c9731ae001a36d7121))
+* **docs:** V16 _probe_docs_url, RTD validation, benchmark 200 ([5c4d5a6](https://github.com/n24q02m/wet-mcp/commit/5c4d5a627101bcb7028e078846f8e1df999e90de))
+* **docs:** V18 detect Cloudflare blocked pages, add RST support ([68350ed](https://github.com/n24q02m/wet-mcp/commit/68350ed23aee51675c4b21d86060e73d042bbe2c))
+* **docs:** V19 enhanced discovery, adaptive quality gate, language hints ([4e5f23f](https://github.com/n24q02m/wet-mcp/commit/4e5f23fbd2c9a14fe768099e69719c9498b13cbd))
+* **docs:** V20 README fallback, language hints, 500 benchmark cases ([301b916](https://github.com/n24q02m/wet-mcp/commit/301b916b073f29232efcb5bfcb59aa00102ecf1e))
+* **docs:** V21 two-pass GitHub search, language accept groups, 800 diverse benchmark cases ([69b31e7](https://github.com/n24q02m/wet-mcp/commit/69b31e7e920ccc5b064d9563e2d48c25b95da9e5))
+* **docs:** V23 well-known docs, SearXNG crash fix, 1200 benchmark cases ([4df24fb](https://github.com/n24q02m/wet-mcp/commit/4df24fb468d653f727a3d3e7f4eecc67992472cb))
+* **docs:** V24 add 6 registries, config tool, reduce well-known ([8367f37](https://github.com/n24q02m/wet-mcp/commit/8367f3753ff2291f7967e556f358c8d346199422))
+* **search:** add language param for docs disambiguation, change SearXNG port ([cbd1e08](https://github.com/n24q02m/wet-mcp/commit/cbd1e08eb578f590072461e191e78a765c2a25e9))
+
+
+### Bug Fixes
+
+* add sub-timeouts for docs search pipeline, expand benchmark to 300 ([3fde783](https://github.com/n24q02m/wet-mcp/commit/3fde7835de2af9ee3e85e4dce1da3aad0dc90f0c))
+* **docs:** V17 filter login URLs, registry listing pages, docs subdomain exclusions ([cd410a0](https://github.com/n24q02m/wet-mcp/commit/cd410a04e36c47d0e260907c366a7ef2937e43af))
+
 ## [2.5.0-beta.8](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.7...v2.5.0-beta.8) (2026-02-14)
 
 
