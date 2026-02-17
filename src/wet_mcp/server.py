@@ -396,6 +396,7 @@ async def _with_timeout(coro, action: str) -> str:
         readOnlyHint=True,
         openWorldHint=True,
         idempotentHint=True,
+        destructiveHint=False,
     ),
 )
 async def search(
@@ -496,6 +497,8 @@ async def search(
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=True,
+        idempotentHint=True,
+        destructiveHint=False,
     ),
 )
 async def extract(
@@ -585,6 +588,8 @@ async def extract(
     annotations=ToolAnnotations(
         readOnlyHint=False,
         openWorldHint=True,
+        idempotentHint=False,
+        destructiveHint=False,
     ),
 )
 async def media(
@@ -649,6 +654,7 @@ async def media(
         readOnlyHint=True,
         openWorldHint=False,
         idempotentHint=True,
+        destructiveHint=False,
     ),
 )
 async def help(tool_name: str = "search") -> str:
