@@ -130,6 +130,9 @@ async def extract(
     urls: list[str],
     format: str = "markdown",
     stealth: bool = True,
+    scan_full_page: bool = False,
+    delay_before_return_html: float = 0.0,
+    page_timeout: int = 60000,
 ) -> str:
     """Extract content from URLs.
 
@@ -137,6 +140,9 @@ async def extract(
         urls: List of URLs to extract
         format: Output format (markdown, text, html)
         stealth: Enable stealth mode
+        scan_full_page: Auto-scroll to trigger lazy-loaded content
+        delay_before_return_html: Seconds to wait after page load before capture
+        page_timeout: Page loading timeout in milliseconds
 
     Returns:
         JSON string with extracted content
@@ -145,6 +151,17 @@ async def extract(
 
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
+
+    # Build CrawlerRunConfig with optional SPA-friendly settings
+    run_config_kwargs: dict = {"verbose": False}
+    if scan_full_page:
+        run_config_kwargs["scan_full_page"] = True
+        run_config_kwargs["scroll_delay"] = 0.3
+    if delay_before_return_html > 0:
+        run_config_kwargs["delay_before_return_html"] = delay_before_return_html
+    if page_timeout != 60000:
+        run_config_kwargs["page_timeout"] = page_timeout
+    run_config = CrawlerRunConfig(**run_config_kwargs)
 
     async def process_url(url: str):
         async with sem:
@@ -155,7 +172,7 @@ async def extract(
             try:
                 result = await crawler.arun(
                     url,  # ty: ignore[invalid-argument-type]
-                    config=CrawlerRunConfig(verbose=False),
+                    config=run_config,
                 )  # ty: ignore[missing-argument]
 
                 if result.success:

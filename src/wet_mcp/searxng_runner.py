@@ -79,9 +79,24 @@ _restart_count: int = 0
 _last_restart_time: float = 0.0
 
 
-def _find_available_port(start_port: int, max_tries: int = 10) -> int:
-    """Find an available port starting from start_port."""
-    for offset in range(max_tries):
+def _find_available_port(start_port: int, max_tries: int = 50) -> int:
+    """Find an available port, randomizing offset to avoid collisions.
+
+    When multiple WET MCP instances start concurrently (e.g. wet, wet-nokey,
+    wet-sync), they all call this function at roughly the same time.
+    A deterministic port scan (8080, 8081, ...) can hit a TOCTOU race:
+    two instances both see port 8081 as free, then one fails to bind.
+
+    Fix: randomize the starting offset within a wider range so concurrent
+    instances are unlikely to pick the same port.
+    """
+    import random
+
+    # Randomize starting offset to avoid concurrent collisions
+    offsets = list(range(max_tries))
+    random.shuffle(offsets)
+
+    for offset in offsets:
         port = start_port + offset
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -117,13 +132,15 @@ async def _wait_for_service(url: str, timeout: float = _STARTUP_HEALTH_TIMEOUT) 
 
 
 def _is_searxng_installed() -> bool:
-    """Check if the SearXNG Python package is installed."""
-    try:
-        import searx  # noqa: F401
+    """Check if the SearXNG Python package is fully installed.
 
-        return True
-    except ImportError:
-        return False
+    Uses ``importlib.util.find_spec`` instead of a direct import to avoid
+    executing module-level code in ``searx.webapp`` which calls ``sys.exit(1)``
+    when ``secret_key`` is unchanged (the default ``ultrasecretkey``).
+    """
+    import importlib.util
+
+    return importlib.util.find_spec("searx.webapp") is not None
 
 
 def _install_searxng() -> bool:
@@ -208,7 +225,7 @@ def _get_settings_path(port: int) -> Path:
 
     # Inject the actual port
     content = content.replace(
-        "port: 8080",
+        "port: 41592",
         f"port: {port}",
     )
 

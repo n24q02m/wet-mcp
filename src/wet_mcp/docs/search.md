@@ -1,6 +1,6 @@
-# web Tool Documentation
+# search Tool Documentation
 
-Web operations: search, extract, crawl, map, research, docs.
+Search the web, academic papers, or library documentation.
 
 ## Actions
 
@@ -15,53 +15,6 @@ Web search via SearXNG metasearch engine.
 **Example:**
 ```json
 {"action": "search", "query": "python web scraping tutorial", "max_results": 5}
-```
-
----
-
-### extract
-Get clean content from one or more URLs.
-
-**Parameters:**
-- `urls` (required): List of URLs to extract
-- `format`: Output format - markdown, text, html (default: markdown)
-- `stealth`: Enable stealth mode to bypass anti-bot (default: true)
-
-**Example:**
-```json
-{"action": "extract", "urls": ["https://example.com/article"]}
-```
-
----
-
-### crawl
-Deep crawl starting from root URLs.
-
-**Parameters:**
-- `urls` (required): List of root URLs to crawl from
-- `depth`: How many levels deep to crawl (default: 2)
-- `max_pages`: Maximum pages to crawl (default: 20)
-- `format`: Output format (default: markdown)
-- `stealth`: Enable stealth mode (default: true)
-
-**Example:**
-```json
-{"action": "crawl", "urls": ["https://docs.example.com"], "depth": 3}
-```
-
----
-
-### map
-Discover site structure without extracting content.
-
-**Parameters:**
-- `urls` (required): List of root URLs
-- `depth`: Discovery depth (default: 2)
-- `max_pages`: Maximum URLs to discover (default: 50)
-
-**Example:**
-```json
-{"action": "map", "urls": ["https://example.com"]}
 ```
 
 ---
@@ -88,29 +41,30 @@ Search library/framework documentation with auto-indexing. First call indexes do
 **Parameters:**
 - `query` (required): What to search for in docs
 - `library` (required): Library name (e.g., "react", "fastapi", "pytorch")
+- `language`: Programming language for disambiguation (e.g., "python", "java", "rust"). Guides which registries to search and improves discovery for cross-language names. Supports: python/py, javascript/js/ts, rust/rs, go/golang, java, kotlin, csharp/c#, php, ruby, swift, c, cpp/c++, zig, dart, elixir, haskell, scala, and more.
 - `version`: Specific version (default: latest)
 - `limit`: Maximum results (default: 10)
 
 **Discovery order:** llms.txt > npm/PyPI/crates.io registry > SearXNG fallback > Crawl4AI fetch.
 
+**When to specify `language`:**
+- Cross-language name collisions: "redis" (Python vs Node.js), "protobuf" (Python vs JS)
+- Languages without registry: Java, C#, PHP, Ruby, C/C++, Swift, Zig
+- Tools and system packages: "cmake", "boost", "openssl"
+
 **Example:**
 ```json
 {"action": "docs", "query": "how to create a router", "library": "fastapi"}
+{"action": "docs", "query": "dependency injection", "library": "spring-boot", "language": "java"}
+{"action": "docs", "query": "entity framework migrations", "library": "efcore", "language": "csharp"}
 ```
 
 **Returns:** Relevant documentation chunks with title, content, URL, and relevance score.
 
 ---
 
-## Anti-Bot Features
-
-The `stealth` parameter enables:
-- Stealth mode: Masks navigator.webdriver, emulates plugins
-- Undetected browser: For advanced detection (Cloudflare, Datadome)
-
 ## Caching
 
-When `WET_CACHE=true` (default), all actions cache results locally:
+When `WET_CACHE=true` (default), search and research results are cached locally:
 - search/research: 1 hour TTL
-- extract/crawl/map: 1 day TTL
 - docs: Persistent FTS5 index (no TTL)

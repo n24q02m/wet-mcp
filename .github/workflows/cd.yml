@@ -1,8 +1,9 @@
 name: CD
 
 on:
-  push:
-    branches: [dev, main]
+  # DISABLED: PSR migration in progress
+  # push:
+  #   branches: [dev, main]
   workflow_dispatch:
     inputs:
       action:
@@ -43,9 +44,12 @@ jobs:
       - name: Check CI/CD status on dev
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          chmod +x .github/scripts/check-ci-cd-status.sh
-          ./.github/scripts/check-ci-cd-status.sh --branch=dev
+        run: ./.github/scripts/check-ci-cd-status.sh --branch=dev
+
+      - name: Cleanup stale release PRs on main
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: ./.github/scripts/cleanup-release-prs.sh --branch=main
 
       - name: Merge and create promote PR
         env:
@@ -54,14 +58,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           PROMOTE_BRANCH="promote/dev-to-main"
-
-          # Close stale release-please PRs on main
-          STALE_PRS=$(gh pr list --base main --label "autorelease: pending" --json number --jq '.[].number')
-          for pr in $STALE_PRS; do
-            echo "Closing stale release PR #$pr"
-            gh pr close "$pr" --comment "Closed by promote workflow."
-          done
-          git push origin --delete release-please--branches--main 2>/dev/null || true
 
           # Close any existing promote PRs
           OLD_PRS=$(gh pr list --base main --head "$PROMOTE_BRANCH" --json number --jq '.[].number')
@@ -72,6 +68,9 @@ jobs:
 
           # Save main's release-please manifest
           MAIN_MANIFEST=$(cat .release-please-manifest.json)
+
+          # Discard any working tree modifications before branch switch
+          git checkout -- .
 
           # Create promote branch from main, merge dev (auto-resolve conflicts)
           git checkout -B "$PROMOTE_BRANCH" origin/main
@@ -352,6 +351,13 @@ jobs:
           ref: main
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
+
+      - name: Cleanup stale release PRs
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          ./.github/scripts/cleanup-release-prs.sh --branch=dev
+          ./.github/scripts/cleanup-release-prs.sh --branch=main
 
       - name: Sync beta manifest and recreate dev
         run: |

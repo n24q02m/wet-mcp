@@ -1,6 +1,6 @@
-# WET - Web ExTract MCP Server
+# WET - Web Extended Toolkit MCP Server
 
-**Open-source MCP Server for web search, content extraction & multimodal analysis.**
+**Open-source MCP Server for web search, content extraction, library docs & multimodal analysis.**
 
 [![PyPI](https://img.shields.io/pypi/v/wet-mcp)](https://pypi.org/project/wet-mcp/)
 [![Docker](https://img.shields.io/docker/v/n24q02m/wet-mcp?label=docker)](https://hub.docker.com/r/n24q02m/wet-mcp)
@@ -9,11 +9,15 @@
 ## Features
 
 - **Web Search** - Search via embedded SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave)
+- **Academic Research** - Search Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
+- **Library Docs** - Auto-discover and index documentation with FTS5 hybrid search
 - **Content Extract** - Extract clean content (Markdown/Text)
 - **Deep Crawl** - Crawl multiple pages from a root URL with depth control
 - **Site Map** - Discover website URL structure
 - **Media** - List and download images, videos, audio files
 - **Anti-bot** - Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter
+- **Local Cache** - TTL-based caching for all web operations
+- **Docs Sync** - Sync indexed docs across machines via rclone
 
 ---
 
@@ -21,20 +25,23 @@
 
 ### Prerequisites
 
-- **Python 3.13** (required — Python 3.14+ is **not** supported due to SearXNG incompatibility)
+- **Python 3.13** (required -- Python 3.14+ is **not** supported due to SearXNG incompatibility)
 
 ### Add to mcp.json
 
 #### uvx (Recommended)
 
-```json
+```jsonc
 {
   "mcpServers": {
     "wet": {
       "command": "uvx",
       "args": ["--python", "3.13", "wet-mcp@latest"],
       "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza..."
+        // Optional: API keys for embedding and media analysis
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",
+        // Optional: GitHub token for higher rate limits on library docs discovery
+        "GITHUB_TOKEN": "ghp_..."
       }
     }
   }
@@ -51,14 +58,90 @@
 
 #### Docker
 
-```json
+```jsonc
 {
   "mcpServers": {
     "wet": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "API_KEYS", "n24q02m/wet-mcp:latest"],
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "wet-data:/data",
+        "-e", "API_KEYS",
+        "n24q02m/wet-mcp:latest"
+      ],
       "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza..."
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",
+        "GITHUB_TOKEN": "ghp_..."
+      }
+    }
+  }
+}
+```
+
+> The `-v wet-data:/data` volume mount persists cached web pages, indexed library docs, and downloaded media across container restarts.
+
+#### With docs sync (Google Drive)
+
+**Step 1**: Get a drive token (one-time, requires browser):
+
+```bash
+uvx --python 3.13 wet-mcp setup-sync drive
+```
+
+This downloads rclone, opens a browser for Google Drive auth, and outputs a **base64-encoded token** for `RCLONE_CONFIG_GDRIVE_TOKEN`.
+
+**Step 2**: Copy the token and add it to your MCP config:
+
+```jsonc
+{
+  "mcpServers": {
+    "wet": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "wet-mcp@latest"],
+      "env": {
+        "API_KEYS": "GOOGLE_API_KEY:AIza...", // optional: enables media analysis & docs embedding
+        "SYNC_ENABLED": "true",               // required for sync
+        "SYNC_REMOTE": "gdrive",               // required: rclone remote name
+        "SYNC_INTERVAL": "300",                // optional: auto-sync seconds (default: 0 = manual)
+        // "SYNC_FOLDER": "wet-mcp",            // optional: remote folder (default: wet-mcp)
+        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",  // required: rclone backend type
+        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>" // required: from setup-sync
+      }
+    }
+  }
+}
+```
+
+Both raw JSON and base64-encoded tokens are supported. Base64 is recommended — it avoids nested JSON escaping issues.
+
+Remote is configured via env vars — works in any environment (local, Docker, CI).
+
+#### With sync in Docker
+
+```jsonc
+{
+  "mcpServers": {
+    "wet": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "wet-data:/data",
+        "-e", "API_KEYS",
+        "-e", "SYNC_ENABLED",
+        "-e", "SYNC_REMOTE",
+        "-e", "SYNC_INTERVAL",              // optional: remove if manual sync only
+        "-e", "RCLONE_CONFIG_GDRIVE_TYPE",
+        "-e", "RCLONE_CONFIG_GDRIVE_TOKEN",
+        "n24q02m/wet-mcp:latest"
+      ],
+      "env": {
+        "API_KEYS": "GOOGLE_API_KEY:AIza...", // optional: enables media analysis & docs embedding
+        "SYNC_ENABLED": "true",               // required for sync
+        "SYNC_REMOTE": "gdrive",               // required: rclone remote name
+        "SYNC_INTERVAL": "300",                // optional: auto-sync seconds (default: 0 = manual)
+        // "SYNC_FOLDER": "wet-mcp",            // optional: remote folder (default: wet-mcp)
+        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",  // required: rclone backend type
+        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>" // required: from setup-sync
       }
     }
   }
@@ -68,7 +151,15 @@
 ### Without uvx
 
 ```bash
+# Standard (cloud embedding via LiteLLM)
 pip install wet-mcp
+
+# With local Qwen3 ONNX embedding & reranking (no API keys needed)
+pip install wet-mcp[local]
+
+# Full (local + all optional dependencies)
+pip install wet-mcp[full]
+
 wet-mcp
 ```
 
@@ -78,17 +169,26 @@ wet-mcp
 
 | Tool | Actions | Description |
 |:-----|:--------|:------------|
-| `web` | search, extract, crawl, map | Web operations |
+| `search` | search, research, docs | Web search, academic research, library documentation |
+| `extract` | extract, crawl, map | Content extraction, deep crawling, site mapping |
 | `media` | list, download, analyze | Media discovery & download |
-| `help` | - | Full documentation |
+| `help` | - | Full documentation for any tool |
 
 ### Usage Examples
 
 ```json
+// search tool
 {"action": "search", "query": "python web scraping", "max_results": 10}
+{"action": "research", "query": "transformer attention mechanism"}
+{"action": "docs", "query": "how to create routes", "library": "fastapi"}
+{"action": "docs", "query": "dependency injection", "library": "spring-boot", "language": "java"}
+
+// extract tool
 {"action": "extract", "urls": ["https://example.com"]}
 {"action": "crawl", "urls": ["https://docs.python.org"], "depth": 2}
 {"action": "map", "urls": ["https://example.com"]}
+
+// media tool
 {"action": "list", "url": "https://github.com/python/cpython"}
 {"action": "download", "media_urls": ["https://example.com/image.png"]}
 ```
@@ -100,19 +200,67 @@ wet-mcp
 | Variable | Default | Description |
 |:---------|:--------|:------------|
 | `WET_AUTO_SEARXNG` | `true` | Auto-start embedded SearXNG subprocess |
-| `WET_SEARXNG_PORT` | `8080` | SearXNG port |
-| `SEARXNG_URL` | `http://localhost:8080` | External SearXNG URL (when auto disabled) |
-| `API_KEYS` | - | LLM API keys for media analysis |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| `WET_SEARXNG_PORT` | `41592` | SearXNG port (optional) |
+| `SEARXNG_URL` | `http://localhost:41592` | External SearXNG URL (optional, when auto disabled) |
+| `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
+| `API_KEYS` | - | LLM API keys (optional, format: `ENV_VAR:key,...`) |
+| `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
+| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3 ONNX). Auto: local > litellm > FTS5-only |
+| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model for docs vector search (optional) |
+| `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
+| `RERANK_ENABLED` | `true` | Enable reranking after search (auto-disabled if no backend) |
+| `RERANK_BACKEND` | (follows embedding) | `litellm` or `local`. Defaults to match `EMBEDDING_BACKEND` |
+| `RERANK_MODEL` | (auto-detect) | LiteLLM rerank model, e.g. `cohere/rerank-v3.5` (optional) |
+| `RERANK_TOP_N` | `10` | Return top N results after reranking |
+| `CACHE_DIR` | `~/.wet-mcp` | Data directory for cache DB, docs DB, downloads (optional) |
+| `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location (optional) |
+| `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory (optional) |
+| `TOOL_TIMEOUT` | `120` | Tool execution timeout in seconds, 0=no timeout (optional) |
+| `WET_CACHE` | `true` | Enable/disable web cache (optional) |
+| `GITHUB_TOKEN` | - | GitHub personal access token for library discovery (optional, increases rate limit from 60 to 5000 req/hr) |
+| `SYNC_ENABLED` | `false` | Enable rclone sync |
+| `SYNC_REMOTE` | - | rclone remote name (required when sync enabled) |
+| `SYNC_FOLDER` | `wet-mcp` | Remote folder name (optional) |
+| `SYNC_INTERVAL` | `0` | Auto-sync interval in seconds, 0=manual (optional) |
+| `LOG_LEVEL` | `INFO` | Logging level (optional) |
 
 ### LLM Configuration (Optional)
 
-For media analysis (images, videos, audio), configure API keys:
+For media analysis and docs embedding, configure API keys:
 
 ```bash
 API_KEYS=GOOGLE_API_KEY:AIza...
 LLM_MODELS=gemini/gemini-3-flash-preview
 ```
+
+The server auto-detects embedding models from configured API keys (Gemini > OpenAI > Mistral > Cohere).
+
+### Local Embedding & Reranking (Optional)
+
+Run embedding and reranking entirely offline using Qwen3 ONNX models — no API keys needed:
+
+```bash
+# Install with local ONNX support
+pip install wet-mcp[local]
+
+# Or full (local + all dependencies)
+pip install wet-mcp[full]
+```
+
+With `uvx`:
+```jsonc
+{
+  "mcpServers": {
+    "wet": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "wet-mcp[local]@latest"]
+      // No API_KEYS needed — local Qwen3-Embedding-0.6B runs on CPU
+    }
+  }
+}
+```
+
+The server auto-detects `qwen3-embed` when installed and uses it for both embedding and reranking. Override with `EMBEDDING_BACKEND=litellm` to force cloud API.
 
 ---
 
@@ -124,22 +272,27 @@ LLM_MODELS=gemini/gemini-3-flash-preview
 │            (Claude, Cursor, Windsurf)                   │
 └─────────────────────┬───────────────────────────────────┘
                       │ MCP Protocol
-                      ▼
+                      v
 ┌─────────────────────────────────────────────────────────┐
 │                   WET MCP Server                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐   │
-│  │   web    │  │  media   │  │        help          │   │
-│  │ (search, │  │ (list,   │  │  (full documentation)│   │
-│  │ extract, │  │ download,│  └──────────────────────┘   │
-│  │ crawl,   │  │ analyze) │                             │
-│  │ map)     │  └────┬─────┘                             │
-│  └────┬─────┘       │                                   │
-│       │             │                                   │
-│       ▼             ▼                                   │
-│  ┌──────────┐  ┌──────────┐                             │
-│  │ SearXNG  │  │ Crawl4AI │                             │
-│  │(embedded)│  │(Playwright)│                           │
-│  └──────────┘  └──────────┘                             │
+│  ┌──────────┐  ┌──────────┐  ┌───────┐  ┌──────────┐   │
+│  │  search  │  │ extract  │  │ media │  │   help   │   │
+│  │ (search, │  │(extract, │  │(list, │  │          │   │
+│  │ research,│  │ crawl,   │  │downld,│  │          │   │
+│  │ docs)    │  │ map)     │  │analyz)│  │          │   │
+│  └──┬───┬───┘  └────┬─────┘  └──┬────┘  └──────────┘   │
+│     │   │           │           │                       │
+│     v   v           v           v                       │
+│  ┌──────┐ ┌──────┐ ┌──────────┐ ┌──────────┐             │
+│  │SearX │ │DocsDB│ │ Crawl4AI │ │ Reranker │             │
+│  │NG    │ │FTS5+ │ │(Playwrgt)│ │(LiteLLM/ │             │
+│  │      │ │sqlite│ │          │ │ Qwen3    │             │
+│  │      │ │-vec  │ │          │ │ local)   │             │
+│  └──────┘ └──────┘ └──────────┘ └──────────┘             │
+│                                                         │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  WebCache (SQLite, TTL)  │  rclone sync (docs)   │   │
+│  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
 
