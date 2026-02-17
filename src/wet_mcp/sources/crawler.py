@@ -44,11 +44,19 @@ _browser_semaphore: asyncio.Semaphore | None = None
 
 def _browser_config(stealth: bool = False) -> BrowserConfig:
     """Create BrowserConfig with per-process isolated data directory."""
+    extra_args: list[str] = []
+
+    # Docker/CI environments need --no-sandbox (Chromium cannot use
+    # the SUID sandbox inside unprivileged containers).
+    if os.path.exists("/.dockerenv") or os.environ.get("container"):
+        extra_args += ["--no-sandbox", "--disable-dev-shm-usage"]
+
     return BrowserConfig(
         headless=True,
         enable_stealth=stealth,
         verbose=False,
         user_data_dir=_BROWSER_DATA_DIR,
+        extra_args=extra_args,
     )
 
 

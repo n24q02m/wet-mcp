@@ -74,6 +74,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     libasound2 \
     libwayland-client0 \
+    # D-Bus daemon (required by Chromium headless)
+    dbus \
+    # Additional Chromium dependencies
+    libxshmfence1 \
+    libx11-xcb1 \
     # SearXNG dependencies
     libxml2 \
     libxslt1.1 \
@@ -91,7 +96,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONPATH=/app/src \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright \
     CACHE_DIR=/data \
-    DOWNLOAD_DIR=/data/downloads
+    DOWNLOAD_DIR=/data/downloads \
+    DBUS_SESSION_BUS_ADDRESS=disabled:
 
 # Create non-root user and set permissions
 RUN groupadd -r appuser && useradd -r -g appuser -d /home/appuser -m appuser \
