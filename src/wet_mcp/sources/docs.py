@@ -506,9 +506,7 @@ async def _discover_from_maven(name: str) -> dict | None:
             version = best.get("latestVersion") or best.get("v", "")
             homepage = ""
             if group_id and artifact_id and version:
-                homepage = (
-                    f"https://javadoc.io/doc/" f"{group_id}/{artifact_id}/{version}"
-                )
+                homepage = f"https://javadoc.io/doc/{group_id}/{artifact_id}/{version}"
             repo_url = ""
             # Try to find GitHub repo from scm info via additional API call
             if group_id and artifact_id and version:
