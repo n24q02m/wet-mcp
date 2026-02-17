@@ -34,6 +34,16 @@ Valid keys:
 | `sync_folder` | String | Remote folder path |
 | `sync_interval` | Integer (seconds) | Sync interval |
 
+### Embedding Model
+
+Default local model is `Qwen/Qwen3-Embedding-0.6B` (ONNX). For GGUF with GPU:
+
+```bash
+pip install wet-mcp[gguf]
+```
+
+Set `EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B-GGUF` to use the GGUF backend.
+
 ### cache_clear
 
 Clear web cache (search, extract, crawl, map results).

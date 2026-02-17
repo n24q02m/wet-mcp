@@ -88,6 +88,7 @@ Search library/framework documentation with auto-indexing. First call indexes do
 **Parameters:**
 - `query` (required): What to search for in docs
 - `library` (required): Library name (e.g., "react", "fastapi", "pytorch")
+- `language`: Programming language for disambiguation (e.g., "python", "java", "rust")
 - `version`: Specific version (default: latest)
 - `limit`: Maximum results (default: 10)
 
