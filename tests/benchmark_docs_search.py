@@ -1,4 +1,4 @@
-"""Benchmark test suite for docs search quality (1200 libraries).
+"""Benchmark test suite for docs search quality (2000 libraries).
 
 Run manually or via CI to validate docs search quality after changes.
 Each test case specifies a library, query, and expected quality signals.
@@ -5416,3 +5416,17 @@ def get_case(case_id: str) -> dict:
 from benchmark_cases_cc_dp import NEW_BENCHMARK_CASES  # noqa: E402
 
 BENCHMARK_CASES.extend(NEW_BENCHMARK_CASES)
+
+# ---------------------------------------------------------------------------
+# Merge 400 new cases (Categories DQ-EZ) from benchmark_cases_dq_ez.py
+# ---------------------------------------------------------------------------
+from benchmark_cases_dq_ez import NEW_BENCHMARK_CASES_DQ_EZ  # noqa: E402
+
+BENCHMARK_CASES.extend(NEW_BENCHMARK_CASES_DQ_EZ)
+
+# ---------------------------------------------------------------------------
+# Merge 400 new cases (Categories FA-GJ) from benchmark_cases_fa_gj.py
+# ---------------------------------------------------------------------------
+from benchmark_cases_fa_gj import NEW_BENCHMARK_CASES_FA_GJ  # noqa: E402
+
+BENCHMARK_CASES.extend(NEW_BENCHMARK_CASES_FA_GJ)
