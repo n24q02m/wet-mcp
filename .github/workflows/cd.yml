@@ -1,8 +1,9 @@
 name: CD
 
 on:
-  push:
-    branches: [dev, main]
+  # DISABLED: PSR migration in progress
+  # push:
+  #   branches: [dev, main]
   workflow_dispatch:
     inputs:
       action:
