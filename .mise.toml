@@ -18,6 +18,7 @@ UV_LINK_MODE = "copy"
 description = "Setup development environment"
 run = [
   "mise install",
+  "node scripts/clean-venv.mjs",
   "uv sync --group dev",
   "uv pip install pre-commit",
   "uv run pre-commit install",

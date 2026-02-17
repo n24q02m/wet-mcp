@@ -98,6 +98,18 @@ addopts = "-m 'not integration'"
 [tool.ty]
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }
 
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+tag_format = "v{version}"
+commit_message = "chore(release): v{version}"
+major_on_zero = false
+
+[tool.semantic_release.changelog]
+changelog_file = "CHANGELOG.md"
+
+[tool.semantic_release.remote]
+type = "github"
+
 [tool.ruff]
 line-length = 88
 target-version = "py313"
