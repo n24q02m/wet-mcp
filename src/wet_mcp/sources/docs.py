@@ -26,7 +26,7 @@ from loguru import logger
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 23
+DISCOVERY_VERSION = 24
 
 
 def _github_headers() -> dict[str, str]:
@@ -246,6 +246,295 @@ async def _discover_from_go(name: str) -> dict | None:
                 }
     except Exception as e:
         logger.debug(f"Go module lookup failed for {name}: {e}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Additional registry discovery functions
+# ---------------------------------------------------------------------------
+
+
+async def _discover_from_hex(name: str) -> dict | None:
+    """Query Hex.pm API for Elixir/Erlang package metadata."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"https://hex.pm/api/packages/{name}",
+                headers={"Accept": "application/json"},
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            meta = data.get("meta", {})
+            links = meta.get("links", {})
+            # Case-insensitive links lookup
+            links_lower = {k.lower(): v for k, v in links.items() if v}
+            docs_url = (
+                data.get("docs_html_url")
+                or links_lower.get("documentation")
+                or links_lower.get("docs")
+                or links_lower.get("homepage")
+                or ""
+            )
+            repo_url = (
+                links_lower.get("github")
+                or links_lower.get("repository")
+                or links_lower.get("source")
+                or ""
+            )
+            # Fallback: hexdocs.pm is the standard Elixir docs host
+            if not docs_url:
+                docs_url = f"https://hexdocs.pm/{name}"
+            return {
+                "name": data.get("name", name),
+                "description": meta.get("description") or "",
+                "homepage": docs_url,
+                "repository": repo_url,
+                "registry": "hex",
+                "downloads": data.get("downloads", {}).get("all", 0),
+            }
+    except Exception as e:
+        logger.debug(f"Hex.pm lookup failed for {name}: {e}")
+        return None
+
+
+async def _discover_from_packagist(name: str) -> dict | None:
+    """Query Packagist API for PHP package metadata.
+
+    ``name`` can be either ``vendor/package`` (exact) or just ``package``
+    (searches by keyword and picks the best match).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            if "/" in name:
+                # Exact vendor/package lookup
+                resp = await client.get(f"https://repo.packagist.org/p2/{name}.json")
+                if resp.status_code != 200:
+                    return None
+                data = resp.json()
+                packages = data.get("packages", {}).get(name, [])
+                if not packages:
+                    return None
+                latest = packages[0]  # First entry is latest
+                return {
+                    "name": name,
+                    "description": latest.get("description") or "",
+                    "homepage": latest.get("homepage") or "",
+                    "repository": latest.get("source", {})
+                    .get("url", "")
+                    .replace("git+", "")
+                    .replace(".git", ""),
+                    "registry": "packagist",
+                }
+            else:
+                # Search by keyword
+                resp = await client.get(
+                    "https://packagist.org/search.json",
+                    params={"q": name, "per_page": 5},
+                )
+                if resp.status_code != 200:
+                    return None
+                results = resp.json().get("results", [])
+                if not results:
+                    return None
+                # Prefer exact name match on package part
+                name_lower = name.lower()
+                best = None
+                for r in results:
+                    pkg_name = r.get("name", "")
+                    pkg_part = (
+                        pkg_name.split("/")[-1].lower()
+                        if "/" in pkg_name
+                        else pkg_name.lower()
+                    )
+                    if pkg_part == name_lower:
+                        best = r
+                        break
+                if not best:
+                    best = results[0]
+                repo_url = best.get("repository") or ""
+                return {
+                    "name": best.get("name", name),
+                    "description": best.get("description") or "",
+                    "homepage": best.get("url") or "",
+                    "repository": repo_url.replace(".git", ""),
+                    "registry": "packagist",
+                    "downloads": best.get("downloads", 0),
+                }
+    except Exception as e:
+        logger.debug(f"Packagist lookup failed for {name}: {e}")
+        return None
+
+
+async def _discover_from_pubdev(name: str) -> dict | None:
+    """Query pub.dev API for Dart/Flutter package metadata."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(f"https://pub.dev/api/packages/{name}")
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            latest = data.get("latest", {})
+            pubspec = latest.get("pubspec", {})
+            docs_url = pubspec.get("documentation") or pubspec.get("homepage") or ""
+            repo_url = pubspec.get("repository") or ""
+            # Fallback: pub.dev documentation page
+            if not docs_url:
+                docs_url = f"https://pub.dev/documentation/{name}/latest/"
+            return {
+                "name": pubspec.get("name", name),
+                "description": pubspec.get("description") or "",
+                "homepage": docs_url,
+                "repository": repo_url,
+                "registry": "pubdev",
+            }
+    except Exception as e:
+        logger.debug(f"pub.dev lookup failed for {name}: {e}")
+        return None
+
+
+async def _discover_from_rubygems(name: str) -> dict | None:
+    """Query RubyGems API for Ruby gem metadata."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(f"https://rubygems.org/api/v1/gems/{name}.json")
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            docs_url = data.get("documentation_uri") or data.get("homepage_uri") or ""
+            repo_url = data.get("source_code_uri") or ""
+            # Fallback: extract GitHub URL from any URI field
+            if not repo_url or "github.com" not in repo_url:
+                for key in ("homepage_uri", "bug_tracker_uri", "changelog_uri"):
+                    val = data.get(key) or ""
+                    if "github.com" in val:
+                        repo_url = val
+                        break
+            return {
+                "name": data.get("name", name),
+                "description": data.get("info") or "",
+                "homepage": docs_url,
+                "repository": repo_url,
+                "registry": "rubygems",
+                "downloads": data.get("downloads", 0),
+            }
+    except Exception as e:
+        logger.debug(f"RubyGems lookup failed for {name}: {e}")
+        return None
+
+
+async def _discover_from_nuget(name: str) -> dict | None:
+    """Query NuGet API for .NET/C# package metadata."""
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            # NuGet service index → registration endpoint
+            resp = await client.get(
+                f"https://api.nuget.org/v3/registration5-gz-semver2/{name.lower()}/index.json",
+                headers={"Accept": "application/json"},
+            )
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            # Get the latest catalog entry
+            pages = data.get("items", [])
+            if not pages:
+                return None
+            last_page = pages[-1]
+            items = last_page.get("items")
+            if not items:
+                # Need to fetch the page
+                page_url = last_page.get("@id")
+                if page_url:
+                    page_resp = await client.get(page_url)
+                    if page_resp.status_code == 200:
+                        items = page_resp.json().get("items", [])
+            if not items:
+                return None
+            latest = items[-1].get("catalogEntry", {})
+            project_url = latest.get("projectUrl") or ""
+            repo_url = ""
+            # Extract GitHub repo from project URL if available
+            if project_url and "github.com" in project_url:
+                repo_url = project_url
+            return {
+                "name": latest.get("id", name),
+                "description": latest.get("description") or "",
+                "homepage": project_url,
+                "repository": repo_url,
+                "registry": "nuget",
+            }
+    except Exception as e:
+        logger.debug(f"NuGet lookup failed for {name}: {e}")
+        return None
+
+
+async def _discover_from_maven(name: str) -> dict | None:
+    """Query Maven Central for Java/Kotlin/Scala package metadata.
+
+    ``name`` can be:
+    - ``artifactId`` only (e.g. "guice") — searches all groups
+    - ``groupId:artifactId`` (e.g. "com.google.inject:guice") — exact lookup
+    """
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            if ":" in name:
+                group_id, artifact_id = name.split(":", 1)
+                q = f'g:"{group_id}" AND a:"{artifact_id}"'
+            else:
+                q = f'a:"{name}"'
+            resp = await client.get(
+                "https://search.maven.org/solrsearch/select",
+                params={"q": q, "rows": 5, "wt": "json"},
+            )
+            if resp.status_code != 200:
+                return None
+            docs = resp.json().get("response", {}).get("docs", [])
+            if not docs:
+                return None
+            # Prefer exact artifactId match
+            name_lower = name.split(":")[-1].lower() if ":" in name else name.lower()
+            best = None
+            for doc in docs:
+                if doc.get("a", "").lower() == name_lower:
+                    best = doc
+                    break
+            if not best:
+                best = docs[0]
+            group_id = best.get("g", "")
+            artifact_id = best.get("a", "")
+            # Build javadoc URL (standard Maven Central pattern)
+            version = best.get("latestVersion") or best.get("v", "")
+            homepage = ""
+            if group_id and artifact_id and version:
+                homepage = (
+                    f"https://javadoc.io/doc/" f"{group_id}/{artifact_id}/{version}"
+                )
+            repo_url = ""
+            # Try to find GitHub repo from scm info via additional API call
+            if group_id and artifact_id and version:
+                try:
+                    pom_url = (
+                        f"https://search.maven.org/solrsearch/select"
+                        f"?q=g:{group_id}+AND+a:{artifact_id}+AND+v:{version}"
+                        f"&rows=1&wt=json"
+                    )
+                    pom_resp = await client.get(pom_url)
+                    if pom_resp.status_code == 200:
+                        pom_docs = pom_resp.json().get("response", {}).get("docs", [])
+                        if pom_docs:
+                            # ec field contains extra info in some responses
+                            pass
+                except Exception:
+                    pass
+            return {
+                "name": f"{group_id}:{artifact_id}" if group_id else name,
+                "description": "",
+                "homepage": homepage,
+                "repository": repo_url,
+                "registry": "maven",
+            }
+    except Exception as e:
+        logger.debug(f"Maven Central lookup failed for {name}: {e}")
         return None
 
 
@@ -757,21 +1046,21 @@ _LANGUAGE_REGISTRIES: dict[str, list[str]] = {
     "typescript": ["npm"],
     "rust": ["crates"],
     "go": ["go"],
+    "java": ["maven"],
+    "kotlin": ["maven"],
+    "scala": ["maven"],
+    "csharp": ["nuget"],
+    "php": ["packagist"],
+    "ruby": ["rubygems"],
+    "dart": ["pubdev"],
+    "elixir": ["hex"],
+    "erlang": ["hex"],
     # Languages without integrated registry — use GitHub search fallback
-    "java": [],
-    "kotlin": [],
-    "csharp": [],
-    "php": [],
-    "ruby": [],
     "swift": [],
     "c": [],
     "cpp": [],
     "zig": [],
-    "dart": [],
-    "elixir": [],
-    "erlang": [],
     "haskell": [],
-    "scala": [],
     "lua": [],
     "perl": [],
     "r": [],
@@ -787,6 +1076,12 @@ _REGISTRY_FUNCTIONS: dict[str, Any] = {
     "pypi": _discover_from_pypi,
     "crates": _discover_from_crates,
     "go": _discover_from_go,
+    "hex": _discover_from_hex,
+    "packagist": _discover_from_packagist,
+    "pubdev": _discover_from_pubdev,
+    "rubygems": _discover_from_rubygems,
+    "nuget": _discover_from_nuget,
+    "maven": _discover_from_maven,
 }
 
 
@@ -797,11 +1092,13 @@ def _normalize_language(language: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Well-known docs — bypass registry discovery for tools, platforms, and
-# libraries with generic names that cause wrong discovery.
+# Well-known docs — ONLY for genuinely ambiguous names, monorepo
+# sub-frameworks, and non-library tools/platforms that no registry can
+# discover correctly.  Entries should be minimal — add a new registry
+# instead of adding entries here.
 # ---------------------------------------------------------------------------
 _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
-    # C++ — generic names shadowed by Python packages
+    # --- Ambiguous names (multi-language collision) ---
     "boost": {
         "homepage": "https://www.boost.org/doc/libs/",
         "repository": "https://github.com/boostorg/boost",
@@ -812,13 +1109,17 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
         "repository": "https://github.com/Kitware/CMake",
         "description": "CMake cross-platform build system",
     },
-    # Multi-lang — ambiguous names on npm/PyPI
     "protobuf": {
         "homepage": "https://protobuf.dev/",
         "repository": "https://github.com/protocolbuffers/protobuf",
         "description": "Protocol Buffers — Google's data interchange format",
     },
-    # Java / Spring sub-frameworks (monorepo, not separate packages)
+    "flux": {
+        "homepage": "https://fluxcd.io/flux/",
+        "repository": "https://github.com/fluxcd/flux2",
+        "description": "Flux — GitOps toolkit for Kubernetes",
+    },
+    # --- Java/Spring monorepo sub-frameworks ---
     "spring-webflux": {
         "homepage": "https://docs.spring.io/spring-framework/reference/web/webflux.html",
         "repository": "https://github.com/spring-projects/spring-framework",
@@ -829,22 +1130,12 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
         "repository": "https://github.com/apache/kafka",
         "description": "Apache Kafka Streams — stream processing library",
     },
-    "r2dbc": {
-        "homepage": "https://r2dbc.io/",
-        "repository": "https://github.com/r2dbc/r2dbc-spi",
-        "description": "R2DBC — Reactive Relational Database Connectivity",
-    },
     "reactor-test": {
         "homepage": "https://projectreactor.io/docs/core/release/reference/#testing",
         "repository": "https://github.com/reactor/reactor-core",
         "description": "Project Reactor test utilities — StepVerifier",
     },
-    "ehcache": {
-        "homepage": "https://www.ehcache.org/documentation/",
-        "repository": "https://github.com/ehcache/ehcache3",
-        "description": "Ehcache — Java caching library",
-    },
-    # Android Jetpack (monorepo, not on standard registries)
+    # --- Android Jetpack monorepo ---
     "navigation-compose": {
         "homepage": "https://developer.android.com/develop/ui/compose/navigation",
         "repository": "https://github.com/androidx/androidx",
@@ -860,13 +1151,12 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
         "repository": "https://github.com/androidx/androidx",
         "description": "Android Jetpack DataStore — data storage solution",
     },
-    # CI/CD tools (not libraries)
+    # --- Non-library tools/platforms ---
     "gitlab-ci": {
         "homepage": "https://docs.gitlab.com/ci/yaml/",
         "repository": "https://github.com/gitlabhq/gitlabhq",
         "description": "GitLab CI/CD pipeline configuration",
     },
-    # Service mesh / API gateway
     "linkerd": {
         "homepage": "https://linkerd.io/2/reference/",
         "repository": "https://github.com/linkerd/linkerd2",
@@ -882,36 +1172,37 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
         "repository": "https://github.com/krakend/krakend-ce",
         "description": "KrakenD — high-performance API gateway",
     },
-    "api-platform": {
-        "homepage": "https://api-platform.com/docs/",
-        "repository": "https://github.com/api-platform/api-platform",
-        "description": "API Platform — PHP REST and GraphQL framework",
-    },
-    # Game engines (not on package registries)
     "defold": {
         "homepage": "https://defold.com/manuals/introduction/",
         "repository": "https://github.com/defold/defold",
         "description": "Defold — cross-platform game engine",
     },
-    # Database tools
     "sqitch": {
         "homepage": "https://sqitch.org/docs/",
         "repository": "https://github.com/sqitchers/sqitch",
         "description": "Sqitch — database change management",
     },
-    # Dart (pub.dev not supported as registry)
-    "json_serializable": {
-        "homepage": "https://pub.dev/packages/json_serializable",
-        "repository": "https://github.com/google/json_serializable.dart",
-        "description": "Dart JSON serialization code generation",
+    "tekton": {
+        "homepage": "https://tekton.dev/docs/",
+        "repository": "https://github.com/tektoncd/pipeline",
+        "description": "Tekton — Kubernetes-native CI/CD pipelines",
     },
-    # PHP (Packagist not supported as registry)
-    "league/csv": {
-        "homepage": "https://csv.thephpleague.com/",
-        "repository": "https://github.com/thephpleague/csv",
-        "description": "League CSV — PHP CSV data manipulation",
+    "spline": {
+        "homepage": "https://docs.spline.design/",
+        "repository": "",
+        "description": "Spline — 3D design tool for the web",
     },
-    # Go tools (binaries, not importable packages)
+    "dhall": {
+        "homepage": "https://dhall-lang.org/",
+        "repository": "https://github.com/dhall-lang/dhall-haskell",
+        "description": "Dhall — programmable configuration language",
+    },
+    "@enhance/ssr": {
+        "homepage": "https://enhance.dev/docs/",
+        "repository": "https://github.com/enhance-dev/enhance",
+        "description": "Enhance — HTML-first web framework",
+    },
+    # --- Go tools (binaries, not importable packages) ---
     "staticcheck": {
         "homepage": "https://staticcheck.dev/docs/",
         "repository": "https://github.com/dominikh/go-tools",
@@ -927,111 +1218,32 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
         "repository": "https://github.com/golang/vuln",
         "description": "govulncheck — Go vulnerability scanner",
     },
-    # Kubernetes CI/CD tools
-    "tekton": {
-        "homepage": "https://tekton.dev/docs/",
-        "repository": "https://github.com/tektoncd/pipeline",
-        "description": "Tekton — Kubernetes-native CI/CD pipelines",
-    },
-    # Python video editing
-    "moviepy": {
-        "homepage": "https://zulko.github.io/moviepy/",
-        "repository": "https://github.com/Zulko/moviepy",
-        "description": "MoviePy — video editing with Python",
-    },
-    # Python Excel
-    "openpyxl": {
-        "homepage": "https://openpyxl.readthedocs.io/en/stable/",
-        "repository": "https://github.com/theorchard/openpyxl",
-        "description": "openpyxl — read/write Excel files in Python",
-    },
-    # Haskell config language
-    "dhall": {
-        "homepage": "https://dhall-lang.org/",
-        "repository": "https://github.com/dhall-lang/dhall-haskell",
-        "description": "Dhall — programmable configuration language",
-    },
-    # Design/3D tools
-    "spline": {
-        "homepage": "https://docs.spline.design/",
-        "repository": "",
-        "description": "Spline — 3D design tool for the web",
-    },
-    # npm scoped packages (hard to discover)
-    "@enhance/ssr": {
-        "homepage": "https://enhance.dev/docs/",
-        "repository": "https://github.com/enhance-dev/enhance",
-        "description": "Enhance — HTML-first web framework",
-    },
-    # npm packages with wrong discovery
-    "superjson": {
-        "homepage": "https://github.com/flightcontrolhq/superjson",
-        "repository": "https://github.com/flightcontrolhq/superjson",
-        "description": "SuperJSON — extended JSON serialization for JS/TS",
-    },
-    # Rust small async
-    "smol": {
-        "homepage": "https://docs.rs/smol",
-        "repository": "https://github.com/smol-rs/smol",
-        "description": "smol — small and fast async runtime for Rust",
-    },
-    # Azure SDK
-    "azure-identity": {
-        "homepage": "https://learn.microsoft.com/en-us/python/api/azure-identity/",
-        "repository": "https://github.com/Azure/azure-sdk-for-python",
-        "description": "Azure Identity — authentication library for Python",
-    },
-    # Phaser game framework (bot-protected)
-    "phaser": {
-        "homepage": "https://github.com/phaserjs/phaser",
-        "repository": "https://github.com/phaserjs/phaser",
-        "description": "Phaser — HTML5 game framework",
-    },
-    # Fyne Go UI
-    "fyne": {
-        "homepage": "https://docs.fyne.io/",
-        "repository": "https://github.com/fyne-io/fyne",
-        "description": "Fyne — cross-platform GUI toolkit for Go",
-    },
-    # Konva JS Canvas
-    "konva": {
-        "homepage": "https://konvajs.org/api/",
-        "repository": "https://github.com/konvajs/konva",
-        "description": "Konva — HTML5 2D Canvas library for JavaScript",
-    },
-    # Flux GitOps (not ML)
-    "flux": {
-        "homepage": "https://fluxcd.io/flux/",
-        "repository": "https://github.com/fluxcd/flux2",
-        "description": "Flux — GitOps toolkit for Kubernetes",
-    },
-    # Immutable data structures for Rust
-    "im": {
-        "homepage": "https://docs.rs/im",
-        "repository": "https://github.com/bodil/im-rs",
-        "description": "im — immutable data structures for Rust",
-    },
 }
 
 
 async def discover_library(name: str, language: str | None = None) -> dict | None:
     """Discover library metadata from package registries.
 
-    Queries npm, PyPI, crates.io, and Go in parallel. Scores by:
+    Queries all supported registries in parallel. Scores by:
     1. Exact name match (case-insensitive)
     2. Has valid docs/homepage URL
     3. Non-GitHub homepage (custom domain = established project)
     4. Description length (longer = more established)
     5. Dedicated docs URL pattern (readthedocs, docs.*, etc.)
 
-    When ``language`` is specified, only queries matching registries:
-    - python → PyPI only
-    - javascript/typescript → npm only
-    - rust → crates.io only
-    - go → Go module search only
-    - Other languages (java, c#, php, etc.) → GitHub search fallback,
-      then SearXNG if GitHub search finds nothing.
+    Supported registries:
+    - npm (JavaScript/TypeScript)
+    - PyPI (Python)
+    - crates.io (Rust)
+    - Go modules (Go)
+    - Maven Central (Java/Kotlin/Scala)
+    - Hex.pm (Elixir/Erlang)
+    - Packagist (PHP)
+    - pub.dev (Dart/Flutter)
+    - RubyGems (Ruby)
+    - NuGet (C#/.NET)
 
+    When ``language`` is specified, only queries matching registries.
     This prevents e.g. npm's obscure "fastapi" package from shadowing
     Python's FastAPI, or npm "torch" from shadowing PyTorch.
     """
@@ -1096,6 +1308,12 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
                 _discover_from_pypi(name),
                 _discover_from_crates(name),
                 _discover_from_go(name),
+                _discover_from_hex(name),
+                _discover_from_packagist(name),
+                _discover_from_pubdev(name),
+                _discover_from_rubygems(name),
+                _discover_from_nuget(name),
+                _discover_from_maven(name),
             ]
     else:
         # No language specified — query all registries (default)
@@ -1104,6 +1322,12 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
             _discover_from_pypi(name),
             _discover_from_crates(name),
             _discover_from_go(name),
+            _discover_from_hex(name),
+            _discover_from_packagist(name),
+            _discover_from_pubdev(name),
+            _discover_from_rubygems(name),
+            _discover_from_nuget(name),
+            _discover_from_maven(name),
         ]
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -1132,7 +1356,8 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
             if isinstance(gh_hp, str) and gh_hp:
                 valid_results[idx]["homepage"] = gh_hp
                 logger.debug(
-                    f"Pre-upgraded {valid_results[idx].get('name')} homepage from GitHub: {gh_hp}"
+                    f"Pre-upgraded {valid_results[idx].get('name')}"
+                    f" homepage from GitHub: {gh_hp}"
                 )
 
     # Score each result for relevance
