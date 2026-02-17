@@ -4,12 +4,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from wet_mcp.server import web
+from wet_mcp.server import extract, search
 
 
 @pytest.mark.asyncio
-async def test_web_search_success():
-    """Test web search action success path."""
+async def test_search_success():
+    """Test search action success path."""
     with (
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
         patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
@@ -17,7 +17,7 @@ async def test_web_search_success():
         mock_ensure.return_value = "http://localhost:8080"
         mock_search.return_value = "Search Results"
 
-        result = await web(action="search", query="test query")
+        result = await search(action="search", query="test query")
 
         assert result == "Search Results"
         mock_ensure.assert_called_once()
@@ -30,19 +30,19 @@ async def test_web_search_success():
 
 
 @pytest.mark.asyncio
-async def test_web_search_missing_query():
-    """Test web search action missing query."""
-    result = await web(action="search", query=None)
+async def test_search_missing_query():
+    """Test search action missing query."""
+    result = await search(action="search", query=None)
     assert "Error: query is required" in result
 
 
 @pytest.mark.asyncio
-async def test_web_extract_success():
-    """Test web extract action success path."""
-    with patch("wet_mcp.server.extract", new_callable=AsyncMock) as mock_extract:
+async def test_extract_success():
+    """Test extract action success path."""
+    with patch("wet_mcp.server._extract", new_callable=AsyncMock) as mock_extract:
         mock_extract.return_value = "Extracted Content"
 
-        result = await web(action="extract", urls=["https://example.com"])
+        result = await extract(action="extract", urls=["https://example.com"])
 
         assert result == "Extracted Content"
         mock_extract.assert_called_once_with(
@@ -53,13 +53,16 @@ async def test_web_extract_success():
 
 
 @pytest.mark.asyncio
-async def test_web_extract_with_options():
-    """Test web extract action with custom options."""
-    with patch("wet_mcp.server.extract", new_callable=AsyncMock) as mock_extract:
+async def test_extract_with_options():
+    """Test extract action with custom options."""
+    with patch("wet_mcp.server._extract", new_callable=AsyncMock) as mock_extract:
         mock_extract.return_value = "Extracted Content"
 
-        result = await web(
-            action="extract", urls=["https://example.com"], format="json", stealth=False
+        result = await extract(
+            action="extract",
+            urls=["https://example.com"],
+            format="json",
+            stealth=False,
         )
 
         assert result == "Extracted Content"
@@ -71,19 +74,19 @@ async def test_web_extract_with_options():
 
 
 @pytest.mark.asyncio
-async def test_web_extract_missing_urls():
-    """Test web extract action missing urls."""
-    result = await web(action="extract", urls=None)
+async def test_extract_missing_urls():
+    """Test extract action missing urls."""
+    result = await extract(action="extract", urls=None)
     assert "Error: urls is required" in result
 
 
 @pytest.mark.asyncio
-async def test_web_crawl_success():
-    """Test web crawl action success path."""
-    with patch("wet_mcp.server.crawl", new_callable=AsyncMock) as mock_crawl:
+async def test_crawl_success():
+    """Test crawl action success path."""
+    with patch("wet_mcp.server._crawl", new_callable=AsyncMock) as mock_crawl:
         mock_crawl.return_value = "Crawl Results"
 
-        result = await web(
+        result = await extract(
             action="crawl",
             urls=["https://example.com"],
             depth=3,
@@ -103,12 +106,12 @@ async def test_web_crawl_success():
 
 
 @pytest.mark.asyncio
-async def test_web_crawl_defaults():
-    """Test web crawl action with defaults."""
-    with patch("wet_mcp.server.crawl", new_callable=AsyncMock) as mock_crawl:
+async def test_crawl_defaults():
+    """Test crawl action with defaults."""
+    with patch("wet_mcp.server._crawl", new_callable=AsyncMock) as mock_crawl:
         mock_crawl.return_value = "Crawl Results"
 
-        result = await web(action="crawl", urls=["https://example.com"])
+        result = await extract(action="crawl", urls=["https://example.com"])
 
         assert result == "Crawl Results"
         mock_crawl.assert_called_once_with(
@@ -121,19 +124,19 @@ async def test_web_crawl_defaults():
 
 
 @pytest.mark.asyncio
-async def test_web_crawl_missing_urls():
-    """Test web crawl action missing urls."""
-    result = await web(action="crawl", urls=None)
+async def test_crawl_missing_urls():
+    """Test crawl action missing urls."""
+    result = await extract(action="crawl", urls=None)
     assert "Error: urls is required" in result
 
 
 @pytest.mark.asyncio
-async def test_web_map_success():
-    """Test web map action success path."""
-    with patch("wet_mcp.server.sitemap", new_callable=AsyncMock) as mock_sitemap:
+async def test_map_success():
+    """Test map action success path."""
+    with patch("wet_mcp.server._sitemap", new_callable=AsyncMock) as mock_sitemap:
         mock_sitemap.return_value = "Sitemap Content"
 
-        result = await web(
+        result = await extract(
             action="map", urls=["https://example.com"], depth=3, max_pages=50
         )
 
@@ -146,12 +149,12 @@ async def test_web_map_success():
 
 
 @pytest.mark.asyncio
-async def test_web_map_defaults():
-    """Test web map action with defaults."""
-    with patch("wet_mcp.server.sitemap", new_callable=AsyncMock) as mock_sitemap:
+async def test_map_defaults():
+    """Test map action with defaults."""
+    with patch("wet_mcp.server._sitemap", new_callable=AsyncMock) as mock_sitemap:
         mock_sitemap.return_value = "Sitemap Content"
 
-        result = await web(action="map", urls=["https://example.com"])
+        result = await extract(action="map", urls=["https://example.com"])
 
         assert result == "Sitemap Content"
         mock_sitemap.assert_called_once_with(
@@ -162,14 +165,21 @@ async def test_web_map_defaults():
 
 
 @pytest.mark.asyncio
-async def test_web_map_missing_urls():
-    """Test web map action missing urls."""
-    result = await web(action="map", urls=None)
+async def test_map_missing_urls():
+    """Test map action missing urls."""
+    result = await extract(action="map", urls=None)
     assert "Error: urls is required" in result
 
 
 @pytest.mark.asyncio
-async def test_web_invalid_action():
-    """Test invalid action."""
-    result = await web(action="invalid_action")
+async def test_search_invalid_action():
+    """Test invalid action on search tool."""
+    result = await search(action="invalid_action")
+    assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_extract_invalid_action():
+    """Test invalid action on extract tool."""
+    result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result

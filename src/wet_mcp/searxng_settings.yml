@@ -6,7 +6,7 @@ use_default_settings: true
 server:
   secret_key: "wet-mcp-internal-secret"
   bind_address: "127.0.0.1"
-  port: 8080
+  port: 41592
   limiter: false
   method: "GET"
 
@@ -15,13 +15,20 @@ search:
     - html
     - json
 
-# Disable rate limiting for local use
+# Optimize for reliability: retry on transient failures,
+# increase pool size for concurrent engine requests.
 outgoing:
   request_timeout: 10.0
   max_request_timeout: 30.0
+  retries: 1
+  pool_maxsize: 20
+  keepalive_expiry: 10.0
+  enable_http2: true
 
 # Engines to enable
+# More general engines = higher reliability when some get rate-limited.
 engines:
+  # General search engines (primary)
   - name: google
     disabled: false
   - name: bing
@@ -30,3 +37,33 @@ engines:
     disabled: false
   - name: brave
     disabled: false
+
+  # General search engines (fallback — increase resilience)
+  - name: qwant
+    disabled: false
+  - name: mojeek
+    disabled: false
+  - name: yahoo
+    disabled: false
+  - name: startpage
+    disabled: false
+
+  # Academic / Science engines (category: science)
+  - name: google scholar
+    disabled: false
+    shortcut: gsc
+  - name: semantic scholar
+    disabled: false
+    shortcut: ssc
+  - name: arxiv
+    disabled: false
+    shortcut: arx
+  - name: pubmed
+    disabled: false
+    shortcut: pub
+  - name: crossref
+    disabled: false
+    shortcut: cr
+  - name: base
+    disabled: false
+    shortcut: bas

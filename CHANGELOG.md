@@ -5,6 +5,93 @@
 
 * **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
 
+## [2.5.0-beta.8](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.7...v2.5.0-beta.8) (2026-02-14)
+
+
+### Bug Fixes
+
+* **cd:** make scripts executable and clean working tree before promote merge ([9d94df1](https://github.com/n24q02m/wet-mcp/commit/9d94df10e21cf746eb5d15b06ccb9b9ee3811b67))
+
+## [2.5.0-beta.7](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.6...v2.5.0-beta.7) (2026-02-14)
+
+
+### Bug Fixes
+
+* optimize Docker build with BuildKit cache and non-root user ([9114ada](https://github.com/n24q02m/wet-mcp/commit/9114adabcbd6e7b662f0338bcd4041845a726b0e))
+
+## [2.5.0-beta.6](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.5...v2.5.0-beta.6) (2026-02-14)
+
+
+### Features
+
+* Add tests for LiteLLMReranker and Qwen3Reranker; update dependencies in uv.lock ([a45c99e](https://github.com/n24q02m/wet-mcp/commit/a45c99ed68d30b5a7108f61916af1dfc7f541183))
+
+## [2.5.0-beta.5](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.4...v2.5.0-beta.5) (2026-02-13)
+
+
+### Features
+
+* add batch splitting and retry with exponential backoff to embedder ([9fe0e94](https://github.com/n24q02m/wet-mcp/commit/9fe0e946b28430ab5254739dc51415c9ed4a1e0e))
+
+
+### Bug Fixes
+
+* resolve ruff C420 lint and f-string format issues in db.py ([bdc3808](https://github.com/n24q02m/wet-mcp/commit/bdc380820b7d0aff5b1f49bf0c710cb3d16a863b))
+
+## [2.5.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.3...v2.5.0-beta.4) (2026-02-13)
+
+
+### Bug Fixes
+
+* correct changelog descriptions for FTS5 search overhaul ([828eb9a](https://github.com/n24q02m/wet-mcp/commit/828eb9a068350c4b84c67a3b6ae59d0265cae85d))
+
+## [2.5.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.2...v2.5.0-beta.3) (2026-02-13)
+
+
+### Features
+
+* overhaul FTS5 search engine with BM25 column weights, tiered AND-to-OR queries, min-max normalization, RRF fusion, chunk quality scoring, language-agnostic stop word handling via BM25 IDF, content cleaning, sitemap discovery, and GitHub raw markdown fallback ([d79e07b](https://github.com/n24q02m/wet-mcp/commit/d79e07b5e1b42bc12b85b3d5b50a833c3ed2cc80))
+
+## [2.5.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.1...v2.5.0-beta.2) (2026-02-13)
+
+
+### Bug Fixes
+
+* improve docs discovery scoring, crawl scope, and cache validation ([cd3466a](https://github.com/n24q02m/wet-mcp/commit/cd3466a71ffc39ee6015acc9dc67abb74be716ac))
+* refine discovery scoring with library-name-in-domain bonus ([3dcdb4f](https://github.com/n24q02m/wet-mcp/commit/3dcdb4f2fd0e913f6514febf394428021f8d7266))
+* replace broken repo-name cache validation with discovery version ([23b1eee](https://github.com/n24q02m/wet-mcp/commit/23b1eee51927afcf3e6160774423a5fc80b1192c))
+
+## [2.5.0-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta...v2.5.0-beta.1) (2026-02-13)
+
+
+### Bug Fixes
+
+* SearXNG port contention, docs discovery priority, and llms.txt quality check ([b7565f8](https://github.com/n24q02m/wet-mcp/commit/b7565f846785867c2e32bcae1c565e98b74da864))
+
+
+### Documentation
+
+* fix Docker volume persistence and config documentation ([9ded9b1](https://github.com/n24q02m/wet-mcp/commit/9ded9b13c7e3f5ed89127254ed5448a3d885a329))
+
+## [2.5.0-beta](https://github.com/n24q02m/wet-mcp/compare/v2.4.1...v2.5.0-beta) (2026-02-13)
+
+
+### Features
+
+* add automated cleanup for stale release-please PRs ([2247ae6](https://github.com/n24q02m/wet-mcp/commit/2247ae634e0a02f68acce7c12909b0174eca0f3d))
+* Add docs indexing, research tools, and caching ([398e013](https://github.com/n24q02m/wet-mcp/commit/398e013634fde701a9921a45ed51614cd3556a0f))
+
+
+### Bug Fixes
+
+* **cd:** auto-resolve merge conflicts in promote workflow ([4971c6c](https://github.com/n24q02m/wet-mcp/commit/4971c6c29225a605d707d9f1807e4e71f1c64b33))
+* use dynamic version from package metadata instead of hardcoded string ([a2cd072](https://github.com/n24q02m/wet-mcp/commit/a2cd0723e23bd97408432a1e4867805df1e6ba16))
+
+
+### Documentation
+
+* add CODEOWNERS and update README description ([5782dab](https://github.com/n24q02m/wet-mcp/commit/5782dabb4afee4c4de868b4357ed40e778c7ba3c))
+
 ## [2.4.1](https://github.com/n24q02m/wet-mcp/compare/v2.4.0...v2.4.1) (2026-02-12)
 
 
