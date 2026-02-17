@@ -1966,7 +1966,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.5.1"
+version = "2.5.2b2"
 source = { editable = "." }
 dependencies = [
     { name = "crawl4ai" },
@@ -1982,6 +1982,9 @@ dependencies = [
 full = [
     { name = "qwen3-embed" },
     { name = "sqlite-vec" },
+]
+gguf = [
+    { name = "qwen3-embed" },
 ]
 local = [
     { name = "qwen3-embed" },
@@ -2011,10 +2014,11 @@ requires-dist = [
     { name = "pydantic-settings" },
     { name = "qwen3-embed", marker = "extra == 'full'", specifier = ">=0.2.0" },
     { name = "qwen3-embed", marker = "extra == 'local'", specifier = ">=0.2.0" },
+    { name = "qwen3-embed", extras = ["gguf"], marker = "extra == 'gguf'", specifier = ">=0.2.0" },
     { name = "sqlite-vec", marker = "extra == 'full'" },
     { name = "sqlite-vec", marker = "extra == 'vector'" },
 ]
-provides-extras = ["vector", "local", "full"]
+provides-extras = ["vector", "local", "gguf", "full"]
 
 [package.metadata.requires-dev]
 dev = [

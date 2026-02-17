@@ -1,5 +1,6 @@
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -69,3 +70,17 @@ def is_safe_url(url: str) -> bool:
         return False
 
     return True
+
+
+def is_safe_path(target_path: str | Path, base_path: str | Path) -> bool:
+    """
+    Check if target_path is within base_path (prevent path traversal).
+    Resolves symlinks and relative paths.
+    """
+    try:
+        base = Path(base_path).resolve()
+        target = Path(target_path).resolve()
+        return target.is_relative_to(base)
+    except Exception as e:
+        logger.error(f"Error validating path {target_path}: {e}")
+        return False
