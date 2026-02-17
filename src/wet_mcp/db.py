@@ -279,6 +279,22 @@ class DocsDB:
         self._conn.commit()
 
     # -----------------------------------------------------------------------
+    # Stats
+    # -----------------------------------------------------------------------
+
+    def stats(self) -> dict:
+        """Return database statistics."""
+        lib_count = self._conn.execute("SELECT COUNT(*) FROM libraries").fetchone()[0]
+        chunk_count = self._conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()[
+            0
+        ]
+        return {
+            "libraries": lib_count,
+            "chunks": chunk_count,
+            "vec_enabled": self._vec_enabled,
+        }
+
+    # -----------------------------------------------------------------------
     # Library CRUD
     # -----------------------------------------------------------------------
 
