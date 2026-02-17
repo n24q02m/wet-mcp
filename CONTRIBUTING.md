@@ -97,21 +97,20 @@ docs: update configuration examples
 
 ## Release Process
 
-Releases are automated using **Semantic Release**. We strictly follow the **Conventional Commits** specification to determine version bumps and generate changelogs automatically.
+Releases are automated using **python-semantic-release (PSR) v10**. We strictly follow the **Conventional Commits** specification to determine version bumps and generate changelogs automatically.
 
 ### How to Release
 
 1. Create a Pull Request with your changes.
 2. Ensure your commit messages follow the convention above.
 3. Merge the PR to `main`.
-4. The CI pipeline will automatically:
-   - Analyze the new commits
-   - Determine the next version number
-   - Generate release notes
-   - Update `CHANGELOG.md`
-   - Publish to PyPI
-   - Create a GitHub Release
-   - Build and push Docker images
+4. A maintainer triggers the CD workflow manually via **workflow_dispatch**:
+   - Choose `beta` or `stable` release type.
+   - PSR analyzes commits since the last release.
+   - Bumps version, updates `CHANGELOG.md`, creates a tag.
+   - Publishes to PyPI.
+   - Creates a GitHub Release.
+   - Builds and pushes Docker images.
 
 You do **not** need to create manual tags or changelog entries.
 
