@@ -172,6 +172,7 @@ wet-mcp
 | `search` | search, research, docs | Web search, academic research, library documentation |
 | `extract` | extract, crawl, map | Content extraction, deep crawling, site mapping |
 | `media` | list, download, analyze | Media discovery & download |
+| `config` | status, set, cache_clear, docs_reindex | Server configuration and cache management |
 | `help` | - | Full documentation for any tool |
 
 ### Usage Examples
@@ -276,10 +277,10 @@ The server auto-detects `qwen3-embed` when installed and uses it for both embedd
 ┌─────────────────────────────────────────────────────────┐
 │                   WET MCP Server                        │
 │  ┌──────────┐  ┌──────────┐  ┌───────┐  ┌──────────┐   │
-│  │  search  │  │ extract  │  │ media │  │   help   │   │
-│  │ (search, │  │(extract, │  │(list, │  │          │   │
-│  │ research,│  │ crawl,   │  │downld,│  │          │   │
-│  │ docs)    │  │ map)     │  │analyz)│  │          │   │
+│  │  search  │  │ extract  │  │ media │  │  config  │   │
+│  │ (search, │  │(extract, │  │(list, │  │(status,  │   │
+│  │ research,│  │ crawl,   │  │downld,│  │ set,     │   │
+│  │ docs)    │  │ map)     │  │analyz)│  │ cache)   │   │
 │  └──┬───┬───┘  └────┬─────┘  └──┬────┘  └──────────┘   │
 │     │   │           │           │                       │
 │     v   v           v           v                       │
