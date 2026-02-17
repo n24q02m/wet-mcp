@@ -248,30 +248,39 @@ class Qwen3EmbedBackend:
             return []
 
         model = self._get_model()
-        # qwen3-embed returns generator of numpy arrays
-        embeddings = list(model.embed(texts))
-        result = [emb.tolist() for emb in embeddings]
-
-        # Truncate dimensions if requested (MRL support)
+        # Pass dim to model.embed() so MRL truncation happens BEFORE L2-normalization
+        kwargs = {}
         if dimensions and dimensions > 0:
-            result = [v[:dimensions] for v in result]
-
-        return result
+            kwargs["dim"] = dimensions
+        embeddings = list(model.embed(texts, **kwargs))
+        return [emb.tolist() for emb in embeddings]
 
     def embed_single(
         self,
         text: str,
         dimensions: int | None = None,
     ) -> list[float]:
-        """Embed a single text."""
+        """Embed a single text (document/passage)."""
         results = self.embed_texts([text], dimensions)
         return results[0]
+
+    def embed_single_query(
+        self,
+        text: str,
+        dimensions: int | None = None,
+    ) -> list[float]:
+        """Embed a query with instruction prefix (asymmetric retrieval)."""
+        model = self._get_model()
+        kwargs = {}
+        if dimensions and dimensions > 0:
+            kwargs["dim"] = dimensions
+        result = list(model.query_embed(text, **kwargs))
+        return result[0].tolist()
 
     def check_available(self) -> int:
         """Check if qwen3-embed is available."""
         try:
             model = self._get_model()
-            # Embed a test text to get dimensions
             result = list(model.embed(["test"]))
             if result:
                 dim = len(result[0])
@@ -281,7 +290,7 @@ class Qwen3EmbedBackend:
                 return dim
             return 0
         except Exception as e:
-            logger.debug(f"Local embedding not available: {e}")
+            logger.warning(f"Local embedding not available: {e}")
             return 0
 
 

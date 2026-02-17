@@ -325,20 +325,22 @@ class TestQwen3EmbedBackend:
         assert backend.embed_texts([]) == []
 
     def test_embed_texts_with_mrl_truncation(self):
-        """Dimensions parameter truncates embeddings (MRL)."""
+        """Dimensions parameter is passed to model.embed(dim=) for MRL."""
         import numpy as np
 
         backend = Qwen3EmbedBackend()
         mock_model = MagicMock()
+        # Model handles truncation internally when dim= is passed
         mock_model.embed.return_value = iter(
             [
-                np.array([0.1, 0.2, 0.3, 0.4, 0.5]),
+                np.array([0.1, 0.2, 0.3]),
             ]
         )
 
         with patch.object(backend, "_get_model", return_value=mock_model):
             vecs = backend.embed_texts(["test"], dimensions=3)
 
+        mock_model.embed.assert_called_once_with(["test"], dim=3)
         assert len(vecs[0]) == 3
         assert vecs[0] == pytest.approx([0.1, 0.2, 0.3])
 

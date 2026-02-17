@@ -251,12 +251,12 @@ async def _init_reranker_backend() -> None:
 
 
 async def _embed(text: str, is_query: bool = False) -> list[float] | None:
-    """Embed text if backend is available, truncated to fixed dims.
+    """Embed text if backend is available.
 
     Args:
         text: Text to embed.
-        is_query: If True, prepend Qwen3 instruction prefix for query
-            embedding (asymmetric retrieval). Document embeddings stay raw.
+        is_query: If True, use query_embed for instruction-aware asymmetric
+            retrieval (Qwen3). Document embeddings stay raw.
     """
     from wet_mcp.embedder import Qwen3EmbedBackend, get_backend
 
@@ -264,38 +264,25 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
     if not backend:
         return None
     try:
-        # Qwen3 instruction-aware embedding: prepend instruction for queries
-        # so the model produces query-optimized vectors (asymmetric retrieval).
-        embed_text = text
         if is_query and isinstance(backend, Qwen3EmbedBackend):
-            embed_text = (
-                f"Instruct: Retrieve relevant technical documentation\nQuery: {text}"
+            return await asyncio.to_thread(
+                backend.embed_single_query, text, _embedding_dims
             )
-        vec = await asyncio.to_thread(backend.embed_single, embed_text, _embedding_dims)
-        # Truncate to fixed dims so switching models never breaks the DB
-        if _embedding_dims > 0 and len(vec) > _embedding_dims:
-            vec = vec[:_embedding_dims]
-        return vec
+        return await asyncio.to_thread(backend.embed_single, text, _embedding_dims)
     except Exception as e:
         logger.debug(f"Embedding failed: {e}")
         return None
 
 
 async def _embed_batch(texts: list[str]) -> list[list[float]] | None:
-    """Embed batch of texts if backend is available, truncated to fixed dims."""
+    """Embed batch of texts if backend is available."""
     from wet_mcp.embedder import get_backend
 
     backend = get_backend()
     if not backend:
         return None
     try:
-        vecs = await asyncio.to_thread(backend.embed_texts, texts, _embedding_dims)
-        # Truncate to fixed dims
-        if _embedding_dims > 0:
-            vecs = [
-                v[:_embedding_dims] if len(v) > _embedding_dims else v for v in vecs
-            ]
-        return vecs
+        return await asyncio.to_thread(backend.embed_texts, texts, _embedding_dims)
     except Exception as e:
         logger.debug(f"Batch embedding failed: {e}")
         return None
