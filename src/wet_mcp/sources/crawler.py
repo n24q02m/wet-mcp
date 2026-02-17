@@ -243,6 +243,43 @@ async def crawl(
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
+    async def process_one(url: str, current_depth: int):
+        async with sem:
+            try:
+                result = await crawler.arun(
+                    url,  # type: ignore[invalid-argument-type]
+                    config=CrawlerRunConfig(verbose=False),
+                )  # type: ignore[missing-argument]
+
+                if result.success:
+                    content = (
+                        result.markdown if format == "markdown" else result.cleaned_html
+                    )
+                    data = {
+                        "url": url,
+                        "depth": current_depth,
+                        "title": result.metadata.get("title", ""),
+                        "content": content[:5000],  # Limit content size
+                    }
+
+                    new_links = []
+                    # Add internal links for next depth
+                    if current_depth < depth:
+                        internal_links = result.links.get("internal", [])
+                        for link_item in internal_links[:10]:
+                            # Crawl4AI returns dicts with 'href' key
+                            link_url = (
+                                link_item.get("href", "")
+                                if isinstance(link_item, dict)
+                                else link_item
+                            )
+                            if link_url:
+                                new_links.append(link_url)
+                    return data, new_links
+            except Exception as e:
+                logger.error(f"Error crawling {url}: {e}")
+        return None, []
+
     for root_url in urls:
         if not is_safe_url(root_url):
             logger.warning(f"Skipping unsafe URL: {root_url}")
@@ -251,50 +288,34 @@ async def crawl(
         to_crawl: list[tuple[str, int]] = [(root_url, 0)]
 
         while to_crawl and len(all_results) < max_pages:
-            url, current_depth = to_crawl.pop(0)
+            # Process in batches
+            batch = []
+            # We determine batch size dynamically, up to _MAX_CONCURRENT_OPS (6)
+            while to_crawl and len(batch) < 6:
+                if len(all_results) >= max_pages:
+                    break
 
-            if url in visited or current_depth > depth:
+                url, current_depth = to_crawl.pop(0)
+
+                if url in visited or current_depth > depth:
+                    continue
+
+                visited.add(url)
+                batch.append((url, current_depth))
+
+            if not batch:
                 continue
 
-            visited.add(url)
+            tasks = [process_one(url, d) for url, d in batch]
+            results = await asyncio.gather(*tasks)
 
-            async with sem:
-                try:
-                    result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
-
-                    if result.success:
-                        content = (
-                            result.markdown
-                            if format == "markdown"
-                            else result.cleaned_html
-                        )
-                        all_results.append(
-                            {
-                                "url": url,
-                                "depth": current_depth,
-                                "title": result.metadata.get("title", ""),
-                                "content": content[:5000],  # Limit content size
-                            }
-                        )
-
-                        # Add internal links for next depth
-                        if current_depth < depth:
-                            internal_links = result.links.get("internal", [])
-                            for link_item in internal_links[:10]:
-                                # Crawl4AI returns dicts with 'href' key
-                                link_url = (
-                                    link_item.get("href", "")
-                                    if isinstance(link_item, dict)
-                                    else link_item
-                                )
-                                if link_url and link_url not in visited:
-                                    to_crawl.append((link_url, current_depth + 1))
-
-                except Exception as e:
-                    logger.error(f"Error crawling {url}: {e}")
+            for data, links in results:
+                if data:
+                    if len(all_results) < max_pages:
+                        all_results.append(data)
+                        for link in links:
+                            if link not in visited:
+                                to_crawl.append((link, data["depth"] + 1))
 
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
