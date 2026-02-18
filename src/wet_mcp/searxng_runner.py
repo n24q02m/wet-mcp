@@ -105,6 +105,19 @@ def _get_startup_lock() -> asyncio.Lock:
 
 def _is_pid_alive(pid: int) -> bool:
     """Check if a process with the given PID is alive."""
+    if sys.platform == "win32":
+        # os.kill(pid, 0) does not work on Windows for non-child processes.
+        # Use ctypes OpenProcess to check if PID exists.
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+        )
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
     try:
         os.kill(pid, 0)
         return True
