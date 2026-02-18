@@ -11,10 +11,13 @@ Resilience features:
 - Force-kill stale processes before restart to avoid port conflicts
 - Health check verification after (re)start
 - Configurable max restart attempts to prevent restart loops
+- Shared instance: multiple MCP server instances reuse one SearXNG process
+- Eager startup: SearXNG starts in lifespan background, ready before first search
 """
 
 import asyncio
 import atexit
+import json as _json
 import os
 import shutil
 import signal
@@ -43,6 +46,10 @@ _HEALTH_CHECK_TIMEOUT = 2.0
 
 # Maximum time to wait for SearXNG to become healthy after start (seconds).
 _STARTUP_HEALTH_TIMEOUT = 60.0
+
+# Discovery file for sharing SearXNG across multiple MCP server instances.
+# Contains {pid, port, owner_pid, started_at} of the running SearXNG process.
+_DISCOVERY_FILE = Path.home() / ".wet-mcp" / "searxng_instance.json"
 
 
 def _get_pip_command() -> list[str]:
@@ -77,6 +84,125 @@ _searxng_process: subprocess.Popen | None = None
 _searxng_port: int | None = None
 _restart_count: int = 0
 _last_restart_time: float = 0.0
+
+# Shared instance tracking
+_is_owner: bool = False  # True if this instance started the SearXNG process
+_startup_lock: asyncio.Lock | None = None  # Lazy-init to avoid event loop issues
+
+
+def _get_startup_lock() -> asyncio.Lock:
+    """Get or create the startup lock (lazy init for event loop safety)."""
+    global _startup_lock
+    if _startup_lock is None:
+        _startup_lock = asyncio.Lock()
+    return _startup_lock
+
+
+# ---------------------------------------------------------------------------
+# Shared instance discovery
+# ---------------------------------------------------------------------------
+
+
+def _is_pid_alive(pid: int) -> bool:
+    """Check if a process with the given PID is alive."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, PermissionError, OSError):
+        return False
+
+
+def _read_discovery() -> dict | None:
+    """Read SearXNG discovery file.
+
+    Returns dict with {pid, port, owner_pid, started_at} or None.
+    """
+    try:
+        if _DISCOVERY_FILE.exists():
+            data = _json.loads(_DISCOVERY_FILE.read_text())
+            if isinstance(data, dict) and "port" in data and "pid" in data:
+                return data
+    except Exception:
+        pass
+    return None
+
+
+def _write_discovery(port: int, pid: int) -> None:
+    """Write SearXNG discovery file for other instances to find."""
+    try:
+        _DISCOVERY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _DISCOVERY_FILE.write_text(
+            _json.dumps(
+                {
+                    "pid": pid,
+                    "port": port,
+                    "owner_pid": os.getpid(),
+                    "started_at": time.time(),
+                }
+            )
+        )
+    except Exception as e:
+        logger.debug(f"Failed to write discovery file: {e}")
+
+
+def _remove_discovery() -> None:
+    """Remove discovery file (only called by owner on cleanup)."""
+    try:
+        if _DISCOVERY_FILE.exists():
+            _DISCOVERY_FILE.unlink()
+    except Exception:
+        pass
+
+
+async def _quick_health_check(url: str) -> bool:
+    """Quick health check against a SearXNG URL (single probe, 2s timeout)."""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{url}/healthz",
+                headers={
+                    "X-Real-IP": "127.0.0.1",
+                    "X-Forwarded-For": "127.0.0.1",
+                },
+                timeout=_HEALTH_CHECK_TIMEOUT,
+            )
+            return response.status_code == 200
+    except Exception:
+        return False
+
+
+async def _try_reuse_existing() -> str | None:
+    """Try to reuse a SearXNG instance started by another MCP server.
+
+    Reads the discovery file, verifies the process is alive and healthy,
+    and returns the URL if reusable.
+    """
+    data = await asyncio.to_thread(_read_discovery)
+    if not data:
+        return None
+
+    port = data.get("port")
+    pid = data.get("pid")
+    if not port or not pid:
+        return None
+
+    # Check if the SearXNG process is still alive
+    if not _is_pid_alive(pid):
+        logger.debug(f"Discovery file points to dead process (PID={pid}), ignoring")
+        return None
+
+    # Health check the existing instance
+    url = f"http://127.0.0.1:{port}"
+    if await _quick_health_check(url):
+        return url
+
+    logger.debug(f"Discovery file points to unhealthy instance at {url}, ignoring")
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Port management
+# ---------------------------------------------------------------------------
 
 
 def _find_available_port(start_port: int, max_tries: int = 50) -> int:
@@ -350,18 +476,27 @@ def _kill_stale_port_process(port: int) -> None:
 
 
 def _cleanup_process() -> None:
-    """Cleanup SearXNG subprocess and per-process settings file on exit."""
-    global _searxng_process, _searxng_port
+    """Cleanup SearXNG subprocess and per-process settings file on exit.
+
+    Only kills SearXNG if this instance owns it (started it).
+    Non-owner instances just clear their local references.
+    """
+    global _searxng_process, _searxng_port, _is_owner
     if _searxng_process is not None:
-        try:
-            logger.debug("Stopping SearXNG subprocess...")
-            _force_kill_process(_searxng_process)
-            logger.debug("SearXNG subprocess stopped")
-        except Exception as e:
-            logger.debug(f"Error stopping SearXNG: {e}")
-        finally:
-            _searxng_process = None
-            _searxng_port = None
+        if _is_owner:
+            try:
+                logger.debug("Stopping owned SearXNG subprocess...")
+                _force_kill_process(_searxng_process)
+                logger.debug("SearXNG subprocess stopped")
+            except Exception as e:
+                logger.debug(f"Error stopping SearXNG: {e}")
+            # Remove discovery file so other instances don't try to reuse
+            _remove_discovery()
+        else:
+            logger.debug("Not owner, leaving SearXNG subprocess running")
+        _searxng_process = None
+        _searxng_port = None
+        _is_owner = False
 
     # Cleanup per-process settings file
     try:
@@ -383,8 +518,9 @@ async def _start_searxng_subprocess() -> str | None:
 
     Returns the URL if started successfully, None on failure.
     Handles port conflicts by killing stale processes first.
+    Writes discovery file so other MCP server instances can reuse this SearXNG.
     """
-    global _searxng_process, _searxng_port
+    global _searxng_process, _searxng_port, _is_owner
 
     # Kill any existing process first
     if _searxng_process is not None:
@@ -434,6 +570,9 @@ async def _start_searxng_subprocess() -> str | None:
         # Wait for SearXNG to be healthy
         if await _wait_for_service(url, timeout=_STARTUP_HEALTH_TIMEOUT):
             logger.info(f"SearXNG ready at {url}")
+            # Write discovery file so other instances can reuse this SearXNG
+            await asyncio.to_thread(_write_discovery, port, _searxng_process.pid)
+            _is_owner = True
         else:
             logger.warning(f"SearXNG started but not healthy at {url}")
             # Check if process crashed during startup
@@ -463,12 +602,15 @@ async def ensure_searxng() -> str:
     """Start embedded SearXNG subprocess if not running. Returns URL.
 
     This function handles:
+    - Reuse of existing SearXNG from other MCP server instances (shared instance)
     - Auto-installation of SearXNG package from GitHub on first run
     - Subprocess lifecycle management with crash detection
     - Automatic restart on crash (up to _MAX_RESTART_ATTEMPTS)
     - Port conflict resolution (kills stale processes)
     - SearXNG configuration via settings.yml
     - Graceful fallback to external SearXNG URL
+
+    Uses an asyncio lock to prevent concurrent startup attempts.
     """
     global _searxng_process, _searxng_port, _restart_count, _last_restart_time
 
@@ -476,11 +618,26 @@ async def ensure_searxng() -> str:
         logger.info("Auto SearXNG disabled, using external URL")
         return settings.searxng_url
 
-    # Fast path: process is alive and port is known
+    # Serialize startup attempts to prevent concurrent starts
+    async with _get_startup_lock():
+        return await _ensure_searxng_locked()
+
+
+async def _ensure_searxng_locked() -> str:
+    """Inner ensure_searxng logic, called under lock."""
+    global _searxng_process, _searxng_port, _restart_count, _last_restart_time
+
+    # Fast path: our own process is alive and port is known
     if _is_process_alive() and _searxng_port is not None:
         url = f"http://127.0.0.1:{_searxng_port}"
         logger.debug(f"SearXNG already running at {url}")
         return url
+
+    # Try reusing existing SearXNG from another MCP server instance
+    reused_url = await _try_reuse_existing()
+    if reused_url:
+        logger.info(f"Reusing existing SearXNG instance at {reused_url}")
+        return reused_url
 
     # Process is dead or not started — need to (re)start
     if _searxng_process is not None:
