@@ -170,58 +170,32 @@ async def _lifespan(_server: FastMCP):
 async def _init_embedding_backend(keys: dict) -> None:
     """Initialize the embedding backend based on config.
 
-    Resolution order:
-    1. Explicit EMBEDDING_BACKEND + EMBEDDING_MODEL
-    2. Auto-detect: local (qwen3-embed) > litellm (API keys) > none
+    Always initializes a backend (never FTS5-only):
+    - litellm: try cloud model, fallback to local on failure
+    - local: always available (GGUF if GPU + llama-cpp, else ONNX)
     """
     global _embedding_dims
     from wet_mcp.embedder import init_backend
 
     backend_type = settings.resolve_embedding_backend()
 
-    if backend_type == "local":
-        try:
-            backend = await asyncio.to_thread(
-                init_backend, "local", settings.embedding_model or None
-            )
-            native_dims = await asyncio.to_thread(backend.check_available)
-            if native_dims > 0:
-                if _embedding_dims == 0:
-                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                logger.info(
-                    f"Embedding: local ONNX "
-                    f"(native={native_dims}, stored={_embedding_dims})"
-                )
-                return
-            else:
-                logger.warning("Local embedding model not available")
-        except Exception as e:
-            logger.warning(f"Local embedding init failed: {e}")
-
-        # Fall through to litellm if local failed and we have keys
-        if keys:
-            backend_type = "litellm"
-        else:
-            logger.info("No embedding backend available, using FTS5-only search")
-            return
-
     if backend_type == "litellm":
         model = settings.resolve_embedding_model()
         if model:
             # Explicit model -- validate it
-            backend = await asyncio.to_thread(init_backend, "litellm", model)
-            native_dims = await asyncio.to_thread(backend.check_available)
-            if native_dims > 0:
-                if _embedding_dims == 0:
-                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                logger.info(
-                    f"Embedding: {model} "
-                    f"(native={native_dims}, stored={_embedding_dims})"
-                )
-            else:
-                logger.warning(
-                    f"Embedding model {model} not available, using FTS5-only"
-                )
+            try:
+                backend = await asyncio.to_thread(init_backend, "litellm", model)
+                native_dims = await asyncio.to_thread(backend.check_available)
+                if native_dims > 0:
+                    if _embedding_dims == 0:
+                        _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+                    logger.info(
+                        f"Embedding: {model} "
+                        f"(native={native_dims}, stored={_embedding_dims})"
+                    )
+                    return
+            except Exception as e:
+                logger.warning(f"Embedding model {model} not available: {e}")
         elif keys:
             # Auto-detect: try candidate models
             for candidate in _EMBEDDING_CANDIDATES:
@@ -240,36 +214,67 @@ async def _init_embedding_backend(keys: dict) -> None:
                         return
                 except Exception:
                     continue
-            logger.warning("No embedding model available, using FTS5-only")
+        # Cloud not available -- fallback to local
+        logger.warning("Cloud embedding not available, using local fallback")
+
+    # Local backend (always available)
+    local_model = settings.resolve_local_embedding_model()
+    try:
+        backend = await asyncio.to_thread(init_backend, "local", local_model)
+        native_dims = await asyncio.to_thread(backend.check_available)
+        if native_dims > 0:
+            if _embedding_dims == 0:
+                _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+            logger.info(
+                f"Embedding: local {local_model} "
+                f"(native={native_dims}, stored={_embedding_dims})"
+            )
         else:
-            logger.info("No API keys configured, using FTS5-only search")
-    elif not backend_type:
-        logger.info("No embedding backend available, using FTS5-only search")
+            logger.error("Local embedding model not available")
+    except Exception as e:
+        logger.error(f"Local embedding init failed: {e}")
 
 
 async def _init_reranker_backend() -> None:
-    """Initialize the reranker backend based on config."""
+    """Initialize the reranker backend based on config.
+
+    Always initializes a backend unless reranking is disabled:
+    - litellm: use RERANK_MODEL or auto-detected from API_KEYS (Cohere)
+    - local: always available (GGUF if GPU + llama-cpp, else ONNX)
+    """
     rerank_backend_type = settings.resolve_rerank_backend()
 
     if not rerank_backend_type:
-        logger.info("Reranking disabled or no backend available")
+        logger.info("Reranking disabled")
         return
 
     from wet_mcp.reranker import init_reranker
 
+    if rerank_backend_type == "litellm":
+        model = settings.resolve_rerank_model()
+        if model:
+            try:
+                reranker = await asyncio.to_thread(init_reranker, "litellm", model)
+                available = await asyncio.to_thread(reranker.check_available)
+                if available:
+                    logger.info(f"Reranker: {model} (cloud)")
+                    return
+            except Exception as e:
+                logger.warning(f"Cloud reranker {model} not available: {e}")
+        # Cloud not available -- fallback to local
+        logger.warning("Cloud reranking not available, using local fallback")
+
+    # Local backend (always available)
+    local_model = settings.resolve_local_rerank_model()
     try:
-        reranker = await asyncio.to_thread(
-            init_reranker,
-            rerank_backend_type,
-            settings.rerank_model or None,
-        )
+        reranker = await asyncio.to_thread(init_reranker, "local", local_model)
         available = await asyncio.to_thread(reranker.check_available)
         if available:
-            logger.info(f"Reranker: {rerank_backend_type} backend initialized")
+            logger.info(f"Reranker: local {local_model}")
         else:
-            logger.warning(f"Reranker {rerank_backend_type} not available, skipping")
+            logger.error("Local reranker not available")
     except Exception as e:
-        logger.warning(f"Reranker init failed: {e}")
+        logger.error(f"Local reranker init failed: {e}")
 
 
 # --- Helpers ---

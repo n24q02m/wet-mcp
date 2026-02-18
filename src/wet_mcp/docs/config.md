@@ -36,13 +36,13 @@ Valid keys:
 
 ### Embedding Model
 
-Default local model is `Qwen/Qwen3-Embedding-0.6B` (ONNX). For GGUF with GPU:
+Default local model is `n24q02m/Qwen3-Embedding-0.6B-ONNX`. For GGUF with GPU:
 
 ```bash
 pip install wet-mcp[gguf]
 ```
 
-Set `EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B-GGUF` to use the GGUF backend.
+Set `EMBEDDING_MODEL=n24q02m/Qwen3-Embedding-0.6B-GGUF` to use the GGUF backend.
 
 ### cache_clear
 

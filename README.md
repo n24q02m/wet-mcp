@@ -181,12 +181,12 @@ Opens a browser for OAuth and outputs env vars (`RCLONE_CONFIG_*`) to set. Both 
 | `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
 | `API_KEYS` | - | LLM API keys (optional, format: `ENV_VAR:key,...`) |
 | `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
-| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3 ONNX). Auto: litellm > local > FTS5-only |
+| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3). Auto: API_KEYS -> litellm, else local (always available) |
 | `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model (optional) |
 | `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
-| `RERANK_ENABLED` | `true` | Enable reranking after search (auto-disabled if no backend) |
-| `RERANK_BACKEND` | (auto-detect) | `litellm` or `local`. Auto: litellm (if RERANK_MODEL) > local |
-| `RERANK_MODEL` | - | LiteLLM rerank model, e.g. `cohere/rerank-v3.5` (optional, enables cloud reranking) |
+| `RERANK_ENABLED` | `true` | Enable reranking after search |
+| `RERANK_BACKEND` | (auto-detect) | `litellm` or `local`. Auto: Cohere key in API_KEYS -> litellm, else local |
+| `RERANK_MODEL` | (auto-detect) | LiteLLM rerank model (auto: `cohere/rerank-v3.5` if Cohere key in API_KEYS) |
 | `RERANK_TOP_N` | `10` | Return top N results after reranking |
 | `CACHE_DIR` | `~/.wet-mcp` | Data directory for cache DB, docs DB, downloads (optional) |
 | `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location (optional) |
@@ -202,12 +202,18 @@ Opens a browser for OAuth and outputs env vars (`RCLONE_CONFIG_*`) to set. Both 
 
 ### Embedding & Reranking
 
-Auto-detection logic:
+Both embedding and reranking are **always available** — local models are built-in and require no configuration.
 
-- **Embedding**: `API_KEYS` set → cloud (Gemini > OpenAI > Mistral > Cohere). No API keys → local Qwen3-Embedding-0.6B (ONNX, CPU).
-- **Reranking**: `RERANK_MODEL` set → cloud (e.g. `cohere/rerank-v3.5`). No RERANK_MODEL → local Qwen3-Reranker-0.6B (ONNX, CPU).
+- **Embedding**: Default local Qwen3-Embedding-0.6B. Set `API_KEYS` to upgrade to cloud (Gemini > OpenAI > Mistral > Cohere), with automatic local fallback if cloud fails.
+- **Reranking**: Default local Qwen3-Reranker-0.6B. If `COHERE_API_KEY` is present in `API_KEYS`, auto-upgrades to cloud `cohere/rerank-v3.5`.
+- **GPU auto-detection**: If GPU is available (CUDA/DirectML) and `llama-cpp-python` is installed, automatically uses GGUF models (~480MB) instead of ONNX (~570MB) for better performance.
 - All embeddings stored at **768 dims** (default). Switching providers never breaks the vector table.
 - Override with `EMBEDDING_BACKEND=local` to force local even with API keys.
+
+`API_KEYS` supports multiple providers in a single string:
+```
+API_KEYS=GOOGLE_API_KEY:AIza...,OPENAI_API_KEY:sk-...,COHERE_API_KEY:co-...
+```
 
 ### LLM Configuration (Optional)
 

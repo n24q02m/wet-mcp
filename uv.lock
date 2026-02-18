@@ -1435,7 +1435,7 @@ wheels = [
 
 [[package]]
 name = "qwen3-embed"
-version = "1.1.1"
+version = "1.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -1446,9 +1446,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2b/a7/52fe9c46eccbfd126457a207f715b6254132337dd9e66b532211bfcbcc4a/qwen3_embed-1.1.1.tar.gz", hash = "sha256:1875bdd7c9b62106408642cc70747a58d1c87b582a29e24ce0f78462e3fdf88b", size = 80689, upload-time = "2026-02-17T19:35:13.635Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/ac/2966e77203340f9d90aa671b4855356d74682b2d2a06f118bc19431e25fb/qwen3_embed-1.1.3.tar.gz", hash = "sha256:27399729e61bd0316f9fd1df801f99e09ddbb65c8e987d091ee0dd239f2625f2", size = 80771, upload-time = "2026-02-18T17:43:30.355Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/85/b6/e45bea6213d0bfc7e4d16b4ca18fd8f27f3e86da0170c83fecf9f5a98941/qwen3_embed-1.1.1-py3-none-any.whl", hash = "sha256:6911c670e802ac516c9203e64637348b29669023b4fc331e12304d6fdf239b56", size = 52625, upload-time = "2026-02-17T19:35:14.449Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/d6/e67d456805c202a3fc62a8fd28f301404903a7219d925366e0cba3ac409b/qwen3_embed-1.1.3-py3-none-any.whl", hash = "sha256:225663751b13321db15023e285e00df8ff710c39eee1f25bc3e1468d9e775d2e", size = 52669, upload-time = "2026-02-18T17:43:31.187Z" },
 ]
 
 [[package]]

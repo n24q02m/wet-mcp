@@ -1,16 +1,15 @@
-"""Dual-backend embedding: LiteLLM (cloud) + qwen3-embed (local ONNX).
+"""Dual-backend embedding: LiteLLM (cloud) + qwen3-embed (local).
 
 Supports two backends:
 - **litellm**: Cloud providers via LiteLLM (OpenAI, Gemini, Mistral, Cohere).
   Requires API keys. Auto-detects provider from API_KEYS config.
-- **local**: Local ONNX inference via qwen3-embed (Qwen3-Embedding-0.6B).
-  No API keys needed, ~0.57GB model download on first use.
+- **local**: Local inference via qwen3-embed. GGUF if GPU + llama-cpp-python,
+  ONNX otherwise. No API keys needed, ~0.5GB model download on first use.
 
-Backend selection is auto-detected in config.resolve_embedding_backend():
+Backend selection (always returns a valid backend):
 1. Explicit EMBEDDING_BACKEND env var
-2. 'local' if qwen3-embed is installed
-3. 'litellm' if API keys are configured
-4. '' (no embedding, FTS5-only search)
+2. 'litellm' if API keys are configured
+3. 'local' (default, always available)
 
 Embeddings are truncated to fixed dims in server._embed().
 """
@@ -222,7 +221,7 @@ class Qwen3EmbedBackend:
     """
 
     # Default model for qwen3-embed
-    DEFAULT_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+    DEFAULT_MODEL = "n24q02m/Qwen3-Embedding-0.6B-ONNX"
 
     def __init__(self, model_name: str | None = None):
         self._model_name = model_name or self.DEFAULT_MODEL
