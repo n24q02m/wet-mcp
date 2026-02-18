@@ -72,12 +72,28 @@ def _get_semaphore() -> asyncio.Semaphore:
     return _browser_semaphore
 
 
+def _cleanup_browser_data_dir() -> None:
+    """Remove browser data directory to clear stale locks and state."""
+    import shutil
+
+    try:
+        data_dir = Path(_BROWSER_DATA_DIR)
+        if data_dir.exists():
+            shutil.rmtree(data_dir, ignore_errors=True)
+            logger.debug(f"Cleaned browser data dir: {data_dir}")
+    except Exception as exc:
+        logger.debug(f"Error cleaning browser data dir: {exc}")
+
+
 async def _get_crawler(stealth: bool = False) -> AsyncWebCrawler:
     """Return a shared AsyncWebCrawler, creating one if necessary.
 
     If the requested *stealth* mode differs from the current instance the
     old browser is shut down and a new one is started.  This should rarely
     happen in practice since most calls use the same stealth setting.
+
+    On failure (e.g. Playwright connection corrupted after browser recycle),
+    retries once with a fresh browser data directory.
     """
     global _crawler_instance, _crawler_stealth
 
@@ -95,22 +111,30 @@ async def _get_crawler(stealth: bool = False) -> AsyncWebCrawler:
                 logger.debug(f"Error closing old crawler: {exc}")
             _crawler_instance = None
 
-        # Start a fresh browser
-        logger.info(f"Starting shared browser (stealth={stealth})...")
-        crawler = AsyncWebCrawler(
-            verbose=False,
-            config=_browser_config(stealth),
-        )
-        try:
-            await crawler.__aenter__()
-        except Exception:
-            logger.error("Failed to start shared browser")
-            raise
+        # Start a fresh browser (retry once on failure)
+        for attempt in range(2):
+            logger.info(f"Starting shared browser (stealth={stealth})...")
+            crawler = AsyncWebCrawler(
+                verbose=False,
+                config=_browser_config(stealth),
+            )
+            try:
+                await crawler.__aenter__()
+                _crawler_instance = crawler
+                _crawler_stealth = stealth
+                logger.info("Shared browser started")
+                return _crawler_instance
+            except Exception:
+                if attempt == 0:
+                    logger.warning(
+                        "Browser start failed, retrying with fresh data dir..."
+                    )
+                    _cleanup_browser_data_dir()
+                else:
+                    logger.error("Failed to start shared browser after retry")
+                    raise
 
-        _crawler_instance = crawler
-        _crawler_stealth = stealth
-        logger.info("Shared browser started")
-        return _crawler_instance
+        raise RuntimeError("Failed to start shared browser")
 
 
 async def shutdown_crawler() -> None:

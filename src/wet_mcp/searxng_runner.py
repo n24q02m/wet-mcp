@@ -45,7 +45,10 @@ _RESTART_COOLDOWN = 2.0
 _HEALTH_CHECK_TIMEOUT = 2.0
 
 # Maximum time to wait for SearXNG to become healthy after start (seconds).
-_STARTUP_HEALTH_TIMEOUT = 60.0
+# Cold start (first run) includes package installation + Flask init which can
+# take 90-120s on slow machines.  Give enough headroom so the first search
+# call does not time out.
+_STARTUP_HEALTH_TIMEOUT = 120.0
 
 # Discovery file for sharing SearXNG across multiple MCP server instances.
 # Contains {pid, port, owner_pid, started_at} of the running SearXNG process.

@@ -364,6 +364,7 @@ _CANCEL_GRACE_PERIOD = 5.0
 
 # Sub-operation timeouts (seconds) within docs search.
 # These prevent any single step from consuming the entire tool_timeout budget.
+_SEARXNG_TIMEOUT = 150  # ensure_searxng() — cold start can take 90-120s
 _DISCOVERY_TIMEOUT = 30  # discover_library() — registry + probe
 _FETCH_TIMEOUT = 90  # _fetch_and_chunk_docs() — llms.txt + GH raw + crawl
 _EMBED_TIMEOUT = 60  # _embed_batch() — ONNX for all chunks
@@ -453,11 +454,11 @@ async def search(
                 if cached:
                     return cached
             try:
-                searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=90)
-            except TimeoutError:
-                return (
-                    "Error: SearXNG startup timed out (90s). Try again or check logs."
+                searxng_url = await asyncio.wait_for(
+                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
                 )
+            except TimeoutError:
+                return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
             except (SystemExit, Exception) as exc:
                 return f"Error: SearXNG startup failed: {exc}"
             result = await _with_timeout(
@@ -859,9 +860,9 @@ async def config(
 async def _do_research(query: str, max_results: int = 10) -> str:
     """Academic/scientific search using SearXNG science engines."""
     try:
-        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=90)
+        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
     except TimeoutError:
-        return "Error: SearXNG startup timed out (90s). Try again or check logs."
+        return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
     except (SystemExit, Exception) as exc:
         return f"Error: SearXNG startup failed: {exc}"
 
@@ -1133,7 +1134,9 @@ async def _do_docs_search(
         )
         logger.info(f"Registry lookup failed, trying SearXNG for '{library}'...")
         try:
-            searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=15)
+            searxng_url = await asyncio.wait_for(
+                ensure_searxng(), timeout=_SEARXNG_TIMEOUT
+            )
             search_result = await asyncio.wait_for(
                 searxng_search(
                     searxng_url=searxng_url,
@@ -1217,7 +1220,9 @@ async def _do_docs_search(
             f"Only {page_count} pages found for '{library}', trying SearXNG fallback..."
         )
         try:
-            searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=15)
+            searxng_url = await asyncio.wait_for(
+                ensure_searxng(), timeout=_SEARXNG_TIMEOUT
+            )
             fallback_result = await asyncio.wait_for(
                 searxng_search(
                     searxng_url=searxng_url,
