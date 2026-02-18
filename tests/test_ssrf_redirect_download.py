@@ -39,9 +39,10 @@ async def test_download_media_handles_redirects_securely():
         with patch("wet_mcp.sources.crawler.is_safe_url") as mock_is_safe:
 
             def side_effect(u):
-                if u.startswith("http://example.com"):
+                # Use exact match to avoid CodeQL "arbitrary position" warnings
+                if u == "http://example.com/image.jpg":
                     return True
-                if u.startswith("http://localhost"):
+                if u == "http://localhost/secret":
                     return False
                 return True
 
