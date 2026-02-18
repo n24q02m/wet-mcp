@@ -2011,9 +2011,11 @@ full = [
 ]
 gguf = [
     { name = "qwen3-embed", extra = ["gguf"] },
+    { name = "sqlite-vec" },
 ]
 local = [
     { name = "qwen3-embed" },
+    { name = "sqlite-vec" },
 ]
 vector = [
     { name = "sqlite-vec" },
@@ -2042,6 +2044,8 @@ requires-dist = [
     { name = "qwen3-embed", marker = "extra == 'local'", specifier = ">=1.1.0" },
     { name = "qwen3-embed", extras = ["gguf"], marker = "extra == 'gguf'", specifier = ">=1.1.0" },
     { name = "sqlite-vec", marker = "extra == 'full'" },
+    { name = "sqlite-vec", marker = "extra == 'gguf'" },
+    { name = "sqlite-vec", marker = "extra == 'local'" },
     { name = "sqlite-vec", marker = "extra == 'vector'" },
 ]
 provides-extras = ["vector", "local", "gguf", "full"]
