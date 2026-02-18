@@ -154,21 +154,31 @@ def _remove_discovery() -> None:
         pass
 
 
-async def _quick_health_check(url: str) -> bool:
-    """Quick health check against a SearXNG URL (single probe, 2s timeout)."""
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{url}/healthz",
-                headers={
-                    "X-Real-IP": "127.0.0.1",
-                    "X-Forwarded-For": "127.0.0.1",
-                },
-                timeout=_HEALTH_CHECK_TIMEOUT,
-            )
-            return response.status_code == 200
-    except Exception:
-        return False
+async def _quick_health_check(url: str, retries: int = 3) -> bool:
+    """Health check against a SearXNG URL with retries.
+
+    Creates a fresh AsyncClient per call.  The first probe after process
+    startup can be slow (cold TCP + SearXNG init), so we retry with
+    exponential backoff (0.5s, 1s, 2s) and a generous per-probe timeout.
+    """
+    for attempt in range(retries):
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{url}/healthz",
+                    headers={
+                        "X-Real-IP": "127.0.0.1",
+                        "X-Forwarded-For": "127.0.0.1",
+                    },
+                    timeout=5.0,
+                )
+                if response.status_code == 200:
+                    return True
+        except Exception:
+            pass
+        if attempt < retries - 1:
+            await asyncio.sleep(0.5 * (attempt + 1))
+    return False
 
 
 async def _try_reuse_existing() -> str | None:
