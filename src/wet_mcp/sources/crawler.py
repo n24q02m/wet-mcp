@@ -13,6 +13,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -479,7 +480,35 @@ async def download_media(
                 if not is_safe_url(target_url):
                     return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-                response = await client.get(target_url, follow_redirects=True)
+                # Manually handle redirects to check each hop for SSRF
+                redirects = 0
+                max_redirects = 10
+
+                while True:
+                    response = await client.get(target_url, follow_redirects=False)
+
+                    if response.is_redirect:
+                        if redirects >= max_redirects:
+                            raise ValueError("Too many redirects")
+
+                        location = response.headers.get("Location")
+                        if not location:
+                            break
+
+                        # Resolve relative redirects
+                        target_url = urljoin(str(response.url), location)
+
+                        if not is_safe_url(target_url):
+                            return {
+                                "url": url,
+                                "error": "Security Alert: Unsafe URL blocked (redirect)",
+                            }
+
+                        redirects += 1
+                        continue
+                    else:
+                        break
+
                 response.raise_for_status()
 
                 filename = target_url.split("/")[-1].split("?")[0] or "download"
