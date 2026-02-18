@@ -33,14 +33,14 @@
 
 ### Option 1: Minimal uvx (Recommended)
 
-FTS5-only docs search. No API keys needed.
-
-```json
+```jsonc
 {
   "mcpServers": {
     "wet": {
       "command": "uvx",
       "args": ["--python", "3.13", "wet-mcp@latest"]
+      // No API keys needed -- local Qwen3-Embedding-0.6B + Qwen3-Reranker-0.6B (ONNX, CPU)
+      // First run downloads ~570MB model, cached for subsequent runs
     }
   }
 }
@@ -48,7 +48,7 @@ FTS5-only docs search. No API keys needed.
 
 ### Option 2: Minimal Docker
 
-```json
+```jsonc
 {
   "mcpServers": {
     "wet": {
@@ -59,14 +59,14 @@ FTS5-only docs search. No API keys needed.
         "-v", "wet-data:/data",
         "n24q02m/wet-mcp:latest"
       ]
+      // Volume persists cached web pages, indexed docs, and downloads
+      // Same built-in local embedding + reranking as uvx
     }
   }
 }
 ```
 
 ### Option 3: Full uvx
-
-Cloud embedding (Gemini), media analysis, GitHub discovery, docs sync.
 
 ```jsonc
 {
@@ -75,7 +75,8 @@ Cloud embedding (Gemini), media analysis, GitHub discovery, docs sync.
       "command": "uvx",
       "args": ["--python", "3.13", "wet-mcp@latest"],
       "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza...",     // embedding + media analysis
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",     // cloud embedding (Gemini > OpenAI > Mistral > Cohere) + media analysis
+        // Reranking: auto local Qwen3-Reranker-0.6B. Or set RERANK_MODEL=cohere/rerank-v3.5 for cloud reranking
         "GITHUB_TOKEN": "ghp_...",                 // higher rate limits for docs discovery
         "SYNC_ENABLED": "true",                    // enable docs sync
         "SYNC_REMOTE": "gdrive",                   // rclone remote name
@@ -117,31 +118,25 @@ Cloud embedding (Gemini), media analysis, GitHub discovery, docs sync.
         "RCLONE_CONFIG_GDRIVE_TYPE": "drive",
         "RCLONE_CONFIG_GDRIVE_TOKEN": "<base64>"
       }
+      // Same auto-detection: cloud embedding from API_KEYS, auto local reranking
     }
   }
 }
 ```
 
-> The `-v wet-data:/data` volume persists cached web pages, indexed docs, and downloads across restarts.
-
 ### Sync setup (one-time)
 
 ```bash
+# Google Drive
 uvx --python 3.13 wet-mcp setup-sync drive
+
+# Other providers (any rclone remote type)
+uvx --python 3.13 wet-mcp setup-sync dropbox
+uvx --python 3.13 wet-mcp setup-sync onedrive
+uvx --python 3.13 wet-mcp setup-sync s3
 ```
 
-Opens a browser for Google Drive auth and outputs a base64 token for `RCLONE_CONFIG_GDRIVE_TOKEN`. Both raw JSON and base64 tokens are supported.
-
-### Without uvx
-
-```bash
-pip install wet-mcp               # FTS5 only
-pip install wet-mcp[local]        # + Qwen3 ONNX embedding & reranking (no API keys)
-pip install wet-mcp[gguf]         # + GGUF embedding (GPU via llama-cpp-python)
-pip install wet-mcp[full]         # all optional dependencies
-
-wet-mcp
-```
+Opens a browser for OAuth and outputs env vars (`RCLONE_CONFIG_*`) to set. Both raw JSON and base64 tokens are supported.
 
 ---
 
@@ -186,12 +181,12 @@ wet-mcp
 | `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
 | `API_KEYS` | - | LLM API keys (optional, format: `ENV_VAR:key,...`) |
 | `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
-| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3 ONNX/GGUF). Auto: local > litellm > FTS5-only |
-| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model, or `Qwen/Qwen3-Embedding-0.6B-GGUF` for GGUF (optional) |
+| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3 ONNX). Auto: litellm > local > FTS5-only |
+| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model (optional) |
 | `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
 | `RERANK_ENABLED` | `true` | Enable reranking after search (auto-disabled if no backend) |
-| `RERANK_BACKEND` | (follows embedding) | `litellm` or `local`. Defaults to match `EMBEDDING_BACKEND` |
-| `RERANK_MODEL` | (auto-detect) | LiteLLM rerank model, e.g. `cohere/rerank-v3.5` (optional) |
+| `RERANK_BACKEND` | (auto-detect) | `litellm` or `local`. Auto: litellm (if RERANK_MODEL) > local |
+| `RERANK_MODEL` | - | LiteLLM rerank model, e.g. `cohere/rerank-v3.5` (optional, enables cloud reranking) |
 | `RERANK_TOP_N` | `10` | Return top N results after reranking |
 | `CACHE_DIR` | `~/.wet-mcp` | Data directory for cache DB, docs DB, downloads (optional) |
 | `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location (optional) |
@@ -205,43 +200,23 @@ wet-mcp
 | `SYNC_INTERVAL` | `0` | Auto-sync interval in seconds, 0=manual (optional) |
 | `LOG_LEVEL` | `INFO` | Logging level (optional) |
 
+### Embedding & Reranking
+
+Auto-detection logic:
+
+- **Embedding**: `API_KEYS` set → cloud (Gemini > OpenAI > Mistral > Cohere). No API keys → local Qwen3-Embedding-0.6B (ONNX, CPU).
+- **Reranking**: `RERANK_MODEL` set → cloud (e.g. `cohere/rerank-v3.5`). No RERANK_MODEL → local Qwen3-Reranker-0.6B (ONNX, CPU).
+- All embeddings stored at **768 dims** (default). Switching providers never breaks the vector table.
+- Override with `EMBEDDING_BACKEND=local` to force local even with API keys.
+
 ### LLM Configuration (Optional)
 
-For media analysis and docs embedding, configure API keys:
+For media analysis, configure API keys:
 
 ```bash
 API_KEYS=GOOGLE_API_KEY:AIza...
 LLM_MODELS=gemini/gemini-3-flash-preview
 ```
-
-The server auto-detects embedding models from configured API keys (Gemini > OpenAI > Mistral > Cohere).
-
-### Local Embedding & Reranking (Optional)
-
-Run embedding and reranking entirely offline using Qwen3 ONNX models — no API keys needed:
-
-```bash
-# Install with local ONNX support
-pip install wet-mcp[local]
-
-# Or full (local + all dependencies)
-pip install wet-mcp[full]
-```
-
-With `uvx`:
-```jsonc
-{
-  "mcpServers": {
-    "wet": {
-      "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp[local]@latest"]
-      // No API_KEYS needed — local Qwen3-Embedding-0.6B runs on CPU
-    }
-  }
-}
-```
-
-The server auto-detects `qwen3-embed` when installed and uses it for both embedding and reranking. Override with `EMBEDDING_BACKEND=litellm` to force cloud API.
 
 ---
 
