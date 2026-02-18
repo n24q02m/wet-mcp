@@ -583,21 +583,27 @@ async def _start_searxng_subprocess() -> str | None:
             # Write discovery file so other instances can reuse this SearXNG
             await asyncio.to_thread(_write_discovery, port, _searxng_process.pid)
             _is_owner = True
-        else:
-            logger.warning(f"SearXNG started but not healthy at {url}")
-            # Check if process crashed during startup
-            if _searxng_process.poll() is not None:
-                stderr = (
-                    _searxng_process.stderr.read().decode()
-                    if _searxng_process.stderr
-                    else ""
-                )
-                logger.error(f"SearXNG process exited during startup: {stderr[:500]}")
-                _searxng_process = None
-                _searxng_port = None
-                return None
+            return url
 
-        return url
+        # Health check timed out — process may be stuck or crashed
+        logger.warning(f"SearXNG started but not healthy at {url}")
+        if _searxng_process.poll() is not None:
+            stderr = (
+                _searxng_process.stderr.read().decode()
+                if _searxng_process.stderr
+                else ""
+            )
+            logger.error(f"SearXNG process exited during startup: {stderr[:500]}")
+        else:
+            # Process alive but not listening — kill the stuck process
+            logger.warning(
+                f"SearXNG process (PID={_searxng_process.pid}) alive but not "
+                "serving, killing stuck process"
+            )
+            _force_kill_process(_searxng_process)
+        _searxng_process = None
+        _searxng_port = None
+        return None
 
     except Exception as e:
         logger.error(f"Failed to start SearXNG subprocess: {e}")
@@ -638,10 +644,24 @@ async def _ensure_searxng_locked() -> str:
     global _searxng_process, _searxng_port, _restart_count, _last_restart_time
 
     # Fast path: our own process is alive and port is known
-    if _is_process_alive() and _searxng_port is not None:
+    if (
+        _is_process_alive()
+        and _searxng_port is not None
+        and _searxng_process is not None
+    ):
         url = f"http://127.0.0.1:{_searxng_port}"
-        logger.debug(f"SearXNG already running at {url}")
-        return url
+        # Verify port is actually responding (process may be stuck)
+        if await _quick_health_check(url, retries=1):
+            logger.debug(f"SearXNG already running at {url}")
+            return url
+        # Process alive but not serving — kill and restart
+        logger.warning(
+            f"SearXNG process alive (PID={_searxng_process.pid}) "
+            f"but not healthy at {url}, killing"
+        )
+        _force_kill_process(_searxng_process)
+        _searxng_process = None
+        _searxng_port = None
 
     # Try reusing existing SearXNG from another MCP server instance
     reused_url = await _try_reuse_existing()
