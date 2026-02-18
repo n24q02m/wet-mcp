@@ -42,7 +42,7 @@ Discover site structure without extracting content.
 **Parameters:**
 - `urls` (required): List of root URLs
 - `depth`: Discovery depth (default: 2)
-- `max_pages`: Maximum URLs to discover (default: 50)
+- `max_pages`: Maximum URLs to discover (default: 20)
 
 **Example:**
 ```json
