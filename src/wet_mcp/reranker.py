@@ -120,7 +120,7 @@ class Qwen3Reranker:
     Model is downloaded on first use (~0.57GB).
     """
 
-    DEFAULT_MODEL = "Qwen/Qwen3-Reranker-0.6B"
+    DEFAULT_MODEL = "n24q02m/Qwen3-Reranker-0.6B-ONNX"
 
     def __init__(self, model_name: str | None = None):
         self._model_name = model_name or self.DEFAULT_MODEL

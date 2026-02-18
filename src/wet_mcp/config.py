@@ -11,19 +11,59 @@ def _default_data_dir() -> Path:
     return Path.home() / ".wet-mcp"
 
 
+def _detect_gpu() -> bool:
+    """Check if GPU is available via onnxruntime providers."""
+    try:
+        import onnxruntime as ort
+
+        providers = ort.get_available_providers()
+        return (
+            "CUDAExecutionProvider" in providers or "DmlExecutionProvider" in providers
+        )
+    except Exception:
+        return False
+
+
+def _has_gguf_support() -> bool:
+    """Check if llama-cpp-python is installed for GGUF models."""
+    try:
+        import llama_cpp  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _resolve_local_model(onnx_name: str, gguf_name: str) -> str:
+    """Choose local model variant: GGUF if GPU + llama-cpp, else ONNX."""
+    if _detect_gpu() and _has_gguf_support():
+        return gguf_name
+    return onnx_name
+
+
+# Known providers that support reranking via LiteLLM
+_RERANK_PROVIDERS: dict[str, str] = {
+    "COHERE_API_KEY": "cohere/rerank-v3.5",
+}
+
+
 class Settings(BaseSettings):
     """WET MCP Server configuration.
 
     Environment variables:
     - SEARXNG_URL: SearXNG instance URL (default: http://localhost:8080)
-    - API_KEYS: Provider API keys (format: ENV_VAR:key,ENV_VAR:key)
+    - API_KEYS: Provider API keys, supports multiple providers
+        Format: "ENV_VAR:key,ENV_VAR:key,..."
+        Example: "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:..."
+        Embedding providers: Google, OpenAI, Mistral, Cohere
+        Reranking providers: Cohere (auto-detected)
     - EMBEDDING_MODEL: LiteLLM embedding model (auto-detected if not set)
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
-    - EMBEDDING_BACKEND: "litellm" (cloud) | "local" (qwen3-embed ONNX)
-        - auto: litellm if API keys, else local (qwen3-embed built-in)
+    - EMBEDDING_BACKEND: "litellm" | "local" (auto: API_KEYS -> litellm, else local)
+        Local: GGUF if GPU + llama-cpp-python, else ONNX
     - RERANK_ENABLED: Enable reranking (default: true)
-    - RERANK_BACKEND: "litellm" | "local" (default: matches EMBEDDING_BACKEND)
-    - RERANK_MODEL: LiteLLM rerank model (for litellm backend)
+    - RERANK_BACKEND: "litellm" | "local" (auto: Cohere key -> litellm, else local)
+    - RERANK_MODEL: LiteLLM rerank model (auto-detected from API_KEYS if Cohere)
     - RERANK_TOP_N: Return top N results after reranking (default: 10)
     - SYNC_ENABLED: Enable rclone sync (default: false)
     - SYNC_REMOTE: Rclone remote name (e.g., "gdrive")
@@ -50,7 +90,7 @@ class Settings(BaseSettings):
     download_dir: str = "~/.wet-mcp/downloads"
 
     # Media Analysis (LiteLLM)
-    api_keys: str | None = None  # provider:key,provider:key
+    api_keys: str | None = None  # ENV_VAR:key,ENV_VAR:key (multiple providers)
     llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
     llm_temperature: float | None = None
 
@@ -64,11 +104,17 @@ class Settings(BaseSettings):
     # Embedding
     embedding_model: str = ""  # LiteLLM format, auto-detect if empty
     embedding_dims: int = 0  # 0 = use server default (768)
-    embedding_backend: str = ""  # "litellm" | "local" | "" (auto-detect)
+    embedding_backend: str = (
+        ""  # "litellm" | "local" | "" (auto: API_KEYS->litellm, else local)
+    )
 
     # Reranking
-    rerank_enabled: bool = True  # Enable reranking (auto-disabled if no backend)
-    rerank_backend: str = ""  # "litellm" | "local" | "" (follows embedding_backend)
+    rerank_enabled: bool = (
+        True  # Enable reranking (always available via local fallback)
+    )
+    rerank_backend: str = (
+        ""  # "litellm" | "local" | "" (auto: Cohere->litellm, else local)
+    )
     rerank_model: str = ""  # LiteLLM rerank model (e.g., "cohere/rerank-v3.5")
     rerank_top_n: int = 10  # Return top N after reranking
 
@@ -155,12 +201,7 @@ class Settings(BaseSettings):
     # --- Embedding resolution ---
 
     def resolve_embedding_model(self) -> str | None:
-        """Return explicit EMBEDDING_MODEL or None for auto-detect.
-
-        If EMBEDDING_MODEL is set explicitly, return it.
-        Otherwise return None -- auto-detection happens in server lifespan
-        by trying candidate models via LiteLLM.
-        """
+        """Return explicit EMBEDDING_MODEL or None for auto-detect."""
         if self.embedding_model:
             return self.embedding_model
         return None
@@ -169,56 +210,71 @@ class Settings(BaseSettings):
         """Return explicit EMBEDDING_DIMS or 0 for auto-detect."""
         return self.embedding_dims
 
+    def resolve_local_embedding_model(self) -> str:
+        """Resolve local embedding model: GGUF if GPU + llama-cpp, else ONNX."""
+        return _resolve_local_model(
+            "n24q02m/Qwen3-Embedding-0.6B-ONNX",
+            "n24q02m/Qwen3-Embedding-0.6B-GGUF",
+        )
+
     def resolve_embedding_backend(self) -> str:
-        """Resolve embedding backend: 'local', 'litellm', or ''.
+        """Resolve embedding backend: 'local' or 'litellm'.
+
+        Always returns a valid backend (never empty).
 
         Auto-detect order:
         1. Explicit EMBEDDING_BACKEND setting
-        2. 'litellm' if API keys are configured (cloud first)
-        3. 'local' if qwen3-embed is available (built-in fallback)
-        4. '' (no embedding, FTS5-only)
+        2. 'litellm' if API keys are configured
+        3. 'local' (qwen3-embed built-in, always available)
         """
         if self.embedding_backend:
             return self.embedding_backend
-
-        # Auto-detect: prefer cloud if API keys available
         if self.api_keys:
             return "litellm"
+        return "local"
 
-        try:
-            import qwen3_embed  # noqa: F401
+    # --- Reranking resolution ---
 
-            return "local"
-        except ImportError:
-            pass
-
-        return ""
+    def resolve_local_rerank_model(self) -> str:
+        """Resolve local rerank model: GGUF if GPU + llama-cpp, else ONNX."""
+        return _resolve_local_model(
+            "n24q02m/Qwen3-Reranker-0.6B-ONNX",
+            "n24q02m/Qwen3-Reranker-0.6B-GGUF",
+        )
 
     def resolve_rerank_backend(self) -> str:
         """Resolve reranking backend: 'local', 'litellm', or ''.
 
-        Returns '' if reranking is disabled.
-        Cloud reranking if RERANK_MODEL is set, otherwise auto local.
+        Returns '' only if reranking is explicitly disabled.
+        Always returns a valid backend otherwise.
+
+        Auto-detect order:
+        1. Explicit RERANK_BACKEND setting
+        2. 'litellm' if RERANK_MODEL is set
+        3. 'litellm' if API_KEYS contains a rerank-capable provider (Cohere)
+        4. 'local' (qwen3-embed built-in, always available)
         """
         if not self.rerank_enabled:
             return ""
-
         if self.rerank_backend:
             return self.rerank_backend
-
-        # Cloud reranking if explicitly configured
         if self.rerank_model:
             return "litellm"
+        if self.api_keys:
+            for provider_key in _RERANK_PROVIDERS:
+                if provider_key in self.api_keys:
+                    return "litellm"
+        return "local"
 
-        # Auto-fallback to local reranking (qwen3-embed is a core dependency)
-        try:
-            import qwen3_embed  # noqa: F401
-
-            return "local"
-        except ImportError:
-            pass
-
-        return ""
+    def resolve_rerank_model(self) -> str | None:
+        """Resolve rerank model from config or auto-detect from API_KEYS."""
+        if self.rerank_model:
+            return self.rerank_model
+        if self.api_keys:
+            for provider_key, model in _RERANK_PROVIDERS.items():
+                if provider_key in self.api_keys:
+                    return model
+        return None
 
 
 settings = Settings()
