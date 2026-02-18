@@ -27,38 +27,28 @@
 
 - **Python 3.13** (required -- Python 3.14+ is **not** supported due to SearXNG incompatibility)
 
-### Add to mcp.json
+> **Warning:** You **must** specify `--python 3.13` when using `uvx`. Without it, `uvx` may pick Python 3.14+ which causes SearXNG search to fail silently.
 
-#### uvx (Recommended)
+**On first run**, the server automatically installs SearXNG, Playwright chromium, and starts the embedded search engine.
 
-```jsonc
+### Option 1: Minimal uvx (Recommended)
+
+FTS5-only docs search. No API keys needed.
+
+```json
 {
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp@latest"],
-      "env": {
-        // Optional: API keys for embedding and media analysis
-        "API_KEYS": "GOOGLE_API_KEY:AIza...",
-        // Optional: GitHub token for higher rate limits on library docs discovery
-        "GITHUB_TOKEN": "ghp_..."
-      }
+      "args": ["--python", "3.13", "wet-mcp@latest"]
     }
   }
 }
 ```
 
-> **Warning:** You **must** specify `--python 3.13` when using `uvx`. Without it, `uvx` may pick Python 3.14+ which causes SearXNG search to fail silently (`RuntimeError: can't register atexit after shutdown` in DNS resolution).
+### Option 2: Minimal Docker
 
-**That's it!** On first run:
-1. Automatically installs SearXNG from GitHub
-2. Automatically installs Playwright chromium + system dependencies
-3. Starts embedded SearXNG subprocess
-4. Runs the MCP server
-
-#### Docker
-
-```jsonc
+```json
 {
   "mcpServers": {
     "wet": {
@@ -67,31 +57,16 @@
         "run", "-i", "--rm",
         "--name", "mcp-wet",
         "-v", "wet-data:/data",
-        "-e", "API_KEYS",
         "n24q02m/wet-mcp:latest"
-      ],
-      "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza...",
-        "GITHUB_TOKEN": "ghp_..."
-      }
+      ]
     }
   }
 }
 ```
 
-> The `-v wet-data:/data` volume mount persists cached web pages, indexed library docs, and downloaded media across container restarts.
+### Option 3: Full uvx
 
-#### With docs sync (Google Drive)
-
-**Step 1**: Get a drive token (one-time, requires browser):
-
-```bash
-uvx --python 3.13 wet-mcp setup-sync drive
-```
-
-This downloads rclone, opens a browser for Google Drive auth, and outputs a **base64-encoded token** for `RCLONE_CONFIG_GDRIVE_TOKEN`.
-
-**Step 2**: Copy the token and add it to your MCP config:
+Cloud embedding (Gemini), media analysis, GitHub discovery, docs sync.
 
 ```jsonc
 {
@@ -100,24 +75,20 @@ This downloads rclone, opens a browser for Google Drive auth, and outputs a **ba
       "command": "uvx",
       "args": ["--python", "3.13", "wet-mcp@latest"],
       "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza...", // optional: enables media analysis & docs embedding
-        "SYNC_ENABLED": "true",               // required for sync
-        "SYNC_REMOTE": "gdrive",               // required: rclone remote name
-        "SYNC_INTERVAL": "300",                // optional: auto-sync seconds (default: 0 = manual)
-        // "SYNC_FOLDER": "wet-mcp",            // optional: remote folder (default: wet-mcp)
-        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",  // required: rclone backend type
-        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>" // required: from setup-sync
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",     // embedding + media analysis
+        "GITHUB_TOKEN": "ghp_...",                 // higher rate limits for docs discovery
+        "SYNC_ENABLED": "true",                    // enable docs sync
+        "SYNC_REMOTE": "gdrive",                   // rclone remote name
+        "SYNC_INTERVAL": "300",                    // auto-sync every 5min (0 = manual)
+        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",
+        "RCLONE_CONFIG_GDRIVE_TOKEN": "<base64>"   // from: uvx --python 3.13 wet-mcp setup-sync drive
       }
     }
   }
 }
 ```
 
-Both raw JSON and base64-encoded tokens are supported. Base64 is recommended — it avoids nested JSON escaping issues.
-
-Remote is configured via env vars — works in any environment (local, Docker, CI).
-
-#### With sync in Docker
+### Option 4: Full Docker
 
 ```jsonc
 {
@@ -129,41 +100,45 @@ Remote is configured via env vars — works in any environment (local, Docker, C
         "--name", "mcp-wet",
         "-v", "wet-data:/data",
         "-e", "API_KEYS",
+        "-e", "GITHUB_TOKEN",
         "-e", "SYNC_ENABLED",
         "-e", "SYNC_REMOTE",
-        "-e", "SYNC_INTERVAL",              // optional: remove if manual sync only
+        "-e", "SYNC_INTERVAL",
         "-e", "RCLONE_CONFIG_GDRIVE_TYPE",
         "-e", "RCLONE_CONFIG_GDRIVE_TOKEN",
         "n24q02m/wet-mcp:latest"
       ],
       "env": {
-        "API_KEYS": "GOOGLE_API_KEY:AIza...", // optional: enables media analysis & docs embedding
-        "SYNC_ENABLED": "true",               // required for sync
-        "SYNC_REMOTE": "gdrive",               // required: rclone remote name
-        "SYNC_INTERVAL": "300",                // optional: auto-sync seconds (default: 0 = manual)
-        // "SYNC_FOLDER": "wet-mcp",            // optional: remote folder (default: wet-mcp)
-        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",  // required: rclone backend type
-        "RCLONE_CONFIG_GDRIVE_TOKEN": "<paste base64 token>" // required: from setup-sync
+        "API_KEYS": "GOOGLE_API_KEY:AIza...",
+        "GITHUB_TOKEN": "ghp_...",
+        "SYNC_ENABLED": "true",
+        "SYNC_REMOTE": "gdrive",
+        "SYNC_INTERVAL": "300",
+        "RCLONE_CONFIG_GDRIVE_TYPE": "drive",
+        "RCLONE_CONFIG_GDRIVE_TOKEN": "<base64>"
       }
     }
   }
 }
 ```
 
+> The `-v wet-data:/data` volume persists cached web pages, indexed docs, and downloads across restarts.
+
+### Sync setup (one-time)
+
+```bash
+uvx --python 3.13 wet-mcp setup-sync drive
+```
+
+Opens a browser for Google Drive auth and outputs a base64 token for `RCLONE_CONFIG_GDRIVE_TOKEN`. Both raw JSON and base64 tokens are supported.
+
 ### Without uvx
 
 ```bash
-# Standard (cloud embedding via LiteLLM)
-pip install wet-mcp
-
-# With local Qwen3 ONNX embedding & reranking (no API keys needed)
-pip install wet-mcp[local]
-
-# With local GGUF embedding & reranking (GPU support via llama-cpp-python)
-pip install wet-mcp[gguf]
-
-# Full (local + all optional dependencies)
-pip install wet-mcp[full]
+pip install wet-mcp               # FTS5 only
+pip install wet-mcp[local]        # + Qwen3 ONNX embedding & reranking (no API keys)
+pip install wet-mcp[gguf]         # + GGUF embedding (GPU via llama-cpp-python)
+pip install wet-mcp[full]         # all optional dependencies
 
 wet-mcp
 ```
