@@ -356,6 +356,15 @@ wheels = [
 ]
 
 [[package]]
+name = "diskcache"
+version = "5.6.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -771,6 +780,18 @@ sdist = { url = "https://files.pythonhosted.org/packages/2e/f3/194a2dca6cb3eddb8
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/05/3516cc7386b220d388aa0bd833308c677e94eceb82b2756dd95e06f6a13f/litellm-1.81.6-py3-none-any.whl", hash = "sha256:573206ba194d49a1691370ba33f781671609ac77c35347f8a0411d852cf6341a", size = 12224343, upload-time = "2026-02-01T04:02:23.704Z" },
 ]
+
+[[package]]
+name = "llama-cpp-python"
+version = "0.3.16"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "diskcache" },
+    { name = "jinja2" },
+    { name = "numpy" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/b4/c8cd17629ced0b9644a71d399a91145aedef109c0333443bef015e45b704/llama_cpp_python-0.3.16.tar.gz", hash = "sha256:34ed0f9bd9431af045bb63d9324ae620ad0536653740e9bb163a2e1fcb973be6", size = 50688636, upload-time = "2025-08-15T04:58:29.212Z" }
 
 [[package]]
 name = "loguru"
@@ -1435,7 +1456,7 @@ wheels = [
 
 [[package]]
 name = "qwen3-embed"
-version = "0.2.0"
+version = "1.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -1446,9 +1467,14 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d9/30/8ae917b34f8084265a7ca6e1154a210ee7bfd6537d978faf8f76b6c147ee/qwen3_embed-0.2.0.tar.gz", hash = "sha256:ee579ecab1aef20bf9ebe512230d83b138e534ca5311cafa4ff1dcfe62187385", size = 74475, upload-time = "2026-02-13T19:22:44.39Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2b/a7/52fe9c46eccbfd126457a207f715b6254132337dd9e66b532211bfcbcc4a/qwen3_embed-1.1.1.tar.gz", hash = "sha256:1875bdd7c9b62106408642cc70747a58d1c87b582a29e24ce0f78462e3fdf88b", size = 80689, upload-time = "2026-02-17T19:35:13.635Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/30/c1/1d0e7f9c456ad291e8cee12c690055799144c4f2c1b828e7f1caa99de90e/qwen3_embed-0.2.0-py3-none-any.whl", hash = "sha256:3ee82824a87118e2b32d41feb189856872b0668feea075db5b43ae044ee9fbfe", size = 46277, upload-time = "2026-02-13T19:22:43.203Z" },
+    { url = "https://files.pythonhosted.org/packages/85/b6/e45bea6213d0bfc7e4d16b4ca18fd8f27f3e86da0170c83fecf9f5a98941/qwen3_embed-1.1.1-py3-none-any.whl", hash = "sha256:6911c670e802ac516c9203e64637348b29669023b4fc331e12304d6fdf239b56", size = 52625, upload-time = "2026-02-17T19:35:14.449Z" },
+]
+
+[package.optional-dependencies]
+gguf = [
+    { name = "llama-cpp-python" },
 ]
 
 [[package]]
@@ -1966,7 +1992,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.5.1"
+version = "2.5.2b2"
 source = { editable = "." }
 dependencies = [
     { name = "crawl4ai" },
@@ -1982,6 +2008,9 @@ dependencies = [
 full = [
     { name = "qwen3-embed" },
     { name = "sqlite-vec" },
+]
+gguf = [
+    { name = "qwen3-embed", extra = ["gguf"] },
 ]
 local = [
     { name = "qwen3-embed" },
@@ -2009,12 +2038,13 @@ requires-dist = [
     { name = "mcp", extras = ["cli"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", marker = "extra == 'full'", specifier = ">=0.2.0" },
-    { name = "qwen3-embed", marker = "extra == 'local'", specifier = ">=0.2.0" },
+    { name = "qwen3-embed", marker = "extra == 'full'", specifier = ">=1.1.0" },
+    { name = "qwen3-embed", marker = "extra == 'local'", specifier = ">=1.1.0" },
+    { name = "qwen3-embed", extras = ["gguf"], marker = "extra == 'gguf'", specifier = ">=1.1.0" },
     { name = "sqlite-vec", marker = "extra == 'full'" },
     { name = "sqlite-vec", marker = "extra == 'vector'" },
 ]
-provides-extras = ["vector", "local", "full"]
+provides-extras = ["vector", "local", "gguf", "full"]
 
 [package.metadata.requires-dev]
 dev = [
