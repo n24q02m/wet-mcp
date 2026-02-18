@@ -3,7 +3,7 @@
 Uses SQLite for persistence across restarts. Cache entries expire based
 on configurable TTL per action type. Thread-safe via WAL mode.
 
-Cache is transparent — callers use ``get``/``set`` and the cache handles
+Cache is transparent - callers use ``get``/``set`` and the cache handles
 expiry automatically. Old entries are purged periodically.
 """
 

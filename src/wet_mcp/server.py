@@ -369,10 +369,10 @@ _CANCEL_GRACE_PERIOD = 5.0
 
 # Sub-operation timeouts (seconds) within docs search.
 # These prevent any single step from consuming the entire tool_timeout budget.
-_SEARXNG_TIMEOUT = 150  # ensure_searxng() — cold start can take 90-120s
-_DISCOVERY_TIMEOUT = 30  # discover_library() — registry + probe
-_FETCH_TIMEOUT = 90  # _fetch_and_chunk_docs() — llms.txt + GH raw + crawl
-_EMBED_TIMEOUT = 60  # _embed_batch() — ONNX for all chunks
+_SEARXNG_TIMEOUT = 150  # ensure_searxng() - cold start can take 90-120s
+_DISCOVERY_TIMEOUT = 30  # discover_library() - registry + probe
+_FETCH_TIMEOUT = 90  # _fetch_and_chunk_docs() - llms.txt + GH raw + crawl
+_EMBED_TIMEOUT = 60  # _embed_batch() - ONNX for all chunks
 _FALLBACK_TIMEOUT = 60  # SearXNG fallback fetch
 
 
@@ -427,6 +427,7 @@ async def _with_timeout(coro, action: str) -> str:
         readOnlyHint=True,
         openWorldHint=True,
         idempotentHint=True,
+        destructiveHint=False,
     ),
 )
 async def search(
@@ -527,6 +528,8 @@ async def search(
     annotations=ToolAnnotations(
         readOnlyHint=True,
         openWorldHint=True,
+        idempotentHint=True,
+        destructiveHint=False,
     ),
 )
 async def extract(
@@ -616,6 +619,8 @@ async def extract(
     annotations=ToolAnnotations(
         readOnlyHint=False,
         openWorldHint=True,
+        idempotentHint=True,
+        destructiveHint=False,
     ),
 )
 async def media(
@@ -680,6 +685,7 @@ async def media(
         readOnlyHint=True,
         openWorldHint=False,
         idempotentHint=True,
+        destructiveHint=False,
     ),
 )
 async def help(tool_name: str = "search") -> str:
@@ -1051,7 +1057,7 @@ async def _do_docs_search(
     if not _docs_db:
         return "Error: Docs database not initialized"
 
-    # Build library identity — include language for DB disambiguation
+    # Build library identity - include language for DB disambiguation
     # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
     lib_key = f"{library}:{language.lower()}" if language else library
 
@@ -1074,7 +1080,7 @@ async def _do_docs_search(
         # Check if we have indexed chunks
         ver = _docs_db.get_best_version(lib["id"], version)
         if ver and ver.get("chunk_count", 0) > 0:
-            # Search existing index — retrieve extra candidates for reranking
+            # Search existing index - retrieve extra candidates for reranking
             query_embedding = await _embed(query, is_query=True)
             retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
@@ -1162,7 +1168,7 @@ async def _do_docs_search(
 
     if not docs_url:
         # When no docs URL found but we have a GitHub repo URL,
-        # use it as the docs source — _fetch_and_chunk_docs will
+        # use it as the docs source - _fetch_and_chunk_docs will
         # try GitHub raw docs (Tier 1) which often has good docs/.
         if repo_url and "github.com" in repo_url:
             docs_url = repo_url

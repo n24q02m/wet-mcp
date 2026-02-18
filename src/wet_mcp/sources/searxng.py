@@ -54,7 +54,7 @@ async def _ensure_searxng_healthy(searxng_url: str) -> str:
         return new_url
 
     # Even if health check fails after restart, return the URL
-    # and let the search attempt proceed — it may still work.
+    # and let the search attempt proceed - it may still work.
     logger.warning(f"SearXNG at {new_url} still unhealthy after restart attempt")
     return new_url
 

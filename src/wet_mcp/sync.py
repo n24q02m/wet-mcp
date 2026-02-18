@@ -1,7 +1,7 @@
 """Embedded Rclone process management for docs sync.
 
 Syncs the docs database (libraries + chunks) across machines using
-rclone. Only docs data is synced — web cache (search/extract) is
+rclone. Only docs data is synced - web cache (search/extract) is
 ephemeral and not synced.
 
 Sync flow:
@@ -450,7 +450,7 @@ def setup_sync(remote_type: str = "drive") -> None:
             sys.exit(1)
         print(f"rclone installed: {rclone_path}")
 
-    # 2. Run rclone authorize (interactive — opens browser)
+    # 2. Run rclone authorize (interactive - opens browser)
     print(f'\nRunning: rclone authorize "{remote_type}"')
     print("A browser window will open for authentication.\n")
     print("-" * 50)

@@ -588,7 +588,7 @@ async def _start_searxng_subprocess() -> str | None:
             )
         )
 
-        # Register cleanup (idempotent — atexit deduplicates internally)
+        # Register cleanup (idempotent - atexit deduplicates internally)
         atexit.register(_cleanup_process)
 
         url = f"http://127.0.0.1:{port}"
@@ -601,7 +601,7 @@ async def _start_searxng_subprocess() -> str | None:
             _is_owner = True
             return url
 
-        # Health check timed out — process may be stuck or crashed
+        # Health check timed out - process may be stuck or crashed
         logger.warning(f"SearXNG started but not healthy at {url}")
         if _searxng_process.poll() is not None:
             stderr = (
@@ -611,7 +611,7 @@ async def _start_searxng_subprocess() -> str | None:
             )
             logger.error(f"SearXNG process exited during startup: {stderr[:500]}")
         else:
-            # Process alive but not listening — kill the stuck process
+            # Process alive but not listening - kill the stuck process
             logger.warning(
                 f"SearXNG process (PID={_searxng_process.pid}) alive but not "
                 "serving, killing stuck process"
@@ -670,7 +670,7 @@ async def _ensure_searxng_locked() -> str:
         if await _quick_health_check(url, retries=1):
             logger.debug(f"SearXNG already running at {url}")
             return url
-        # Process alive but not serving — kill and restart
+        # Process alive but not serving - kill and restart
         logger.warning(
             f"SearXNG process alive (PID={_searxng_process.pid}) "
             f"but not healthy at {url}, killing"
@@ -685,7 +685,7 @@ async def _ensure_searxng_locked() -> str:
         logger.info(f"Reusing existing SearXNG instance at {reused_url}")
         return reused_url
 
-    # Process is dead or not started — need to (re)start
+    # Process is dead or not started - need to (re)start
     if _searxng_process is not None:
         # Process existed but crashed
         exit_code = _searxng_process.poll()
@@ -734,7 +734,7 @@ async def _ensure_searxng_locked() -> str:
 
     url = await _start_searxng_subprocess()
     if url is not None:
-        # Successful start — reset restart counter
+        # Successful start - reset restart counter
         _restart_count = 0
         return url
 

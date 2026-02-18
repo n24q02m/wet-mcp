@@ -38,7 +38,7 @@ engines:
   - name: brave
     disabled: false
 
-  # General search engines (fallback — increase resilience)
+  # General search engines (fallback - increase resilience)
   - name: qwant
     disabled: false
   - name: mojeek

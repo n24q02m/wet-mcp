@@ -51,7 +51,7 @@ _DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
 def _build_fts_queries(query: str) -> list[str]:
     """Build tiered FTS5 queries: PHRASE -> AND -> OR.
 
-    No stop-word filtering — BM25's IDF naturally down-weights common
+    No stop-word filtering - BM25's IDF naturally down-weights common
     words (any language) and the PHRASE->AND->OR fallback ensures precision
     first, then recall.
     """
@@ -64,11 +64,11 @@ def _build_fts_queries(query: str) -> list[str]:
         return [f'"{safe[0]}"*']
 
     return [
-        # Tier 0: PHRASE — exact phrase match (highest precision)
+        # Tier 0: PHRASE - exact phrase match (highest precision)
         '"' + " ".join(safe) + '"',
-        # Tier 1: AND — all terms must appear
+        # Tier 1: AND - all terms must appear
         " AND ".join(f'"{w}"*' for w in safe),
-        # Tier 2: OR — any term matches (broadest fallback)
+        # Tier 2: OR - any term matches (broadest fallback)
         " OR ".join(f'"{w}"*' for w in safe),
     ]
 
@@ -818,7 +818,7 @@ class DocsDB:
             d["_type"] = "version"
             lines.append(json.dumps(d, ensure_ascii=False))
 
-        # Export chunks (without embeddings — re-generate on target)
+        # Export chunks (without embeddings - re-generate on target)
         for row in self._conn.execute(
             "SELECT * FROM doc_chunks ORDER BY library_id, chunk_index"
         ).fetchall():
