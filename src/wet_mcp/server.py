@@ -57,6 +57,18 @@ _docs_db: DocsDB | None = None
 _embedding_dims: int = 0
 
 
+async def _warmup_searxng() -> None:
+    """Pre-warm SearXNG in background so the first search call is fast.
+
+    Non-fatal: if startup fails, the first search call will retry.
+    """
+    try:
+        url = await ensure_searxng()
+        logger.info(f"SearXNG pre-warmed at {url}")
+    except Exception as e:
+        logger.debug(f"SearXNG pre-warm failed (non-fatal): {e}")
+
+
 @asynccontextmanager
 async def _lifespan(_server: FastMCP):
     """Server lifespan: startup SearXNG, init cache/docs DB, cleanup on shutdown."""
@@ -85,8 +97,13 @@ async def _lifespan(_server: FastMCP):
     await asyncio.to_thread(__import__, "crawl4ai")
     logger.info("Crawl4AI loaded")
 
-    # SearXNG is initialized lazily on first search call via ensure_searxng()
-    # to avoid blocking startup when docs-only usage is needed.
+    # SearXNG is pre-warmed eagerly as a background task to eliminate
+    # startup latency on the first search call. If this instance finds an
+    # existing healthy SearXNG (started by another MCP server instance), it
+    # reuses it instead of spawning a new subprocess.
+    _searxng_warmup_task: asyncio.Task | None = None
+    if settings.wet_auto_searxng:
+        _searxng_warmup_task = asyncio.create_task(_warmup_searxng())
 
     # 2. Initialize web cache
     if settings.wet_cache:
@@ -116,6 +133,14 @@ async def _lifespan(_server: FastMCP):
     yield
 
     logger.info("Shutting down WET MCP Server...")
+
+    # Cancel SearXNG warmup task if still running
+    if _searxng_warmup_task and not _searxng_warmup_task.done():
+        _searxng_warmup_task.cancel()
+        try:
+            await _searxng_warmup_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     # Stop auto-sync
     if settings.sync_enabled:
