@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import tempfile
+from collections import deque
 from pathlib import Path
 
 import httpx
@@ -203,9 +204,9 @@ async def extract(
 
             try:
                 result = await crawler.arun(
-                    url,  # ty: ignore[invalid-argument-type]
+                    url,  # type: ignore[invalid-argument-type]
                     config=run_config,
-                )  # ty: ignore[missing-argument]
+                )  # type: ignore[missing-argument]
 
                 if result.success:
                     content = (
@@ -267,27 +268,37 @@ async def crawl(
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
+    to_crawl: deque[tuple[str, int]] = deque()
     for root_url in urls:
-        if not is_safe_url(root_url):
+        if is_safe_url(root_url):
+            to_crawl.append((root_url, 0))
+        else:
             logger.warning(f"Skipping unsafe URL: {root_url}")
-            continue
 
-        to_crawl: list[tuple[str, int]] = [(root_url, 0)]
+    while to_crawl and len(all_results) < max_pages:
+        batch = []
+        remaining = max_pages - len(all_results)
+        # Limit batch size to avoid over-fetching
+        batch_limit = min(_MAX_CONCURRENT_OPS, remaining)
 
-        while to_crawl and len(all_results) < max_pages:
-            url, current_depth = to_crawl.pop(0)
-
+        # Fill batch with valid unvisited URLs
+        while to_crawl and len(batch) < batch_limit:
+            url, current_depth = to_crawl.popleft()
             if url in visited or current_depth > depth:
                 continue
-
             visited.add(url)
+            batch.append((url, current_depth))
 
+        if not batch:
+            continue
+
+        async def process_one(url: str, current_depth: int):
             async with sem:
                 try:
                     result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
+                        url,  # type: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
+                    )  # type: ignore[missing-argument]
 
                     if result.success:
                         content = (
@@ -295,15 +306,14 @@ async def crawl(
                             if format == "markdown"
                             else result.cleaned_html
                         )
-                        all_results.append(
-                            {
-                                "url": url,
-                                "depth": current_depth,
-                                "title": result.metadata.get("title", ""),
-                                "content": content[:5000],  # Limit content size
-                            }
-                        )
+                        res_entry = {
+                            "url": url,
+                            "depth": current_depth,
+                            "title": result.metadata.get("title", ""),
+                            "content": content[:5000],  # Limit content size
+                        }
 
+                        new_links = []
                         # Add internal links for next depth
                         if current_depth < depth:
                             internal_links = result.links.get("internal", [])
@@ -314,11 +324,22 @@ async def crawl(
                                     if isinstance(link_item, dict)
                                     else link_item
                                 )
-                                if link_url and link_url not in visited:
-                                    to_crawl.append((link_url, current_depth + 1))
-
+                                if link_url:
+                                    new_links.append((link_url, current_depth + 1))
+                        return res_entry, new_links
+                    return None, []
                 except Exception as e:
                     logger.error(f"Error crawling {url}: {e}")
+                    return None, []
+
+        tasks = [process_one(url, d) for url, d in batch]
+        results = await asyncio.gather(*tasks)
+
+        for res_entry, new_links in results:
+            if res_entry:
+                all_results.append(res_entry)
+            # We filter visited later when popping from to_crawl
+            to_crawl.extend(new_links)
 
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
@@ -347,43 +368,67 @@ async def sitemap(
     crawler = await _get_crawler(stealth=False)
     sem = _get_semaphore()
 
-    for root_url in urls:
+    async def process_root(root_url: str) -> list[dict[str, object]]:
         if not is_safe_url(root_url):
             logger.warning(f"Skipping unsafe URL: {root_url}")
-            continue
+            return []
 
-        to_visit: list[tuple[str, int]] = [(root_url, 0)]
+        to_visit: deque[tuple[str, int]] = deque([(root_url, 0)])
         site_urls: list[dict[str, object]] = []
 
         while to_visit and len(site_urls) < max_pages:
-            url, current_depth = to_visit.pop(0)
+            batch = []
+            remaining = max_pages - len(site_urls)
+            batch_limit = min(_MAX_CONCURRENT_OPS, remaining)
 
-            if url in visited or current_depth > depth:
+            while to_visit and len(batch) < batch_limit:
+                url, current_depth = to_visit.popleft()
+                if url in visited or current_depth > depth:
+                    continue
+                visited.add(url)
+                batch.append((url, current_depth))
+
+            if not batch:
                 continue
 
-            visited.add(url)
-            site_urls.append({"url": url, "depth": current_depth})
+            async def process_one(url: str, current_depth: int):
+                async with sem:
+                    try:
+                        result = await crawler.arun(
+                            url,  # type: ignore[invalid-argument-type]
+                            config=CrawlerRunConfig(verbose=False),
+                        )  # type: ignore[missing-argument]
 
-            async with sem:
-                try:
-                    result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
+                        new_links = []
+                        if result.success and current_depth < depth:
+                            for link in result.links.get("internal", [])[:20]:
+                                link_url = (
+                                    link.get("href", "")
+                                    if isinstance(link, dict)
+                                    else link
+                                )
+                                if link_url:
+                                    new_links.append((link_url, current_depth + 1))
 
-                    if result.success and current_depth < depth:
-                        for link in result.links.get("internal", [])[:20]:
-                            # Extract URL from dict if necessary
-                            link_url = (
-                                link.get("href", "") if isinstance(link, dict) else link
-                            )
-                            if link_url and link_url not in visited:
-                                to_visit.append((link_url, current_depth + 1))
+                        return {"url": url, "depth": current_depth}, new_links
+                    except Exception as e:
+                        logger.debug(f"Error mapping {url}: {e}")
+                        return {"url": url, "depth": current_depth}, []
 
-                except Exception as e:
-                    logger.debug(f"Error mapping {url}: {e}")
+            tasks = [process_one(url, d) for url, d in batch]
+            results = await asyncio.gather(*tasks)
 
-        all_urls.extend(site_urls)
+            for res_entry, new_links in results:
+                if res_entry:
+                    site_urls.append(res_entry)
+                to_visit.extend(new_links)
+
+        return site_urls
+
+    root_tasks = [process_root(url) for url in urls]
+    results = await asyncio.gather(*root_tasks)
+    for res in results:
+        all_urls.extend(res)
 
     logger.info(f"Mapped {len(all_urls)} URLs")
     return json.dumps(all_urls, ensure_ascii=False, indent=2)
@@ -414,9 +459,9 @@ async def list_media(
 
     async with sem:
         result = await crawler.arun(
-            url,  # ty: ignore[invalid-argument-type]
+            url,  # type: ignore[invalid-argument-type]
             config=CrawlerRunConfig(verbose=False),
-        )  # ty: ignore[missing-argument]
+        )  # type: ignore[missing-argument]
 
         if not result.success:
             return json.dumps({"error": result.error_message or "Failed to load page"})
