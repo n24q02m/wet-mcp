@@ -65,9 +65,10 @@
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
+        "--name", "mcp-wet",
         "-v", "wet-data:/data",
         "-e", "API_KEYS",
-        "n24q02m/wet-mcp:beta"
+        "n24q02m/wet-mcp:latest"
       ],
       "env": {
         "API_KEYS": "GOOGLE_API_KEY:AIza...",
@@ -125,6 +126,7 @@ Remote is configured via env vars — works in any environment (local, Docker, C
       "command": "docker",
       "args": [
         "run", "-i", "--rm",
+        "--name", "mcp-wet",
         "-v", "wet-data:/data",
         "-e", "API_KEYS",
         "-e", "SYNC_ENABLED",
@@ -132,7 +134,7 @@ Remote is configured via env vars — works in any environment (local, Docker, C
         "-e", "SYNC_INTERVAL",              // optional: remove if manual sync only
         "-e", "RCLONE_CONFIG_GDRIVE_TYPE",
         "-e", "RCLONE_CONFIG_GDRIVE_TOKEN",
-        "n24q02m/wet-mcp:beta"
+        "n24q02m/wet-mcp:latest"
       ],
       "env": {
         "API_KEYS": "GOOGLE_API_KEY:AIza...", // optional: enables media analysis & docs embedding
@@ -318,7 +320,7 @@ uv run wet-mcp
 ### Docker Build
 
 ```bash
-docker build -t n24q02m/wet-mcp:beta .
+docker build -t n24q02m/wet-mcp:latest .
 ```
 
 **Requirements:** Python 3.13 (not 3.14+)
