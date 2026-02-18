@@ -400,6 +400,32 @@ def stop_auto_sync() -> None:
         _sync_task = None
 
 
+def _extract_token(output: str) -> str | None:
+    """Extract rclone OAuth token JSON from authorize output.
+
+    rclone outputs the token between dashed lines like:
+        Paste the following into your remote machine config
+        --------------------
+        {"access_token":"...","token_type":"Bearer",...}
+        --------------------
+    """
+    import re
+
+    # Try to find JSON between ---- markers
+    pattern = r"-{4,}\s*\n\s*(\{[^}]+\})\s*\n\s*-{4,}"
+    match = re.search(pattern, output)
+    if match:
+        return match.group(1).strip()
+
+    # Fallback: find any JSON object with access_token
+    pattern = r'\{"access_token"[^}]+\}'
+    match = re.search(pattern, output)
+    if match:
+        return match.group(0).strip()
+
+    return None
+
+
 def setup_sync(remote_type: str = "drive") -> None:
     """Download rclone and run authorize to get a token.
 
@@ -409,7 +435,6 @@ def setup_sync(remote_type: str = "drive") -> None:
     Captures the token from rclone output, base64-encodes it,
     and prints ready-to-paste MCP config.
     """
-    import re
 
     print(f"=== WET MCP: Setup Sync ({remote_type}) ===\n")
 
@@ -447,20 +472,7 @@ def setup_sync(remote_type: str = "drive") -> None:
         sys.exit(1)
 
     # 3. Extract token JSON from stdout
-    token_json = None
-    output = result.stdout or ""
-
-    # Try to find JSON between ---- markers
-    pattern = r"-{4,}\s*\n\s*(\{[^}]+\})\s*\n\s*-{4,}"
-    match = re.search(pattern, output)
-    if match:
-        token_json = match.group(1).strip()
-    else:
-        # Fallback: find any JSON object with access_token
-        pattern = r'\{"access_token"[^}]+\}'
-        match = re.search(pattern, output)
-        if match:
-            token_json = match.group(0).strip()
+    token_json = _extract_token(result.stdout or "")
 
     remote_name = "gdrive" if remote_type == "drive" else remote_type
     remote_upper = remote_name.upper()
