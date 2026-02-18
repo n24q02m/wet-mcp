@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     - EMBEDDING_MODEL: LiteLLM embedding model (auto-detected if not set)
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
     - EMBEDDING_BACKEND: "litellm" (cloud) | "local" (qwen3-embed ONNX)
-        - auto: local if qwen3-embed installed, else litellm if API keys, else none
+        - auto: litellm if API keys, else local (qwen3-embed built-in)
     - RERANK_ENABLED: Enable reranking (default: true)
     - RERANK_BACKEND: "litellm" | "local" (default: matches EMBEDDING_BACKEND)
     - RERANK_MODEL: LiteLLM rerank model (for litellm backend)
@@ -174,14 +174,17 @@ class Settings(BaseSettings):
 
         Auto-detect order:
         1. Explicit EMBEDDING_BACKEND setting
-        2. 'local' if qwen3-embed is installed
-        3. 'litellm' if API keys are configured
+        2. 'litellm' if API keys are configured (cloud first)
+        3. 'local' if qwen3-embed is available (built-in fallback)
         4. '' (no embedding, FTS5-only)
         """
         if self.embedding_backend:
             return self.embedding_backend
 
-        # Auto-detect: prefer local if available
+        # Auto-detect: prefer cloud if API keys available
+        if self.api_keys:
+            return "litellm"
+
         try:
             import qwen3_embed  # noqa: F401
 
@@ -189,16 +192,13 @@ class Settings(BaseSettings):
         except ImportError:
             pass
 
-        if self.api_keys:
-            return "litellm"
-
         return ""
 
     def resolve_rerank_backend(self) -> str:
         """Resolve reranking backend: 'local', 'litellm', or ''.
 
         Returns '' if reranking is disabled.
-        Follows embedding backend if not explicitly set.
+        Cloud reranking if RERANK_MODEL is set, otherwise auto local.
         """
         if not self.rerank_enabled:
             return ""
@@ -206,19 +206,11 @@ class Settings(BaseSettings):
         if self.rerank_backend:
             return self.rerank_backend
 
-        # Follow embedding backend
-        embed_backend = self.resolve_embedding_backend()
-        if embed_backend == "local":
-            try:
-                import qwen3_embed  # noqa: F401
-
-                return "local"
-            except ImportError:
-                pass
-        if embed_backend == "litellm" and self.rerank_model:
+        # Cloud reranking if explicitly configured
+        if self.rerank_model:
             return "litellm"
 
-        # Local reranking available even without explicit embed backend
+        # Auto-fallback to local reranking (qwen3-embed is a core dependency)
         try:
             import qwen3_embed  # noqa: F401
 

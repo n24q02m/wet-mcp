@@ -356,15 +356,6 @@ wheels = [
 ]
 
 [[package]]
-name = "diskcache"
-version = "5.6.3"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3f/21/1c1ffc1a039ddcc459db43cc108658f32c57d271d7289a2794e401d0fdb6/diskcache-5.6.3.tar.gz", hash = "sha256:2c3a3fa2743d8535d832ec61c2054a1641f41775aa7c556758a109941e33e4fc", size = 67916, upload-time = "2023-08-31T06:12:00.316Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3f/27/4570e78fc0bf5ea0ca45eb1de3818a23787af9b390c0b0a0033a1b8236f9/diskcache-5.6.3-py3-none-any.whl", hash = "sha256:5e31b2d5fbad117cc363ebaf6b689474db18a1f6438bc82358b024abd4c2ca19", size = 45550, upload-time = "2023-08-31T06:11:58.822Z" },
-]
-
-[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -780,18 +771,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/2e/f3/194a2dca6cb3eddb8
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e6/05/3516cc7386b220d388aa0bd833308c677e94eceb82b2756dd95e06f6a13f/litellm-1.81.6-py3-none-any.whl", hash = "sha256:573206ba194d49a1691370ba33f781671609ac77c35347f8a0411d852cf6341a", size = 12224343, upload-time = "2026-02-01T04:02:23.704Z" },
 ]
-
-[[package]]
-name = "llama-cpp-python"
-version = "0.3.16"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "diskcache" },
-    { name = "jinja2" },
-    { name = "numpy" },
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e4/b4/c8cd17629ced0b9644a71d399a91145aedef109c0333443bef015e45b704/llama_cpp_python-0.3.16.tar.gz", hash = "sha256:34ed0f9bd9431af045bb63d9324ae620ad0536653740e9bb163a2e1fcb973be6", size = 50688636, upload-time = "2025-08-15T04:58:29.212Z" }
 
 [[package]]
 name = "loguru"
@@ -1472,11 +1451,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/85/b6/e45bea6213d0bfc7e4d16b4ca18fd8f27f3e86da0170c83fecf9f5a98941/qwen3_embed-1.1.1-py3-none-any.whl", hash = "sha256:6911c670e802ac516c9203e64637348b29669023b4fc331e12304d6fdf239b56", size = 52625, upload-time = "2026-02-17T19:35:14.449Z" },
 ]
 
-[package.optional-dependencies]
-gguf = [
-    { name = "llama-cpp-python" },
-]
-
 [[package]]
 name = "rank-bm25"
 version = "0.2.2"
@@ -1992,7 +1966,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.6.0b3"
+version = "2.6.0b4"
 source = { editable = "." }
 dependencies = [
     { name = "crawl4ai" },
@@ -2002,22 +1976,7 @@ dependencies = [
     { name = "mcp", extra = ["cli"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-]
-
-[package.optional-dependencies]
-full = [
     { name = "qwen3-embed" },
-    { name = "sqlite-vec" },
-]
-gguf = [
-    { name = "qwen3-embed", extra = ["gguf"] },
-    { name = "sqlite-vec" },
-]
-local = [
-    { name = "qwen3-embed" },
-    { name = "sqlite-vec" },
-]
-vector = [
     { name = "sqlite-vec" },
 ]
 
@@ -2040,15 +1999,9 @@ requires-dist = [
     { name = "mcp", extras = ["cli"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", marker = "extra == 'full'", specifier = ">=1.1.0" },
-    { name = "qwen3-embed", marker = "extra == 'local'", specifier = ">=1.1.0" },
-    { name = "qwen3-embed", extras = ["gguf"], marker = "extra == 'gguf'", specifier = ">=1.1.0" },
-    { name = "sqlite-vec", marker = "extra == 'full'" },
-    { name = "sqlite-vec", marker = "extra == 'gguf'" },
-    { name = "sqlite-vec", marker = "extra == 'local'" },
-    { name = "sqlite-vec", marker = "extra == 'vector'" },
+    { name = "qwen3-embed", specifier = ">=1.1.0" },
+    { name = "sqlite-vec" },
 ]
-provides-extras = ["vector", "local", "gguf", "full"]
 
 [package.metadata.requires-dev]
 dev = [
