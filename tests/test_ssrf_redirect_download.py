@@ -39,9 +39,9 @@ async def test_download_media_handles_redirects_securely():
         with patch("wet_mcp.sources.crawler.is_safe_url") as mock_is_safe:
 
             def side_effect(u):
-                if "example.com" in u:
+                if u.startswith("http://example.com"):
                     return True
-                if "localhost" in u:
+                if u.startswith("http://localhost"):
                     return False
                 return True
 
