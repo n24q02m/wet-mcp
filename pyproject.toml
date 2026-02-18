@@ -42,10 +42,12 @@ vector = [
 local = [
     # Local ONNX embedding + reranking (no API keys needed)
     "qwen3-embed>=1.1.0",
+    "sqlite-vec",
 ]
 gguf = [
     # Local GGUF embedding + reranking (GPU support via llama-cpp-python)
     "qwen3-embed[gguf]>=1.1.0",
+    "sqlite-vec",
 ]
 full = [
     # All optional features
