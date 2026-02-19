@@ -19,6 +19,7 @@ import asyncio
 import atexit
 import json as _json
 import os
+import secrets
 import shutil
 import signal
 import socket
@@ -380,6 +381,11 @@ def _get_settings_path(port: int) -> Path:
         "port: 41592",
         f"port: {port}",
     )
+
+    # Generate random secret key for this session
+    # This prevents using the hardcoded secret from the template
+    secret = secrets.token_hex(32)
+    content = content.replace("REPLACE_WITH_REAL_SECRET", secret)
 
     settings_file.write_text(content)
     logger.debug(f"SearXNG settings written to: {settings_file}")
