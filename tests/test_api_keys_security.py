@@ -1,7 +1,10 @@
 import os
 import tempfile
+
 import pytest
+
 from wet_mcp.config import Settings
+
 
 @pytest.fixture(autouse=True)
 def clean_env():
