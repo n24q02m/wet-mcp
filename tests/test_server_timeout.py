@@ -50,6 +50,7 @@ sys.modules["wet_mcp.config"] = mock_config
 # Now import the target function
 from wet_mcp.server import _with_timeout  # noqa: E402, I001
 
+
 @pytest.mark.asyncio
 async def test_with_timeout_success():
     """Test _with_timeout returns result when task completes within timeout."""
@@ -60,6 +61,7 @@ async def test_with_timeout_success():
 
     result = await _with_timeout(fast_coro(), "test_action")
     assert result == "success"
+
 
 @pytest.mark.asyncio
 async def test_with_timeout_exceeded():
@@ -77,6 +79,7 @@ async def test_with_timeout_exceeded():
     )
     assert result == expected_msg
 
+
 @pytest.mark.asyncio
 async def test_with_timeout_exception():
     """Test _with_timeout propagates exceptions from inner task."""
@@ -88,22 +91,28 @@ async def test_with_timeout_exception():
     with pytest.raises(ValueError, match="oops"):
         await _with_timeout(failing_coro(), "test_action")
 
+
 @pytest.mark.asyncio
 async def test_with_timeout_disabled():
     """Test _with_timeout bypasses timeout logic when <= 0."""
     # Test with 0
     mock_settings.tool_timeout = 0
+
     async def coro1():
         return "success"
+
     result = await _with_timeout(coro1(), "test_action")
     assert result == "success"
 
     # Test with negative
     mock_settings.tool_timeout = -1
+
     async def coro2():
         return "success"
+
     result = await _with_timeout(coro2(), "test_action")
     assert result == "success"
+
 
 @pytest.mark.asyncio
 async def test_with_timeout_cleanup():
