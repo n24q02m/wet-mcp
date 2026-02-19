@@ -9,7 +9,15 @@ from wet_mcp.config import Settings
 @pytest.fixture(autouse=True)
 def clean_env():
     """Ensure clean environment for each test."""
-    keys_to_clean = ["API_KEYS", "TEST_KEY", "ANOTHER_KEY", "FILE_KEY", "FILE_KEY_2", "LINE_KEY_1", "LINE_KEY_2"]
+    keys_to_clean = [
+        "API_KEYS",
+        "TEST_KEY",
+        "ANOTHER_KEY",
+        "FILE_KEY",
+        "FILE_KEY_2",
+        "LINE_KEY_1",
+        "LINE_KEY_2",
+    ]
     original_env = {}
     for key in keys_to_clean:
         if key in os.environ:
@@ -24,6 +32,7 @@ def clean_env():
     for key, val in original_env.items():
         os.environ[key] = val
 
+
 def test_api_keys_direct():
     """Test standard API_KEYS environment variable."""
     os.environ["API_KEYS"] = "TEST_KEY:123,ANOTHER_KEY:456"
@@ -33,6 +42,7 @@ def test_api_keys_direct():
     assert os.environ.get("TEST_KEY") == "123"
     assert os.environ.get("ANOTHER_KEY") == "456"
     assert keys["TEST_KEY"] == ["123"]
+
 
 def test_api_keys_file_comma():
     """Test loading API_KEYS from a file (comma separated)."""
@@ -51,6 +61,7 @@ def test_api_keys_file_comma():
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
+
 
 def test_api_keys_file_newlines():
     """Test loading API_KEYS from a file (newline separated)."""
