@@ -12,18 +12,22 @@ async def test_download_media_success(tmp_path):
     """Test successful download of media files."""
     mock_content = b"test content"
 
-    mock_client = AsyncMock()
     mock_response = MagicMock()
     mock_response.content = mock_content
     mock_response.raise_for_status = MagicMock()
-    # Mock redirect logic support if needed, though for simple success it's not strictly required unless we test redirects specifically
     mock_response.headers = {}
 
+    # The client used inside the with block
+    mock_client = AsyncMock()
     mock_client.get.return_value = mock_response
 
-    mock_client_cls = MagicMock()
-    mock_client_cls.return_value.__aenter__.return_value = mock_client
-    mock_client_cls.return_value.__aexit__.return_value = None
+    # The context manager instance returned by httpx.AsyncClient()
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+
+    # The class/constructor httpx.AsyncClient
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
 
     url = "http://example.com/file.txt"
     output_dir = str(tmp_path)
@@ -49,22 +53,25 @@ async def test_download_media_success(tmp_path):
     args, kwargs = mock_client.get.call_args
     assert args[0] == url
 
+
 @pytest.mark.asyncio
 async def test_download_media_protocol_relative(tmp_path):
     """Test handling of protocol-relative URLs."""
     mock_content = b"image data"
 
-    mock_client = AsyncMock()
     mock_response = MagicMock()
     mock_response.content = mock_content
     mock_response.raise_for_status = MagicMock()
     mock_response.headers = {}
 
+    mock_client = AsyncMock()
     mock_client.get.return_value = mock_response
 
-    mock_client_cls = MagicMock()
-    mock_client_cls.return_value.__aenter__.return_value = mock_client
-    mock_client_cls.return_value.__aexit__.return_value = None
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
 
     url = "//example.com/image.jpg"
     output_dir = str(tmp_path)
@@ -87,20 +94,23 @@ async def test_download_media_protocol_relative(tmp_path):
     assert results[0]["url"] == url
     assert results[0]["path"] == str(expected_file)
 
+
 @pytest.mark.asyncio
 async def test_download_media_http_error(tmp_path):
     """Test handling of HTTP errors during download."""
-    mock_client = AsyncMock()
     mock_response = MagicMock()
     mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
         "404 Not Found", request=MagicMock(), response=MagicMock()
     )
 
+    mock_client = AsyncMock()
     mock_client.get.return_value = mock_response
 
-    mock_client_cls = MagicMock()
-    mock_client_cls.return_value.__aenter__.return_value = mock_client
-    mock_client_cls.return_value.__aexit__.return_value = None
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
 
     url = "http://example.com/missing.txt"
 
@@ -117,22 +127,25 @@ async def test_download_media_http_error(tmp_path):
     # File should not exist
     assert not (tmp_path / "missing.txt").exists()
 
+
 @pytest.mark.asyncio
 async def test_download_media_file_write_error(tmp_path):
     """Test handling of file write errors."""
     mock_content = b"test content"
 
-    mock_client = AsyncMock()
     mock_response = MagicMock()
     mock_response.content = mock_content
     mock_response.raise_for_status = MagicMock()
     mock_response.headers = {}
 
+    mock_client = AsyncMock()
     mock_client.get.return_value = mock_response
 
-    mock_client_cls = MagicMock()
-    mock_client_cls.return_value.__aenter__.return_value = mock_client
-    mock_client_cls.return_value.__aexit__.return_value = None
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
 
     url = "http://example.com/file.txt"
 
