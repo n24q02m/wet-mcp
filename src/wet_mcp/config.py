@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -54,6 +55,7 @@ class Settings(BaseSettings):
     - SEARXNG_URL: SearXNG instance URL (default: http://localhost:8080)
     - API_KEYS: Provider API keys, supports multiple providers
         Format: "ENV_VAR:key,ENV_VAR:key,..."
+        Or file path: "@path/to/keys"
         Example: "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:..."
         Embedding providers: Google, OpenAI, Mistral, Cohere
         Reranking providers: Cohere (auto-detected)
@@ -90,7 +92,7 @@ class Settings(BaseSettings):
     download_dir: str = "~/.wet-mcp/downloads"
 
     # Media Analysis (LiteLLM)
-    api_keys: str | None = None  # ENV_VAR:key,ENV_VAR:key (multiple providers)
+    api_keys: SecretStr | None = None  # ENV_VAR:key,ENV_VAR:key (multiple providers)
     llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
     llm_temperature: float | None = None
 
@@ -161,6 +163,7 @@ class Settings(BaseSettings):
         """Parse API_KEYS and set env vars for LiteLLM.
 
         Format: "GOOGLE_API_KEY:AIza...,OPENAI_API_KEY:sk-..."
+        Or file: "@path/to/keys_file"
 
         Also sets aliases (e.g., GOOGLE_API_KEY -> GEMINI_API_KEY)
         because LiteLLM embedding uses GEMINI_API_KEY for gemini/ models.
@@ -172,8 +175,23 @@ class Settings(BaseSettings):
             return {}
 
         keys_by_env: dict[str, list[str]] = {}
+        api_keys_str = self.api_keys.get_secret_value()
 
-        for pair in self.api_keys.split(","):
+        # Handle file-based keys
+        if api_keys_str.startswith("@"):
+            path_str = api_keys_str[1:]
+            path = Path(path_str).expanduser()
+            if not path.exists():
+                raise FileNotFoundError(f"API keys file not found: {path}")
+
+            try:
+                # Read content and normalize newlines to commas
+                content = path.read_text(encoding="utf-8").strip()
+                api_keys_str = content.replace("\n", ",")
+            except Exception as e:
+                raise ValueError(f"Failed to read API keys file: {e}") from e
+
+        for pair in api_keys_str.split(","):
             pair = pair.strip()
             if ":" not in pair:
                 continue
@@ -260,20 +278,36 @@ class Settings(BaseSettings):
             return self.rerank_backend
         if self.rerank_model:
             return "litellm"
+
+        # Check env vars first (populated by setup_api_keys)
+        for provider_key in _RERANK_PROVIDERS:
+            if os.environ.get(provider_key):
+                return "litellm"
+
         if self.api_keys:
-            for provider_key in _RERANK_PROVIDERS:
-                if provider_key in self.api_keys:
-                    return "litellm"
+            val = self.api_keys.get_secret_value()
+            if not val.startswith("@"):
+                for provider_key in _RERANK_PROVIDERS:
+                    if provider_key in val:
+                        return "litellm"
         return "local"
 
     def resolve_rerank_model(self) -> str | None:
         """Resolve rerank model from config or auto-detect from API_KEYS."""
         if self.rerank_model:
             return self.rerank_model
+
+        # Check env vars first
+        for provider_key, model in _RERANK_PROVIDERS.items():
+            if os.environ.get(provider_key):
+                return model
+
         if self.api_keys:
-            for provider_key, model in _RERANK_PROVIDERS.items():
-                if provider_key in self.api_keys:
-                    return model
+            val = self.api_keys.get_secret_value()
+            if not val.startswith("@"):
+                for provider_key, model in _RERANK_PROVIDERS.items():
+                    if provider_key in val:
+                        return model
         return None
 
 
