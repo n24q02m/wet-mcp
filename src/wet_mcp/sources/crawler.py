@@ -9,8 +9,8 @@ overwhelm the browser or exhaust system memory.
 """
 
 import asyncio
-import json
 import collections
+import json
 import os
 import tempfile
 from pathlib import Path
