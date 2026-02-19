@@ -55,10 +55,14 @@ def get_model_capabilities(model: str) -> dict:
     }
 
 
-def encode_image(image_path: str) -> str:
+async def encode_image(image_path: str) -> str:
     """Encode image to base64."""
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
+
+    def _encode_sync(path: str) -> str:
+        with open(path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode("utf-8")
+
+    return await asyncio.to_thread(_encode_sync, image_path)
 
 
 async def analyze_media(
@@ -135,7 +139,7 @@ async def analyze_media(
         config = get_llm_config()
         logger.info(f"Analyzing media with model: {config['model']}")
 
-        base64_image = await asyncio.to_thread(encode_image, media_path)
+        base64_image = await encode_image(media_path)
         data_url = f"data:{mime_type};base64,{base64_image}"
 
         messages = [
