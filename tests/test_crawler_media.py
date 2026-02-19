@@ -56,21 +56,27 @@ async def test_list_media_type_filter(mock_crawler_instance):
         return_value=mock_crawler_instance,
     ):
         # Test images only
-        result_images_json = await list_media(url="https://example.com", media_type="images")
+        result_images_json = await list_media(
+            url="https://example.com", media_type="images"
+        )
         results_images = json.loads(result_images_json)
         assert "images" in results_images
         assert "videos" not in results_images
         assert "audio" not in results_images
 
         # Test videos only
-        result_videos_json = await list_media(url="https://example.com", media_type="videos")
+        result_videos_json = await list_media(
+            url="https://example.com", media_type="videos"
+        )
         results_videos = json.loads(result_videos_json)
         assert "videos" in results_videos
         assert "images" not in results_videos
         assert "audio" not in results_videos
 
         # Test audio only
-        result_audio_json = await list_media(url="https://example.com", media_type="audio")
+        result_audio_json = await list_media(
+            url="https://example.com", media_type="audio"
+        )
         results_audio = json.loads(result_audio_json)
         assert "audio" in results_audio
         assert "images" not in results_audio
@@ -93,7 +99,9 @@ async def test_list_media_max_items(mock_crawler_instance):
         new_callable=AsyncMock,
         return_value=mock_crawler_instance,
     ):
-        result_json = await list_media(url="https://example.com", media_type="images", max_items=5)
+        result_json = await list_media(
+            url="https://example.com", media_type="images", max_items=5
+        )
 
     results = json.loads(result_json)
     assert len(results["images"]) == 5
