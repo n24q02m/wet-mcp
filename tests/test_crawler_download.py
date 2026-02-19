@@ -157,7 +157,9 @@ async def test_download_media_file_write_error(tmp_path):
     # Patching 'pathlib.Path.write_bytes' works for all instances.
 
     with patch("httpx.AsyncClient", mock_client_cls):
-        with patch("pathlib.Path.write_bytes", side_effect=PermissionError("Access denied")):
+        with patch(
+            "pathlib.Path.write_bytes", side_effect=PermissionError("Access denied")
+        ):
             result_json = await download_media([url], str(tmp_path))
 
     results = json.loads(result_json)
