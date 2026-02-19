@@ -1,6 +1,7 @@
 """Tests for LLM integration."""
 
 import asyncio
+import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,14 +15,17 @@ def mock_settings():
     """Mock settings for testing."""
     original_keys = settings.api_keys
     original_models = settings.llm_models
+    original_download_dir = settings.download_dir
 
     settings.api_keys = "GOOGLE_API_KEY:fake-key"
     settings.llm_models = "gemini/fake-model"
+    settings.download_dir = tempfile.gettempdir()
 
     yield
 
     settings.api_keys = original_keys
     settings.llm_models = original_models
+    settings.download_dir = original_download_dir
 
 
 def test_get_llm_config(mock_settings):
@@ -79,9 +83,9 @@ def test_analyze_media_no_keys():
     assert "Error: LLM analysis requires API_KEYS" in result
 
 
-def test_analyze_media_file_not_found(mock_settings):
+def test_analyze_media_file_not_found(mock_settings, tmp_path):
     """Test file not found error."""
-    result = asyncio.run(analyze_media("non_existent_file.jpg"))
+    result = asyncio.run(analyze_media(str(tmp_path / "non_existent_file.jpg")))
     assert "Error: File not found" in result
 
 
