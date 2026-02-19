@@ -135,7 +135,9 @@ async def search(
                         if item["source"] and item["source"] not in existing["source"]:
                             existing["source"] += f", {item['source']}"
                         # Keep longer snippet
-                        if len(item.get("snippet", "")) > len(existing.get("snippet", "")):
+                        if len(item.get("snippet", "")) > len(
+                            existing.get("snippet", "")
+                        ):
                             existing["snippet"] = item["snippet"]
                             existing["title"] = item["title"] or existing["title"]
                     else:
@@ -157,7 +159,9 @@ async def search(
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code
                 last_error = f"HTTP error: {status}"
-                logger.warning(f"SearXNG HTTP {status} on attempt {attempt}/{_MAX_RETRIES}")
+                logger.warning(
+                    f"SearXNG HTTP {status} on attempt {attempt}/{_MAX_RETRIES}"
+                )
 
                 # Only retry on server errors (5xx), not client errors (4xx)
                 if status < 500:
