@@ -1,8 +1,9 @@
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-import re
 
 from wet_mcp.searxng_runner import _get_settings_path
+
 
 def test_searxng_secret_key_replacement():
     """Verify that the placeholder secret key is replaced with a random hex string."""
