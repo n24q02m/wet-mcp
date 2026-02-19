@@ -1,5 +1,6 @@
 """Crawl4AI integration for web crawling and extraction."""
 
+import asyncio
 import json
 import os
 import tempfile
@@ -47,13 +48,11 @@ async def extract(
     async with AsyncWebCrawler(
         verbose=False, config=_browser_config(stealth)
     ) as crawler:
-        for url in urls:
+        # Process URLs concurrently to improve throughput
+        async def process_url(url: str):
             if not is_safe_url(url):
                 logger.warning(f"Skipping unsafe URL: {url}")
-                results.append(
-                    {"url": url, "error": "Security Alert: Unsafe URL blocked"}
-                )
-                continue
+                return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
             try:
                 result = await crawler.arun(
@@ -65,33 +64,29 @@ async def extract(
                     content = (
                         result.markdown if format == "markdown" else result.cleaned_html
                     )
-                    results.append(
-                        {
-                            "url": url,
-                            "title": result.metadata.get("title", ""),
-                            "content": content,
-                            "links": {
-                                "internal": result.links.get("internal", [])[:20],
-                                "external": result.links.get("external", [])[:20],
-                            },
-                        }
-                    )
+                    return {
+                        "url": url,
+                        "title": result.metadata.get("title", ""),
+                        "content": content,
+                        "links": {
+                            "internal": result.links.get("internal", [])[:20],
+                            "external": result.links.get("external", [])[:20],
+                        },
+                    }
                 else:
-                    results.append(
-                        {
-                            "url": url,
-                            "error": result.error_message or "Failed to extract",
-                        }
-                    )
+                    return {
+                        "url": url,
+                        "error": result.error_message or "Failed to extract",
+                    }
 
             except Exception as e:
                 logger.error(f"Error extracting {url}: {e}")
-                results.append(
-                    {
-                        "url": url,
-                        "error": str(e),
-                    }
-                )
+                return {
+                    "url": url,
+                    "error": str(e),
+                }
+
+        results = await asyncio.gather(*[process_url(url) for url in urls])
 
     logger.info(f"Extracted {len(results)} pages")
     return json.dumps(results, ensure_ascii=False, indent=2)
