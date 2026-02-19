@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from wet_mcp.config import settings
-from wet_mcp.llm import analyze_media, get_llm_config
+from wet_mcp.llm import analyze_media, get_llm_config, get_model_capabilities
 
 
 @pytest.fixture
@@ -125,3 +125,22 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         "Error: Cannot determine file type" in result
         or "Unsupported media type" in result
     )
+
+def test_get_model_capabilities():
+    """Test get_model_capabilities function."""
+
+    with patch("wet_mcp.llm.litellm") as mock_litellm:
+        mock_litellm.supports_vision.return_value = True
+        mock_litellm.supports_audio_input.return_value = False
+        mock_litellm.supports_audio_output.return_value = True
+
+        caps = get_model_capabilities("fake-model")
+
+        assert caps == {
+            "vision": True,
+            "audio_input": False,
+            "audio_output": True,
+        }
+        mock_litellm.supports_vision.assert_called_once_with("fake-model")
+        mock_litellm.supports_audio_input.assert_called_once_with("fake-model")
+        mock_litellm.supports_audio_output.assert_called_once_with("fake-model")
