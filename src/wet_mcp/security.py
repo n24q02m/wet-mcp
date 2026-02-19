@@ -1,8 +1,11 @@
 import ipaddress
 import socket
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
+
+from wet_mcp.config import settings
 
 
 def is_safe_url(url: str) -> bool:
@@ -69,3 +72,21 @@ def is_safe_url(url: str) -> bool:
         return False
 
     return True
+
+
+def is_safe_path(path: str | Path, base_dir: str | Path | None = None) -> bool:
+    """
+    Check if a path is safe (within the allowed base directory).
+    Prevents path traversal attacks.
+    """
+    if base_dir is None:
+        base_dir = settings.download_dir
+
+    try:
+        path_obj = Path(path).resolve()
+        base_obj = Path(base_dir).expanduser().resolve()
+
+        return path_obj.is_relative_to(base_obj)
+    except Exception as e:
+        logger.error(f"Error validating path {path}: {e}")
+        return False
