@@ -17,6 +17,7 @@ from wet_mcp.setup import (
 
 # --- Helper Tests ---
 
+
 def test_needs_setup():
     with patch("wet_mcp.setup.SETUP_MARKER") as mock_marker:
         mock_marker.exists.return_value = False
@@ -24,6 +25,7 @@ def test_needs_setup():
 
         mock_marker.exists.return_value = True
         assert needs_setup() is False
+
 
 def test_reset_setup():
     with patch("wet_mcp.setup.SETUP_MARKER") as mock_marker:
@@ -35,6 +37,7 @@ def test_reset_setup():
         mock_marker.exists.return_value = False
         reset_setup()
         mock_marker.unlink.assert_not_called()
+
 
 def test_find_searx_package_dir():
     # Mock importlib.util.find_spec
@@ -54,11 +57,12 @@ def test_find_searx_package_dir():
         mock_find_spec.side_effect = Exception("Import error")
         assert _find_searx_package_dir() is None
 
+
 def test_patch_searxng_version():
     with patch("wet_mcp.setup._find_searx_package_dir") as mock_find_dir:
         # Case 1: SearXNG not found
         mock_find_dir.return_value = None
-        patch_searxng_version() # Should not raise
+        patch_searxng_version()  # Should not raise
 
         # Case 2: vf exists
         mock_dir = MagicMock(spec=Path)
@@ -76,6 +80,7 @@ def test_patch_searxng_version():
         mock_vf.write_text.assert_called_once()
         assert 'VERSION_STRING = "0.0.0"' in mock_vf.write_text.call_args[0][0]
 
+
 def test_patch_searxng_windows():
     # We need to mock sys.platform. Since it's not a function, we mock it via patch
     # But sys is imported in the module. We should patch wet_mcp.setup.sys.platform
@@ -84,7 +89,7 @@ def test_patch_searxng_windows():
 
     with patch("sys.platform", "win32"):
         with patch("wet_mcp.setup._find_searx_package_dir") as mock_find_dir:
-             # Case 1: Not found
+            # Case 1: Not found
             mock_find_dir.return_value = None
             patch_searxng_windows()
 
@@ -95,7 +100,7 @@ def test_patch_searxng_windows():
             mock_valkey.exists.return_value = True
 
             # Content needs patching
-            original_content = "import pwd\nStart\n        _pw = pwd.getpwuid(os.getuid())\n        logger.exception(\"[%s (%s)] can't connect valkey DB ...\", _pw.pw_name, _pw.pw_uid)"
+            original_content = 'import pwd\nStart\n        _pw = pwd.getpwuid(os.getuid())\n        logger.exception("[%s (%s)] can\'t connect valkey DB ...", _pw.pw_name, _pw.pw_uid)'
             mock_valkey.read_text.return_value = original_content
 
             mock_find_dir.return_value = mock_dir
@@ -106,19 +111,23 @@ def test_patch_searxng_windows():
             assert "try:\n    import pwd" in new_content
             assert "if pwd and hasattr(os, 'getuid'):" in new_content
 
+
 def test_patch_searxng_windows_non_win32():
     with patch("sys.platform", "linux"):
         with patch("wet_mcp.setup._find_searx_package_dir") as mock_find_dir:
             patch_searxng_windows()
             mock_find_dir.assert_not_called()
 
+
 # --- Installation Tests ---
+
 
 def test_install_searxng_already_installed():
     # Simulate searx being importable
     # We need to patch sys.modules so 'import searx' works
     with patch.dict(sys.modules, {"searx": MagicMock()}):
         assert _install_searxng() is True
+
 
 def test_install_searxng_success():
     # Simulate searx NOT being importable initially
@@ -130,10 +139,11 @@ def test_install_searxng_success():
         if "searx" in sys.modules:
             del sys.modules["searx"]
 
-        with patch("wet_mcp.setup.subprocess.run") as mock_run, \
-             patch("wet_mcp.setup.patch_searxng_version") as mock_patch_ver, \
-             patch("wet_mcp.setup.patch_searxng_windows") as mock_patch_win:
-
+        with (
+            patch("wet_mcp.setup.subprocess.run") as mock_run,
+            patch("wet_mcp.setup.patch_searxng_version") as mock_patch_ver,
+            patch("wet_mcp.setup.patch_searxng_windows") as mock_patch_win,
+        ):
             # Mock success for both calls
             mock_process = MagicMock()
             mock_process.returncode = 0
@@ -144,6 +154,7 @@ def test_install_searxng_success():
             assert mock_run.call_count == 2
             mock_patch_ver.assert_called_once()
             mock_patch_win.assert_called_once()
+
 
 def test_install_searxng_deps_fail():
     with patch.dict(sys.modules):
@@ -159,6 +170,7 @@ def test_install_searxng_deps_fail():
 
             assert _install_searxng() is False
             assert mock_run.call_count == 1
+
 
 def test_install_searxng_install_fail():
     with patch.dict(sys.modules):
@@ -179,32 +191,44 @@ def test_install_searxng_install_fail():
             assert _install_searxng() is False
             assert mock_run.call_count == 2
 
+
 def test_setup_crawl4ai_success():
     # Mock crawl4ai.install
     mock_install = MagicMock()
-    with patch.dict(sys.modules, {"crawl4ai": MagicMock(), "crawl4ai.install": mock_install}):
+    with patch.dict(
+        sys.modules, {"crawl4ai": MagicMock(), "crawl4ai.install": mock_install}
+    ):
         assert _setup_crawl4ai() is True
         mock_install.post_install.assert_called_once()
+
 
 def test_setup_crawl4ai_failure():
     mock_install = MagicMock()
     mock_install.post_install.side_effect = Exception("Setup failed")
-    with patch.dict(sys.modules, {"crawl4ai": MagicMock(), "crawl4ai.install": mock_install}):
+    with patch.dict(
+        sys.modules, {"crawl4ai": MagicMock(), "crawl4ai.install": mock_install}
+    ):
         assert _setup_crawl4ai() is False
 
+
 # --- Main Setup Flow Tests ---
+
 
 def test_run_auto_setup_already_done():
     with patch("wet_mcp.setup.needs_setup", return_value=False):
         assert run_auto_setup() is True
 
-def test_run_auto_setup_full_success():
-    with patch("wet_mcp.setup.needs_setup", return_value=True), \
-         patch("wet_mcp.setup.Path.home") as mock_home, \
-         patch("wet_mcp.setup._install_searxng", return_value=True) as mock_install_searx, \
-         patch("wet_mcp.setup._setup_crawl4ai", return_value=True) as mock_setup_crawl, \
-         patch("wet_mcp.setup.SETUP_MARKER") as mock_marker:
 
+def test_run_auto_setup_full_success():
+    with (
+        patch("wet_mcp.setup.needs_setup", return_value=True),
+        patch("wet_mcp.setup.Path.home") as mock_home,
+        patch(
+            "wet_mcp.setup._install_searxng", return_value=True
+        ) as mock_install_searx,
+        patch("wet_mcp.setup._setup_crawl4ai", return_value=True) as mock_setup_crawl,
+        patch("wet_mcp.setup.SETUP_MARKER") as mock_marker,
+    ):
         mock_config_dir = MagicMock()
         mock_home.return_value.__truediv__.return_value = mock_config_dir
 
@@ -215,32 +239,38 @@ def test_run_auto_setup_full_success():
         mock_setup_crawl.assert_called_once()
         mock_marker.touch.assert_called_once()
 
-def test_run_auto_setup_searx_fail_crawl_success():
-    with patch("wet_mcp.setup.needs_setup", return_value=True), \
-         patch("wet_mcp.setup.Path.home") as mock_home, \
-         patch("wet_mcp.setup._install_searxng", return_value=False), \
-         patch("wet_mcp.setup._setup_crawl4ai", return_value=True), \
-         patch("wet_mcp.setup.SETUP_MARKER") as mock_marker:
 
+def test_run_auto_setup_searx_fail_crawl_success():
+    with (
+        patch("wet_mcp.setup.needs_setup", return_value=True),
+        patch("wet_mcp.setup.Path.home") as mock_home,
+        patch("wet_mcp.setup._install_searxng", return_value=False),
+        patch("wet_mcp.setup._setup_crawl4ai", return_value=True),
+        patch("wet_mcp.setup.SETUP_MARKER") as mock_marker,
+    ):
         mock_home.return_value.__truediv__.return_value = MagicMock()
 
         assert run_auto_setup() is True
         mock_marker.touch.assert_called_once()
 
-def test_run_auto_setup_crawl_fail():
-    with patch("wet_mcp.setup.needs_setup", return_value=True), \
-         patch("wet_mcp.setup.Path.home") as mock_home, \
-         patch("wet_mcp.setup._install_searxng", return_value=True), \
-         patch("wet_mcp.setup._setup_crawl4ai", return_value=False), \
-         patch("wet_mcp.setup.SETUP_MARKER") as mock_marker:
 
+def test_run_auto_setup_crawl_fail():
+    with (
+        patch("wet_mcp.setup.needs_setup", return_value=True),
+        patch("wet_mcp.setup.Path.home") as mock_home,
+        patch("wet_mcp.setup._install_searxng", return_value=True),
+        patch("wet_mcp.setup._setup_crawl4ai", return_value=False),
+        patch("wet_mcp.setup.SETUP_MARKER") as mock_marker,
+    ):
         mock_home.return_value.__truediv__.return_value = MagicMock()
 
         assert run_auto_setup() is False
         mock_marker.touch.assert_not_called()
 
+
 def test_install_searxng_timeout():
     from subprocess import TimeoutExpired
+
     with patch.dict(sys.modules):
         if "searx" in sys.modules:
             del sys.modules["searx"]
@@ -250,13 +280,17 @@ def test_install_searxng_timeout():
 
             assert _install_searxng() is False
 
+
 def test_install_searxng_arguments():
     with patch.dict(sys.modules):
         if "searx" in sys.modules:
             del sys.modules["searx"]
 
-        with patch("wet_mcp.setup.subprocess.run") as mock_run,              patch("wet_mcp.setup.patch_searxng_version"),              patch("wet_mcp.setup.patch_searxng_windows"):
-
+        with (
+            patch("wet_mcp.setup.subprocess.run") as mock_run,
+            patch("wet_mcp.setup.patch_searxng_version"),
+            patch("wet_mcp.setup.patch_searxng_windows"),
+        ):
             mock_process = MagicMock()
             mock_process.returncode = 0
             mock_run.return_value = mock_process
