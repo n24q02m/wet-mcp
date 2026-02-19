@@ -18,7 +18,8 @@ import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_url, resolve_safe_url
+from urllib.parse import urlparse, urljoin
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
@@ -476,31 +477,85 @@ async def download_media(
                 if target_url.startswith("//"):
                     target_url = f"https:{target_url}"
 
+                # Initial check
                 if not is_safe_url(target_url):
                     return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-                response = await client.get(target_url, follow_redirects=True)
-                response.raise_for_status()
+                current_url = target_url
+                redirects = 0
+                max_redirects = 10
 
-                filename = target_url.split("/")[-1].split("?")[0] or "download"
-                filepath = (output_path / filename).resolve()
+                while redirects < max_redirects:
+                    # DNS Rebinding Protection: Resolve to safe IP first
+                    try:
+                        safe_ip = resolve_safe_url(current_url)
+                    except ValueError as e:
+                        return {"url": url, "error": f"Security Alert: {e}"}
 
-                # Security check: Ensure the resolved path is still
-                # within the output directory
-                if not filepath.is_relative_to(output_path):
-                    raise ValueError(
-                        f"Security Alert: Path traversal attempt detected "
-                        f"for {filename}"
-                    )
+                    parsed = urlparse(current_url)
+                    request_url = current_url
+                    headers_req = {}  # Per-request headers
 
-                # Write file in thread to avoid blocking event loop
-                await asyncio.to_thread(filepath.write_bytes, response.content)
+                    if parsed.scheme == "http":
+                        # For HTTP, rewrite URL to use IP and add Host header
+                        # This prevents DNS rebinding by forcing connection to the validated IP
+                        netloc = safe_ip
+                        if parsed.port:
+                            netloc = f"{safe_ip}:{parsed.port}"
 
-                return {
-                    "url": url,
-                    "path": str(filepath),
-                    "size": len(response.content),
-                }
+                        request_url = parsed._replace(netloc=netloc).geturl()
+                        headers_req["Host"] = parsed.hostname
+
+                    # For HTTPS, we rely on TLS certificate verification to prevent rebinding.
+
+                    try:
+                        response = await client.get(
+                            request_url,
+                            headers=headers_req,
+                            follow_redirects=False
+                        )
+                    except httpx.RequestError as e:
+                        return {"url": url, "error": f"Request failed: {e}"}
+
+                    if response.is_redirect:
+                        redirects += 1
+                        location = response.headers.get("Location")
+                        if not location:
+                             return {"url": url, "error": "Redirect without Location header"}
+
+                        # Handle relative redirects
+                        current_url = urljoin(current_url, location)
+
+                        # Validate new scheme
+                        parsed_next = urlparse(current_url)
+                        if parsed_next.scheme not in ("http", "https"):
+                             return {"url": url, "error": f"Unsupported redirect scheme: {parsed_next.scheme}"}
+
+                        continue
+
+                    response.raise_for_status()
+
+                    filename = current_url.split("/")[-1].split("?")[0] or "download"
+                    filepath = (output_path / filename).resolve()
+
+                    # Security check: Ensure the resolved path is still
+                    # within the output directory
+                    if not filepath.is_relative_to(output_path):
+                        raise ValueError(
+                            f"Security Alert: Path traversal attempt detected "
+                            f"for {filename}"
+                        )
+
+                    # Write file in thread to avoid blocking event loop
+                    await asyncio.to_thread(filepath.write_bytes, response.content)
+
+                    return {
+                        "url": url,
+                        "path": str(filepath),
+                        "size": len(response.content),
+                    }
+
+                return {"url": url, "error": "Too many redirects"}
 
             except Exception as e:
                 logger.error(f"Error downloading {url}: {e}")
