@@ -355,9 +355,7 @@ async def sitemap(
         to_visit: list[tuple[str, int]] = [(root_url, 0)]
         site_urls: list[dict[str, object]] = []
 
-        async def process_one(
-            url: str, current_depth: int
-        ) -> list[tuple[str, int]]:
+        async def process_one(url: str, current_depth: int) -> list[tuple[str, int]]:
             async with sem:
                 try:
                     result = await crawler.arun(
@@ -384,9 +382,7 @@ async def sitemap(
         while to_visit and len(site_urls) < max_pages:
             batch = []
             while (
-                len(batch) < 10
-                and to_visit
-                and len(site_urls) + len(batch) < max_pages
+                len(batch) < 10 and to_visit and len(site_urls) + len(batch) < max_pages
             ):
                 url, current_depth = to_visit.pop(0)
 
