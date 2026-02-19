@@ -203,9 +203,9 @@ async def extract(
 
             try:
                 result = await crawler.arun(
-                    url,  # ty: ignore[invalid-argument-type]
+                    url,  # type: ignore[invalid-argument-type]
                     config=run_config,
-                )  # ty: ignore[missing-argument]
+                )  # type: ignore[missing-argument]
 
                 if result.success:
                     content = (
@@ -285,9 +285,9 @@ async def crawl(
             async with sem:
                 try:
                     result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
+                        url,  # type: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
+                    )  # type: ignore[missing-argument]
 
                     if result.success:
                         content = (
@@ -367,9 +367,9 @@ async def sitemap(
             async with sem:
                 try:
                     result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
+                        url,  # type: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
+                    )  # type: ignore[missing-argument]
 
                     if result.success and current_depth < depth:
                         for link in result.links.get("internal", [])[:20]:
@@ -414,9 +414,9 @@ async def list_media(
 
     async with sem:
         result = await crawler.arun(
-            url,  # ty: ignore[invalid-argument-type]
+            url,  # type: ignore[invalid-argument-type]
             config=CrawlerRunConfig(verbose=False),
-        )  # ty: ignore[missing-argument]
+        )  # type: ignore[missing-argument]
 
         if not result.success:
             return json.dumps({"error": result.error_message or "Failed to load page"})
