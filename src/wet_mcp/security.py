@@ -81,12 +81,12 @@ def resolve_safe_url(url: str) -> str:
         return first_ip
 
     except socket.gaierror as e:
-        raise ValueError(f"DNS resolution failed for {hostname}: {e}")
+        raise ValueError(f"DNS resolution failed for {hostname}: {e}") from e
     except Exception as e:
         if isinstance(e, ValueError):
             raise e
         logger.error(f"Error resolving {hostname}: {e}")
-        raise ValueError(f"Error resolving {hostname}: {e}")
+        raise ValueError(f"Error resolving {hostname}: {e}") from e
 
 
 def is_safe_url(url: str) -> bool:

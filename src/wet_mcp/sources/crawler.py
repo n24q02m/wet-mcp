@@ -13,13 +13,13 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
 from wet_mcp.security import is_safe_url, resolve_safe_url
-from urllib.parse import urlparse, urljoin
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
