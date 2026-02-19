@@ -45,6 +45,9 @@ def test_get_llm_config_with_temperature(mock_settings):
 @patch("wet_mcp.llm.acompletion")
 def test_analyze_media(mock_completion, mock_settings, tmp_path):
     """Test analyze_media function using real temp file."""
+    # Set download_dir to tmp_path for security check
+    settings.download_dir = str(tmp_path)
+
     # Create valid dummy image file
     img_path = tmp_path / "test.jpg"
     img_path.write_bytes(b"fake-image-data")
@@ -89,15 +92,19 @@ def test_analyze_media_no_keys():
     assert "Error: LLM analysis requires API_KEYS" in result
 
 
-def test_analyze_media_file_not_found(mock_settings):
+def test_analyze_media_file_not_found(mock_settings, tmp_path):
     """Test file not found error."""
-    result = asyncio.run(analyze_media("non_existent_file.jpg"))
+    settings.download_dir = str(tmp_path)
+    result = asyncio.run(analyze_media(str(tmp_path / "non_existent_file.jpg")))
     assert "Error: File not found" in result
 
 
 @patch("wet_mcp.llm.acompletion")
 def test_analyze_media_text_file(mock_completion, mock_settings, tmp_path):
     """Test text file analysis."""
+    # Set download_dir to tmp_path for security check
+    settings.download_dir = str(tmp_path)
+
     txt_path = tmp_path / "test.txt"
     txt_path.write_text("Hello")
 
@@ -117,6 +124,9 @@ def test_analyze_media_text_file(mock_completion, mock_settings, tmp_path):
 
 def test_analyze_media_unsupported_type(mock_settings, tmp_path):
     """Test unsupported file type."""
+    # Set download_dir to tmp_path for security check
+    settings.download_dir = str(tmp_path)
+
     bin_path = tmp_path / "test.bin"
     bin_path.write_bytes(b"\x00\x01")  # unknown binary
 
