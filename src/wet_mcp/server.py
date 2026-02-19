@@ -5,6 +5,7 @@ import sys
 from contextlib import asynccontextmanager
 from importlib.resources import files
 
+import mcp.types as types
 from loguru import logger
 from mcp.server.fastmcp import FastMCP
 
@@ -15,7 +16,7 @@ from wet_mcp.sources.searxng import search as searxng_search
 
 # Configure logging
 logger.remove()
-logger.add(sys.stderr, level=settings.log_level)
+logger.add(sys.stderr, level=settings.log_level, serialize=True)
 
 
 @asynccontextmanager
@@ -104,7 +105,11 @@ async def _with_timeout(coro, action: str) -> str:
     )
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=types.ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True
+    )
+)
 async def web(
     action: str,
     query: str | None = None,
@@ -172,7 +177,11 @@ async def web(
             return f"Error: Unknown action '{action}'. Valid actions: search, extract, crawl, map"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=types.ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=False
+    )
+)
 async def media(
     action: str,
     url: str | None = None,
@@ -230,7 +239,11 @@ async def media(
             return f"Error: Unknown action '{action}'. Valid actions: list, download, analyze"
 
 
-@mcp.tool()
+@mcp.tool(
+    annotations=types.ToolAnnotations(
+        readOnlyHint=True, destructiveHint=False, idempotentHint=True
+    )
+)
 async def help(tool_name: str = "web") -> str:
     """Get full documentation for a tool.
     Use when compressed descriptions are insufficient.
