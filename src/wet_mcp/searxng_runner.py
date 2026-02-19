@@ -753,5 +753,3 @@ def _get_process_kwargs() -> dict:
 def stop_searxng() -> None:
     """Stop SearXNG subprocess if running."""
     _cleanup_process()
-
-
