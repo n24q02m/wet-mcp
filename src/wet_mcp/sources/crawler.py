@@ -273,7 +273,9 @@ async def _perform_crawl(
         to_visit: list[tuple[str, int]] = [(root_url, 0)]
 
         while to_visit:
-            current_count = len(local_results) if per_root_limit else len(global_results)
+            current_count = (
+                len(local_results) if per_root_limit else len(global_results)
+            )
             if current_count >= max_pages:
                 break
 
@@ -345,12 +347,9 @@ async def crawl(
     Returns:
         JSON string with crawled content
     """
+
     def extract_content(url: str, depth: int, result: Any) -> dict[str, Any] | None:
-        content = (
-            result.markdown
-            if format == "markdown"
-            else result.cleaned_html
-        )
+        content = result.markdown if format == "markdown" else result.cleaned_html
         return {
             "url": url,
             "depth": depth,
@@ -385,6 +384,7 @@ async def sitemap(
     Returns:
         JSON string with discovered URLs
     """
+
     def record_visit(url: str, depth: int) -> dict[str, Any] | None:
         return {"url": url, "depth": depth}
 
