@@ -355,15 +355,9 @@ async def sitemap(
         to_visit: list[tuple[str, int]] = [(root_url, 0)]
         site_urls: list[dict[str, object]] = []
 
-        while to_visit and len(site_urls) < max_pages:
-            url, current_depth = to_visit.pop(0)
-
-            if url in visited or current_depth > depth:
-                continue
-
-            visited.add(url)
-            site_urls.append({"url": url, "depth": current_depth})
-
+        async def process_one(
+            url: str, current_depth: int
+        ) -> list[tuple[str, int]]:
             async with sem:
                 try:
                     result = await crawler.arun(
@@ -372,16 +366,44 @@ async def sitemap(
                     )  # ty: ignore[missing-argument]
 
                     if result.success and current_depth < depth:
+                        new_links = []
                         for link in result.links.get("internal", [])[:20]:
                             # Extract URL from dict if necessary
                             link_url = (
                                 link.get("href", "") if isinstance(link, dict) else link
                             )
                             if link_url and link_url not in visited:
-                                to_visit.append((link_url, current_depth + 1))
+                                new_links.append((link_url, current_depth + 1))
+                        return new_links
 
                 except Exception as e:
                     logger.debug(f"Error mapping {url}: {e}")
+
+                return []
+
+        while to_visit and len(site_urls) < max_pages:
+            batch = []
+            while (
+                len(batch) < 10
+                and to_visit
+                and len(site_urls) + len(batch) < max_pages
+            ):
+                url, current_depth = to_visit.pop(0)
+
+                if url in visited or current_depth > depth:
+                    continue
+
+                visited.add(url)
+                site_urls.append({"url": url, "depth": current_depth})
+                batch.append((url, current_depth))
+
+            if not batch:
+                continue
+
+            results = await asyncio.gather(*[process_one(u, d) for u, d in batch])
+            for res in results:
+                if res:
+                    to_visit.extend(res)
 
         all_urls.extend(site_urls)
 
