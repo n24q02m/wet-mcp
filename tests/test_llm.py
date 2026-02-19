@@ -126,6 +126,7 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         or "Unsupported media type" in result
     )
 
+
 @patch("wet_mcp.llm.acompletion")
 def test_analyze_media_large_text_file(mock_completion, mock_settings, tmp_path):
     """Test truncation of large text files."""
