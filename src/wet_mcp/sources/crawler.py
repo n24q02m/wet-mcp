@@ -510,9 +510,7 @@ async def download_media(
 
                     try:
                         response = await client.get(
-                            request_url,
-                            headers=headers_req,
-                            follow_redirects=False
+                            request_url, headers=headers_req, follow_redirects=False
                         )
                     except httpx.RequestError as e:
                         return {"url": url, "error": f"Request failed: {e}"}
@@ -521,7 +519,10 @@ async def download_media(
                         redirects += 1
                         location = response.headers.get("Location")
                         if not location:
-                             return {"url": url, "error": "Redirect without Location header"}
+                            return {
+                                "url": url,
+                                "error": "Redirect without Location header",
+                            }
 
                         # Handle relative redirects
                         current_url = urljoin(current_url, location)
@@ -529,7 +530,10 @@ async def download_media(
                         # Validate new scheme
                         parsed_next = urlparse(current_url)
                         if parsed_next.scheme not in ("http", "https"):
-                             return {"url": url, "error": f"Unsupported redirect scheme: {parsed_next.scheme}"}
+                            return {
+                                "url": url,
+                                "error": f"Unsupported redirect scheme: {parsed_next.scheme}",
+                            }
 
                         continue
 

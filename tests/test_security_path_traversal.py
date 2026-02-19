@@ -26,7 +26,10 @@ async def test_download_media_path_traversal(tmp_path):
     # But wait, is_safe_url checks scheme and IP.
     # "http://example.com/.." is safe network-wise (resolves to example.com IP).
 
-    with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True), patch("wet_mcp.sources.crawler.resolve_safe_url", return_value="1.2.3.4"):
+    with (
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+        patch("wet_mcp.sources.crawler.resolve_safe_url", return_value="1.2.3.4"),
+    ):
         with patch("httpx.AsyncClient", return_value=mock_client):
             # 1. Traversal attempt with '..' as filename
             # This simulates a URL where split('/')[-1] is '..'
@@ -52,7 +55,10 @@ async def test_download_media_safe(tmp_path):
     mock_client.__aenter__.return_value = mock_client
     mock_client.__aexit__.return_value = None
 
-    with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True), patch("wet_mcp.sources.crawler.resolve_safe_url", return_value="1.2.3.4"):
+    with (
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+        patch("wet_mcp.sources.crawler.resolve_safe_url", return_value="1.2.3.4"),
+    ):
         with patch("httpx.AsyncClient", return_value=mock_client):
             url = "http://example.com/image.png"
             await download_media([url], str(tmp_path))

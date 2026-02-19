@@ -58,7 +58,9 @@ def resolve_safe_url(url: str) -> str:
         for res in results:
             ip_str = str(res[4][0])
             if not _validate_ip(ip_str):
-                raise ValueError(f"Blocked private/unsafe IP: {ip_str} for host {hostname}")
+                raise ValueError(
+                    f"Blocked private/unsafe IP: {ip_str} for host {hostname}"
+                )
             resolved_ips.append(ip_str)
 
         if not resolved_ips:
@@ -76,7 +78,7 @@ def resolve_safe_url(url: str) -> str:
                 ipaddress.IPv6Address(first_ip.split("%")[0])
                 return f"[{first_ip}]"
             except ValueError:
-                pass # Not IPv6
+                pass  # Not IPv6
 
         return first_ip
 
