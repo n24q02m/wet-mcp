@@ -61,6 +61,15 @@ def encode_image(image_path: str) -> str:
         return base64.b64encode(image_file.read()).decode("utf-8")
 
 
+def _read_and_truncate(path: str) -> str:
+    """Read file and truncate if too long."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    if len(text) > 100000:
+        text = text[:100000] + "\n...[truncated]"
+    return text
+
+
 async def analyze_media(
     media_path: str, prompt: str = "Describe this media in detail."
 ) -> str:
@@ -83,15 +92,6 @@ async def analyze_media(
         "application/javascript",
         "application/xml",
     ]:
-
-        def _read_and_truncate(path: str) -> str:
-            """Read file and truncate if too long."""
-            with open(path, encoding="utf-8") as f:
-                text = f.read()
-            if len(text) > 100000:
-                text = text[:100000] + "\n...[truncated]"
-            return text
-
         try:
             content = await asyncio.to_thread(_read_and_truncate, media_path)
 
