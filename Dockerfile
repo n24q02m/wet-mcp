@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:0.9.26 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # Copy project files
 COPY pyproject.toml uv.lock README.md ./
@@ -67,26 +67,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN useradd -m -u 1000 app && mkdir -p /app && chown -R app:app /app
-
 # Copy virtual environment from builder
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --from=builder --chown=app:app /app/src /app/src
+COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder /app/src /app/src
 
 # Copy Playwright browsers from builder
-COPY --from=builder --chown=app:app /root/.cache/ms-playwright /home/app/.cache/ms-playwright
+COPY --from=builder /root/.cache/ms-playwright /root/.cache/ms-playwright
 
 # Activate venv
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH=/app/src
-ENV PLAYWRIGHT_BROWSERS_PATH=/home/app/.cache/ms-playwright
 
 # Mark setup as complete (everything pre-installed)
-RUN mkdir -p /home/app/.wet-mcp && touch /home/app/.wet-mcp/.setup-complete
-
-# Switch to non-root user
-USER app
+RUN mkdir -p /root/.wet-mcp && touch /root/.wet-mcp/.setup-complete
 
 # Stdio transport by default
 CMD ["python", "-m", "wet_mcp"]
