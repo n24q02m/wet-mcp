@@ -133,6 +133,7 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         or "Unsupported media type" in result
     )
 
+
 def test_analyze_media_security_alert(mock_settings, tmp_path):
     """Test security alert for file outside download_dir."""
     unsafe_path = "/etc/passwd"
