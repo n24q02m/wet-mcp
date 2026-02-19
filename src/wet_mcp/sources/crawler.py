@@ -18,7 +18,8 @@ import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.config import settings
+from wet_mcp.security import is_safe_path, is_safe_url
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
@@ -406,6 +407,12 @@ async def download_media(
     logger.info(f"Downloading {len(media_urls)} media files")
 
     output_path = Path(output_dir).expanduser().resolve()
+
+    # Validate output directory against allowed download directory
+    allowed_base = Path(settings.download_dir).expanduser().resolve()
+    if not is_safe_path(output_path, [allowed_base]):
+        raise ValueError(f"Security Alert: Access to path {output_dir} is restricted")
+
     output_path.mkdir(parents=True, exist_ok=True)
 
     transport = httpx.AsyncHTTPTransport(retries=3)
@@ -438,7 +445,7 @@ async def download_media(
 
                 # Security check: Ensure the resolved path is still
                 # within the output directory
-                if not filepath.is_relative_to(output_path):
+                if not is_safe_path(filepath, [output_path]):
                     raise ValueError(
                         f"Security Alert: Path traversal attempt detected "
                         f"for {filename}"
