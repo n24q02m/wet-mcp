@@ -93,9 +93,9 @@ async def search(
 
     last_error: str | None = None
 
-    for attempt in range(1, _MAX_RETRIES + 1):
-        try:
-            async with httpx.AsyncClient(timeout=settings.searxng_timeout) as client:
+    async with httpx.AsyncClient(timeout=settings.searxng_timeout) as client:
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
                 headers = {
                     "X-Real-IP": "127.0.0.1",
                     "X-Forwarded-For": "127.0.0.1",
@@ -108,85 +108,85 @@ async def search(
                 response.raise_for_status()
                 data = response.json()
 
-            results = data.get("results", [])[: max_results * 2]
+                results = data.get("results", [])[: max_results * 2]
 
-            # Format results
-            formatted = []
-            for r in results:
-                formatted.append(
-                    {
-                        "url": r.get("url", ""),
-                        "title": r.get("title", ""),
-                        "snippet": r.get("content", ""),
-                        "source": r.get("engine", ""),
-                    }
+                # Format results
+                formatted = []
+                for r in results:
+                    formatted.append(
+                        {
+                            "url": r.get("url", ""),
+                            "title": r.get("title", ""),
+                            "snippet": r.get("content", ""),
+                            "source": r.get("engine", ""),
+                        }
+                    )
+
+                # Deduplicate by URL: with multiple engines, the same page
+                # may appear several times.  Keep the entry with the longest
+                # snippet (most informative) and merge engine sources.
+                seen: dict[str, dict] = {}
+                deduped: list[dict] = []
+                for item in formatted:
+                    url = item["url"]
+                    if url in seen:
+                        existing = seen[url]
+                        # Merge engine sources
+                        if item["source"] and item["source"] not in existing["source"]:
+                            existing["source"] += f", {item['source']}"
+                        # Keep longer snippet
+                        if len(item.get("snippet", "")) > len(existing.get("snippet", "")):
+                            existing["snippet"] = item["snippet"]
+                            existing["title"] = item["title"] or existing["title"]
+                    else:
+                        seen[url] = item
+                        deduped.append(item)
+
+                # Trim to requested limit after dedup
+                deduped = deduped[:max_results]
+
+                output = {
+                    "results": deduped,
+                    "total": len(deduped),
+                    "query": query,
+                }
+
+                logger.info(f"Found {len(deduped)} results for: {query}")
+                return json.dumps(output, ensure_ascii=False, indent=2)
+
+            except httpx.HTTPStatusError as e:
+                status = e.response.status_code
+                last_error = f"HTTP error: {status}"
+                logger.warning(f"SearXNG HTTP {status} on attempt {attempt}/{_MAX_RETRIES}")
+
+                # Only retry on server errors (5xx), not client errors (4xx)
+                if status < 500:
+                    logger.error(f"SearXNG client error (non-retryable): {last_error}")
+                    return json.dumps({"error": last_error})
+
+            except httpx.RequestError as e:
+                last_error = f"Request error: {e}"
+                logger.warning(
+                    f"SearXNG request error on attempt {attempt}/{_MAX_RETRIES}: {e}"
                 )
 
-            # Deduplicate by URL: with multiple engines, the same page
-            # may appear several times.  Keep the entry with the longest
-            # snippet (most informative) and merge engine sources.
-            seen: dict[str, dict] = {}
-            deduped: list[dict] = []
-            for item in formatted:
-                url = item["url"]
-                if url in seen:
-                    existing = seen[url]
-                    # Merge engine sources
-                    if item["source"] and item["source"] not in existing["source"]:
-                        existing["source"] += f", {item['source']}"
-                    # Keep longer snippet
-                    if len(item.get("snippet", "")) > len(existing.get("snippet", "")):
-                        existing["snippet"] = item["snippet"]
-                        existing["title"] = item["title"] or existing["title"]
-                else:
-                    seen[url] = item
-                    deduped.append(item)
+                # Connection refused / reset likely means SearXNG crashed
+                # Try to restart it before next retry
+                if attempt < _MAX_RETRIES:
+                    logger.info("Attempting SearXNG restart before retry...")
+                    active_url = await _ensure_searxng_healthy(active_url)
 
-            # Trim to requested limit after dedup
-            deduped = deduped[:max_results]
+            except Exception as e:
+                last_error = str(e)
+                logger.warning(
+                    f"SearXNG unexpected error on attempt {attempt}/{_MAX_RETRIES}: {e}"
+                )
 
-            output = {
-                "results": deduped,
-                "total": len(deduped),
-                "query": query,
-            }
-
-            logger.info(f"Found {len(deduped)} results for: {query}")
-            return json.dumps(output, ensure_ascii=False, indent=2)
-
-        except httpx.HTTPStatusError as e:
-            status = e.response.status_code
-            last_error = f"HTTP error: {status}"
-            logger.warning(f"SearXNG HTTP {status} on attempt {attempt}/{_MAX_RETRIES}")
-
-            # Only retry on server errors (5xx), not client errors (4xx)
-            if status < 500:
-                logger.error(f"SearXNG client error (non-retryable): {last_error}")
-                return json.dumps({"error": last_error})
-
-        except httpx.RequestError as e:
-            last_error = f"Request error: {e}"
-            logger.warning(
-                f"SearXNG request error on attempt {attempt}/{_MAX_RETRIES}: {e}"
-            )
-
-            # Connection refused / reset likely means SearXNG crashed
-            # Try to restart it before next retry
+            # Exponential backoff before retry (skip on last attempt)
             if attempt < _MAX_RETRIES:
-                logger.info("Attempting SearXNG restart before retry...")
-                active_url = await _ensure_searxng_healthy(active_url)
-
-        except Exception as e:
-            last_error = str(e)
-            logger.warning(
-                f"SearXNG unexpected error on attempt {attempt}/{_MAX_RETRIES}: {e}"
-            )
-
-        # Exponential backoff before retry (skip on last attempt)
-        if attempt < _MAX_RETRIES:
-            delay = _BASE_DELAY * (2 ** (attempt - 1))
-            logger.debug(f"Retrying in {delay:.1f}s...")
-            await asyncio.sleep(delay)
+                delay = _BASE_DELAY * (2 ** (attempt - 1))
+                logger.debug(f"Retrying in {delay:.1f}s...")
+                await asyncio.sleep(delay)
 
     # All retries exhausted
     error_msg = last_error or "All retry attempts failed"
