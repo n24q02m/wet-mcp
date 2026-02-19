@@ -327,9 +327,7 @@ async def crawl(
                     break
 
                 content = (
-                    result.markdown
-                    if format == "markdown"
-                    else result.cleaned_html
+                    result.markdown if format == "markdown" else result.cleaned_html
                 )
 
                 all_results.append(
