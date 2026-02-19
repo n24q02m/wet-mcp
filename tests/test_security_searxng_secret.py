@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 from wet_mcp.searxng_runner import _get_settings_path
 
+
 def test_secret_key_replacement():
     """Verify that a random secret key is generated and injected."""
     # Mock Path.home()
@@ -25,9 +26,7 @@ def test_secret_key_replacement():
 
     # Mock the template content with the placeholder
     template_content = (
-        "server:\n"
-        "  port: 41592\n"
-        "  secret_key: REPLACE_WITH_REAL_SECRET\n"
+        "server:\n  port: 41592\n  secret_key: REPLACE_WITH_REAL_SECRET\n"
     )
     mock_bundled_file.read_text.return_value = template_content
 
