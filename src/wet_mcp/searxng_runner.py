@@ -110,8 +110,8 @@ async def _wait_for_service(url: str, timeout: float = _STARTUP_HEALTH_TIMEOUT) 
                 )
                 if response.status_code == 200:
                     return True
-            except Exception:
-                pass
+            except httpx.RequestError as e:
+                logger.debug(f"Health check failed for {url}: {e}")
             await asyncio.sleep(1.0)
     return False
 
