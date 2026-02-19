@@ -349,7 +349,6 @@ def _install_searxng() -> bool:
             patch_searxng_windows()
             return True
         else:
-
             logger.error(f"SearXNG installation failed: {result.stderr[:500]}")
             return False
 
@@ -386,8 +385,8 @@ def _get_settings_path(port: int) -> Path:
     # Inject a random secret key
     secret = secrets.token_hex(32)
     content = content.replace(
-        "secret_key: \"REPLACE_WITH_REAL_SECRET\"",
-        f"secret_key: \"{secret}\"",
+        'secret_key: "REPLACE_WITH_REAL_SECRET"',
+        f'secret_key: "{secret}"',
     )
 
     settings_file.write_text(content)

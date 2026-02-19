@@ -25,9 +25,7 @@ def test_searxng_secret_key_replacement():
 
     # The content must contain the placeholder
     mock_bundled_file.read_text.return_value = (
-        "server:\n"
-        "  port: 41592\n"
-        "  secret_key: \"REPLACE_WITH_REAL_SECRET\"\n"
+        'server:\n  port: 41592\n  secret_key: "REPLACE_WITH_REAL_SECRET"\n'
     )
 
     with (
@@ -50,7 +48,7 @@ def test_searxng_secret_key_replacement():
 
         # Check secret key replacement
         assert "REPLACE_WITH_REAL_SECRET" not in content
-        assert "secret_key: \"" in content
+        assert 'secret_key: "' in content
 
         # Extract the key to verify format
         match = re.search(r'secret_key: "([a-f0-9]+)"', content)
