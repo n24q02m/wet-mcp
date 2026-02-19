@@ -1,22 +1,18 @@
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 # We need to import the module under test
 # But some functions use top-level imports or local imports that we need to control.
-
 from wet_mcp.setup import (
-    SETUP_MARKER,
     _find_searx_package_dir,
-    patch_searxng_version,
-    patch_searxng_windows,
-    needs_setup,
     _install_searxng,
     _setup_crawl4ai,
-    run_auto_setup,
+    needs_setup,
+    patch_searxng_version,
+    patch_searxng_windows,
     reset_setup,
+    run_auto_setup,
 )
 
 # --- Helper Tests ---
