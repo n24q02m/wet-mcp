@@ -59,6 +59,46 @@ async def _ensure_searxng_healthy(searxng_url: str) -> str:
     return new_url
 
 
+def _process_results(data: dict, max_results: int) -> list[dict]:
+    """Process and deduplicate raw SearXNG results."""
+    results = data.get("results", [])[: max_results * 2]
+
+    # Format results
+    formatted = []
+    for r in results:
+        formatted.append(
+            {
+                "url": r.get("url", ""),
+                "title": r.get("title", ""),
+                "snippet": r.get("content", ""),
+                "source": r.get("engine", ""),
+            }
+        )
+
+    # Deduplicate by URL: with multiple engines, the same page
+    # may appear several times.  Keep the entry with the longest
+    # snippet (most informative) and merge engine sources.
+    seen: dict[str, dict] = {}
+    deduped: list[dict] = []
+    for item in formatted:
+        url = item["url"]
+        if url in seen:
+            existing = seen[url]
+            # Merge engine sources
+            if item["source"] and item["source"] not in existing["source"]:
+                existing["source"] += f", {item['source']}"
+            # Keep longer snippet
+            if len(item.get("snippet", "")) > len(existing.get("snippet", "")):
+                existing["snippet"] = item["snippet"]
+                existing["title"] = item["title"] or existing["title"]
+        else:
+            seen[url] = item
+            deduped.append(item)
+
+    # Trim to requested limit after dedup
+    return deduped[:max_results]
+
+
 async def search(
     searxng_url: str,
     query: str,
@@ -108,42 +148,7 @@ async def search(
                 response.raise_for_status()
                 data = response.json()
 
-            results = data.get("results", [])[: max_results * 2]
-
-            # Format results
-            formatted = []
-            for r in results:
-                formatted.append(
-                    {
-                        "url": r.get("url", ""),
-                        "title": r.get("title", ""),
-                        "snippet": r.get("content", ""),
-                        "source": r.get("engine", ""),
-                    }
-                )
-
-            # Deduplicate by URL: with multiple engines, the same page
-            # may appear several times.  Keep the entry with the longest
-            # snippet (most informative) and merge engine sources.
-            seen: dict[str, dict] = {}
-            deduped: list[dict] = []
-            for item in formatted:
-                url = item["url"]
-                if url in seen:
-                    existing = seen[url]
-                    # Merge engine sources
-                    if item["source"] and item["source"] not in existing["source"]:
-                        existing["source"] += f", {item['source']}"
-                    # Keep longer snippet
-                    if len(item.get("snippet", "")) > len(existing.get("snippet", "")):
-                        existing["snippet"] = item["snippet"]
-                        existing["title"] = item["title"] or existing["title"]
-                else:
-                    seen[url] = item
-                    deduped.append(item)
-
-            # Trim to requested limit after dedup
-            deduped = deduped[:max_results]
+            deduped = _process_results(data, max_results)
 
             output = {
                 "results": deduped,
