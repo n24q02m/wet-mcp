@@ -8,6 +8,7 @@ This module handles automatic first-run setup:
 Setup runs automatically on first server start.
 """
 
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -120,7 +121,29 @@ def needs_setup() -> bool:
     return not SETUP_MARKER.exists()
 
 
-def _install_searxng() -> bool:
+def _get_pip_command() -> list[str]:
+    """Get cross-platform pip install command.
+
+    Priority:
+    1. uv pip (for uv environments - no pip module)
+    2. pip (for traditional venvs)
+    3. python -m pip (fallback)
+    """
+    # Check uv first (cross-platform, works in uv venvs without pip)
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return [uv_path, "pip", "install"]
+
+    # Check pip executable
+    pip_path = shutil.which("pip")
+    if pip_path:
+        return [pip_path, "install"]
+
+    # Fallback to python -m pip
+    return [sys.executable, "-m", "pip", "install"]
+
+
+def install_searxng() -> bool:
     """Install SearXNG Python package from GitHub zip archive.
 
     Pre-installs build dependencies, then installs SearXNG with
@@ -139,13 +162,12 @@ def _install_searxng() -> bool:
 
     logger.info("Installing SearXNG from GitHub...")
     try:
+        pip_cmd = _get_pip_command()
+
         # Pre-install build dependencies
         deps_result = subprocess.run(
             [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
+                *pip_cmd,
                 "--quiet",
                 "msgspec",
                 "setuptools",
@@ -163,10 +185,7 @@ def _install_searxng() -> bool:
         # Install SearXNG with --no-build-isolation
         result = subprocess.run(
             [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
+                *pip_cmd,
                 "--quiet",
                 "--no-build-isolation",
                 _SEARXNG_INSTALL_URL,
@@ -194,9 +213,9 @@ def _install_searxng() -> bool:
 def _setup_crawl4ai() -> bool:
     """Run crawl4ai post-install setup.
 
-    Delegates to ``crawl4ai.install.post_install()`` which handles:
-    - ``.crawl4ai`` home directory creation
-    - Playwright chromium + system deps (``--with-deps --force``)
+    Delegates to crawl4ai.install.post_install() which handles:
+    - .crawl4ai home directory creation
+    - Playwright chromium + system deps (--with-deps --force)
     - Patchright chromium for stealth/undetected mode
     - Database migration
 
@@ -246,7 +265,7 @@ def run_auto_setup() -> bool:
     logger.debug(f"Created config directory: {config_dir}")
 
     # Step 2: Install SearXNG from GitHub
-    if not _install_searxng():
+    if not install_searxng():
         logger.warning("SearXNG not installed, search will use external URL")
         # Don't fail setup entirely - extract/crawl still works
 
