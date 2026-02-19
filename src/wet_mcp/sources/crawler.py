@@ -274,7 +274,9 @@ async def crawl(
             continue
 
         # Use deque for O(1) pops (BFS)
-        to_crawl: collections.deque[tuple[str, int]] = collections.deque([(root_url, 0)])
+        to_crawl: collections.deque[tuple[str, int]] = collections.deque(
+            [(root_url, 0)]
+        )
 
         while to_crawl and len(all_results) < max_pages:
             url, current_depth = to_crawl.popleft()
@@ -355,7 +357,9 @@ async def sitemap(
             continue
 
         # Use deque for O(1) pops (BFS)
-        to_visit: collections.deque[tuple[str, int]] = collections.deque([(root_url, 0)])
+        to_visit: collections.deque[tuple[str, int]] = collections.deque(
+            [(root_url, 0)]
+        )
         site_urls: list[dict[str, object]] = []
 
         while to_visit and len(site_urls) < max_pages:
