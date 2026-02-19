@@ -1,9 +1,10 @@
 """Tests for _with_timeout helper in server.py."""
 
-import sys
 import asyncio
+import sys
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, patch
 
 # Mock dependencies before import
 mock_loguru = MagicMock()
@@ -47,7 +48,7 @@ mock_config.settings = mock_settings
 sys.modules["wet_mcp.config"] = mock_config
 
 # Now import the target function
-from wet_mcp.server import _with_timeout
+from wet_mcp.server import _with_timeout  # noqa: E402, I001
 
 @pytest.mark.asyncio
 async def test_with_timeout_success():
