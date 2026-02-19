@@ -18,6 +18,7 @@ import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
+from wet_mcp.config import settings
 from wet_mcp.security import is_safe_url
 
 # ---------------------------------------------------------------------------
@@ -510,7 +511,7 @@ async def download_media(
                 }
 
     async with httpx.AsyncClient(
-        timeout=60, transport=transport, headers=headers
+        timeout=settings.crawler_timeout, transport=transport, headers=headers
     ) as client:
         tasks = [_download_one(url, client) for url in media_urls]
         results = await asyncio.gather(*tasks)
