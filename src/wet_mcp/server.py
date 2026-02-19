@@ -24,6 +24,7 @@ from wet_mcp.sources.crawler import (
 )
 from wet_mcp.sources.crawler import (
     list_media,
+    shutdown_crawler,
 )
 from wet_mcp.sources.crawler import (
     sitemap as _sitemap,
@@ -158,8 +159,6 @@ async def _lifespan(_server: FastMCP):
 
     # Shut down the shared browser pool first (may take a few seconds)
     try:
-        from wet_mcp.sources.crawler import shutdown_crawler
-
         await shutdown_crawler()
     except Exception as exc:
         logger.debug(f"Browser pool shutdown error (non-fatal): {exc}")
