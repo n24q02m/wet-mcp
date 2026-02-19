@@ -1,124 +1,152 @@
 """Tests for _with_timeout helper in server.py."""
 
 import asyncio
+import importlib
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Mock dependencies before import
-mock_loguru = MagicMock()
-sys.modules["loguru"] = mock_loguru
 
-mock_mcp = MagicMock()
-sys.modules["mcp"] = mock_mcp
-sys.modules["mcp.server"] = MagicMock()
-sys.modules["mcp.server.fastmcp"] = MagicMock()
-sys.modules["mcp.types"] = MagicMock()
+@pytest.fixture
+def mock_dependencies():
+    """Mock external dependencies to allow importing server.py."""
+    modules = {
+        "loguru": MagicMock(),
+        "mcp": MagicMock(),
+        "mcp.server": MagicMock(),
+        "mcp.server.fastmcp": MagicMock(),
+        "mcp.types": MagicMock(),
+        "crawl4ai": MagicMock(),
+        "httpx": MagicMock(),
+        "pydantic": MagicMock(),
+        "pydantic_settings": MagicMock(),
+        "litellm": MagicMock(),
+        "sqlite_vec": MagicMock(),
+        # Internal modules
+        "wet_mcp.cache": MagicMock(),
+        "wet_mcp.db": MagicMock(),
+        "wet_mcp.searxng_runner": MagicMock(),
+        "wet_mcp.sources": MagicMock(),
+        "wet_mcp.sources.crawler": MagicMock(),
+        "wet_mcp.sources.searxng": MagicMock(),
+        "wet_mcp.embedder": MagicMock(),
+        "wet_mcp.reranker": MagicMock(),
+        "wet_mcp.setup": MagicMock(),
+        "wet_mcp.sync": MagicMock(),
+        # Mock config explicitly
+        "wet_mcp.config": MagicMock(),
+    }
 
-sys.modules["crawl4ai"] = MagicMock()
-sys.modules["httpx"] = MagicMock()
-sys.modules["pydantic"] = MagicMock()
-sys.modules["pydantic_settings"] = MagicMock()
-sys.modules["litellm"] = MagicMock()
-sys.modules["sqlite_vec"] = MagicMock()
+    # Mock importlib.metadata to avoid PackageNotFoundError
+    mock_metadata = MagicMock()
+    mock_metadata.version.return_value = "0.0.0"
+    modules["importlib.metadata"] = mock_metadata
 
-# Mock importlib.metadata to avoid PackageNotFoundError
-mock_metadata = MagicMock()
-mock_metadata.version.return_value = "0.0.0"
-sys.modules["importlib.metadata"] = mock_metadata
+    with patch.dict(sys.modules, modules):
+        # Create a mock settings object
+        mock_settings = MagicMock()
+        mock_settings.tool_timeout = 120
+        sys.modules["wet_mcp.config"].settings = mock_settings
 
-# Mock internal modules to avoid import errors
-sys.modules["wet_mcp.cache"] = MagicMock()
-sys.modules["wet_mcp.db"] = MagicMock()
-sys.modules["wet_mcp.searxng_runner"] = MagicMock()
-sys.modules["wet_mcp.sources"] = MagicMock()
-sys.modules["wet_mcp.sources.crawler"] = MagicMock()
-sys.modules["wet_mcp.sources.searxng"] = MagicMock()
-sys.modules["wet_mcp.embedder"] = MagicMock()
-sys.modules["wet_mcp.reranker"] = MagicMock()
-sys.modules["wet_mcp.setup"] = MagicMock()
-sys.modules["wet_mcp.sync"] = MagicMock()
+        # Import the module inside the patch context
+        # We must invalidate the cache first if it exists to force re-import with mocks
+        if "wet_mcp.server" in sys.modules:
+            del sys.modules["wet_mcp.server"]
 
-# Mock config
-mock_settings = MagicMock()
-mock_settings.tool_timeout = 120
-mock_config = MagicMock()
-mock_config.settings = mock_settings
-sys.modules["wet_mcp.config"] = mock_config
-
-# Now import the target function
-from wet_mcp.server import _with_timeout  # noqa: E402, I001
+        module = importlib.import_module("wet_mcp.server")
+        yield module, mock_settings
 
 
-@pytest.mark.asyncio
-async def test_with_timeout_success():
+def test_with_timeout_success(mock_dependencies):
     """Test _with_timeout returns result when task completes within timeout."""
+    server_module, mock_settings = mock_dependencies
+    _with_timeout = server_module._with_timeout
+
     mock_settings.tool_timeout = 1.0
 
     async def fast_coro():
         return "success"
 
-    result = await _with_timeout(fast_coro(), "test_action")
-    assert result == "success"
+    async def _test():
+        result = await _with_timeout(fast_coro(), "test_action")
+        assert result == "success"
+
+    asyncio.run(_test())
 
 
-@pytest.mark.asyncio
-async def test_with_timeout_exceeded():
+def test_with_timeout_exceeded(mock_dependencies):
     """Test _with_timeout returns error message when task exceeds timeout."""
+    server_module, mock_settings = mock_dependencies
+    _with_timeout = server_module._with_timeout
+
     mock_settings.tool_timeout = 0.1
 
     async def slow_coro():
         await asyncio.sleep(0.5)
         return "fail"
 
-    result = await _with_timeout(slow_coro(), "test_action")
-    expected_msg = (
-        "Error: 'test_action' timed out after 0.1s. "
-        "Increase TOOL_TIMEOUT or try simpler parameters."
-    )
-    assert result == expected_msg
+    async def _test():
+        result = await _with_timeout(slow_coro(), "test_action")
+        expected_msg = (
+            "Error: 'test_action' timed out after 0.1s. "
+            "Increase TOOL_TIMEOUT or try simpler parameters."
+        )
+        assert result == expected_msg
+
+    asyncio.run(_test())
 
 
-@pytest.mark.asyncio
-async def test_with_timeout_exception():
+def test_with_timeout_exception(mock_dependencies):
     """Test _with_timeout propagates exceptions from inner task."""
+    server_module, mock_settings = mock_dependencies
+    _with_timeout = server_module._with_timeout
+
     mock_settings.tool_timeout = 1.0
 
     async def failing_coro():
         raise ValueError("oops")
 
-    with pytest.raises(ValueError, match="oops"):
-        await _with_timeout(failing_coro(), "test_action")
+    async def _test():
+        with pytest.raises(ValueError, match="oops"):
+            await _with_timeout(failing_coro(), "test_action")
+
+    asyncio.run(_test())
 
 
-@pytest.mark.asyncio
-async def test_with_timeout_disabled():
+def test_with_timeout_disabled(mock_dependencies):
     """Test _with_timeout bypasses timeout logic when <= 0."""
-    # Test with 0
-    mock_settings.tool_timeout = 0
+    server_module, mock_settings = mock_dependencies
+    _with_timeout = server_module._with_timeout
 
-    async def coro1():
-        return "success"
+    async def _test():
+        # Test with 0
+        mock_settings.tool_timeout = 0
 
-    result = await _with_timeout(coro1(), "test_action")
-    assert result == "success"
+        async def coro1():
+            return "success"
 
-    # Test with negative
-    mock_settings.tool_timeout = -1
+        result = await _with_timeout(coro1(), "test_action")
+        assert result == "success"
 
-    async def coro2():
-        return "success"
+        # Test with negative
+        mock_settings.tool_timeout = -1
 
-    result = await _with_timeout(coro2(), "test_action")
-    assert result == "success"
+        async def coro2():
+            return "success"
+
+        result = await _with_timeout(coro2(), "test_action")
+        assert result == "success"
+
+    asyncio.run(_test())
 
 
-@pytest.mark.asyncio
-async def test_with_timeout_cleanup():
+def test_with_timeout_cleanup(mock_dependencies):
     """Test that cancelled task is given grace period for cleanup."""
-    cleanup_done = [False]
+    server_module, mock_settings = mock_dependencies
+    _with_timeout = server_module._with_timeout
 
+    cleanup_done = [False]
     mock_settings.tool_timeout = 0.1
 
     async def cleanup_coro():
@@ -128,12 +156,15 @@ async def test_with_timeout_cleanup():
             # This should run during the grace period
             cleanup_done[0] = True
 
-    result = await _with_timeout(cleanup_coro(), "test_action")
+    async def _test():
+        result = await _with_timeout(cleanup_coro(), "test_action")
 
-    expected_msg = (
-        "Error: 'test_action' timed out after 0.1s. "
-        "Increase TOOL_TIMEOUT or try simpler parameters."
-    )
-    assert result == expected_msg
-    # Verify cleanup ran
-    assert cleanup_done[0] is True, "Cleanup block did not run"
+        expected_msg = (
+            "Error: 'test_action' timed out after 0.1s. "
+            "Increase TOOL_TIMEOUT or try simpler parameters."
+        )
+        assert result == expected_msg
+        # Verify cleanup ran
+        assert cleanup_done[0] is True, "Cleanup block did not run"
+
+    asyncio.run(_test())
