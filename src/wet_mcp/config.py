@@ -52,6 +52,9 @@ class Settings(BaseSettings):
 
             env_var, key = pair.split(":", 1)
             env_var = env_var.strip()
+
+            if not env_var:
+                continue
             key = key.strip()
 
             if not key:
