@@ -126,6 +126,7 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         or "Unsupported media type" in result
     )
 
+
 def test_get_model_capabilities():
     """Test get_model_capabilities function."""
 
