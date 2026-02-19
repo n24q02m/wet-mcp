@@ -755,6 +755,3 @@ def stop_searxng() -> None:
     _cleanup_process()
 
 
-def remove_searxng() -> None:
-    """Stop SearXNG subprocess (alias for compatibility)."""
-    _cleanup_process()
