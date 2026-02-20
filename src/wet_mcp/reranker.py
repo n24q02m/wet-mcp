@@ -148,9 +148,7 @@ class Qwen3Reranker:
 
         try:
             model = self._get_model()
-            # qwen3-embed rerank() takes list of (query, document) pairs
-            pairs = [(query, doc) for doc in documents]
-            scores = list(model.rerank(pairs))
+            scores = list(model.rerank(query, documents))
 
             # Build (index, score) pairs
             results = list(enumerate(scores))
@@ -166,7 +164,7 @@ class Qwen3Reranker:
         """Check if qwen3-embed reranker is available."""
         try:
             model = self._get_model()
-            scores = list(model.rerank([("test", "test document")]))
+            scores = list(model.rerank("test", ["test document"]))
             return len(scores) > 0
         except Exception as e:
             logger.debug(f"Local reranker not available: {e}")

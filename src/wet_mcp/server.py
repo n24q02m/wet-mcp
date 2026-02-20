@@ -38,9 +38,8 @@ logger.add(sys.stderr, level=settings.log_level)
 # Validated against API keys -- first success wins.
 _EMBEDDING_CANDIDATES = [
     "gemini/gemini-embedding-001",
-    "text-embedding-3-small",
-    "mistral/mistral-embed",
-    "embed-english-v3.0",
+    "text-embedding-3-large",
+    "embed-multilingual-v3.0",
 ]
 
 # Fixed embedding dimensions for sqlite-vec.
@@ -58,11 +57,21 @@ _embedding_dims: int = 0
 
 
 async def _warmup_searxng() -> None:
-    """Pre-warm SearXNG in background so the first search call is fast.
+    """Run heavy setup and pre-warm SearXNG in background.
 
     Non-fatal: if startup fails, the first search call will retry.
     """
     try:
+        from wet_mcp.setup import run_auto_setup
+
+        await asyncio.to_thread(run_auto_setup)
+
+        # Pre-import crawl4ai
+        await asyncio.to_thread(__import__, "crawl4ai")
+        logger.info("Crawl4AI background load complete")
+
+        from wet_mcp.searxng_runner import ensure_searxng
+
         url = await ensure_searxng()
         logger.info(f"SearXNG pre-warmed at {url}")
     except Exception as e:
@@ -74,12 +83,11 @@ async def _lifespan(_server: FastMCP):
     """Server lifespan: startup SearXNG, init cache/docs DB, cleanup on shutdown."""
     global _web_cache, _docs_db, _embedding_dims
 
-    from wet_mcp.setup import run_auto_setup
-
     logger.info("Starting WET MCP Server...")
-    await asyncio.to_thread(run_auto_setup)
 
     # 1. Setup API keys (+ aliases like GOOGLE_API_KEY -> GEMINI_API_KEY)
+    from wet_mcp.config import settings
+
     keys = settings.setup_api_keys()
     if keys:
         logger.info(f"API keys configured: {', '.join(keys.keys())}")
@@ -90,12 +98,6 @@ async def _lifespan(_server: FastMCP):
             "No GITHUB_TOKEN set. Library docs discovery will use unauthenticated "
             "GitHub API (60 req/hr limit). Set GITHUB_TOKEN for 5000 req/hr."
         )
-
-    # Pre-import crawl4ai -- its first import runs heavy synchronous init
-    # that would block the event loop if deferred to the first tool call.
-    logger.info("Pre-loading Crawl4AI...")
-    await asyncio.to_thread(__import__, "crawl4ai")
-    logger.info("Crawl4AI loaded")
 
     # SearXNG is pre-warmed eagerly as a background task to eliminate
     # startup latency on the first search call. If this instance finds an
@@ -114,10 +116,17 @@ async def _lifespan(_server: FastMCP):
 
     # 3. Initialize embedding backend (dual-backend: litellm or local)
     _embedding_dims = settings.resolve_embedding_dims()
-    await _init_embedding_backend(keys)
+    if _embedding_dims == 0:
+        _embedding_dims = _DEFAULT_EMBEDDING_DIMS
 
-    # 4. Initialize reranker backend
-    await _init_reranker_backend()
+    async def _init_backends_task():
+        try:
+            await _init_embedding_backend(keys)
+            await _init_reranker_backend()
+        except Exception as e:
+            logger.error(f"Background backend init failed: {e}")
+
+    asyncio.create_task(_init_backends_task())
 
     # 5. Initialize docs DB
     docs_path = settings.get_db_path()
@@ -535,7 +544,7 @@ async def extract(
     depth: int = 2,
     max_pages: int = 20,
     format: str = "markdown",
-    stealth: bool = True,
+    stealth: bool = False,
 ) -> str:
     """Extract content from web pages, crawl sites, or map site structure.
     - extract: Get clean content from URLs (requires urls)

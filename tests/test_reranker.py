@@ -132,8 +132,8 @@ class TestQwen3Reranker:
             reranker.rerank("my query", ["doc1", "doc2"])
 
         # Verify pairs passed to model
-        call_args = mock_model.rerank.call_args[0][0]
-        assert call_args == [("my query", "doc1"), ("my query", "doc2")]
+        assert mock_model.rerank.call_args[0][0] == "my query"
+        assert mock_model.rerank.call_args[0][1] == ["doc1", "doc2"]
 
     def test_rerank_error_returns_empty(self):
         """Model errors return empty results (graceful fallback)."""

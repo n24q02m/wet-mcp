@@ -48,7 +48,7 @@ async def test_extract_success():
         mock_extract.assert_called_once_with(
             urls=["https://example.com"],
             format="markdown",
-            stealth=True,
+            stealth=False,
         )
 
 
@@ -119,7 +119,7 @@ async def test_crawl_defaults():
             depth=2,
             max_pages=20,
             format="markdown",
-            stealth=True,
+            stealth=False,
         )
 
 

@@ -120,6 +120,22 @@ def needs_setup() -> bool:
     return not SETUP_MARKER.exists()
 
 
+def _get_pip_command() -> list[str]:
+    """Get cross-platform pip install command."""
+    import shutil
+    import sys
+
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return [uv_path, "pip", "install", "--python", sys.executable]
+
+    pip_path = shutil.which("pip")
+    if pip_path:
+        return [pip_path, "install"]
+
+    return [sys.executable, "-m", "pip", "install"]
+
+
 def _install_searxng() -> bool:
     """Install SearXNG Python package from GitHub zip archive.
 
@@ -140,19 +156,19 @@ def _install_searxng() -> bool:
     logger.info("Installing SearXNG from GitHub...")
     try:
         # Pre-install build dependencies
+        pip_cmd = _get_pip_command()
         deps_result = subprocess.run(
             [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
+                *pip_cmd,
                 "--quiet",
                 "msgspec",
                 "setuptools",
                 "wheel",
                 "pyyaml",
             ],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
+            encoding="utf-8",
             text=True,
             timeout=120,
         )
@@ -163,15 +179,14 @@ def _install_searxng() -> bool:
         # Install SearXNG with --no-build-isolation
         result = subprocess.run(
             [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
+                *pip_cmd,
                 "--quiet",
                 "--no-build-isolation",
                 _SEARXNG_INSTALL_URL,
             ],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
+            encoding="utf-8",
             text=True,
             timeout=300,
         )
@@ -208,9 +223,29 @@ def _setup_crawl4ai() -> bool:
     """
     logger.info("Running crawl4ai setup (browsers + system deps)...")
     try:
-        from crawl4ai.install import post_install
+        import subprocess
+        import sys
 
-        post_install()
+        # 1. Setup home directory and run migration safely in a subprocess
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from crawl4ai.install import setup_home_directory, run_migration; setup_home_directory(); run_migration()",
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+        # 2. Run playwright install safely
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
         logger.info("crawl4ai setup completed successfully")
         return True
     except Exception as e:
