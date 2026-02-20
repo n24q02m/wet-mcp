@@ -42,10 +42,10 @@ async def test_download_media_success_streaming():
             mock_file.__exit__.return_value = None
 
             with patch("builtins.open", return_value=mock_file) as mock_open:
-                 with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
+                with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
                     result_json = await download_media(
                         media_urls=["https://example.com/image.png"],
-                        output_dir="/tmp/downloads"
+                        output_dir="/tmp/downloads",
                     )
 
     results = json.loads(result_json)
@@ -55,7 +55,9 @@ async def test_download_media_success_streaming():
     assert results[0]["size"] == len(b"fake image content")
 
     # Verify stream was called
-    mock_client.stream.assert_called_with("GET", "https://example.com/image.png", follow_redirects=True)
+    mock_client.stream.assert_called_with(
+        "GET", "https://example.com/image.png", follow_redirects=True
+    )
 
     # Verify file writes
     mock_open.assert_called()

@@ -16,6 +16,7 @@ async def test_download_media_path_traversal(tmp_path):
     # Mock streaming
     async def mock_aiter_bytes():
         yield b"fake content"
+
     mock_response.aiter_bytes = mock_aiter_bytes
 
     mock_stream_ctx = AsyncMock()
@@ -47,6 +48,7 @@ async def test_download_media_safe(tmp_path):
 
     async def mock_aiter_bytes():
         yield b"safe content"
+
     mock_response.aiter_bytes = mock_aiter_bytes
 
     mock_stream_ctx = AsyncMock()

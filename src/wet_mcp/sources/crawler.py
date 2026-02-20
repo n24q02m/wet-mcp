@@ -479,7 +479,9 @@ async def download_media(
                 if not is_safe_url(target_url):
                     return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-                async with client.stream("GET", target_url, follow_redirects=True) as response:
+                async with client.stream(
+                    "GET", target_url, follow_redirects=True
+                ) as response:
                     response.raise_for_status()
 
                     filename = target_url.split("/")[-1].split("?")[0] or "download"
