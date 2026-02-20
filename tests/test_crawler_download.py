@@ -1,9 +1,10 @@
 import json
-import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_success_streaming():
