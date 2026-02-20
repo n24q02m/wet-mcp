@@ -1,7 +1,10 @@
 import json
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
+
 import pytest
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_ssrf_redirect_protection():
@@ -54,7 +57,7 @@ async def test_download_media_ssrf_redirect_protection():
             return True
         if url == unsafe_url:
             return False
-        return True # Default safe
+        return True  # Default safe
 
     with patch("httpx.AsyncClient", mock_client_cls):
         with patch("wet_mcp.sources.crawler.is_safe_url", side_effect=mock_is_safe_url):
@@ -74,4 +77,6 @@ async def test_download_media_ssrf_redirect_protection():
 
     # Should NOT call get with unsafe_url
     # Because is_safe_url(unsafe_url) returned False before the call
-    assert call(unsafe_url, follow_redirects=False) not in mock_client.get.call_args_list
+    assert (
+        call(unsafe_url, follow_redirects=False) not in mock_client.get.call_args_list
+    )
