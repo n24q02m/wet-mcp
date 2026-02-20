@@ -66,7 +66,7 @@ def _get_pip_command() -> list[str]:
     # Check uv first (cross-platform, works in uv venvs without pip)
     uv_path = shutil.which("uv")
     if uv_path:
-        return [uv_path, "pip", "install"]
+        return [uv_path, "pip", "install", "--python", sys.executable]
 
     # Check pip executable
     pip_path = shutil.which("pip")
@@ -321,6 +321,7 @@ def _install_searxng() -> bool:
                 "wheel",
                 "pyyaml",
             ],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=120,
@@ -337,6 +338,7 @@ def _install_searxng() -> bool:
                 "--no-build-isolation",
                 _SEARXNG_INSTALL_URL,
             ],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=300,
@@ -448,6 +450,7 @@ def _kill_stale_port_process(port: int) -> None:
         try:
             result = subprocess.run(
                 ["netstat", "-ano"],
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -472,6 +475,7 @@ def _kill_stale_port_process(port: int) -> None:
         try:
             result = subprocess.run(
                 ["lsof", "-ti", f":{port}"],
+                stdin=subprocess.DEVNULL,
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -492,6 +496,7 @@ def _kill_stale_port_process(port: int) -> None:
             try:
                 subprocess.run(
                     ["fuser", "-k", f"{port}/tcp"],
+                    stdin=subprocess.DEVNULL,
                     capture_output=True,
                     timeout=5,
                 )
@@ -581,6 +586,7 @@ async def _start_searxng_subprocess() -> str | None:
             lambda: subprocess.Popen(
                 [sys.executable, "-m", "searx.webapp"],
                 env=env,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,
                 # Use process group on Unix for clean shutdown

@@ -43,7 +43,7 @@ def _resolve_local_model(onnx_name: str, gguf_name: str) -> str:
 
 # Known providers that support reranking via LiteLLM
 _RERANK_PROVIDERS: dict[str, str] = {
-    "COHERE_API_KEY": "cohere/rerank-v3.5",
+    "COHERE_API_KEY": "cohere/rerank-multilingual-v3.0",
 }
 
 
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     - API_KEYS: Provider API keys, supports multiple providers
         Format: "ENV_VAR:key,ENV_VAR:key,..."
         Example: "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:..."
-        Embedding providers: Google, OpenAI, Mistral, Cohere
+        Embedding providers: Google, OpenAI, Cohere
         Reranking providers: Cohere (auto-detected)
     - EMBEDDING_MODEL: LiteLLM embedding model (auto-detected if not set)
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
@@ -115,7 +115,9 @@ class Settings(BaseSettings):
     rerank_backend: str = (
         ""  # "litellm" | "local" | "" (auto: Cohere->litellm, else local)
     )
-    rerank_model: str = ""  # LiteLLM rerank model (e.g., "cohere/rerank-v3.5")
+    rerank_model: str = (
+        ""  # LiteLLM rerank model (e.g., "cohere/rerank-multilingual-v3.0")
+    )
     rerank_top_n: int = 10  # Return top N after reranking
 
     # Docs sync (rclone)

@@ -205,6 +205,7 @@ def _run_rclone(
 
     return subprocess.run(
         cmd,
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         timeout=timeout,
@@ -457,6 +458,7 @@ def setup_sync(remote_type: str = "drive") -> None:
 
     result = subprocess.run(
         [str(rclone_path), "authorize", remote_type],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         text=True,
         timeout=300,

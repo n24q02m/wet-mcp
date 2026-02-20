@@ -1999,7 +1999,7 @@ requires-dist = [
     { name = "mcp", extras = ["cli"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", specifier = ">=1.1.0" },
+    { name = "qwen3-embed", specifier = ">=1.1.3" },
     { name = "sqlite-vec" },
 ]
 
