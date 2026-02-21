@@ -11,6 +11,7 @@ async def test_download_media_path_traversal(tmp_path):
 
     # Mock httpx response
     mock_response = MagicMock()
+    mock_response.is_redirect = False  # Explicitly not a redirect
     mock_response.content = b"fake content"
     mock_response.raise_for_status = MagicMock()
 
@@ -30,6 +31,8 @@ async def test_download_media_path_traversal(tmp_path):
             # 1. Traversal attempt with '..' as filename
             # This simulates a URL where split('/')[-1] is '..'
             url1 = "http://example.com/.."
+            # IMPORTANT: Set the response URL to match, as download_media now uses response.url
+            mock_response.url = url1
             res1 = await download_media([url1], str(tmp_path))
 
             # Should fail with "Security Alert" because '..' resolves to parent dir
@@ -42,6 +45,7 @@ async def test_download_media_path_traversal(tmp_path):
 @pytest.mark.asyncio
 async def test_download_media_safe(tmp_path):
     mock_response = MagicMock()
+    mock_response.is_redirect = False
     mock_response.content = b"safe content"
     mock_response.raise_for_status = MagicMock()
 
@@ -53,6 +57,7 @@ async def test_download_media_safe(tmp_path):
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
         with patch("httpx.AsyncClient", return_value=mock_client):
             url = "http://example.com/image.png"
+            mock_response.url = url
             await download_media([url], str(tmp_path))
 
             expected_file = tmp_path / "image.png"

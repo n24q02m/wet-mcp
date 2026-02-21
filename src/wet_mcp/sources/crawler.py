@@ -13,6 +13,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -479,10 +480,37 @@ async def download_media(
                 if not is_safe_url(target_url):
                     return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-                response = await client.get(target_url, follow_redirects=True)
+                # Manual redirect handling to enforce SSRF checks on every hop
+                current_url = target_url
+                response = None
+                for _ in range(5):  # Max 5 redirects
+                    response = await client.get(current_url, follow_redirects=False)
+
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location:
+                            break
+
+                        # Resolve relative redirects
+                        next_url = urljoin(current_url, location)
+
+                        if not is_safe_url(next_url):
+                            return {
+                                "url": url,
+                                "error": f"Security Alert: Unsafe redirect to {next_url}",
+                            }
+
+                        current_url = next_url
+                        continue
+                    else:
+                        break
+
+                if response is None:
+                    return {"url": url, "error": "Failed to fetch URL"}
+
                 response.raise_for_status()
 
-                filename = target_url.split("/")[-1].split("?")[0] or "download"
+                filename = str(response.url).split("/")[-1].split("?")[0] or "download"
                 filepath = (output_path / filename).resolve()
 
                 # Security check: Ensure the resolved path is still
