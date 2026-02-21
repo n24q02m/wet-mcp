@@ -1,7 +1,10 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_ssrf_redirect_protection():
@@ -79,8 +82,8 @@ async def test_download_media_ssrf_redirect_protection():
                 # Return the redirect response for manual handling
                 return response1
         elif url == "http://localhost/secret":
-             # If the code manually tries to fetch the unsafe URL (which it shouldn't), return it
-             return response2
+            # If the code manually tries to fetch the unsafe URL (which it shouldn't), return it
+            return response2
         return MagicMock()
 
     mock_client.get.side_effect = side_effect_get
@@ -97,7 +100,9 @@ async def test_download_media_ssrf_redirect_protection():
             return False
         return True
 
-    with patch("wet_mcp.sources.crawler.is_safe_url", side_effect=side_effect_is_safe_url):
+    with patch(
+        "wet_mcp.sources.crawler.is_safe_url", side_effect=side_effect_is_safe_url
+    ):
         with patch("httpx.AsyncClient", mock_client_cls):
             url = "http://safe.com/redirect"
 
@@ -108,6 +113,8 @@ async def test_download_media_ssrf_redirect_protection():
 
     # If the code is secure, it should have errored out.
     assert len(results) == 1
-    assert "error" in results[0], f"Vulnerability: Download succeeded for {results[0]['url']}"
+    assert "error" in results[0], (
+        f"Vulnerability: Download succeeded for {results[0]['url']}"
+    )
     # The error message should indicate an unsafe redirect
     assert "Security Alert: Unsafe redirect" in results[0]["error"]
