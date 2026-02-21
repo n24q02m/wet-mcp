@@ -1,8 +1,10 @@
 import json
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_streams_content():
@@ -41,7 +43,7 @@ async def test_download_media_streams_content():
     # Actually, asyncio.to_thread just runs the function in a separate thread.
     # If we pass a mock object's method to to_thread, it works.
 
-    with patch("httpx.AsyncClient", side_effect=mock_client_cls) as mock_httpx_cls, \
+    with patch("httpx.AsyncClient", side_effect=mock_client_cls), \
          patch("pathlib.Path.mkdir"), \
          patch("builtins.open", new_callable=MagicMock) as mock_open:
 
