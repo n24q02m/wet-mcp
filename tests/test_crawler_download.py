@@ -19,6 +19,7 @@ async def test_download_media_streams_content():
     async def async_iter():
         yield b"chunk1"
         yield b"chunk2"
+
     mock_response.aiter_bytes = MagicMock(return_value=async_iter())
 
     # Mock client.stream context manager
@@ -43,16 +44,19 @@ async def test_download_media_streams_content():
     # Actually, asyncio.to_thread just runs the function in a separate thread.
     # If we pass a mock object's method to to_thread, it works.
 
-    with patch("httpx.AsyncClient", side_effect=mock_client_cls), \
-         patch("pathlib.Path.mkdir"), \
-         patch("builtins.open", new_callable=MagicMock) as mock_open:
-
+    with (
+        patch("httpx.AsyncClient", side_effect=mock_client_cls),
+        patch("pathlib.Path.mkdir"),
+        patch("builtins.open", new_callable=MagicMock) as mock_open,
+    ):
         mock_file = MagicMock()
         mock_open.return_value = mock_file
         mock_open.return_value.__enter__.return_value = mock_file
 
         # Run download
-        result_json = await download_media(["http://example.com/file.jpg"], "/tmp/downloads")
+        result_json = await download_media(
+            ["http://example.com/file.jpg"], "/tmp/downloads"
+        )
 
         # Verify client.stream was called instead of client.get
         # The code creates a client instance, then calls client.stream

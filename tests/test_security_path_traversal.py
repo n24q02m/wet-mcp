@@ -48,6 +48,7 @@ async def test_download_media_safe(tmp_path):
     # Mock response.aiter_bytes for streaming
     async def async_iter():
         yield b"safe content"
+
     mock_response.aiter_bytes = MagicMock(return_value=async_iter())
 
     mock_client = AsyncMock()

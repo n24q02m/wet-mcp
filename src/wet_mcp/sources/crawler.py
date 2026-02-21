@@ -491,7 +491,9 @@ async def download_media(
                     )
 
                 size = 0
-                async with client.stream("GET", target_url, follow_redirects=True) as response:
+                async with client.stream(
+                    "GET", target_url, follow_redirects=True
+                ) as response:
                     response.raise_for_status()
 
                     # Write stream to file (file ops handled in thread to minimize blocking)
