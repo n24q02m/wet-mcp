@@ -13,6 +13,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import BinaryIO, cast
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -498,7 +499,8 @@ async def download_media(
 
                     # Write stream to file (file ops handled in thread to minimize blocking)
                     # We open/write/close in thread to avoid blocking the event loop
-                    f = await asyncio.to_thread(open, filepath, "wb")
+                    f_obj = await asyncio.to_thread(open, filepath, "wb")
+                    f = cast(BinaryIO, f_obj)
                     try:
                         async for chunk in response.aiter_bytes():
                             await asyncio.to_thread(f.write, chunk)
