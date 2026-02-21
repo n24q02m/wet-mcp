@@ -45,8 +45,19 @@ async def test_download_media_safe(tmp_path):
     mock_response.content = b"safe content"
     mock_response.raise_for_status = MagicMock()
 
+    # Mock response.aiter_bytes for streaming
+    async def async_iter():
+        yield b"safe content"
+    mock_response.aiter_bytes = MagicMock(return_value=async_iter())
+
     mock_client = AsyncMock()
-    mock_client.get.return_value = mock_response
+    # Support client.stream
+    mock_client.stream = MagicMock()
+    mock_stream_ctx = AsyncMock()
+    mock_stream_ctx.__aenter__.return_value = mock_response
+    mock_stream_ctx.__aexit__.return_value = None
+    mock_client.stream.return_value = mock_stream_ctx
+
     mock_client.__aenter__.return_value = mock_client
     mock_client.__aexit__.return_value = None
 
