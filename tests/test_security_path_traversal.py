@@ -14,11 +14,21 @@ async def test_download_media_path_traversal(tmp_path):
     mock_response.content = b"fake content"
     mock_response.raise_for_status = MagicMock()
 
+    async def mock_aiter_bytes():
+        yield b"fake content"
+    mock_response.aiter_bytes = mock_aiter_bytes
+
     # Mock httpx client context manager
     mock_client = AsyncMock()
     mock_client.get.return_value = mock_response
     mock_client.__aenter__.return_value = mock_client
     mock_client.__aexit__.return_value = None
+
+    # Mock stream context manager
+    stream_ctx = MagicMock()
+    stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+    stream_ctx.__aexit__ = AsyncMock(return_value=None)
+    mock_client.stream = MagicMock(return_value=stream_ctx)
 
     # We need to simulate is_safe_url passing for these URLs, or mock it.
     # Since we are testing path traversal, we assume the URL is "safe" network-wise but malicious filename-wise.
@@ -45,10 +55,20 @@ async def test_download_media_safe(tmp_path):
     mock_response.content = b"safe content"
     mock_response.raise_for_status = MagicMock()
 
+    async def mock_aiter_bytes():
+        yield b"safe content"
+    mock_response.aiter_bytes = mock_aiter_bytes
+
     mock_client = AsyncMock()
     mock_client.get.return_value = mock_response
     mock_client.__aenter__.return_value = mock_client
     mock_client.__aexit__.return_value = None
+
+    # Mock stream context manager
+    stream_ctx = MagicMock()
+    stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+    stream_ctx.__aexit__ = AsyncMock(return_value=None)
+    mock_client.stream = MagicMock(return_value=stream_ctx)
 
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
         with patch("httpx.AsyncClient", return_value=mock_client):
