@@ -1,8 +1,11 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
+
 import httpx
+import pytest
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_ssrf_redirect_protection():
