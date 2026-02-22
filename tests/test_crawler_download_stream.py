@@ -19,13 +19,16 @@ async def test_download_media_streams_content():
     mock_response.is_redirect = False
 
     # Mock content access to fail if called
-    content_mock = MagicMock(side_effect=AssertionError("Should not access response.content"))
+    content_mock = MagicMock(
+        side_effect=AssertionError("Should not access response.content")
+    )
     type(mock_response).content = property(fget=content_mock)
 
     # Mock aiter_bytes
     async def mock_aiter_bytes():
         yield b"chunk1"
         yield b"chunk2"
+
     mock_response.aiter_bytes = mock_aiter_bytes
 
     # Mock stream context manager
@@ -40,11 +43,16 @@ async def test_download_media_streams_content():
     mock_client_cls.return_value.__aexit__.return_value = None
 
     with patch("httpx.AsyncClient", mock_client_cls):
-        with patch("pathlib.Path.mkdir"), patch("builtins.open", new_callable=MagicMock) as mock_open:
+        with (
+            patch("pathlib.Path.mkdir"),
+            patch("builtins.open", new_callable=MagicMock) as mock_open,
+        ):
             mock_file = MagicMock()
             mock_open.return_value.__enter__.return_value = mock_file
 
-            result_json = await download_media(["http://example.com/large_file.mp4"], "/tmp/downloads")
+            result_json = await download_media(
+                ["http://example.com/large_file.mp4"], "/tmp/downloads"
+            )
 
             # Verify stream was called
             mock_client.stream.assert_called()
@@ -55,4 +63,4 @@ async def test_download_media_streams_content():
 
             # Verify result size
             results = json.loads(result_json)
-            assert results[0]["size"] == 12 # len("chunk1") + len("chunk2")
+            assert results[0]["size"] == 12  # len("chunk1") + len("chunk2")
