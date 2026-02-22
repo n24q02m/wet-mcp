@@ -31,7 +31,7 @@ async def test_download_media_ssrf_redirect_protection():
     response1.headers = {"location": unsafe_redirect}
     # Response.url must be the requested URL for relative redirect resolution
     response1.url = httpx.URL(safe_url)
-    response1.history = [] # No history yet
+    response1.history = []  # No history yet
 
     # If the code follows the redirect, it would call client.get(unsafe_redirect)
     # We want to ensure it DOES NOT do that, or if it does, it catches it before request?
@@ -45,7 +45,7 @@ async def test_download_media_ssrf_redirect_protection():
 
     with patch("httpx.AsyncClient", mock_client_cls):
         with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_bytes"):
-             # We expect an error in the result because the redirect is unsafe
+            # We expect an error in the result because the redirect is unsafe
             result_json = await download_media([safe_url], "/tmp/downloads")
 
     results = json.loads(result_json)
@@ -61,4 +61,6 @@ async def test_download_media_ssrf_redirect_protection():
     # The fixed code should return an error.
 
     assert "error" in results[0], "Should report error for unsafe redirect"
-    assert "Security Alert" in results[0]["error"] or "Unsafe URL" in results[0]["error"]
+    assert (
+        "Security Alert" in results[0]["error"] or "Unsafe URL" in results[0]["error"]
+    )
