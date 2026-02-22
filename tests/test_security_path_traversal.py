@@ -12,6 +12,7 @@ async def test_download_media_path_traversal(tmp_path):
     # Mock httpx response
     mock_response = MagicMock()
     mock_response.content = b"fake content"
+    mock_response.is_redirect = False  # Ensure it's not treated as a redirect
     mock_response.raise_for_status = MagicMock()
 
     # Mock httpx client context manager
@@ -43,6 +44,7 @@ async def test_download_media_path_traversal(tmp_path):
 async def test_download_media_safe(tmp_path):
     mock_response = MagicMock()
     mock_response.content = b"safe content"
+    mock_response.is_redirect = False  # Ensure it's not treated as a redirect
     mock_response.raise_for_status = MagicMock()
 
     mock_client = AsyncMock()
