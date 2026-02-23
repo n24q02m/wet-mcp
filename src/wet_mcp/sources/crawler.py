@@ -13,6 +13,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -476,13 +477,47 @@ async def download_media(
                 if target_url.startswith("//"):
                     target_url = f"https:{target_url}"
 
-                if not is_safe_url(target_url):
-                    return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                # Manual redirect handling to prevent SSRF
+                current_url = target_url
+                response = None
 
-                response = await client.get(target_url, follow_redirects=True)
+                for _ in range(5):  # Max 5 redirects
+                    if not is_safe_url(current_url):
+                        return {
+                            "url": url,
+                            "error": f"Security Alert: Unsafe URL blocked: {current_url}",
+                        }
+
+                    response = await client.get(current_url, follow_redirects=False)
+
+                    if response.is_redirect:
+                        location = response.headers.get("Location")
+                        if not location:
+                            break
+                        # Handle relative redirects
+                        current_url = urljoin(current_url, location)
+                        continue
+                    else:
+                        break
+                else:
+                    return {
+                        "url": url,
+                        "error": "Error: Too many redirects",
+                    }
+
+                if response is None:
+                    return {"url": url, "error": "Failed to download"}
+
+                # Check final URL safety
+                if not is_safe_url(current_url):
+                    return {
+                        "url": url,
+                        "error": f"Security Alert: Unsafe URL blocked: {current_url}",
+                    }
+
                 response.raise_for_status()
 
-                filename = target_url.split("/")[-1].split("?")[0] or "download"
+                filename = current_url.split("/")[-1].split("?")[0] or "download"
                 filepath = (output_path / filename).resolve()
 
                 # Security check: Ensure the resolved path is still
