@@ -16,7 +16,7 @@ async def test_download_media_ssrf_redirect_protection():
     mock_redirect.is_redirect = True
     mock_redirect.headers = {"Location": "http://localhost/secret.txt"}
     mock_redirect.url = "http://safe.com/image.png"
-    mock_redirect.content = b"" # No content in redirect
+    mock_redirect.content = b""  # No content in redirect
     mock_redirect.raise_for_status = MagicMock()
 
     # Mock the client
@@ -43,6 +43,10 @@ async def test_download_media_ssrf_redirect_protection():
             # We expect the code to detect the unsafe redirect and return an error.
             # If it returns success (no error), it means it didn't check the redirect.
             if "error" not in result:
-                pytest.fail("Vulnerability: The code did not block the unsafe redirect.")
+                pytest.fail(
+                    "Vulnerability: The code did not block the unsafe redirect."
+                )
 
-            assert "Security Alert" in result["error"], f"Expected Security Alert, got: {result.get('error')}"
+            assert "Security Alert" in result["error"], (
+                f"Expected Security Alert, got: {result.get('error')}"
+            )
