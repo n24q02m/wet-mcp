@@ -97,6 +97,18 @@
 }
 ```
 
+### Pre-install (optional)
+
+Pre-download all dependencies before adding to your MCP client config. This avoids slow first-run startup:
+
+```bash
+# Pre-download SearXNG, Playwright, embedding model (~570MB), and reranker model (~570MB)
+uvx --python 3.13 wet-mcp warmup
+
+# With cloud embedding (validates API key, skips local download if cloud works)
+API_KEYS="GOOGLE_API_KEY:AIza..." uvx --python 3.13 wet-mcp warmup
+```
+
 ### Sync setup (one-time)
 
 ```bash
