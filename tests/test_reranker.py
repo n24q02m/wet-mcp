@@ -167,6 +167,66 @@ class TestQwen3Reranker:
 # -----------------------------------------------------------------------
 
 
+class TestLiteLLMRerankerApiKeyValidation:
+    """check_available() distinguishes API key errors from other failures."""
+
+    def test_api_key_401_returns_false(self):
+        """401 errors return False."""
+        reranker = LiteLLMReranker("cohere/rerank")
+        with patch("litellm.rerank", side_effect=Exception("401 Unauthorized")):
+            assert reranker.check_available() is False
+
+    def test_api_key_403_returns_false(self):
+        """403 errors return False."""
+        reranker = LiteLLMReranker("cohere/rerank")
+        with patch("litellm.rerank", side_effect=Exception("403 Forbidden")):
+            assert reranker.check_available() is False
+
+    def test_invalid_key_detected(self):
+        """'invalid' keyword triggers warning path."""
+        reranker = LiteLLMReranker("cohere/rerank")
+        with patch(
+            "litellm.rerank",
+            side_effect=Exception("Invalid API key"),
+        ):
+            assert reranker.check_available() is False
+
+    def test_non_auth_error_returns_false(self):
+        """Non-auth errors also return False."""
+        reranker = LiteLLMReranker("cohere/rerank")
+        with patch(
+            "litellm.rerank",
+            side_effect=Exception("Model not found"),
+        ):
+            assert reranker.check_available() is False
+
+    def test_success_returns_true(self):
+        """Successful check returns True."""
+        reranker = LiteLLMReranker("cohere/rerank")
+        mock_response = MagicMock()
+        mock_response.results = [MagicMock(index=0, relevance_score=0.9)]
+        with patch("litellm.rerank", return_value=mock_response):
+            assert reranker.check_available() is True
+
+
+class TestQwen3RerankerGetModelWarning:
+    """_get_model() and check_available edge cases."""
+
+    def test_check_available_import_error(self):
+        """Returns False when qwen3-embed is not installed."""
+        reranker = Qwen3Reranker()
+        with patch.object(reranker, "_get_model", side_effect=ImportError("No module")):
+            assert reranker.check_available() is False
+
+    def test_check_available_success(self):
+        """Returns True when local reranker works."""
+        reranker = Qwen3Reranker()
+        mock_model = MagicMock()
+        mock_model.rerank.return_value = iter([0.8])
+        with patch.object(reranker, "_get_model", return_value=mock_model):
+            assert reranker.check_available() is True
+
+
 class TestRerankerFactory:
     def test_init_litellm_reranker(self):
         """init_reranker('litellm') creates LiteLLMReranker."""

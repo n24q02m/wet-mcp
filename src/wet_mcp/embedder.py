@@ -192,7 +192,11 @@ class LiteLLMBackend:
         return results[0]
 
     def check_available(self) -> int:
-        """Check if the LiteLLM model is available via test request."""
+        """Check if the LiteLLM model is available via test request.
+
+        Distinguishes between invalid API keys (warning) and other
+        failures (debug) so users know when their keys are wrong.
+        """
         try:
             from litellm import embedding as litellm_embedding
 
@@ -203,7 +207,16 @@ class LiteLLMBackend:
                 return dim
             return 0
         except Exception as e:
-            logger.debug(f"Embedding model {self.model} not available: {e}")
+            msg = str(e).lower()
+            if any(
+                p in msg for p in ("401", "403", "invalid", "unauthorized", "api key")
+            ):
+                logger.warning(
+                    f"API key invalid for {self.model}: {e}. "
+                    "Check your API_KEYS configuration."
+                )
+            else:
+                logger.debug(f"Embedding model {self.model} not available: {e}")
             return 0
 
 
@@ -228,11 +241,19 @@ class Qwen3EmbedBackend:
         self._model = None
 
     def _get_model(self):
-        """Lazy-load the embedding model."""
+        """Lazy-load the embedding model.
+
+        On first call, downloads the ONNX model (~570 MB) from HuggingFace
+        if not already cached. Logs a warning so users know why startup is slow.
+        """
         if self._model is None:
             from qwen3_embed import TextEmbedding
 
-            logger.info(f"Loading local embedding model: {self._model_name}")
+            logger.warning(
+                f"Loading local embedding model: {self._model_name} "
+                "(~570 MB download on first run). "
+                "Set API_KEYS to use cloud embedding instead."
+            )
             self._model = TextEmbedding(model_name=self._model_name)
             logger.info("Local embedding model loaded")
         return self._model
