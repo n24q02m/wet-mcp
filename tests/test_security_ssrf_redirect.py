@@ -1,7 +1,10 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
+
 from wet_mcp.sources.crawler import download_media
+
 
 @pytest.mark.asyncio
 async def test_download_media_ssrf_redirect_protection():
@@ -30,7 +33,7 @@ async def test_download_media_ssrf_redirect_protection():
 
     with patch("httpx.AsyncClient", mock_client_cls):
         # We need to mock Path operations to avoid filesystem errors
-        with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_bytes") as mock_write:
+        with patch("pathlib.Path.mkdir"), patch("pathlib.Path.write_bytes"):
             url = "http://safe.com/image.png"
             result_json = await download_media([url], "/tmp/downloads")
 
