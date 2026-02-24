@@ -1,7 +1,6 @@
 import sys
 from unittest import mock
 
-import pytest
 from wet_mcp.config import _detect_gpu, _has_gguf_support, _resolve_local_model
 
 
