@@ -742,9 +742,14 @@ class DocsDB:
         # Cap results per URL to avoid returning 4-5 chunks from the same page
         max_per_url = 2
         url_counts: dict[str, int] = {}
-        results = []
+
+        # 1. Collect candidates
+        candidates = []
+        lib_ids = set()
+        context_keys = set()  # (url, version_id, chunk_index)
+
         for cid, score in scored:
-            if len(results) >= limit:
+            if len(candidates) >= limit:
                 break
             chunk = fts_chunks.get(cid)
             if not chunk:
@@ -755,40 +760,84 @@ class DocsDB:
                 if url_counts[chunk_url] > max_per_url:
                     continue
 
-            # Resolve library name
-            lib_row = self._conn.execute(
-                "SELECT name FROM libraries WHERE id = ?", (chunk["library_id"],)
-            ).fetchone()
+            # Add to candidates
+            candidates.append((chunk, score))
+            lib_ids.add(chunk["library_id"])
+
+            # Collect needed context keys
+            ver_id_val = chunk.get("version_id", "")
+            chunk_idx = chunk.get("chunk_index", -1)
+            if chunk_url and ver_id_val and chunk_idx >= 0:
+                # Previous chunk
+                if chunk_idx > 0:
+                    context_keys.add((chunk_url, ver_id_val, chunk_idx - 1))
+                # Next chunk
+                context_keys.add((chunk_url, ver_id_val, chunk_idx + 1))
+
+        # 2. Batch fetch libraries
+        lib_names = {}
+        if lib_ids:
+            lib_ids_list = list(lib_ids)
+            # Fetch in chunks of 500
+            for i in range(0, len(lib_ids_list), 500):
+                batch = lib_ids_list[i : i + 500]
+                placeholders = ",".join(["?"] * len(batch))
+                rows = self._conn.execute(
+                    f"SELECT id, name FROM libraries WHERE id IN ({placeholders})",
+                    batch,
+                ).fetchall()
+                for row in rows:
+                    lib_names[row["id"]] = row["name"]
+
+        # 3. Batch fetch context chunks
+        context_map = {}
+        if context_keys:
+            keys_list = list(context_keys)
+            # Fetch in chunks of 500 (1500 params)
+            batch_size = 500
+            for i in range(0, len(keys_list), batch_size):
+                batch = keys_list[i : i + batch_size]
+                placeholders = ",".join(["(?, ?, ?)"] * len(batch))
+                params = []
+                for k in batch:
+                    params.extend(k)
+
+                rows = self._conn.execute(
+                    f"SELECT url, version_id, chunk_index, content FROM doc_chunks WHERE (url, version_id, chunk_index) IN ({placeholders})",
+                    params,
+                ).fetchall()
+
+                for row in rows:
+                    key = (row["url"], row["version_id"], row["chunk_index"])
+                    context_map[key] = row["content"]
+
+        # 4. Build final results
+        results = []
+        for chunk, score in candidates:
+            lib_name = lib_names.get(chunk["library_id"], "")
 
             result: dict = {
                 "content": chunk["content"],
                 "title": chunk.get("title", ""),
                 "url": chunk.get("url", ""),
                 "heading_path": chunk.get("heading_path", ""),
-                "library": lib_row["name"] if lib_row else "",
+                "library": lib_name,
                 "score": round(score, 4),
             }
 
-            # Cross-chunk context: include adjacent chunks for better RAG
+            # Add context if available
             chunk_url = chunk.get("url", "")
-            chunk_idx = chunk.get("chunk_index", -1)
             ver_id_val = chunk.get("version_id", "")
-            if chunk_url and ver_id_val and chunk_idx >= 0:
-                prev = self._conn.execute(
-                    "SELECT content FROM doc_chunks "
-                    "WHERE url = ? AND version_id = ? AND chunk_index = ?",
-                    (chunk_url, ver_id_val, chunk_idx - 1),
-                ).fetchone()
-                if prev:
-                    result["context_before"] = prev["content"]
+            chunk_idx = chunk.get("chunk_index", -1)
 
-                nxt = self._conn.execute(
-                    "SELECT content FROM doc_chunks "
-                    "WHERE url = ? AND version_id = ? AND chunk_index = ?",
-                    (chunk_url, ver_id_val, chunk_idx + 1),
-                ).fetchone()
-                if nxt:
-                    result["context_after"] = nxt["content"]
+            if chunk_url and ver_id_val and chunk_idx >= 0:
+                prev_content = context_map.get((chunk_url, ver_id_val, chunk_idx - 1))
+                if prev_content:
+                    result["context_before"] = prev_content
+
+                next_content = context_map.get((chunk_url, ver_id_val, chunk_idx + 1))
+                if next_content:
+                    result["context_after"] = next_content
 
             results.append(result)
 
