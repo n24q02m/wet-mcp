@@ -141,6 +141,8 @@ def _read_discovery() -> dict | None:
     except Exception:
         pass
     return None
+
+
 def _write_discovery(port: int, pid: int) -> None:
     """Write SearXNG discovery file for other instances to find."""
     try:
