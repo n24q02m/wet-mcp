@@ -10,7 +10,9 @@ from wet_mcp.server import search
 @pytest.mark.asyncio
 async def test_docs_success():
     """Test docs action success path."""
-    with patch("wet_mcp.server._do_docs_search", new_callable=AsyncMock) as mock_docs_search:
+    with patch(
+        "wet_mcp.server._do_docs_search", new_callable=AsyncMock
+    ) as mock_docs_search:
         mock_docs_search.return_value = "Docs Search Results"
 
         result = await search(
@@ -19,7 +21,7 @@ async def test_docs_success():
             query="test query",
             language="python",
             version="1.0",
-            limit=5
+            limit=5,
         )
 
         assert result == "Docs Search Results"
@@ -31,11 +33,13 @@ async def test_docs_success():
             limit=5,
         )
 
+
 @pytest.mark.asyncio
 async def test_docs_missing_library():
     """Test docs action missing library."""
     result = await search(action="docs", query="test query")
     assert "Error: library is required" in result
+
 
 @pytest.mark.asyncio
 async def test_docs_missing_query():
