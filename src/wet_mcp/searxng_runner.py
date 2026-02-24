@@ -636,6 +636,98 @@ async def _start_searxng_subprocess() -> str | None:
         return None
 
 
+async def _check_active_instance() -> str | None:
+    """Check if the currently tracked process is healthy."""
+    global _searxng_process, _searxng_port
+
+    if (
+        _is_process_alive()
+        and _searxng_port is not None
+        and _searxng_process is not None
+    ):
+        url = f"http://127.0.0.1:{_searxng_port}"
+        # Verify port is actually responding (process may be stuck)
+        if await _quick_health_check(url, retries=1):
+            logger.debug(f"SearXNG already running at {url}")
+            return url
+        # Process alive but not serving — kill and restart
+        logger.warning(
+            f"SearXNG process alive (PID={_searxng_process.pid}) "
+            f"but not healthy at {url}, killing"
+        )
+        _force_kill_process(_searxng_process)
+        _searxng_process = None
+        _searxng_port = None
+    return None
+
+
+def _handle_crashed_process() -> None:
+    """Log details if the process has crashed."""
+    global _searxng_process
+
+    if _searxng_process is not None:
+        # Process existed but crashed
+        exit_code = _searxng_process.poll()
+        stderr_output = ""
+        if _searxng_process.stderr:
+            try:
+                stderr_output = _searxng_process.stderr.read().decode(errors="replace")[
+                    :500
+                ]
+            except Exception:
+                pass
+        logger.warning(
+            f"SearXNG process crashed (exit_code={exit_code}). stderr: {stderr_output}"
+        )
+        _searxng_process = None
+
+
+async def _check_restart_policy() -> bool:
+    """Check if we should attempt a restart based on policy."""
+    global _restart_count, _last_restart_time
+
+    # Reset restart counter if enough time has passed since last restart
+    now = time.time()
+    if now - _last_restart_time > 300:  # 5 minutes
+        _restart_count = 0
+
+    # Check restart budget
+    if _restart_count >= _MAX_RESTART_ATTEMPTS:
+        logger.error(
+            f"SearXNG restart limit reached ({_MAX_RESTART_ATTEMPTS} attempts). "
+            "Falling back to external URL."
+        )
+        return False
+
+    # Attempt to start with cooldown between restarts
+    if _restart_count > 0:
+        cooldown = _RESTART_COOLDOWN * _restart_count
+        logger.info(
+            f"Waiting {cooldown:.1f}s before SearXNG restart attempt {_restart_count + 1}..."
+        )
+        await asyncio.sleep(cooldown)
+
+    _restart_count += 1
+    _last_restart_time = time.time()
+    return True
+
+
+async def _ensure_installation_and_start() -> str | None:
+    """Ensure SearXNG is installed and attempt to start it."""
+    # Ensure SearXNG package is installed
+    if not await asyncio.to_thread(_is_searxng_installed):
+        if not await asyncio.to_thread(_install_searxng):
+            logger.warning("SearXNG installation failed, using external URL")
+            return None
+
+    url = await _start_searxng_subprocess()
+    if url is not None:
+        return url
+
+    logger.warning("SearXNG start failed, falling back to external URL")
+    return None
+
+
 async def ensure_searxng() -> str:
     """Start embedded SearXNG subprocess if not running. Returns URL.
 
@@ -663,88 +755,33 @@ async def ensure_searxng() -> str:
 
 async def _ensure_searxng_locked() -> str:
     """Inner ensure_searxng logic, called under lock."""
-    global _searxng_process, _searxng_port, _restart_count, _last_restart_time
+    global _restart_count
 
-    # Fast path: our own process is alive and port is known
-    if (
-        _is_process_alive()
-        and _searxng_port is not None
-        and _searxng_process is not None
-    ):
-        url = f"http://127.0.0.1:{_searxng_port}"
-        # Verify port is actually responding (process may be stuck)
-        if await _quick_health_check(url, retries=1):
-            logger.debug(f"SearXNG already running at {url}")
-            return url
-        # Process alive but not serving — kill and restart
-        logger.warning(
-            f"SearXNG process alive (PID={_searxng_process.pid}) "
-            f"but not healthy at {url}, killing"
-        )
-        _force_kill_process(_searxng_process)
-        _searxng_process = None
-        _searxng_port = None
+    # 1. Fast path: our own process is alive
+    url = await _check_active_instance()
+    if url:
+        return url
 
-    # Try reusing existing SearXNG from another MCP server instance
+    # 2. Try reusing existing SearXNG from another MCP server instance
     reused_url = await _try_reuse_existing()
     if reused_url:
         logger.info(f"Reusing existing SearXNG instance at {reused_url}")
         return reused_url
 
-    # Process is dead or not started — need to (re)start
-    if _searxng_process is not None:
-        # Process existed but crashed
-        exit_code = _searxng_process.poll()
-        stderr_output = ""
-        if _searxng_process.stderr:
-            try:
-                stderr_output = _searxng_process.stderr.read().decode(errors="replace")[
-                    :500
-                ]
-            except Exception:
-                pass
-        logger.warning(
-            f"SearXNG process crashed (exit_code={exit_code}). stderr: {stderr_output}"
-        )
-        _searxng_process = None
+    # 3. Handle previous crash logging
+    _handle_crashed_process()
 
-    # Reset restart counter if enough time has passed since last restart
-    now = time.time()
-    if now - _last_restart_time > 300:  # 5 minutes
-        _restart_count = 0
-
-    # Check restart budget
-    if _restart_count >= _MAX_RESTART_ATTEMPTS:
-        logger.error(
-            f"SearXNG restart limit reached ({_MAX_RESTART_ATTEMPTS} attempts). "
-            "Falling back to external URL."
-        )
+    # 4. Check restart limits and apply cooldown
+    if not await _check_restart_policy():
         return settings.searxng_url
 
-    # Ensure SearXNG package is installed
-    if not await asyncio.to_thread(_is_searxng_installed):
-        if not await asyncio.to_thread(_install_searxng):
-            logger.warning("SearXNG installation failed, using external URL")
-            return settings.searxng_url
-
-    # Attempt to start with cooldown between restarts
-    if _restart_count > 0:
-        cooldown = _RESTART_COOLDOWN * _restart_count
-        logger.info(
-            f"Waiting {cooldown:.1f}s before SearXNG restart attempt {_restart_count + 1}..."
-        )
-        await asyncio.sleep(cooldown)
-
-    _restart_count += 1
-    _last_restart_time = time.time()
-
-    url = await _start_searxng_subprocess()
-    if url is not None:
+    # 5. Ensure installed and start
+    url = await _ensure_installation_and_start()
+    if url:
         # Successful start — reset restart counter
         _restart_count = 0
         return url
 
-    logger.warning("SearXNG start failed, falling back to external URL")
     return settings.searxng_url
 
 
