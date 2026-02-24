@@ -28,6 +28,7 @@ from wet_mcp.sources.crawler import (
 from wet_mcp.sources.crawler import (
     sitemap as _sitemap,
 )
+from wet_mcp.sources.docs import discover_library
 from wet_mcp.sources.searxng import search as searxng_search
 
 # Configure logging
@@ -1049,6 +1050,276 @@ async def _fetch_and_chunk_docs(
 # ---------------------------------------------------------------------------
 
 
+
+
+async def _discover_library_metadata(
+    library: str,
+    language: str | None,
+) -> dict | None:
+    """Discover library metadata from registries (with sub-timeout)."""
+    try:
+        return await asyncio.wait_for(
+            discover_library(library, language=language),
+            timeout=_DISCOVERY_TIMEOUT,
+        )
+    except TimeoutError:
+        logger.warning(
+            f"Discovery timed out after {_DISCOVERY_TIMEOUT}s for '{library}'"
+        )
+        return None
+
+
+async def _fallback_discovery(
+    library: str,
+    language: str | None,
+) -> str:
+    """Fallback: use SearXNG to find docs URL."""
+    search_query = (
+        f"{library} {language} documentation"
+        if language
+        else f"{library} official documentation"
+    )
+    logger.info(f"Registry lookup failed, trying SearXNG for '{library}'...")
+    try:
+        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
+        search_result = await asyncio.wait_for(
+            searxng_search(
+                searxng_url=searxng_url,
+                query=search_query,
+                categories="general",
+                max_results=3,
+            ),
+            timeout=15,
+        )
+        search_data = json.loads(search_result)
+        top_results = search_data.get("results", [])
+        if top_results:
+            return top_results[0].get("url", "")
+    except TimeoutError:
+        logger.warning("SearXNG discovery fallback timed out")
+    except json.JSONDecodeError:
+        pass
+    return ""
+
+
+async def _attempt_fallback_fetch(
+    library: str,
+    language: str | None,
+    original_docs_url: str,
+    query: str,
+    current_chunks: list[dict],
+    current_page_count: int,
+) -> tuple[str, list[dict], int]:
+    """Try to find better docs via SearXNG if the original URL yielded few results."""
+    fallback_query = (
+        f"{library} {language} documentation"
+        if language
+        else f"{library} documentation"
+    )
+    logger.info(
+        f"Only {current_page_count} pages found for '{library}', trying SearXNG fallback..."
+    )
+
+    best_docs_url = original_docs_url
+    best_chunks = current_chunks
+    best_page_count = current_page_count
+
+    try:
+        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
+        fallback_result = await asyncio.wait_for(
+            searxng_search(
+                searxng_url=searxng_url,
+                query=fallback_query,
+                categories="general",
+                max_results=3,
+            ),
+            timeout=15,
+        )
+        fallback_data = json.loads(fallback_result)
+
+        for fr in fallback_data.get("results", []):
+            alt_url = fr.get("url", "")
+            if not alt_url or not alt_url.startswith("http"):
+                continue
+
+            # Skip if same domain as original (likely same bad docs)
+            alt_parsed = urlparse(alt_url)
+            orig_parsed = urlparse(original_docs_url)
+            if alt_parsed.netloc == orig_parsed.netloc:
+                continue
+
+            try:
+                alt_chunks, alt_pages = await asyncio.wait_for(
+                    _fetch_and_chunk_docs(alt_url, "", query),
+                    timeout=_FALLBACK_TIMEOUT,
+                )
+            except TimeoutError:
+                logger.warning(f"SearXNG fallback fetch timed out for {alt_url}")
+                continue
+
+            if alt_pages > best_page_count and len(alt_chunks) > len(best_chunks):
+                logger.info(
+                    f"SearXNG fallback: {alt_url} "
+                    f"({alt_pages} pages, {len(alt_chunks)} chunks)"
+                )
+                best_docs_url = alt_url
+                best_chunks = alt_chunks
+                best_page_count = alt_pages
+                break
+
+    except TimeoutError:
+        logger.warning("SearXNG fallback timed out")
+    except Exception as e:
+        logger.debug(f"SearXNG fallback failed: {e}")
+
+    return best_docs_url, best_chunks, best_page_count
+
+
+async def _fetch_docs_content(
+    library: str,
+    docs_url: str,
+    repo_url: str,
+    query: str,
+    language: str | None,
+) -> tuple[str, list[dict], int]:
+    """Fetch docs content, with SearXNG fallback if initial fetch is poor."""
+    # Normalize docs URL
+    from wet_mcp.sources.docs import _normalize_docs_url
+
+    docs_url = _normalize_docs_url(docs_url)
+
+    logger.info(f"Fetching docs for '{library}' from {docs_url}...")
+    try:
+        all_chunks, page_count = await asyncio.wait_for(
+            _fetch_and_chunk_docs(
+                docs_url=docs_url,
+                repo_url=repo_url,
+                query=query,
+                library_hint=library,
+            ),
+            timeout=_FETCH_TIMEOUT,
+        )
+    except TimeoutError:
+        logger.warning(f"Docs fetch timed out after {_FETCH_TIMEOUT}s for '{library}'")
+        all_chunks, page_count = [], 0
+
+    # Fallback logic
+    if page_count <= 2 and len(all_chunks) < 100:
+        return await _attempt_fallback_fetch(
+            library, language, docs_url, query, all_chunks, page_count
+        )
+
+    return docs_url, all_chunks, page_count
+
+
+async def _generate_docs_embeddings(chunks: list[dict]) -> list[list[float]] | None:
+    """Generate embeddings for chunks with timeout and error handling."""
+    if not chunks:
+        return None
+
+    from wet_mcp.embedder import get_backend
+
+    if get_backend() is None:
+        return None
+
+    embed_texts_list = []
+    for c in chunks:
+        parts = []
+        if c.get("title"):
+            parts.append(c["title"])
+        if c.get("heading_path") and c.get("heading_path") != c.get("title"):
+            parts.append(c["heading_path"])
+        parts.append(c["content"])
+        embed_texts_list.append(" | ".join(parts)[:2000])
+
+    logger.info(f"Generating embeddings for {len(embed_texts_list)} chunks...")
+    try:
+        embeddings = await asyncio.wait_for(
+            _embed_batch(embed_texts_list),
+            timeout=_EMBED_TIMEOUT,
+        )
+        if embeddings:
+            logger.info(f"Generated {len(embeddings)} embeddings")
+        return embeddings
+    except TimeoutError:
+        logger.warning(
+            f"Embedding timed out after {_EMBED_TIMEOUT}s "
+            f"for {len(embed_texts_list)} chunks, skipping"
+        )
+        return None
+
+
+async def _index_and_search_docs(
+    lib_key: str,
+    library: str,
+    version: str,
+    query: str,
+    limit: int,
+    docs_url: str,
+    registry: str,
+    description: str,
+    all_chunks: list[dict],
+    embeddings: list[list[float]] | None,
+    page_count: int,
+) -> str:
+    """Index the content and perform the search."""
+
+    # Create/update library record
+    lib_id = _docs_db.upsert_library(
+        name=lib_key,
+        docs_url=docs_url,
+        registry=registry,
+        description=description,
+    )
+    ver_id = _docs_db.upsert_version(
+        library_id=lib_id,
+        version=version or "latest",
+        docs_url=docs_url,
+    )
+
+    # Clear old chunks for re-indexing
+    _docs_db.clear_version_chunks(ver_id)
+
+    # Store chunks
+    _docs_db.add_chunks(
+        version_id=ver_id,
+        library_id=lib_id,
+        chunks=all_chunks,
+        embeddings=embeddings,
+    )
+    _docs_db.mark_version_indexed(ver_id, page_count, len(all_chunks))
+
+    # Search
+    query_embedding = await _embed(query, is_query=True)
+    retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
+
+    results = _docs_db.search(
+        query=query,
+        library_name=lib_key,
+        version=version,
+        limit=retrieve_limit,
+        query_embedding=query_embedding,
+    )
+
+    # Rerank
+    results = await _rerank_results(query, results, limit)
+
+    return json.dumps(
+        {
+            "library": library,
+            "version": version or "latest",
+            "docs_url": docs_url,
+            "results": results,
+            "total": len(results),
+            "source": "freshly_indexed",
+            "pages_crawled": page_count,
+            "chunks_indexed": len(all_chunks),
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
 async def _do_docs_search(
     library: str,
     query: str,
@@ -1098,40 +1369,27 @@ async def _do_docs_search(
             if results:
                 # Rerank if available, otherwise truncate to limit
                 results = await _rerank_results(query, results, limit)
-                return json.dumps(
-                    {
-                        "library": library,
-                        "version": ver.get("version", "latest"),
-                        "results": results,
-                        "total": len(results),
-                        "source": "cached_index",
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
 
-    # Step 2: Auto-discover and index
-    logger.info(f"Library '{lib_key}' not indexed, discovering docs...")
+            return json.dumps(
+                {
+                    "library": library,
+                    "version": version or "latest",
+                    "docs_url": lib.get("docs_url", ""),
+                    "results": results,
+                    "total": len(results),
+                    "source": "existing_index",
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
 
-    from wet_mcp.sources.docs import (
-        discover_library,
-    )
+    # Step 2: Discover library metadata
+    discovery = await _discover_library_metadata(library, language)
 
-    # Discover library metadata from registries (with sub-timeout)
     docs_url = ""
     repo_url = ""
     registry = ""
     description = ""
-    try:
-        discovery = await asyncio.wait_for(
-            discover_library(library, language=language),
-            timeout=_DISCOVERY_TIMEOUT,
-        )
-    except TimeoutError:
-        logger.warning(
-            f"Discovery timed out after {_DISCOVERY_TIMEOUT}s for '{library}'"
-        )
-        discovery = None
 
     if discovery:
         docs_url = discovery.get("homepage", "")
@@ -1140,34 +1398,7 @@ async def _do_docs_search(
         description = discovery.get("description", "")
     else:
         # Fallback: use SearXNG to find docs
-        # Include language context for better results
-        search_query = (
-            f"{library} {language} documentation"
-            if language
-            else f"{library} official documentation"
-        )
-        logger.info(f"Registry lookup failed, trying SearXNG for '{library}'...")
-        try:
-            searxng_url = await asyncio.wait_for(
-                ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-            )
-            search_result = await asyncio.wait_for(
-                searxng_search(
-                    searxng_url=searxng_url,
-                    query=search_query,
-                    categories="general",
-                    max_results=3,
-                ),
-                timeout=15,
-            )
-            search_data = json.loads(search_result)
-            top_results = search_data.get("results", [])
-            if top_results:
-                docs_url = top_results[0].get("url", "")
-        except TimeoutError:
-            logger.warning("SearXNG discovery fallback timed out")
-        except json.JSONDecodeError:
-            pass
+        docs_url = await _fallback_discovery(library, language)
 
     if not docs_url:
         # When no docs URL found but we have a GitHub repo URL,
@@ -1185,97 +1416,16 @@ async def _do_docs_search(
                 ensure_ascii=False,
             )
 
-    # Create/update library record
-    lib_id = _docs_db.upsert_library(
-        name=lib_key,
-        docs_url=docs_url,
-        registry=registry,
-        description=description,
-    )
-    ver_id = _docs_db.upsert_version(
-        library_id=lib_id,
-        version=version or "latest",
-        docs_url=docs_url,
-    )
-
-    # Clear old chunks for re-indexing
-    _docs_db.clear_version_chunks(ver_id)
-
-    # Step 3: Fetch and chunk docs (tiered: llms.txt > GitHub raw > crawl)
-    # Normalize docs URL (strip overly-specific paths for better crawl coverage)
-    from wet_mcp.sources.docs import _normalize_docs_url
-
-    docs_url = _normalize_docs_url(docs_url)
-
-    logger.info(f"Fetching docs for '{library}' from {docs_url}...")
+    # Step 3: Fetch and chunk docs
     try:
-        all_chunks, page_count = await asyncio.wait_for(
-            _fetch_and_chunk_docs(
-                docs_url=docs_url,
-                repo_url=repo_url,
-                query=query,
-                library_hint=library,
-            ),
-            timeout=_FETCH_TIMEOUT,
+        docs_url, all_chunks, page_count = await _fetch_docs_content(
+            library, docs_url, repo_url, query, language
         )
-    except TimeoutError:
-        logger.warning(f"Docs fetch timed out after {_FETCH_TIMEOUT}s for '{library}'")
-        all_chunks, page_count = [], 0
-
-    # Fallback: if too few pages (likely wrong/insufficient docs URL),
-    # try SearXNG to discover a better documentation URL.
-    if page_count <= 2 and len(all_chunks) < 100:
-        fallback_query = (
-            f"{library} {language} documentation"
-            if language
-            else f"{library} documentation"
+    except Exception as e:
+        logger.error(f"Error fetching docs content: {e}")
+        return json.dumps(
+            {"error": f"Error fetching docs: {str(e)}"}, ensure_ascii=False
         )
-        logger.info(
-            f"Only {page_count} pages found for '{library}', trying SearXNG fallback..."
-        )
-        try:
-            searxng_url = await asyncio.wait_for(
-                ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-            )
-            fallback_result = await asyncio.wait_for(
-                searxng_search(
-                    searxng_url=searxng_url,
-                    query=fallback_query,
-                    categories="general",
-                    max_results=3,
-                ),
-                timeout=15,
-            )
-            fallback_data = json.loads(fallback_result)
-            for fr in fallback_data.get("results", []):
-                alt_url = fr.get("url", "")
-                if not alt_url or not alt_url.startswith("http"):
-                    continue
-                alt_parsed = urlparse(alt_url)
-                orig_parsed = urlparse(docs_url)
-                if alt_parsed.netloc == orig_parsed.netloc:
-                    continue
-                try:
-                    alt_chunks, alt_pages = await asyncio.wait_for(
-                        _fetch_and_chunk_docs(alt_url, "", query),
-                        timeout=_FALLBACK_TIMEOUT,
-                    )
-                except TimeoutError:
-                    logger.warning(f"SearXNG fallback fetch timed out for {alt_url}")
-                    continue
-                if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
-                    logger.info(
-                        f"SearXNG fallback: {alt_url} "
-                        f"({alt_pages} pages, {len(alt_chunks)} chunks)"
-                    )
-                    docs_url = alt_url
-                    all_chunks = alt_chunks
-                    page_count = alt_pages
-                    break
-        except TimeoutError:
-            logger.warning("SearXNG fallback timed out")
-        except Exception as e:
-            logger.debug(f"SearXNG fallback failed: {e}")
 
     if not all_chunks:
         return json.dumps(
@@ -1286,75 +1436,22 @@ async def _do_docs_search(
             ensure_ascii=False,
         )
 
-    # Step 4: Generate embeddings (optional, with sub-timeout)
-    embeddings = None
-    if all_chunks:
-        from wet_mcp.embedder import get_backend
+    # Step 4: Generate embeddings (optional)
+    embeddings = await _generate_docs_embeddings(all_chunks)
 
-        if get_backend() is not None:
-            # Build embedding text: prepend title + heading for context, then content
-            # Truncate to 2000 chars to balance quality vs cost
-            embed_texts_list = []
-            for c in all_chunks:
-                parts = []
-                if c.get("title"):
-                    parts.append(c["title"])
-                if c.get("heading_path") and c.get("heading_path") != c.get("title"):
-                    parts.append(c["heading_path"])
-                parts.append(c["content"])
-                embed_texts_list.append(" | ".join(parts)[:2000])
-            logger.info(f"Generating embeddings for {len(embed_texts_list)} chunks...")
-            try:
-                embeddings = await asyncio.wait_for(
-                    _embed_batch(embed_texts_list),
-                    timeout=_EMBED_TIMEOUT,
-                )
-            except TimeoutError:
-                logger.warning(
-                    f"Embedding timed out after {_EMBED_TIMEOUT}s "
-                    f"for {len(embed_texts_list)} chunks, skipping"
-                )
-                embeddings = None
-            if embeddings:
-                logger.info(f"Generated {len(embeddings)} embeddings")
-
-    # Step 5: Store chunks
-    _docs_db.add_chunks(
-        version_id=ver_id,
-        library_id=lib_id,
-        chunks=all_chunks,
-        embeddings=embeddings,
-    )
-    _docs_db.mark_version_indexed(ver_id, page_count, len(all_chunks))
-
-    # Step 6: Search the freshly indexed content
-    query_embedding = await _embed(query, is_query=True)
-    retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
-
-    results = _docs_db.search(
-        query=query,
-        library_name=lib_key,
-        version=version,
-        limit=retrieve_limit,
-        query_embedding=query_embedding,
-    )
-
-    # Rerank if available
-    results = await _rerank_results(query, results, limit)
-
-    return json.dumps(
-        {
-            "library": library,
-            "version": version or "latest",
-            "docs_url": docs_url,
-            "results": results,
-            "total": len(results),
-            "source": "freshly_indexed",
-            "pages_crawled": page_count,
-            "chunks_indexed": len(all_chunks),
-        },
-        ensure_ascii=False,
-        indent=2,
+    # Step 5 & 6: Index and Search
+    return await _index_and_search_docs(
+        lib_key,
+        library,
+        version,
+        query,
+        limit,
+        docs_url,
+        registry,
+        description,
+        all_chunks,
+        embeddings,
+        page_count,
     )
 
 
