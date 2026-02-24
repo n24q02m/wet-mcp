@@ -139,7 +139,7 @@ def _setup_docs_db() -> None:
 
 def _setup_auto_sync() -> None:
     """Start auto-sync if enabled."""
-    if settings.sync_enabled:
+    if settings.sync_enabled and _docs_db:
         from wet_mcp.sync import start_auto_sync
 
         start_auto_sync(_docs_db)
