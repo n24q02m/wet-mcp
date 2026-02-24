@@ -141,8 +141,6 @@ def _read_discovery() -> dict | None:
     except Exception:
         pass
     return None
-
-
 def _write_discovery(port: int, pid: int) -> None:
     """Write SearXNG discovery file for other instances to find."""
     try:
@@ -177,9 +175,9 @@ async def _quick_health_check(url: str, retries: int = 3) -> bool:
     startup can be slow (cold TCP + SearXNG init), so we retry with
     exponential backoff (0.5s, 1s, 2s) and a generous per-probe timeout.
     """
-    for attempt in range(retries):
-        try:
-            async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as client:
+        for attempt in range(retries):
+            try:
                 response = await client.get(
                     f"{url}/healthz",
                     headers={
@@ -190,10 +188,10 @@ async def _quick_health_check(url: str, retries: int = 3) -> bool:
                 )
                 if response.status_code == 200:
                     return True
-        except Exception:
-            pass
-        if attempt < retries - 1:
-            await asyncio.sleep(0.5 * (attempt + 1))
+            except Exception:
+                pass
+            if attempt < retries - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
     return False
 
 
