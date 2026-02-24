@@ -632,7 +632,6 @@ async def media(
     url: str | None = None,
     media_type: str = "all",
     media_urls: list[str] | None = None,
-    output_dir: str | None = None,
     max_items: int = 10,
     prompt: str = "Describe this image in detail.",
 ) -> str:
@@ -664,7 +663,7 @@ async def media(
             return await _with_timeout(
                 download_media(
                     media_urls=media_urls,
-                    output_dir=output_dir or settings.download_dir,
+                    output_dir=settings.download_dir,
                 ),
                 "media.download",
             )

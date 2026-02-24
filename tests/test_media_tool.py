@@ -39,30 +39,13 @@ async def test_media_list_missing_url():
 
 @pytest.mark.asyncio
 async def test_media_download_success(mock_settings):
-    """Test media download action successfully calls download_media."""
+    """Test media download action successfully calls download_media with default dir."""
     mock_download_media = AsyncMock(return_value='["file1.jpg"]')
 
     with patch("wet_mcp.sources.crawler.download_media", mock_download_media):
         result = await media(
             action="download",
             media_urls=["http://example.com/img.jpg"],
-            output_dir="/custom/dir",
-        )
-
-        mock_download_media.assert_called_once_with(
-            media_urls=["http://example.com/img.jpg"], output_dir="/custom/dir"
-        )
-        assert result == '["file1.jpg"]'
-
-
-@pytest.mark.asyncio
-async def test_media_download_default_dir(mock_settings):
-    """Test media download action uses default directory if not provided."""
-    mock_download_media = AsyncMock(return_value='["file1.jpg"]')
-
-    with patch("wet_mcp.sources.crawler.download_media", mock_download_media):
-        result = await media(
-            action="download", media_urls=["http://example.com/img.jpg"]
         )
 
         mock_download_media.assert_called_once_with(
