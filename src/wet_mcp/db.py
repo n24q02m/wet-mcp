@@ -506,17 +506,19 @@ class DocsDB:
 
         for i, chunk in enumerate(chunks):
             chunk_id = uuid.uuid4().hex[:12]
-            chunk_params.append((
-                chunk_id,
-                version_id,
-                library_id,
-                chunk.get("url", ""),
-                chunk.get("title", ""),
-                chunk.get("chunk_index", i),
-                chunk["content"],
-                chunk.get("heading_path", ""),
-                now,
-            ))
+            chunk_params.append(
+                (
+                    chunk_id,
+                    version_id,
+                    library_id,
+                    chunk.get("url", ""),
+                    chunk.get("title", ""),
+                    chunk.get("chunk_index", i),
+                    chunk["content"],
+                    chunk.get("heading_path", ""),
+                    now,
+                )
+            )
 
             if (
                 self._vec_enabled
