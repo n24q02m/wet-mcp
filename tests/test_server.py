@@ -1,10 +1,10 @@
 """Tests for src/wet_mcp/server.py."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from wet_mcp.server import extract, search
+from wet_mcp.server import extract, help, search
 
 
 @pytest.mark.asyncio
@@ -183,3 +183,57 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_help_success():
+    """Test help tool success path."""
+    mock_file = MagicMock()
+    mock_file.read_text.return_value = "Mock Documentation"
+
+    mock_files = MagicMock()
+    mock_files.joinpath.return_value = mock_file
+
+    with patch("wet_mcp.server.files", return_value=mock_files) as mock_files_fn:
+        result = await help("test_tool")
+        assert result == "Mock Documentation"
+        mock_files_fn.assert_called_with("wet_mcp.docs")
+        mock_files.joinpath.assert_called_with("test_tool.md")
+
+
+@pytest.mark.asyncio
+async def test_help_default():
+    """Test help tool default argument."""
+    mock_file = MagicMock()
+    mock_file.read_text.return_value = "Search Documentation"
+
+    mock_files = MagicMock()
+    mock_files.joinpath.return_value = mock_file
+
+    with patch("wet_mcp.server.files", return_value=mock_files) as mock_files_fn:
+        result = await help()
+        assert result == "Search Documentation"
+        mock_files_fn.assert_called_with("wet_mcp.docs")
+        mock_files.joinpath.assert_called_with("search.md")
+
+
+@pytest.mark.asyncio
+async def test_help_not_found():
+    """Test help tool with missing documentation."""
+    mock_files = MagicMock()
+    mock_files.joinpath.side_effect = FileNotFoundError
+
+    with patch("wet_mcp.server.files", return_value=mock_files):
+        result = await help("non_existent")
+        assert "Error: No documentation found" in result
+
+
+@pytest.mark.asyncio
+async def test_help_error():
+    """Test help tool error handling."""
+    mock_files = MagicMock()
+    mock_files.joinpath.side_effect = Exception("Read error")
+
+    with patch("wet_mcp.server.files", return_value=mock_files):
+        result = await help("error_tool")
+        assert "Error loading documentation: Read error" in result
