@@ -60,15 +60,15 @@ def test_detect_gpu_import_error():
     orig_import = __import__
 
     def side_effect(name, *args, **kwargs):
-        if name == 'onnxruntime':
+        if name == "onnxruntime":
             raise ImportError("No module named 'onnxruntime'")
         return orig_import(name, *args, **kwargs)
 
-    with mock.patch('builtins.__import__', side_effect=side_effect):
+    with mock.patch("builtins.__import__", side_effect=side_effect):
         # Temporarily remove from sys.modules to force import attempt
         with mock.patch.dict(sys.modules):
-            if 'onnxruntime' in sys.modules:
-                del sys.modules['onnxruntime']
+            if "onnxruntime" in sys.modules:
+                del sys.modules["onnxruntime"]
             assert _detect_gpu() is False
 
 
@@ -83,40 +83,48 @@ def test_has_gguf_support_not_installed():
     orig_import = __import__
 
     def side_effect(name, *args, **kwargs):
-        if name == 'llama_cpp':
+        if name == "llama_cpp":
             raise ImportError("No module named 'llama_cpp'")
         return orig_import(name, *args, **kwargs)
 
-    with mock.patch('builtins.__import__', side_effect=side_effect):
+    with mock.patch("builtins.__import__", side_effect=side_effect):
         with mock.patch.dict(sys.modules):
-            if 'llama_cpp' in sys.modules:
-                del sys.modules['llama_cpp']
+            if "llama_cpp" in sys.modules:
+                del sys.modules["llama_cpp"]
             assert _has_gguf_support() is False
 
 
 def test_resolve_local_model_gpu_gguf():
     """Test _resolve_local_model chooses GGUF if GPU and GGUF support are present."""
-    with mock.patch("wet_mcp.config._detect_gpu", return_value=True), \
-         mock.patch("wet_mcp.config._has_gguf_support", return_value=True):
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=True),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=True),
+    ):
         assert _resolve_local_model("onnx", "gguf") == "gguf"
 
 
 def test_resolve_local_model_gpu_no_gguf():
     """Test _resolve_local_model chooses ONNX if GPU present but no GGUF support."""
-    with mock.patch("wet_mcp.config._detect_gpu", return_value=True), \
-         mock.patch("wet_mcp.config._has_gguf_support", return_value=False):
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=True),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=False),
+    ):
         assert _resolve_local_model("onnx", "gguf") == "onnx"
 
 
 def test_resolve_local_model_no_gpu_gguf():
     """Test _resolve_local_model chooses ONNX if no GPU, even with GGUF support."""
-    with mock.patch("wet_mcp.config._detect_gpu", return_value=False), \
-         mock.patch("wet_mcp.config._has_gguf_support", return_value=True):
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=False),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=True),
+    ):
         assert _resolve_local_model("onnx", "gguf") == "onnx"
 
 
 def test_resolve_local_model_no_gpu_no_gguf():
     """Test _resolve_local_model chooses ONNX if neither GPU nor GGUF support."""
-    with mock.patch("wet_mcp.config._detect_gpu", return_value=False), \
-         mock.patch("wet_mcp.config._has_gguf_support", return_value=False):
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=False),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=False),
+    ):
         assert _resolve_local_model("onnx", "gguf") == "onnx"
