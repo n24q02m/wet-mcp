@@ -1,4 +1,15 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+import sys
+from pathlib import Path
+
+# Fix the test file
+test_path = Path("tests/test_security_path_traversal.py")
+test_content = test_path.read_text()
+
+# We need to make sure mock_response has is_redirect=False and headers={}
+# The previous patch might have failed if indentation or context was slightly different or if it was already applied (idempotency).
+# Let's write the whole file content to be sure.
+
+new_test_content = """from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -7,7 +18,7 @@ from wet_mcp.sources.crawler import download_media
 
 @pytest.mark.asyncio
 async def test_download_media_path_traversal(tmp_path):
-    """Test that download_media prevents path traversal."""
+    \"\"\"Test that download_media prevents path traversal.\"\"\"
 
     # Mock httpx response
     mock_response = MagicMock()
@@ -72,3 +83,7 @@ async def test_download_media_safe(tmp_path):
             expected_file = tmp_path / "image.png"
             assert expected_file.exists()
             assert expected_file.read_bytes() == b"safe content"
+"""
+
+test_path.write_text(new_test_content)
+print("Rewrote tests/test_security_path_traversal.py")
