@@ -58,9 +58,7 @@ class TestProcessKilling(unittest.TestCase):
             # Mock os.getpid to avoid killing self
             with patch("wet_mcp.searxng_runner.os.getpid", return_value=5678):
                 # Mock os.getpgid because _kill_pid calls it
-                with patch(
-                    "wet_mcp.searxng_runner.os.getpgid", return_value=1234
-                ):
+                with patch("wet_mcp.searxng_runner.os.getpgid", return_value=1234):
                     # Mock os.killpg because _kill_pid calls it
                     with patch("wet_mcp.searxng_runner.os.killpg") as mock_killpg:
                         searxng_runner._kill_stale_port_process(8080)
