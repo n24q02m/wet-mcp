@@ -25,10 +25,14 @@ async def test_download_media_ssrf_protection():
             result_json = await download_media([url], "/tmp/downloads")
 
         # The request was NOT made because it's unsafe
+        # Note: In the new implementation, we use client.build_request and client.send
+        # client.get is not used.
         mock_client.get.assert_not_called()
+        mock_client.send.assert_not_called()
 
         results = json.loads(result_json)
         assert len(results) == 1
         assert results[0]["url"] == url
         assert "error" in results[0]
-        assert "Security Alert: Unsafe URL blocked" in results[0]["error"]
+        # Updated assertion to match specific error message from resolve_safe_url
+        assert "Security Alert: Blocked localhost: localhost" in results[0]["error"]

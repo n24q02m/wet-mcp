@@ -50,6 +50,7 @@ def test_safe_urls():
 
 
 def test_dns_failure_fallback():
-    # If DNS fails, we allow it (connection will fail anyway)
+    # If DNS fails, we now verify strict resolution for safety.
+    # So it should return False (unsafe/invalid).
     with patch("socket.getaddrinfo", side_effect=socket.gaierror):
-        assert is_safe_url("http://non-existent-domain.com")
+        assert not is_safe_url("http://non-existent-domain.com")

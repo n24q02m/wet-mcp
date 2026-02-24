@@ -13,12 +13,13 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from urllib.parse import urljoin
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_url, resolve_safe_url
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
@@ -472,35 +473,63 @@ async def download_media(
         async with semaphore:
             try:
                 # Handle protocol-relative URLs
-                target_url = url
-                if target_url.startswith("//"):
-                    target_url = f"https:{target_url}"
+                current_url = url
+                if current_url.startswith("//"):
+                    current_url = f"https:{current_url}"
 
-                if not is_safe_url(target_url):
-                    return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+                max_redirects = 5
+                redirects = 0
 
-                response = await client.get(target_url, follow_redirects=True)
-                response.raise_for_status()
+                while redirects <= max_redirects:
+                    try:
+                        ip_url, hostname, ip = resolve_safe_url(current_url)
+                    except ValueError as e:
+                        return {"url": url, "error": f"Security Alert: {e}"}
 
-                filename = target_url.split("/")[-1].split("?")[0] or "download"
-                filepath = (output_path / filename).resolve()
-
-                # Security check: Ensure the resolved path is still
-                # within the output directory
-                if not filepath.is_relative_to(output_path):
-                    raise ValueError(
-                        f"Security Alert: Path traversal attempt detected "
-                        f"for {filename}"
+                    # Create request with pinned IP and SNI
+                    request = client.build_request(
+                        "GET",
+                        ip_url,
+                        headers={"Host": hostname},
+                        extensions={"sni_hostname": hostname},
                     )
 
-                # Write file in thread to avoid blocking event loop
-                await asyncio.to_thread(filepath.write_bytes, response.content)
+                    response = await client.send(request, follow_redirects=False)
 
-                return {
-                    "url": url,
-                    "path": str(filepath),
-                    "size": len(response.content),
-                }
+                    if response.is_redirect:
+                        redirects += 1
+                        location = response.headers.get("Location")
+                        if not location:
+                            break
+
+                        # Handle relative redirects
+                        current_url = urljoin(current_url, location)
+                        await response.aclose()
+                        continue
+
+                    response.raise_for_status()
+
+                    filename = current_url.split("/")[-1].split("?")[0] or "download"
+                    filepath = (output_path / filename).resolve()
+
+                    # Security check: Ensure the resolved path is still
+                    # within the output directory
+                    if not filepath.is_relative_to(output_path):
+                        raise ValueError(
+                            f"Security Alert: Path traversal attempt detected "
+                            f"for {filename}"
+                        )
+
+                    # Write file in thread to avoid blocking event loop
+                    await asyncio.to_thread(filepath.write_bytes, response.content)
+
+                    return {
+                        "url": url,
+                        "path": str(filepath),
+                        "size": len(response.content),
+                    }
+
+                return {"url": url, "error": "Too many redirects"}
 
             except Exception as e:
                 logger.error(f"Error downloading {url}: {e}")
