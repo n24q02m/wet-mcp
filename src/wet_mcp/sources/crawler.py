@@ -109,9 +109,7 @@ async def extract(
 
                 if result.success:
                     content = (
-                        result.markdown
-                        if format == "markdown"
-                        else result.cleaned_html
+                        result.markdown if format == "markdown" else result.cleaned_html
                     )
                     return {
                         "url": url,
@@ -170,7 +168,9 @@ async def crawl(
     sem = _get_semaphore()
 
     # Worker helper to process a single URL
-    async def _process_one(url: str, current_depth: int) -> tuple[dict, list[str]] | None:
+    async def _process_one(
+        url: str, current_depth: int
+    ) -> tuple[dict, list[str]] | None:
         async with sem:
             try:
                 result = await crawler.arun(
@@ -180,9 +180,7 @@ async def crawl(
 
                 if result.success:
                     content = (
-                        result.markdown
-                        if format == "markdown"
-                        else result.cleaned_html
+                        result.markdown if format == "markdown" else result.cleaned_html
                     )
                     page_data = {
                         "url": url,
