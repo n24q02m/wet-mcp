@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import tempfile
+from collections import deque
 from pathlib import Path
 
 import httpx
@@ -28,36 +29,12 @@ from wet_mcp.security import is_safe_url
 # when multiple MCP server instances run simultaneously.
 _BROWSER_DATA_DIR = str(Path(tempfile.gettempdir()) / f"wet-mcp-browser-{os.getpid()}")
 
-# Maximum number of concurrent browser operations.  Each operation uses a
-# tab/page inside the shared browser, so we can safely allow several in
-# parallel without starting extra browser processes.
-_MAX_CONCURRENT_OPS = 6
-
-# Guards all access to the shared crawler instance.
-_pool_lock = asyncio.Lock()
-_crawler_instance: AsyncWebCrawler | None = None
-_crawler_stealth: bool = False  # stealth mode of the current instance
-
-# Semaphore to limit concurrent browser operations across all callers.
+# Global singleton
+_browser_instance: AsyncWebCrawler | None = None
 _browser_semaphore: asyncio.Semaphore | None = None
 
-
-def _browser_config(stealth: bool = False) -> BrowserConfig:
-    """Create BrowserConfig with per-process isolated data directory."""
-    extra_args: list[str] = []
-
-    # Docker/CI environments need --no-sandbox (Chromium cannot use
-    # the SUID sandbox inside unprivileged containers).
-    if os.path.exists("/.dockerenv") or os.environ.get("container"):
-        extra_args += ["--no-sandbox", "--disable-dev-shm-usage"]
-
-    return BrowserConfig(
-        headless=True,
-        enable_stealth=stealth,
-        verbose=False,
-        user_data_dir=_BROWSER_DATA_DIR,
-        extra_args=extra_args,
-    )
+# Limits
+_MAX_CONCURRENT_OPS = 6
 
 
 def _get_semaphore() -> asyncio.Semaphore:
@@ -72,152 +49,77 @@ def _get_semaphore() -> asyncio.Semaphore:
     return _browser_semaphore
 
 
-def _cleanup_browser_data_dir() -> None:
-    """Remove browser data directory to clear stale locks and state."""
-    import shutil
+async def _get_crawler(stealth: bool = True) -> AsyncWebCrawler:
+    """Return the singleton browser instance, creating it if needed.
 
-    try:
-        data_dir = Path(_BROWSER_DATA_DIR)
-        if data_dir.exists():
-            shutil.rmtree(data_dir, ignore_errors=True)
-            logger.debug(f"Cleaned browser data dir: {data_dir}")
-    except Exception as exc:
-        logger.debug(f"Error cleaning browser data dir: {exc}")
-
-
-async def _get_crawler(stealth: bool = False) -> AsyncWebCrawler:
-    """Return a shared AsyncWebCrawler, creating one if necessary.
-
-    If the requested *stealth* mode differs from the current instance the
-    old browser is shut down and a new one is started.  This should rarely
-    happen in practice since most calls use the same stealth setting.
-
-    On failure (e.g. Playwright connection corrupted after browser recycle),
-    retries once with a fresh browser data directory.
+    Args:
+        stealth: Whether to enable stealth mode (anti-bot evasion).
     """
-    global _crawler_instance, _crawler_stealth
+    global _browser_instance
+    if _browser_instance is None:
+        # Configure browser settings
+        browser_config = BrowserConfig(
+            headless=True,
+            # Use a persistent user data dir to cache resources/sessions if needed
+            user_data_dir=_BROWSER_DATA_DIR,
+            # Stealth mode helps bypass basic bot detection
+            verbose=False,
+            # Default viewport
+            viewport_width=1280,
+            viewport_height=720,
+        )
 
-    async with _pool_lock:
-        # Reuse existing instance if stealth matches
-        if _crawler_instance is not None and _crawler_stealth == stealth:
-            return _crawler_instance
+        _browser_instance = AsyncWebCrawler(config=browser_config)
+        await _browser_instance.start()
+        logger.info(f"Started browser instance (pid={os.getpid()})")
 
-        # Tear down existing instance with different stealth mode
-        if _crawler_instance is not None:
-            logger.debug(f"Recycling browser (stealth {_crawler_stealth} -> {stealth})")
-            try:
-                await _crawler_instance.__aexit__(None, None, None)
-            except Exception as exc:
-                logger.debug(f"Error closing old crawler: {exc}")
-            _crawler_instance = None
-
-        # Start a fresh browser (retry once on failure)
-        for attempt in range(2):
-            logger.info(f"Starting shared browser (stealth={stealth})...")
-            crawler = AsyncWebCrawler(
-                verbose=False,
-                config=_browser_config(stealth),
-            )
-            try:
-                await crawler.__aenter__()
-                _crawler_instance = crawler
-                _crawler_stealth = stealth
-                logger.info("Shared browser started")
-                return _crawler_instance
-            except Exception:
-                if attempt == 0:
-                    logger.warning(
-                        "Browser start failed, retrying with fresh data dir..."
-                    )
-                    _cleanup_browser_data_dir()
-                else:
-                    logger.error("Failed to start shared browser after retry")
-                    raise
-
-        raise RuntimeError("Failed to start shared browser")
-
-
-async def shutdown_crawler() -> None:
-    """Shut down the shared browser (called during server shutdown)."""
-    global _crawler_instance, _browser_semaphore
-
-    async with _pool_lock:
-        if _crawler_instance is not None:
-            logger.info("Shutting down shared browser...")
-            try:
-                await _crawler_instance.__aexit__(None, None, None)
-            except Exception as exc:
-                logger.debug(f"Error during browser shutdown: {exc}")
-            _crawler_instance = None
-            logger.info("Shared browser shut down")
-        _browser_semaphore = None
-
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
+    return _browser_instance
 
 
 async def extract(
     urls: list[str],
     format: str = "markdown",
     stealth: bool = True,
-    scan_full_page: bool = False,
-    delay_before_return_html: float = 0.0,
-    page_timeout: int = 60000,
 ) -> str:
-    """Extract content from URLs.
+    """Extract content from a list of URLs.
 
     Args:
-        urls: List of URLs to extract
-        format: Output format (markdown, text, html)
+        urls: List of URLs to extract content from.
+        format: Output format (markdown or html)
         stealth: Enable stealth mode
-        scan_full_page: Auto-scroll to trigger lazy-loaded content
-        delay_before_return_html: Seconds to wait after page load before capture
-        page_timeout: Page loading timeout in milliseconds
 
     Returns:
-        JSON string with extracted content
+        JSON string with extraction results
     """
-    logger.info(f"Extracting content from {len(urls)} URLs")
+    logger.info(f"Extracting {len(urls)} URLs")
 
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
-    # Build CrawlerRunConfig with optional SPA-friendly settings
-    run_config_kwargs: dict = {"verbose": False}
-    if scan_full_page:
-        run_config_kwargs["scan_full_page"] = True
-        run_config_kwargs["scroll_delay"] = 0.3
-    if delay_before_return_html > 0:
-        run_config_kwargs["delay_before_return_html"] = delay_before_return_html
-    if page_timeout != 60000:
-        run_config_kwargs["page_timeout"] = page_timeout
-    run_config = CrawlerRunConfig(**run_config_kwargs)
+    async def process_url(url: str) -> dict:
+        if not is_safe_url(url):
+            return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-    async def process_url(url: str):
         async with sem:
-            if not is_safe_url(url):
-                logger.warning(f"Skipping unsafe URL: {url}")
-                return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
-
             try:
                 result = await crawler.arun(
                     url,  # ty: ignore[invalid-argument-type]
-                    config=run_config,
+                    config=CrawlerRunConfig(verbose=False),
                 )  # ty: ignore[missing-argument]
 
                 if result.success:
                     content = (
-                        result.markdown if format == "markdown" else result.cleaned_html
+                        result.markdown
+                        if format == "markdown"
+                        else result.cleaned_html
                     )
                     return {
                         "url": url,
                         "title": result.metadata.get("title", ""),
-                        "content": content,
+                        "content": content[:50000],  # Reasonable limit
                         "links": {
-                            "internal": result.links.get("internal", [])[:20],
-                            "external": result.links.get("external", [])[:20],
+                            "internal": (result.links.get("internal", []) or [])[:20],
+                            "external": (result.links.get("external", []) or [])[:20],
                         },
                     }
                 else:
@@ -267,58 +169,111 @@ async def crawl(
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
+    # Worker helper to process a single URL
+    async def _process_one(url: str, current_depth: int) -> tuple[dict, list[str]] | None:
+        async with sem:
+            try:
+                result = await crawler.arun(
+                    url,  # ty: ignore[invalid-argument-type]
+                    config=CrawlerRunConfig(verbose=False),
+                )  # ty: ignore[missing-argument]
+
+                if result.success:
+                    content = (
+                        result.markdown
+                        if format == "markdown"
+                        else result.cleaned_html
+                    )
+                    page_data = {
+                        "url": url,
+                        "depth": current_depth,
+                        "title": result.metadata.get("title", ""),
+                        "content": content[:5000],  # Limit content size
+                    }
+
+                    # Extract internal links
+                    links = []
+                    if current_depth < depth:
+                        internal_links = result.links.get("internal", [])
+                        for link_item in internal_links[:10]:
+                            # Crawl4AI returns dicts with 'href' key
+                            link_url = (
+                                link_item.get("href", "")
+                                if isinstance(link_item, dict)
+                                else link_item
+                            )
+                            if link_url:
+                                links.append(link_url)
+
+                    return page_data, links
+
+            except Exception as e:
+                logger.error(f"Error crawling {url}: {e}")
+        return None
+
+    # Initialize pending queue with safe root URLs
+    pending: deque[tuple[str, int]] = deque()
     for root_url in urls:
         if not is_safe_url(root_url):
             logger.warning(f"Skipping unsafe URL: {root_url}")
             continue
+        pending.append((root_url, 0))
 
-        to_crawl: list[tuple[str, int]] = [(root_url, 0)]
+    active_tasks = set()
+    # Limit number of concurrent asyncio tasks (separate from semaphore)
+    # This prevents creating too many tasks if pending queue grows large
+    MAX_TASKS = 20
 
-        while to_crawl and len(all_results) < max_pages:
-            url, current_depth = to_crawl.pop(0)
+    while (pending or active_tasks) and len(all_results) < max_pages:
+        # Spawn new tasks if we have capacity
+        while pending and len(active_tasks) < MAX_TASKS:
+            # Heuristic: stop spawning if existing tasks + results could hit limit
+            if len(all_results) + len(active_tasks) >= max_pages:
+                break
+
+            url, current_depth = pending.popleft()
 
             if url in visited or current_depth > depth:
                 continue
 
             visited.add(url)
 
-            async with sem:
-                try:
-                    result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
+            task = asyncio.create_task(_process_one(url, current_depth))
+            active_tasks.add(task)
 
-                    if result.success:
-                        content = (
-                            result.markdown
-                            if format == "markdown"
-                            else result.cleaned_html
-                        )
-                        all_results.append(
-                            {
-                                "url": url,
-                                "depth": current_depth,
-                                "title": result.metadata.get("title", ""),
-                                "content": content[:5000],  # Limit content size
-                            }
-                        )
+        if not active_tasks:
+            break
 
-                        # Add internal links for next depth
-                        if current_depth < depth:
-                            internal_links = result.links.get("internal", [])
-                            for link_item in internal_links[:10]:
-                                # Crawl4AI returns dicts with 'href' key
-                                link_url = (
-                                    link_item.get("href", "")
-                                    if isinstance(link_item, dict)
-                                    else link_item
-                                )
-                                if link_url and link_url not in visited:
-                                    to_crawl.append((link_url, current_depth + 1))
+        # Wait for at least one task to complete
+        done, active_tasks = await asyncio.wait(
+            active_tasks, return_when=asyncio.FIRST_COMPLETED
+        )
 
-                except Exception as e:
-                    logger.error(f"Error crawling {url}: {e}")
+        for task in done:
+            res = await task
+            if res:
+                page_data, links = res
+                all_results.append(page_data)
+
+                # Check limit immediately
+                if len(all_results) >= max_pages:
+                    break
+
+                # Add new links to pending
+                for link_url in links:
+                    if link_url not in visited:
+                        pending.append((link_url, page_data["depth"] + 1))
+
+        if len(all_results) >= max_pages:
+            break
+
+    # Cancel any remaining tasks
+    for task in active_tasks:
+        task.cancel()
+
+    # Wait for cancellation (optional, but good practice to avoid errors logging)
+    if active_tasks:
+        await asyncio.gather(*active_tasks, return_exceptions=True)
 
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
