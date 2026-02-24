@@ -827,13 +827,17 @@ class DocsDB:
             List of chunk dicts sorted by relevance score
         """
         # Resolve library/version filters
-        library_id, version_id, found = self._resolve_search_filters(library_name, version)
+        library_id, version_id, found = self._resolve_search_filters(
+            library_name, version
+        )
         if not found:
             return []
 
         candidate_limit = limit * 3
 
-        fts_scores, chunks = self._search_fts(query, library_id, version_id, candidate_limit)
+        fts_scores, chunks = self._search_fts(
+            query, library_id, version_id, candidate_limit
+        )
 
         vec_scores = self._search_vectors(
             query_embedding, library_id, version_id, candidate_limit, chunks
@@ -842,6 +846,7 @@ class DocsDB:
         scored_ids = self._rank_results(fts_scores, vec_scores, chunks)
 
         return self._build_results(scored_ids, chunks, limit)
+
     # -----------------------------------------------------------------------
     # Export / Import (JSONL for sync)
     # -----------------------------------------------------------------------
