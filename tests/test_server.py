@@ -184,6 +184,7 @@ async def test_extract_invalid_action():
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
 
+
 @pytest.mark.asyncio
 async def test_crawl_max_pages_limit():
     """Test crawl action max_pages limit enforcement."""
