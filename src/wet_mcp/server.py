@@ -1050,8 +1050,6 @@ async def _fetch_and_chunk_docs(
 # ---------------------------------------------------------------------------
 
 
-
-
 async def _discover_library_metadata(
     library: str,
     language: str | None,
