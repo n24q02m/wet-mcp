@@ -1250,7 +1250,7 @@ async def _generate_docs_embeddings(chunks: list[dict]) -> list[list[float]] | N
 async def _index_and_search_docs(
     lib_key: str,
     library: str,
-    version: str,
+    version: str | None,
     query: str,
     limit: int,
     docs_url: str,
