@@ -45,10 +45,11 @@ def resolve_safe_url(url: str) -> tuple[str, str, str]:
         raise ValueError(f"DNS resolution failed for {hostname}") from e
 
     # Check IPs
-    safe_ip = None
+    safe_ip: str | None = None
     for res in results:
         # res[4] is sockaddr. (ip, port) or (ip, port, flowinfo, scopeid)
-        ip_str = res[4][0]
+        # Ensure ip_str is treated as str, although it should be by default from socket
+        ip_str = str(res[4][0])
 
         # Handle IPv6 scope ID
         if "%" in ip_str:
