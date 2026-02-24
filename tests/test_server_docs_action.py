@@ -1,9 +1,11 @@
 """Tests for docs action in src/wet_mcp/server.py."""
 
 from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from wet_mcp.server import search
+
 
 @pytest.mark.asyncio
 async def test_docs_success():
