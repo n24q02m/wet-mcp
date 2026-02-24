@@ -49,6 +49,7 @@ _DEFAULT_EMBEDDING_DIMS = 768
 
 # Reranking: retrieve more candidates than final limit, then rerank.
 _RERANK_CANDIDATE_MULTIPLIER = 3
+_MAX_PAGES_LIMIT = 100
 
 # Module-level state (set during lifespan)
 _web_cache: WebCache | None = None
@@ -552,6 +553,9 @@ async def extract(
     - map: Discover site structure without content (requires urls)
     Use `help` tool for full documentation.
     """
+    if max_pages > _MAX_PAGES_LIMIT:
+        max_pages = _MAX_PAGES_LIMIT
+
     match action:
         case "extract":
             if not urls:
