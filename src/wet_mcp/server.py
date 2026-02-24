@@ -78,43 +78,43 @@ async def _warmup_searxng() -> None:
         logger.debug(f"SearXNG pre-warm failed (non-fatal): {e}")
 
 
-@asynccontextmanager
-async def _lifespan(_server: FastMCP):
-    """Server lifespan: startup SearXNG, init cache/docs DB, cleanup on shutdown."""
-    global _web_cache, _docs_db, _embedding_dims
-
-    logger.info("Starting WET MCP Server...")
-
-    # 1. Setup API keys (+ aliases like GOOGLE_API_KEY -> GEMINI_API_KEY)
-    from wet_mcp.config import settings
-
+def _setup_api_keys() -> dict:
+    """Setup API keys and return the configured keys."""
     keys = settings.setup_api_keys()
     if keys:
         logger.info(f"API keys configured: {', '.join(keys.keys())}")
+    return keys
 
-    # Warn about GitHub token for library docs discovery
+
+def _check_github_token() -> None:
+    """Warn if GitHub token is missing."""
     if not (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")):
         logger.warning(
             "No GITHUB_TOKEN set. Library docs discovery will use unauthenticated "
             "GitHub API (60 req/hr limit). Set GITHUB_TOKEN for 5000 req/hr."
         )
 
-    # SearXNG is pre-warmed eagerly as a background task to eliminate
-    # startup latency on the first search call. If this instance finds an
-    # existing healthy SearXNG (started by another MCP server instance), it
-    # reuses it instead of spawning a new subprocess.
-    _searxng_warmup_task: asyncio.Task | None = None
-    if settings.wet_auto_searxng:
-        _searxng_warmup_task = asyncio.create_task(_warmup_searxng())
 
-    # 2. Initialize web cache
+def _start_searxng_warmup() -> asyncio.Task | None:
+    """Start SearXNG warmup task if enabled."""
+    if settings.wet_auto_searxng:
+        return asyncio.create_task(_warmup_searxng())
+    return None
+
+
+def _setup_web_cache() -> None:
+    """Initialize the web cache."""
+    global _web_cache
     if settings.wet_cache:
         cache_path = settings.get_cache_db_path()
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         _web_cache = WebCache(cache_path)
         logger.info("Web cache enabled")
 
-    # 3. Initialize embedding backend (dual-backend: litellm or local)
+
+def _setup_backends(keys: dict) -> None:
+    """Initialize embedding and reranker backends."""
+    global _embedding_dims
     _embedding_dims = settings.resolve_embedding_dims()
     if _embedding_dims == 0:
         _embedding_dims = _DEFAULT_EMBEDDING_DIMS
@@ -128,36 +128,44 @@ async def _lifespan(_server: FastMCP):
 
     asyncio.create_task(_init_backends_task())
 
-    # 5. Initialize docs DB
+
+def _setup_docs_db() -> None:
+    """Initialize the documentation database."""
+    global _docs_db
     docs_path = settings.get_db_path()
     docs_path.parent.mkdir(parents=True, exist_ok=True)
     _docs_db = DocsDB(docs_path, embedding_dims=_embedding_dims)
 
-    # Start auto-sync if configured
+
+def _setup_auto_sync() -> None:
+    """Start auto-sync if enabled."""
     if settings.sync_enabled:
         from wet_mcp.sync import start_auto_sync
 
         start_auto_sync(_docs_db)
 
-    yield
 
-    logger.info("Shutting down WET MCP Server...")
-
-    # Cancel SearXNG warmup task if still running
-    if _searxng_warmup_task and not _searxng_warmup_task.done():
-        _searxng_warmup_task.cancel()
+async def _shutdown_searxng_warmup(task: asyncio.Task | None) -> None:
+    """Cancel and await the SearXNG warmup task."""
+    if task and not task.done():
+        task.cancel()
         try:
-            await _searxng_warmup_task
+            await task
         except (asyncio.CancelledError, Exception):
             pass
 
-    # Stop auto-sync
+
+def _stop_auto_sync() -> None:
+    """Stop auto-sync if enabled."""
     if settings.sync_enabled:
         from wet_mcp.sync import stop_auto_sync
 
         stop_auto_sync()
 
-    # Close databases
+
+def _close_databases() -> None:
+    """Close web cache and docs database."""
+    global _docs_db, _web_cache
     if _docs_db:
         _docs_db.close()
         _docs_db = None
@@ -165,7 +173,9 @@ async def _lifespan(_server: FastMCP):
         _web_cache.close()
         _web_cache = None
 
-    # Shut down the shared browser pool first (may take a few seconds)
+
+async def _shutdown_crawler() -> None:
+    """Shutdown the crawler pool."""
     try:
         from wet_mcp.sources.crawler import shutdown_crawler
 
@@ -173,6 +183,28 @@ async def _lifespan(_server: FastMCP):
     except Exception as exc:
         logger.debug(f"Browser pool shutdown error (non-fatal): {exc}")
 
+
+@asynccontextmanager
+async def _lifespan(_server: FastMCP):
+    """Server lifespan: startup SearXNG, init cache/docs DB, cleanup on shutdown."""
+    logger.info("Starting WET MCP Server...")
+
+    keys = _setup_api_keys()
+    _check_github_token()
+    searxng_warmup_task = _start_searxng_warmup()
+    _setup_web_cache()
+    _setup_backends(keys)
+    _setup_docs_db()
+    _setup_auto_sync()
+
+    yield
+
+    logger.info("Shutting down WET MCP Server...")
+
+    await _shutdown_searxng_warmup(searxng_warmup_task)
+    _stop_auto_sync()
+    _close_databases()
+    await _shutdown_crawler()
     stop_searxng()
 
 
