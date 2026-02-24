@@ -1,0 +1,3 @@
+## 2024-05-23 - SQLite Executemany Performance
+**Learning:** `executemany` for standard tables (`doc_chunks`) provides a noticeable speedup (~8%), but for virtual tables (`doc_chunks_vec` using `sqlite-vec`), it can be slightly slower or neutral compared to a loop. However, using `executemany` for both is cleaner and safer (when ordered correctly) than interleaved inserts.
+**Action:** When optimizing SQLite inserts involving virtual tables, verify performance of `executemany` vs loop. Prioritize batching for standard tables. Ensure insertion order respects (implicit) FKs even if virtual tables don't enforce them strictly.

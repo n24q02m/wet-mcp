@@ -501,13 +501,12 @@ class DocsDB:
         """
         now = _now_ts()
         count = 0
+        doc_params = []
+        vec_params = []
 
         for i, chunk in enumerate(chunks):
             chunk_id = uuid.uuid4().hex[:12]
-            self._conn.execute(
-                """INSERT INTO doc_chunks
-                   (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            doc_params.append(
                 (
                     chunk_id,
                     version_id,
@@ -518,7 +517,7 @@ class DocsDB:
                     chunk["content"],
                     chunk.get("heading_path", ""),
                     now,
-                ),
+                )
             )
 
             # Store embedding if available
@@ -528,15 +527,26 @@ class DocsDB:
                 and i < len(embeddings)
                 and embeddings[i]
             ):
-                try:
-                    self._conn.execute(
-                        "INSERT INTO doc_chunks_vec (id, embedding) VALUES (?, ?)",
-                        (chunk_id, _serialize_f32(embeddings[i])),
-                    )
-                except Exception as e:
-                    logger.debug(f"Failed to store embedding: {e}")
+                vec_params.append((chunk_id, _serialize_f32(embeddings[i])))
 
             count += 1
+
+        if doc_params:
+            self._conn.executemany(
+                """INSERT INTO doc_chunks
+                   (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                doc_params,
+            )
+
+        if vec_params:
+            try:
+                self._conn.executemany(
+                    "INSERT INTO doc_chunks_vec (id, embedding) VALUES (?, ?)",
+                    vec_params,
+                )
+            except Exception as e:
+                logger.debug(f"Failed to store embeddings: {e}")
 
         self._conn.commit()
         return count
