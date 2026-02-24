@@ -352,36 +352,65 @@ async def sitemap(
             logger.warning(f"Skipping unsafe URL: {root_url}")
             continue
 
-        to_visit: list[tuple[str, int]] = [(root_url, 0)]
+        queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue()
+        queue.put_nowait((root_url, 0))
         site_urls: list[dict[str, object]] = []
 
-        while to_visit and len(site_urls) < max_pages:
-            url, current_depth = to_visit.pop(0)
-
-            if url in visited or current_depth > depth:
-                continue
-
-            visited.add(url)
-            site_urls.append({"url": url, "depth": current_depth})
-
-            async with sem:
+        async def worker(q: asyncio.Queue, s_urls: list):
+            while True:
                 try:
-                    result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
+                    item = await q.get()
+                except asyncio.CancelledError:
+                    return
 
-                    if result.success and current_depth < depth:
-                        for link in result.links.get("internal", [])[:20]:
-                            # Extract URL from dict if necessary
-                            link_url = (
-                                link.get("href", "") if isinstance(link, dict) else link
-                            )
-                            if link_url and link_url not in visited:
-                                to_visit.append((link_url, current_depth + 1))
+                try:
+                    url, current_depth = item
 
-                except Exception as e:
-                    logger.debug(f"Error mapping {url}: {e}")
+                    if len(s_urls) >= max_pages:
+                        q.task_done()
+                        continue
+
+                    if url in visited or current_depth > depth:
+                        q.task_done()
+                        continue
+
+                    visited.add(url)
+                    s_urls.append({"url": url, "depth": current_depth})
+
+                    async with sem:
+                        try:
+                            result = await crawler.arun(
+                                url,
+                                config=CrawlerRunConfig(verbose=False),
+                            )  # ty: ignore[missing-argument]
+
+                            if result.success and current_depth < depth:
+                                for link in result.links.get("internal", [])[:20]:
+                                    # Extract URL from dict if necessary
+                                    link_url = (
+                                        link.get("href", "")
+                                        if isinstance(link, dict)
+                                        else link
+                                    )
+                                    if link_url and link_url not in visited:
+                                        q.put_nowait((link_url, current_depth + 1))
+
+                        except Exception as e:
+                            logger.debug(f"Error mapping {url}: {e}")
+                finally:
+                    q.task_done()
+
+        workers = [
+            asyncio.create_task(worker(queue, site_urls))
+            for _ in range(min(max_pages, _MAX_CONCURRENT_OPS))
+        ]
+
+        try:
+            await queue.join()
+        finally:
+            for w in workers:
+                w.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
 
         all_urls.extend(site_urls)
 
