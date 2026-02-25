@@ -1,6 +1,7 @@
 """WET MCP Server - Main server definition."""
 
 import asyncio
+import functools
 import json
 import os
 import sys
@@ -16,6 +17,7 @@ from wet_mcp.cache import WebCache
 from wet_mcp.config import settings
 from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
+from wet_mcp.security import wrap_external_content
 from wet_mcp.sources.crawler import (
     crawl as _crawl,
 )
@@ -376,6 +378,26 @@ mcp = FastMCP(
 # (e.g. close browser tabs) before we abandon it entirely.
 _CANCEL_GRACE_PERIOD = 5.0
 
+
+def _wrap_tool(tool_name: str):
+    """Decorator to wrap tool results with XPIA safety markers.
+
+    Encapsulates untrusted external content in XML boundary tags and appends
+    a security warning instructing the LLM to treat the content as data only.
+    Error responses are passed through unwrapped.
+    """
+
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            result = await func(*args, **kwargs)
+            return wrap_external_content(tool_name, result)
+
+        return wrapper
+
+    return decorator
+
+
 # Sub-operation timeouts (seconds) within docs search.
 # These prevent any single step from consuming the entire tool_timeout budget.
 _SEARXNG_TIMEOUT = 150  # ensure_searxng() — cold start can take 90-120s
@@ -438,6 +460,7 @@ async def _with_timeout(coro, action: str) -> str:
         idempotentHint=True,
     ),
 )
+@_wrap_tool("search")
 async def search(
     action: str,
     query: str | None = None,
@@ -538,6 +561,7 @@ async def search(
         openWorldHint=True,
     ),
 )
+@_wrap_tool("extract")
 async def extract(
     action: str,
     urls: list[str] | None = None,
@@ -627,6 +651,7 @@ async def extract(
         openWorldHint=True,
     ),
 )
+@_wrap_tool("media")
 async def media(
     action: str,
     url: str | None = None,
