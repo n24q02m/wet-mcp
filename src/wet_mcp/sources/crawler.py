@@ -12,6 +12,7 @@ import asyncio
 import json
 import os
 import tempfile
+from collections import deque
 from pathlib import Path
 
 import httpx
@@ -263,62 +264,98 @@ async def crawl(
 
     all_results = []
     visited: set[str] = set()
+    queue = deque()
+
+    # Initialize queue with safe root URLs
+    for url in urls:
+        if is_safe_url(url):
+            queue.append((url, 0))
+        else:
+            logger.warning(f"Skipping unsafe URL: {url}")
 
     crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
-    for root_url in urls:
-        if not is_safe_url(root_url):
-            logger.warning(f"Skipping unsafe URL: {root_url}")
-            continue
+    active_tasks = set()
 
-        to_crawl: list[tuple[str, int]] = [(root_url, 0)]
+    async def crawl_task(url: str, current_depth: int):
+        async with sem:
+            try:
+                result = await crawler.arun(
+                    url,  # ty: ignore[invalid-argument-type]
+                    config=CrawlerRunConfig(verbose=False),
+                )  # ty: ignore[missing-argument]
 
-        while to_crawl and len(all_results) < max_pages:
-            url, current_depth = to_crawl.pop(0)
+                new_links = []
+                item = None
 
-            if url in visited or current_depth > depth:
+                if result.success:
+                    content = (
+                        result.markdown if format == "markdown" else result.cleaned_html
+                    )
+                    item = {
+                        "url": url,
+                        "depth": current_depth,
+                        "title": result.metadata.get("title", ""),
+                        "content": content[:5000],  # Limit content size
+                    }
+
+                    if current_depth < depth:
+                        internal_links = result.links.get("internal", [])
+                        for link_item in internal_links[:10]:
+                            link_url = (
+                                link_item.get("href", "")
+                                if isinstance(link_item, dict)
+                                else link_item
+                            )
+                            if link_url:
+                                new_links.append(link_url)
+
+                return item, new_links
+
+            except Exception as e:
+                logger.error(f"Error crawling {url}: {e}")
+                return None, []
+
+    while (queue or active_tasks) and len(all_results) < max_pages:
+        # Launch new tasks up to concurrency limit
+        while (
+            queue
+            and len(active_tasks) < _MAX_CONCURRENT_OPS
+            # Stop launching if we have enough results pending to satisfy max_pages
+            and len(all_results) + len(active_tasks) < max_pages
+        ):
+            url, depth_val = queue.popleft()
+
+            if url in visited or depth_val > depth:
                 continue
 
             visited.add(url)
+            task = asyncio.create_task(crawl_task(url, depth_val))
+            active_tasks.add(task)
 
-            async with sem:
-                try:
-                    result = await crawler.arun(
-                        url,  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )  # ty: ignore[missing-argument]
+        if not active_tasks:
+            break
 
-                    if result.success:
-                        content = (
-                            result.markdown
-                            if format == "markdown"
-                            else result.cleaned_html
-                        )
-                        all_results.append(
-                            {
-                                "url": url,
-                                "depth": current_depth,
-                                "title": result.metadata.get("title", ""),
-                                "content": content[:5000],  # Limit content size
-                            }
-                        )
+        # Wait for at least one task to complete
+        done, pending = await asyncio.wait(
+            active_tasks, return_when=asyncio.FIRST_COMPLETED
+        )
+        active_tasks = pending
 
-                        # Add internal links for next depth
-                        if current_depth < depth:
-                            internal_links = result.links.get("internal", [])
-                            for link_item in internal_links[:10]:
-                                # Crawl4AI returns dicts with 'href' key
-                                link_url = (
-                                    link_item.get("href", "")
-                                    if isinstance(link_item, dict)
-                                    else link_item
-                                )
-                                if link_url and link_url not in visited:
-                                    to_crawl.append((link_url, current_depth + 1))
+        for task in done:
+            try:
+                item, links = await task
+                if item and len(all_results) < max_pages:
+                    all_results.append(item)
 
-                except Exception as e:
-                    logger.error(f"Error crawling {url}: {e}")
+                    next_depth = item["depth"] + 1
+                    if next_depth <= depth:
+                        for link in links:
+                            if link not in visited:
+                                queue.append((link, next_depth))
+            except Exception as e:
+                logger.debug(f"Task failed: {e}")
 
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
