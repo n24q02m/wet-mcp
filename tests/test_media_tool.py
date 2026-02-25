@@ -27,7 +27,9 @@ async def test_media_list_success(mock_settings):
         mock_list_media.assert_called_once_with(
             url="http://example.com", media_type="images", max_items=5
         )
-        assert result == '{"images": []}'
+        assert '{"images": []}' in result
+        assert "<untrusted_media_content>" in result
+        assert "[SECURITY:" in result
 
 
 @pytest.mark.asyncio
@@ -52,7 +54,8 @@ async def test_media_download_success(mock_settings):
         mock_download_media.assert_called_once_with(
             media_urls=["http://example.com/img.jpg"], output_dir="/custom/dir"
         )
-        assert result == '["file1.jpg"]'
+        assert '["file1.jpg"]' in result
+        assert "<untrusted_media_content>" in result
 
 
 @pytest.mark.asyncio
@@ -69,7 +72,8 @@ async def test_media_download_default_dir(mock_settings):
             media_urls=["http://example.com/img.jpg"],
             output_dir=mock_settings.download_dir,
         )
-        assert result == '["file1.jpg"]'
+        assert '["file1.jpg"]' in result
+        assert "<untrusted_media_content>" in result
 
 
 @pytest.mark.asyncio
@@ -92,7 +96,8 @@ async def test_media_analyze_success(mock_settings):
         mock_analyze_media.assert_called_once_with(
             media_path="/path/to/image.jpg", prompt="Describe it"
         )
-        assert result == "Analysis result"
+        assert "Analysis result" in result
+        assert "<untrusted_media_content>" in result
 
 
 @pytest.mark.asyncio
