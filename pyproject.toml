@@ -46,6 +46,7 @@ dev = [
     "ruff",
     "ty",
     "pre-commit",
+    "pytest-cov>=7.0.0",
 ]
 
 [project.scripts]

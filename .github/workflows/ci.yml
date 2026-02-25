@@ -39,13 +39,20 @@ jobs:
       - name: Run ty type check
         run: uv run ty check
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
           if [ -d "tests" ] && [ "$(ls -A tests/*.py 2>/dev/null)" ]; then
-            uv run pytest --tb=short
+            uv run pytest --tb=short --cov=wet_mcp --cov-report=xml
           else
             echo "No tests found, skipping..."
           fi
+
+      - name: Upload coverage to Codecov
+        if: github.event_name == 'push'
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   dependency-review:
     name: Dependency Review

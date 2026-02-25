@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!uv.lock"
+    - "!**/*.generated.*"
+  path_instructions:
+    - path: "src/wet_mcp/server.py"
+      instructions: "Review for MCP tool patterns: structured error returns, match/case dispatch, timeout handling, graceful fallback chains."
+    - path: "src/wet_mcp/security.py"
+      instructions: "Review for SSRF prevention: URL validation, DNS rebinding protection, redirect handling."
+    - path: "src/wet_mcp/sources/**"
+      instructions: "Review for web scraping safety: resource limits, memory management, proper async cleanup."
+
+chat:
+  auto_reply: true
