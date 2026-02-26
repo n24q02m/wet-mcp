@@ -19,6 +19,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Protocol
 
 from loguru import logger
@@ -164,7 +165,7 @@ class LiteLLMBackend:
             return self._embed_batch_inner(texts, dimensions)
 
         # Split into batches
-        all_embeddings: list[list[float]] = []
+        batches = []
         total_batches = (len(texts) + self.MAX_BATCH_SIZE - 1) // self.MAX_BATCH_SIZE
         logger.info(
             f"Splitting {len(texts)} texts into {total_batches} batches "
@@ -172,13 +173,23 @@ class LiteLLMBackend:
         )
 
         for i in range(0, len(texts), self.MAX_BATCH_SIZE):
-            batch = texts[i : i + self.MAX_BATCH_SIZE]
-            batch_num = i // self.MAX_BATCH_SIZE + 1
-            logger.debug(
-                f"Embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
-            )
-            batch_result = self._embed_batch_inner(batch, dimensions)
-            all_embeddings.extend(batch_result)
+            batches.append(texts[i : i + self.MAX_BATCH_SIZE])
+
+        # Execute batches in parallel
+        all_embeddings: list[list[float]] = []
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            # Preserve order by mapping futures back to batch index
+            futures = [
+                executor.submit(self._embed_batch_inner, batch, dimensions)
+                for batch in batches
+            ]
+            for i, future in enumerate(futures):
+                try:
+                    batch_result = future.result()
+                    all_embeddings.extend(batch_result)
+                except Exception as e:
+                    logger.error(f"Batch {i + 1}/{total_batches} failed: {e}")
+                    raise
 
         return all_embeddings
 
