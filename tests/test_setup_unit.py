@@ -36,7 +36,7 @@ sys.modules["faiss"] = MagicMock()
 # Mock importlib.metadata to avoid PackageNotFoundError
 with patch("importlib.metadata.version", return_value="0.0.0"):
     try:
-        from wet_mcp.setup import patch_searxng_version
+        from wet_mcp.setup import patch_searxng_version  # noqa: F401
     except ImportError:
         pass
 
@@ -61,7 +61,7 @@ def test_patch_searxng_version_creates_file(tmp_path, mock_logger):
     """Test that version_frozen.py is created if it doesn't exist."""
     # Re-import to ensure we have the module
     with patch("importlib.metadata.version", return_value="0.0.0"):
-         from wet_mcp.setup import patch_searxng_version
+         from wet_mcp.setup import patch_searxng_version  # noqa: F401
 
     # Setup: searx_dir is tmp_path
     with patch("wet_mcp.setup._find_searx_package_dir", return_value=tmp_path):
@@ -79,7 +79,7 @@ def test_patch_searxng_version_creates_file(tmp_path, mock_logger):
 def test_patch_searxng_version_skips_existing(tmp_path, mock_logger):
     """Test that version_frozen.py is NOT overwritten if it exists."""
     with patch("importlib.metadata.version", return_value="0.0.0"):
-         from wet_mcp.setup import patch_searxng_version
+         from wet_mcp.setup import patch_searxng_version  # noqa: F401
 
     vf = tmp_path / "version_frozen.py"
     original_content = 'VERSION_STRING = "9.9.9"'
@@ -95,7 +95,7 @@ def test_patch_searxng_version_skips_existing(tmp_path, mock_logger):
 def test_patch_searxng_version_no_package(mock_logger):
     """Test that nothing happens if searx package is not found."""
     with patch("importlib.metadata.version", return_value="0.0.0"):
-         from wet_mcp.setup import patch_searxng_version
+         from wet_mcp.setup import patch_searxng_version  # noqa: F401
 
     with patch("wet_mcp.setup._find_searx_package_dir", return_value=None):
         patch_searxng_version()
@@ -107,7 +107,7 @@ def test_patch_searxng_version_no_package(mock_logger):
 def test_patch_searxng_version_handles_error(mock_logger):
     """Test that exceptions are caught and logged."""
     with patch("importlib.metadata.version", return_value="0.0.0"):
-         from wet_mcp.setup import patch_searxng_version
+         from wet_mcp.setup import patch_searxng_version  # noqa: F401
 
     # Simulate an error by making _find_searx_package_dir raise an exception
     with patch("wet_mcp.setup._find_searx_package_dir", side_effect=Exception("Test Error")):
