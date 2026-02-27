@@ -316,7 +316,7 @@ async def test_do_docs_search_new():
 
         res = await server._do_docs_search("newlib", "query")
         data = json.loads(res)
-        assert data["source"] == "freshly_indexed"
+        assert data["status"] == "indexing_in_progress"
         assert data["library"] == "newlib"
 
 
@@ -446,7 +446,7 @@ async def test_do_docs_search_force_reindex():
         mock_discover.return_value = {"homepage": "http"}
         mock_fetch.return_value = ([], 0)
         res = await server._do_docs_search("test", "test")
-        assert "Could not extract" in res
+        assert "indexing_in_progress" in res
 
 
 @pytest.mark.asyncio
@@ -474,7 +474,7 @@ async def test_do_docs_search_no_docs_but_repo():
         }
         mock_fetch.return_value = ([], 0)
         res = await server._do_docs_search("test", "test")
-        assert "Could not extract" in res
+        assert "indexing_in_progress" in res
 
 
 @pytest.mark.asyncio
@@ -497,7 +497,7 @@ async def test_do_docs_search_fallback_searxng():
         mock_fetch.return_value = ([{"content": "chunk"}], 1)
 
         res = await server._do_docs_search("test", "test")
-        assert "freshly_indexed" in res
+        assert "indexing_in_progress" in res
 
 
 @pytest.mark.asyncio
@@ -517,7 +517,7 @@ async def test_do_docs_search_fetch_timeout():
         mock_search.return_value = json.dumps({"results": []})
 
         res = await server._do_docs_search("test", "test")
-        assert "Could not extract" in res
+        assert "indexing_in_progress" in res
 
 
 @pytest.mark.asyncio
