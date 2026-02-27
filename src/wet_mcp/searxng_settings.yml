@@ -4,7 +4,7 @@
 use_default_settings: true
 
 server:
-  secret_key: "wet-mcp-internal-secret"
+  secret_key: "REPLACE_WITH_REAL_SECRET"
   bind_address: "127.0.0.1"
   port: 41592
   limiter: false
