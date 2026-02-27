@@ -102,6 +102,7 @@ async def test_extract_crawler_failure():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.extract(["https://safe.com"])
@@ -116,6 +117,7 @@ async def test_extract_crawler_exception():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.extract(["https://safe.com"])
@@ -134,6 +136,7 @@ async def test_crawl_success():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.crawl(["https://safe.com"], depth=1, max_pages=3)
@@ -161,6 +164,7 @@ async def test_crawl_exception():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.crawl(["https://safe.com"])
@@ -179,6 +183,7 @@ async def test_sitemap_success():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.sitemap(["https://safe.com"], depth=1, max_pages=3)
@@ -206,6 +211,7 @@ async def test_sitemap_exception():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.sitemap(["https://safe.com"])
@@ -226,6 +232,7 @@ async def test_list_media_success():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.list_media("https://safe.com", media_type="all")
@@ -248,6 +255,7 @@ async def test_list_media_specific_type():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.list_media("https://safe.com", media_type="images")
@@ -275,6 +283,7 @@ async def test_list_media_failure():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.list_media("https://safe.com")
@@ -550,6 +559,7 @@ async def test_crawl_visited_and_depth():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.crawl(["https://safe.com"], depth=1, max_pages=5)
@@ -568,6 +578,7 @@ async def test_sitemap_visited_and_depth():
 
     with (
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("playwright.async_api.async_playwright"),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.sitemap(["https://safe.com"], depth=1, max_pages=5)
