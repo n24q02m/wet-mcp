@@ -116,9 +116,7 @@ async def _get_crawler(stealth: bool = False) -> AsyncWebCrawler:
 
         # Start a fresh browser (retry once on failure)
         for attempt in range(2):
-            logger.info(
-                f"Starting shared browser (stealth={stealth})..."
-            )
+            logger.info(f"Starting shared browser (stealth={stealth})...")
             crawler = AsyncWebCrawler(
                 verbose=False,
                 config=_browser_config(stealth),
