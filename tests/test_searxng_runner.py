@@ -1,6 +1,6 @@
-import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from wet_mcp.searxng_runner import _get_settings_path, ensure_searxng
