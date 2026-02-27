@@ -76,6 +76,7 @@ async def analyze_media(
     mime_type, _ = mimetypes.guess_type(media_path)
     if not mime_type:
         return f"Error: Cannot determine file type for {media_path}"
+    config = get_llm_config()
 
     # Handle text files directly
     if mime_type.startswith("text/") or mime_type in [
@@ -94,8 +95,6 @@ async def analyze_media(
 
         try:
             content = await asyncio.to_thread(_read_and_truncate, media_path)
-
-            config = get_llm_config()
             logger.info(f"Analyzing text file with model: {config['model']}")
 
             messages = [
@@ -115,7 +114,6 @@ async def analyze_media(
             return f"Error analyzing text file: {e}"
 
     # Check model capabilities for media
-    config = get_llm_config()
     caps = get_model_capabilities(config["model"])
 
     # Validate capability vs file type
@@ -132,7 +130,6 @@ async def analyze_media(
         return f"Error: Unsupported media type: {mime_type}"
 
     try:
-        config = get_llm_config()
         logger.info(f"Analyzing media with model: {config['model']}")
 
         base64_image = await asyncio.to_thread(encode_image, media_path)
