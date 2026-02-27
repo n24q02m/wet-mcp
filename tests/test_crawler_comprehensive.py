@@ -88,7 +88,8 @@ async def test_extract_html_format():
 @pytest.mark.asyncio
 async def test_extract_unsafe_url():
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=False):
-        result_json = await crawler.extract(["http://unsafe.com"])
+        with patch("wet_mcp.sources.crawler._get_crawler", new_callable=AsyncMock):
+            result_json = await crawler.extract(["http://unsafe.com"])
         data = json.loads(result_json)
         assert data[0]["error"] == "Security Alert: Unsafe URL blocked"
 
@@ -152,7 +153,8 @@ async def test_crawl_success():
 @pytest.mark.asyncio
 async def test_crawl_unsafe_url():
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=False):
-        result_json = await crawler.crawl(["http://unsafe.com"])
+        with patch("wet_mcp.sources.crawler._get_crawler", new_callable=AsyncMock):
+            result_json = await crawler.crawl(["http://unsafe.com"])
         data = json.loads(result_json)
         assert len(data) == 0
 
@@ -199,7 +201,8 @@ async def test_sitemap_success():
 @pytest.mark.asyncio
 async def test_sitemap_unsafe_url():
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=False):
-        result_json = await crawler.sitemap(["http://unsafe.com"])
+        with patch("wet_mcp.sources.crawler._get_crawler", new_callable=AsyncMock):
+            result_json = await crawler.sitemap(["http://unsafe.com"])
         data = json.loads(result_json)
         assert len(data) == 0
 
