@@ -11,6 +11,7 @@ server:
   method: "GET"
 
 search:
+  default_lang: "en-US"
   formats:
     - html
     - json
@@ -42,7 +43,7 @@ engines:
   - name: qwant
     disabled: false
   - name: mojeek
-    disabled: false
+    disabled: true
   - name: yahoo
     disabled: false
   - name: startpage

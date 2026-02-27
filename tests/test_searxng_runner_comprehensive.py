@@ -577,7 +577,6 @@ async def test_ensure_searxng_locked_install_fails():
 
 
 def test_get_startup_lock():
-
     lock1 = _get_startup_lock()
     lock2 = _get_startup_lock()
     assert lock1 is lock2
@@ -585,7 +584,6 @@ def test_get_startup_lock():
 
 
 def test_cleanup_process():
-
     import wet_mcp.searxng_runner as module
 
     mock_proc = MagicMock()

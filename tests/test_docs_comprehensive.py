@@ -50,13 +50,13 @@ async def test_all_registries():
             "repository": {"url": "git://github.com/a/b.git"},
             "homepage": "http://a.com",
         }
-        await _discover_from_npm("test")  # type: ignore
+        await _discover_from_npm("test")
 
         # pypi
         mock_response.json.return_value = {
             "info": {"project_urls": {"Documentation": "http://docs.org"}}
         }
-        await _discover_from_pypi("test")  # type: ignore
+        await _discover_from_pypi("test")
 
         # crates
         mock_response.json.return_value = {
@@ -65,45 +65,45 @@ async def test_all_registries():
                 "repository": "http://github.com",
             }
         }
-        await _discover_from_crates("test")  # type: ignore
+        await _discover_from_crates("test")
 
         # go
         mock_response.text = 'href="https://pkg.go.dev/test"'
-        await _discover_from_go("test")  # type: ignore
+        await _discover_from_go("test")
 
         # hex
         mock_response.json.return_value = {
             "meta": {"links": {"GitHub": "http://github.com"}}
         }
-        await _discover_from_hex("test")  # type: ignore
+        await _discover_from_hex("test")
 
         # packagist
         mock_response.json.return_value = {
             "packages": {"test": [{"source": {"url": "http://github.com"}}]}
         }
-        await _discover_from_packagist("test")  # type: ignore
+        await _discover_from_packagist("test")
 
         # pubdev
         mock_response.json.return_value = {
             "latest": {"pubspec": {"homepage": "http://pub.dev"}}
         }
-        await _discover_from_pubdev("test")  # type: ignore
+        await _discover_from_pubdev("test")
 
         # rubygems
         mock_response.json.return_value = {"documentation_uri": "http://docs.ruby"}
-        await _discover_from_rubygems("test")  # type: ignore
+        await _discover_from_rubygems("test")
 
         # nuget
         mock_response.json.return_value = {
             "data": [{"projectUrl": "http://docs.nuget"}]
         }
-        await _discover_from_nuget("test")  # type: ignore
+        await _discover_from_nuget("test")
 
         # maven
         mock_response.json.return_value = {
             "response": {"docs": [{"g": "com", "a": "test"}]}
         }
-        await _discover_from_maven("test")  # type: ignore
+        await _discover_from_maven("test")
 
         # Github search
         mock_response.json.return_value = {
@@ -200,7 +200,7 @@ async def test_fetch_docs_pages():
             ) as mock_objects:
                 mock_objects.return_value = []
 
-                res = await fetch_docs_pages("https://docs.test", query="test")  # type: ignore
+                res = await fetch_docs_pages("https://docs.test", query="test")
                 assert len(res) > 0
 
 
