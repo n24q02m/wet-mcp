@@ -54,6 +54,7 @@ def test_dns_failure_fallback():
     with patch("socket.getaddrinfo", side_effect=socket.gaierror):
         assert is_safe_url("http://non-existent-domain.com")
 
+
 def test_extended_ssrf_scenarios():
     """Test additional SSRF scenarios including IPv6 ULA, 0.0.0.0, and mixed-case schemes."""
 
