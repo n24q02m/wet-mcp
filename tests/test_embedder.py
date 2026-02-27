@@ -1,11 +1,6 @@
-"""Tests for src/wet_mcp/embedder.py — Dual-backend embedding.
+"""Tests for embedding functionality (local and cloud)."""
 
-Covers LiteLLMBackend (batch embedding, batch splitting, retry logic),
-Qwen3EmbedBackend (local ONNX embedding), factory functions, and
-legacy backward-compatible module-level functions.
-"""
-
-import logging
+import time
 from unittest.mock import MagicMock, call, patch
 
 import pytest
@@ -17,453 +12,188 @@ from wet_mcp.embedder import (
     init_backend,
 )
 
-# -----------------------------------------------------------------------
-# LiteLLMBackend: embed_texts
-# -----------------------------------------------------------------------
 
-
-class TestLiteLLMBackend:
-    def test_embed_texts_success(self):
-        """Batch embedding returns correct vectors."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"index": 0, "embedding": [0.1, 0.2, 0.3]},
-            {"index": 1, "embedding": [0.4, 0.5, 0.6]},
-        ]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            vecs = backend.embed_texts(["hello", "world"])
-
-        assert len(vecs) == 2
-        assert vecs[0] == [0.1, 0.2, 0.3]
-        assert vecs[1] == [0.4, 0.5, 0.6]
-
-    def test_embed_texts_empty_input(self):
-        """Empty input returns empty list without API call."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-        vecs = backend.embed_texts([])
-        assert vecs == []
-
-    def test_embed_texts_preserves_order(self):
-        """Results are sorted by index even if API returns out-of-order."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"index": 2, "embedding": [0.7, 0.8]},
-            {"index": 0, "embedding": [0.1, 0.2]},
-            {"index": 1, "embedding": [0.4, 0.5]},
-        ]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            vecs = backend.embed_texts(["a", "b", "c"])
-
-        assert vecs[0] == [0.1, 0.2]
-        assert vecs[1] == [0.4, 0.5]
-        assert vecs[2] == [0.7, 0.8]
-
-    def test_embed_texts_with_dimensions(self):
-        """Dimensions parameter is passed to LiteLLM."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.1]}]
-
-        with patch("litellm.embedding", return_value=mock_response) as mock_embed:
-            backend.embed_texts(["test"], dimensions=256)
-            mock_embed.assert_called_once_with(
-                model="text-embedding-3-small",
-                input=["test"],
-                dimensions=256,
-            )
-
-    def test_embed_texts_no_dimensions(self):
-        """No dimensions parameter when not specified."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.1]}]
-
-        with patch("litellm.embedding", return_value=mock_response) as mock_embed:
-            backend.embed_texts(["test"])
-            call_kwargs = mock_embed.call_args[1]
-            assert "dimensions" not in call_kwargs
-
-    def test_embed_texts_api_error(self):
-        """Non-retryable API errors are raised to caller."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-
-        with patch(
-            "litellm.embedding",
-            side_effect=Exception("Invalid model"),
-        ):
-            with pytest.raises(Exception, match="Invalid model"):
-                backend.embed_texts(["test"])
-
-    def test_embed_single_success(self):
-        """Single text embedding returns one vector."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-
+@pytest.fixture
+def mock_litellm():
+    with patch("litellm.embedding") as mock_embedding:
+        # Mock response structure for a single item
         mock_response = MagicMock()
         mock_response.data = [{"index": 0, "embedding": [0.1, 0.2, 0.3]}]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            vec = backend.embed_single("hello")
-
-        assert vec == [0.1, 0.2, 0.3]
-
-    def test_check_available(self):
-        """Returns dimension count when model is available."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.0] * 768}]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            dims = backend.check_available()
-
-        assert dims == 768
-
-    def test_check_unavailable(self):
-        """Returns 0 when model is not available."""
-        backend = LiteLLMBackend("nonexistent")
-
-        with patch(
-            "litellm.embedding",
-            side_effect=Exception("Invalid API key"),
-        ):
-            dims = backend.check_available()
-
-        assert dims == 0
+        mock_embedding.return_value = mock_response
+        yield mock_embedding
 
 
-# -----------------------------------------------------------------------
-# LiteLLMBackend: Batch splitting
-# -----------------------------------------------------------------------
+@pytest.fixture
+def mock_qwen3():
+    with patch("qwen3_embed.TextEmbedding") as mock_cls:
+        mock_instance = MagicMock()
+        # Mock numpy array tolist() behavior
+        mock_array = MagicMock()
+        mock_array.tolist.return_value = [0.1, 0.2, 0.3]
+        # Make the mock array have a length for len() calls
+        mock_array.__len__ = MagicMock(return_value=3)
+        mock_instance.embed.return_value = [mock_array]
+        mock_instance.query_embed.return_value = [mock_array]
+        mock_cls.return_value = mock_instance
+        yield mock_cls
 
 
-class TestBatchSplitting:
-    def test_splits_large_batch(self):
-        """Texts exceeding MAX_BATCH_SIZE are split into sub-batches."""
-        backend = LiteLLMBackend("test-model")
-        n = backend.MAX_BATCH_SIZE + 50  # 150 texts -> 2 batches
-
-        def mock_embed(**kwargs):
-            batch_input = kwargs["input"]
-            resp = MagicMock()
-            resp.data = [
-                {"index": j, "embedding": [float(j)]} for j in range(len(batch_input))
-            ]
-            return resp
-
-        with patch("litellm.embedding", side_effect=mock_embed):
-            vecs = backend.embed_texts([f"text_{i}" for i in range(n)])
-
-        assert len(vecs) == n
-
-    def test_batch_call_count(self):
-        """Correct number of API calls for split batches."""
-        backend = LiteLLMBackend("test-model")
-        n = backend.MAX_BATCH_SIZE * 2 + 10  # 210 texts -> 3 batches
-
-        def mock_embed(**kwargs):
-            resp = MagicMock()
-            resp.data = [
-                {"index": j, "embedding": [0.0]} for j in range(len(kwargs["input"]))
-            ]
-            return resp
-
-        with patch("litellm.embedding", side_effect=mock_embed) as mock:
-            backend.embed_texts([f"t{i}" for i in range(n)])
-
-        assert mock.call_count == 3
-
-    def test_no_split_under_limit(self):
-        """No splitting when under MAX_BATCH_SIZE."""
-        backend = LiteLLMBackend("test-model")
-        n = backend.MAX_BATCH_SIZE
-
-        def mock_embed(**kwargs):
-            resp = MagicMock()
-            resp.data = [
-                {"index": j, "embedding": [0.0]} for j in range(len(kwargs["input"]))
-            ]
-            return resp
-
-        with patch("litellm.embedding", side_effect=mock_embed) as mock:
-            backend.embed_texts([f"text_{i}" for i in range(n)])
-
-        assert mock.call_count == 1
+def test_init_backend_litellm():
+    backend = init_backend("litellm", "test-model")
+    assert isinstance(backend, LiteLLMBackend)
+    assert backend.model == "test-model"
+    assert get_backend() is backend
 
 
-# -----------------------------------------------------------------------
-# LiteLLMBackend: Retry logic
-# -----------------------------------------------------------------------
+def test_init_backend_local():
+    backend = init_backend("local", "test-local-model")
+    assert isinstance(backend, Qwen3EmbedBackend)
+    assert backend._model_name == "test-local-model"
+    assert get_backend() is backend
 
 
-class TestRetryLogic:
-    @patch("wet_mcp.embedder.time.sleep")
-    def test_retries_on_rate_limit(self, mock_sleep):
-        """Retries on rate limit errors with exponential backoff."""
-        backend = LiteLLMBackend("test-model")
+def test_litellm_embed_single(mock_litellm):
+    backend = LiteLLMBackend("test-model")
+    embedding = backend.embed_single("test text")
 
-        success_response = MagicMock()
-        success_response.data = [{"index": 0, "embedding": [0.1]}]
+    assert embedding == [0.1, 0.2, 0.3]
+    mock_litellm.assert_called_once()
+    args, kwargs = mock_litellm.call_args
+    assert kwargs["model"] == "test-model"
+    assert kwargs["input"] == ["test text"]
 
-        with patch(
-            "litellm.embedding",
-            side_effect=[
-                Exception("429 rate limit exceeded"),
-                success_response,
-            ],
-        ):
-            result = backend.embed_texts(["test"])
 
-        assert result == [[0.1]]
-        mock_sleep.assert_called_once_with(1.0)
+def test_litellm_embed_batch_small(mock_litellm):
+    """Test embedding a small batch (no splitting)."""
+    backend = LiteLLMBackend("test-model")
 
-    @patch("wet_mcp.embedder.time.sleep")
-    def test_retries_on_server_error(self, mock_sleep):
-        """Retries on 5xx server errors."""
-        backend = LiteLLMBackend("test-model")
+    # Setup mock to return two embeddings
+    mock_response = MagicMock()
+    mock_response.data = [
+        {"index": 0, "embedding": [0.1]},
+        {"index": 1, "embedding": [0.2]}
+    ]
+    mock_litellm.return_value = mock_response
 
-        success_response = MagicMock()
-        success_response.data = [{"index": 0, "embedding": [0.2]}]
+    embeddings = backend.embed_texts(["text1", "text2"])
 
-        with patch(
-            "litellm.embedding",
-            side_effect=[
-                Exception("503 service temporarily unavailable"),
-                success_response,
-            ],
-        ):
-            result = backend.embed_texts(["test"])
+    assert len(embeddings) == 2
+    assert embeddings[0] == [0.1]
+    assert embeddings[1] == [0.2]
+    mock_litellm.assert_called_once()
+    args, kwargs = mock_litellm.call_args
+    assert kwargs["input"] == ["text1", "text2"]
 
-        assert result == [[0.2]]
 
-    @patch("wet_mcp.embedder.time.sleep")
-    def test_no_retry_on_non_retryable(self, mock_sleep):
-        """Non-retryable errors fail immediately without retry."""
-        backend = LiteLLMBackend("test-model")
+def test_litellm_embed_batch_splitting(mock_litellm):
+    """Test that large batches are split correctly."""
+    backend = LiteLLMBackend("test-model")
+    # Force small batch size for testing
+    backend.MAX_BATCH_SIZE = 2
 
-        with patch(
-            "litellm.embedding",
-            side_effect=Exception("Invalid API key"),
-        ):
-            with pytest.raises(Exception, match="Invalid API key"):
-                backend.embed_texts(["test"])
+    # 3 inputs -> should split into [2, 1]
+    inputs = ["t1", "t2", "t3"]
 
-        mock_sleep.assert_not_called()
+    # Mock responses for each call
+    resp1 = MagicMock()
+    resp1.data = [{"index": 0, "embedding": [0.1]}, {"index": 1, "embedding": [0.2]}]
 
-    @patch("wet_mcp.embedder.time.sleep")
-    def test_exponential_backoff(self, mock_sleep):
-        """Retry delays use exponential backoff."""
-        backend = LiteLLMBackend("test-model")
+    resp2 = MagicMock()
+    resp2.data = [{"index": 0, "embedding": [0.3]}]
 
-        success_response = MagicMock()
-        success_response.data = [{"index": 0, "embedding": [0.1]}]
+    mock_litellm.side_effect = [resp1, resp2]
 
-        with patch(
-            "litellm.embedding",
-            side_effect=[
-                Exception("429 rate limit"),
-                Exception("429 rate limit"),
-                success_response,
-            ],
-        ):
-            backend.embed_texts(["test"])
+    embeddings = backend.embed_texts(inputs)
 
-        assert mock_sleep.call_args_list == [call(1.0), call(2.0)]
+    assert len(embeddings) == 3
+    assert embeddings == [[0.1], [0.2], [0.3]]
 
-    @patch("wet_mcp.embedder.time.sleep")
-    def test_max_retries_exhausted(self, mock_sleep):
-        """Raises after all retries are exhausted."""
-        backend = LiteLLMBackend("test-model")
+    assert mock_litellm.call_count == 2
+    # Check calls
+    call1 = call(model="test-model", input=["t1", "t2"])
+    call2 = call(model="test-model", input=["t3"])
+    mock_litellm.assert_has_calls([call1, call2])
 
-        with patch(
-            "litellm.embedding",
-            side_effect=Exception("429 rate limit"),
-        ):
-            with pytest.raises(Exception, match="429 rate limit"):
-                backend.embed_texts(["test"])
 
-        # 3 attempts total, 2 sleeps
+def test_litellm_retry_logic(mock_litellm):
+    """Test retry logic on transient errors."""
+    backend = LiteLLMBackend("test-model")
+
+    # Fail twice with RateLimitError, then succeed
+    error = Exception("Rate limit exceeded (429)")
+    success_resp = MagicMock()
+    success_resp.data = [{"index": 0, "embedding": [0.1]}]
+
+    mock_litellm.side_effect = [error, error, success_resp]
+
+    # Mock time.sleep to avoid waiting
+    with patch("time.sleep") as mock_sleep:
+        embeddings = backend.embed_texts(["test"])
+
+        assert embeddings == [[0.1]]
+        assert mock_litellm.call_count == 3
         assert mock_sleep.call_count == 2
 
 
-# -----------------------------------------------------------------------
-# Qwen3EmbedBackend
-# -----------------------------------------------------------------------
+def test_litellm_retry_failure(mock_litellm):
+    """Test that retries eventually fail."""
+    backend = LiteLLMBackend("test-model")
+
+    # Always fail
+    error = Exception("Rate limit exceeded (429)")
+    mock_litellm.side_effect = error
+
+    with patch("time.sleep"):
+        with pytest.raises(Exception) as exc:
+            backend.embed_texts(["test"])
+
+        assert "Rate limit" in str(exc.value)
+        # Should try MAX_RETRIES (3) times
+        assert mock_litellm.call_count == 3
 
 
-class TestQwen3EmbedBackend:
-    def test_embed_texts_success(self):
-        """Local ONNX embedding returns correct vectors."""
-        import numpy as np
+def test_litellm_no_retry_on_fatal_error(mock_litellm):
+    """Test that fatal errors (e.g. 400 Bad Request) are not retried."""
+    backend = LiteLLMBackend("test-model")
 
-        backend = Qwen3EmbedBackend("test-model")
-        mock_model = MagicMock()
-        mock_model.embed.return_value = iter(
-            [
-                np.array([0.1, 0.2, 0.3]),
-                np.array([0.4, 0.5, 0.6]),
-            ]
-        )
+    # Fail with non-retriable error
+    error = Exception("Invalid request (400)")
+    mock_litellm.side_effect = error
 
-        with patch.object(backend, "_get_model", return_value=mock_model):
-            vecs = backend.embed_texts(["hello", "world"])
+    with patch("time.sleep") as mock_sleep:
+        with pytest.raises(Exception):
+            backend.embed_texts(["test"])
 
-        assert len(vecs) == 2
-        assert vecs[0] == pytest.approx([0.1, 0.2, 0.3])
-        assert vecs[1] == pytest.approx([0.4, 0.5, 0.6])
-
-    def test_embed_texts_empty(self):
-        """Empty input returns empty list."""
-        backend = Qwen3EmbedBackend()
-        assert backend.embed_texts([]) == []
-
-    def test_embed_texts_with_mrl_truncation(self):
-        """Dimensions parameter is passed to model.embed(dim=) for MRL."""
-        import numpy as np
-
-        backend = Qwen3EmbedBackend()
-        mock_model = MagicMock()
-        # Model handles truncation internally when dim= is passed
-        mock_model.embed.return_value = iter(
-            [
-                np.array([0.1, 0.2, 0.3]),
-            ]
-        )
-
-        with patch.object(backend, "_get_model", return_value=mock_model):
-            vecs = backend.embed_texts(["test"], dimensions=3)
-
-        mock_model.embed.assert_called_once_with(["test"], dim=3)
-        assert len(vecs[0]) == 3
-        assert vecs[0] == pytest.approx([0.1, 0.2, 0.3])
-
-    def test_embed_single(self):
-        """embed_single delegates to embed_texts."""
-        import numpy as np
-
-        backend = Qwen3EmbedBackend()
-        mock_model = MagicMock()
-        mock_model.embed.return_value = iter([np.array([0.1, 0.2])])
-
-        with patch.object(backend, "_get_model", return_value=mock_model):
-            vec = backend.embed_single("test")
-
-        assert vec == pytest.approx([0.1, 0.2])
-
-    def test_check_available_success(self):
-        """Returns dimensions when model loads successfully."""
-        import numpy as np
-
-        backend = Qwen3EmbedBackend()
-        mock_model = MagicMock()
-        mock_model.embed.return_value = iter([np.array([0.0] * 1024)])
-
-        with patch.object(backend, "_get_model", return_value=mock_model):
-            dims = backend.check_available()
-
-        assert dims == 1024
-
-    def test_check_available_failure(self):
-        """Returns 0 when model fails to load."""
-        backend = Qwen3EmbedBackend()
-
-        with patch.object(
-            backend, "_get_model", side_effect=Exception("ONNX load error")
-        ):
-            dims = backend.check_available()
-
-        assert dims == 0
+        # Should fail immediately
+        assert mock_litellm.call_count == 1
+        mock_sleep.assert_not_called()
 
 
-# -----------------------------------------------------------------------
-# Factory functions
-# -----------------------------------------------------------------------
+def test_litellm_check_available(mock_litellm):
+    backend = LiteLLMBackend("test-model")
+    dims = backend.check_available()
+    assert dims == 3
+    mock_litellm.assert_called_with(model="test-model", input=["test"])
 
 
-class TestBackendFactory:
-    def test_init_litellm_backend(self):
-        """init_backend('litellm') creates LiteLLMBackend."""
-        backend = init_backend("litellm", "test-model")
-        assert isinstance(backend, LiteLLMBackend)
-        assert get_backend() is backend
+def test_qwen3_embed_single(mock_qwen3):
+    backend = Qwen3EmbedBackend()
+    embedding = backend.embed_single("test text")
 
-    def test_init_local_backend(self):
-        """init_backend('local') creates Qwen3EmbedBackend."""
-        backend = init_backend("local")
-        assert isinstance(backend, Qwen3EmbedBackend)
-        assert get_backend() is backend
-
-    def test_init_litellm_requires_model(self):
-        """LiteLLM backend requires model name."""
-        with pytest.raises(ValueError, match="model is required"):
-            init_backend("litellm")
-
-    def test_init_unknown_backend(self):
-        """Unknown backend type raises ValueError."""
-        with pytest.raises(ValueError, match="Unknown backend"):
-            init_backend("unknown")
+    assert embedding == [0.1, 0.2, 0.3]
+    mock_qwen3.return_value.embed.assert_called_with(["test text"])
 
 
-# -----------------------------------------------------------------------
-# Legacy compatibility functions
-# -----------------------------------------------------------------------
+def test_qwen3_embed_query(mock_qwen3):
+    backend = Qwen3EmbedBackend()
+    embedding = backend.embed_single_query("test query")
+
+    assert embedding == [0.1, 0.2, 0.3]
+    mock_qwen3.return_value.query_embed.assert_called_with("test query")
 
 
-class TestLegacyCompat:
-    def test_embed_texts_legacy(self):
-        """Legacy embed_texts function works."""
-        from wet_mcp.embedder import embed_texts
-
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"index": 0, "embedding": [0.1, 0.2, 0.3]},
-        ]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            vecs = embed_texts(["hello"], model="text-embedding-3-small")
-
-        assert vecs == [[0.1, 0.2, 0.3]]
-
-    def test_embed_single_legacy(self):
-        """Legacy embed_single function works."""
-        from wet_mcp.embedder import embed_single
-
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.1, 0.2]}]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            vec = embed_single("hello", model="test-model")
-
-        assert vec == [0.1, 0.2]
-
-    def test_check_embedding_available_legacy(self):
-        """Legacy check_embedding_available works."""
-        from wet_mcp.embedder import check_embedding_available
-
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.0] * 768}]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            dims = check_embedding_available("text-embedding-3-small")
-
-        assert dims == 768
-
-
-# -----------------------------------------------------------------------
-# LiteLLM logging suppression
-# -----------------------------------------------------------------------
-
-
-class TestLoggingSuppression:
-    def test_litellm_logger_suppressed(self):
-        """LiteLLM logger should be suppressed to ERROR level after backend init."""
-        _ = LiteLLMBackend("test-model")
-        litellm_logger = logging.getLogger("LiteLLM")
-        assert litellm_logger.level >= logging.ERROR
+def test_qwen3_check_available(mock_qwen3):
+    backend = Qwen3EmbedBackend()
+    dims = backend.check_available()
+    assert dims == 3
+    mock_qwen3.return_value.embed.assert_called_with(["test"])

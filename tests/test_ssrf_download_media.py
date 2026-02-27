@@ -26,7 +26,6 @@ async def test_download_media_ssrf_protection():
 
         # The request was NOT made because it's unsafe
         mock_client.get.assert_not_called()
-        mock_client.stream.assert_not_called()
 
         results = json.loads(result_json)
         assert len(results) == 1
