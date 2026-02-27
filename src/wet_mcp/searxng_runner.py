@@ -293,7 +293,10 @@ def _is_searxng_installed() -> bool:
     """
     import importlib.util
 
-    return importlib.util.find_spec("searx.webapp") is not None
+    try:
+        return importlib.util.find_spec("searx.webapp") is not None
+    except ModuleNotFoundError:
+        return False
 
 
 def _install_searxng() -> bool:
