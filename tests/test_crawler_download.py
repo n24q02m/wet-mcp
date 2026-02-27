@@ -13,6 +13,7 @@ async def test_download_media_success(tmp_path):
     mock_content = b"test content"
 
     mock_response = MagicMock()
+    mock_response.is_redirect = False
     mock_response.content = mock_content
     mock_response.raise_for_status = MagicMock()
     mock_response.headers = {}
@@ -32,7 +33,7 @@ async def test_download_media_success(tmp_path):
     url = "http://example.com/file.txt"
     output_dir = str(tmp_path)
 
-    with patch("httpx.AsyncClient", mock_client_cls):
+    with patch("wet_mcp.sources.crawler.httpx.AsyncClient", mock_client_cls):
         result_json = await download_media([url], output_dir)
 
     results = json.loads(result_json)
@@ -60,6 +61,7 @@ async def test_download_media_protocol_relative(tmp_path):
     mock_content = b"image data"
 
     mock_response = MagicMock()
+    mock_response.is_redirect = False
     mock_response.content = mock_content
     mock_response.raise_for_status = MagicMock()
     mock_response.headers = {}
@@ -76,7 +78,7 @@ async def test_download_media_protocol_relative(tmp_path):
     url = "//example.com/image.jpg"
     output_dir = str(tmp_path)
 
-    with patch("httpx.AsyncClient", mock_client_cls):
+    with patch("wet_mcp.sources.crawler.httpx.AsyncClient", mock_client_cls):
         result_json = await download_media([url], output_dir)
 
     results = json.loads(result_json)
@@ -99,8 +101,13 @@ async def test_download_media_protocol_relative(tmp_path):
 async def test_download_media_http_error(tmp_path):
     """Test handling of HTTP errors during download."""
     mock_response = MagicMock()
+    mock_response.is_redirect = False
     mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-        "404 Not Found", request=MagicMock(), response=MagicMock()
+        "404 Not Found",
+        request=httpx.Request("GET", "http://example.com/missing.txt"),
+        response=httpx.Response(
+            404, request=httpx.Request("GET", "http://example.com/missing.txt")
+        ),
     )
 
     mock_client = AsyncMock()
@@ -114,7 +121,7 @@ async def test_download_media_http_error(tmp_path):
 
     url = "http://example.com/missing.txt"
 
-    with patch("httpx.AsyncClient", mock_client_cls):
+    with patch("wet_mcp.sources.crawler.httpx.AsyncClient", mock_client_cls):
         result_json = await download_media([url], str(tmp_path))
 
     results = json.loads(result_json)
@@ -134,6 +141,7 @@ async def test_download_media_file_write_error(tmp_path):
     mock_content = b"test content"
 
     mock_response = MagicMock()
+    mock_response.is_redirect = False
     mock_response.content = mock_content
     mock_response.raise_for_status = MagicMock()
     mock_response.headers = {}
@@ -156,7 +164,7 @@ async def test_download_media_file_write_error(tmp_path):
     # The 'filepath' is a concrete Path object (PosixPath or WindowsPath).
     # Patching 'pathlib.Path.write_bytes' works for all instances.
 
-    with patch("httpx.AsyncClient", mock_client_cls):
+    with patch("wet_mcp.sources.crawler.httpx.AsyncClient", mock_client_cls):
         with patch(
             "pathlib.Path.write_bytes", side_effect=PermissionError("Access denied")
         ):
