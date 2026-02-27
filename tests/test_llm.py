@@ -125,3 +125,31 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
         "Error: Cannot determine file type" in result
         or "Unsupported media type" in result
     )
+
+
+@patch("wet_mcp.llm.acompletion")
+def test_analyze_media_large_text_file(mock_completion, mock_settings, tmp_path):
+    """Test truncation of large text files."""
+    txt_path = tmp_path / "large.txt"
+    # Create content larger than 100,000 chars
+    large_content = "a" * 100005
+    txt_path.write_text(large_content)
+
+    # Mock response
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "Summary of large text."
+    mock_completion.return_value = mock_response
+
+    result = asyncio.run(analyze_media(str(txt_path)))
+    assert result == "Summary of large text."
+
+    # Verify truncation
+    mock_completion.assert_called_once()
+    call_args = mock_completion.call_args[1]
+    sent_content = call_args["messages"][0]["content"]
+
+    # Expected truncated content
+    expected_body = "a" * 100000 + "\n...[truncated]"
+
+    assert expected_body in sent_content
+    assert "a" * 100001 not in sent_content
