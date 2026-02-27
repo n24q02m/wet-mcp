@@ -126,7 +126,7 @@ jobs:
       - run: |
           mkdir -p ${{ runner.temp }}/digests
           echo "${{ steps.build.outputs.digest }}" > "${{ runner.temp }}/digests/${{ matrix.artifact }}"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: digest-${{ matrix.artifact }}
           path: ${{ runner.temp }}/digests/*
@@ -143,7 +143,7 @@ jobs:
         with:
           egress-policy: audit
 
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@70fc10c6e5e1ce46ad2ea6f2b72d43f7d47b13c3 # v8
         with:
           pattern: digest-*
           path: ${{ runner.temp }}/digests
