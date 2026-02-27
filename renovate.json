@@ -10,6 +10,7 @@
   "timezone": "Asia/Ho_Chi_Minh",
   "prConcurrentLimit": 5,
   "prHourlyLimit": 3,
+  "dependencyDashboard": false,
   "labels": [
     "dependencies"
   ],
