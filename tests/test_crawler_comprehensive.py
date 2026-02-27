@@ -431,11 +431,13 @@ async def test_get_crawler_retry_logic():
     # Mock crawler that fails on first __aenter__ but succeeds on second
     class FlakyMockCrawler(MockAsyncWebCrawler):
         _effect_idx = 0
+
         def get_effect(self):
             if FlakyMockCrawler._effect_idx == 0:
                 FlakyMockCrawler._effect_idx += 1
                 raise Exception("Init failed")
             return self
+
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.__aenter__ = AsyncMock(side_effect=self.get_effect)
@@ -515,6 +517,7 @@ def test_get_semaphore():
     assert sem1 is sem2
     assert isinstance(sem1, asyncio.Semaphore)
 
+
 @pytest.mark.asyncio
 async def test_get_crawler_recycle_exception():
     mock_crawler = MockAsyncWebCrawler()
@@ -526,54 +529,86 @@ async def test_get_crawler_recycle_exception():
         await crawler._get_crawler(stealth=False)
         mock_crawler.__aexit__.assert_called()
 
+
 @pytest.mark.asyncio
 async def test_crawl_visited_and_depth():
     mock_crawler = MockAsyncWebCrawler()
     # Return links that point to already visited page and new page
     mock_crawler.arun.return_value = MockCrawlerResult(
-        links={"internal": [{"href": "http://safe.com"}, {"href": "http://safe.com/deep"}, {"href": "http://safe.com/deep2"}]}
+        links={
+            "internal": [
+                {"href": "http://safe.com"},
+                {"href": "http://safe.com/deep"},
+                {"href": "http://safe.com/deep2"},
+            ]
+        }
     )
 
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler), \
-         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
-
+    with (
+        patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+    ):
         result_json = await crawler.crawl(["http://safe.com"], depth=1, max_pages=5)
         json.loads(result_json)
         # Should not get stuck in infinite loop, should hit the visited continue
+
 
 @pytest.mark.asyncio
 async def test_sitemap_visited_and_depth():
     mock_crawler = MockAsyncWebCrawler()
     mock_crawler.arun.return_value = MockCrawlerResult(
-        links={"internal": [{"href": "http://safe.com"}, {"href": "http://safe.com/deep"}]}
+        links={
+            "internal": [{"href": "http://safe.com"}, {"href": "http://safe.com/deep"}]
+        }
     )
 
-    with patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler), \
-         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
-
+    with (
+        patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+    ):
         result_json = await crawler.sitemap(["http://safe.com"], depth=1, max_pages=5)
         json.loads(result_json)
+
 
 @pytest.mark.asyncio
 async def test_download_media_redirect_no_location(tmp_path):
     mock_client = AsyncMock()
     mock_client.get.return_value = MockResponse(is_redirect=True, headers={})
 
-    with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True), \
-         patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_client), __aexit__=AsyncMock())):
-
-        result_json = await crawler.download_media(["http://safe.com/image.jpg"], str(tmp_path))
+    with (
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+        patch(
+            "httpx.AsyncClient",
+            return_value=AsyncMock(
+                __aenter__=AsyncMock(return_value=mock_client), __aexit__=AsyncMock()
+            ),
+        ),
+    ):
+        result_json = await crawler.download_media(
+            ["http://safe.com/image.jpg"], str(tmp_path)
+        )
         data = json.loads(result_json)
         assert len(data) == 1
+
 
 @pytest.mark.asyncio
 async def test_download_media_too_many_redirects(tmp_path):
     mock_client = AsyncMock()
-    mock_client.get.return_value = MockResponse(is_redirect=True, headers={"Location": "/loop.jpg"})
+    mock_client.get.return_value = MockResponse(
+        is_redirect=True, headers={"Location": "/loop.jpg"}
+    )
 
-    with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True), \
-         patch("httpx.AsyncClient", return_value=AsyncMock(__aenter__=AsyncMock(return_value=mock_client), __aexit__=AsyncMock())):
-
-        result_json = await crawler.download_media(["http://safe.com/loop.jpg"], str(tmp_path))
+    with (
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+        patch(
+            "httpx.AsyncClient",
+            return_value=AsyncMock(
+                __aenter__=AsyncMock(return_value=mock_client), __aexit__=AsyncMock()
+            ),
+        ),
+    ):
+        result_json = await crawler.download_media(
+            ["http://safe.com/loop.jpg"], str(tmp_path)
+        )
         data = json.loads(result_json)
         assert len(data) == 1
