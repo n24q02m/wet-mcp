@@ -1,6 +1,6 @@
 [project]
 name = "wet-mcp"
-version = "2.9.1"
+version = "2.9.2"
 description = "Open-source MCP Server for web search, extract, crawl, academic research, and library docs with embedded SearXNG"
 readme = "README.md"
 license = { text = "MIT" }
