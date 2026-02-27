@@ -1,0 +1,3 @@
+## 2024-05-24 - SQLite Insert Optimization
+**Learning:** Using `sqlite3.Cursor.executemany` for bulk inserting records into SQLite tables and virtual tables (like `sqlite-vec`) is significantly faster and more resource-efficient than iterating and calling `.execute()` individually for each row inside a loop. This avoids multiple context switches between Python and SQLite, as well as multiple internal statement preparations per row.
+**Action:** When bulk inserting documents, vectors, or chunks into an SQLite database (including vector search tables), always construct a list of parameter tuples and use `executemany()`.
