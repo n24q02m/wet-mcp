@@ -4,6 +4,7 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from wet_mcp.config import settings
 from wet_mcp.llm import analyze_media, get_llm_config
@@ -16,7 +17,7 @@ def mock_settings():
     original_models = settings.llm_models
     original_temperature = settings.llm_temperature
 
-    settings.api_keys = "GOOGLE_API_KEY:fake-key"
+    settings.api_keys = SecretStr("GOOGLE_API_KEY:fake-key")
     settings.llm_models = "gemini/fake-model"
     settings.llm_temperature = None
 
