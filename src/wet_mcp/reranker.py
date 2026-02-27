@@ -91,7 +91,11 @@ class LiteLLMReranker:
             return []
 
     def check_available(self) -> bool:
-        """Check if LiteLLM reranking model is available."""
+        """Check if LiteLLM reranking model is available.
+
+        Distinguishes between invalid API keys (warning) and other
+        failures (debug) so users know when their keys are wrong.
+        """
         try:
             import litellm
 
@@ -103,7 +107,16 @@ class LiteLLMReranker:
             )
             return bool(response.results)
         except Exception as e:
-            logger.debug(f"LiteLLM reranker {self.model} not available: {e}")
+            msg = str(e).lower()
+            if any(
+                p in msg for p in ("401", "403", "invalid", "unauthorized", "api key")
+            ):
+                logger.warning(
+                    f"API key invalid for reranker {self.model}: {e}. "
+                    "Check your API_KEYS configuration."
+                )
+            else:
+                logger.debug(f"LiteLLM reranker {self.model} not available: {e}")
             return False
 
 
@@ -127,11 +140,19 @@ class Qwen3Reranker:
         self._model = None
 
     def _get_model(self):
-        """Lazy-load the reranking model."""
+        """Lazy-load the reranking model.
+
+        On first call, downloads the ONNX model (~570 MB) from HuggingFace
+        if not already cached. Logs a warning so users know why startup is slow.
+        """
         if self._model is None:
             from qwen3_embed import TextCrossEncoder
 
-            logger.info(f"Loading local reranker model: {self._model_name}")
+            logger.warning(
+                f"Loading local reranker model: {self._model_name} "
+                "(~570 MB download on first run). "
+                "Set API_KEYS with COHERE_API_KEY to use cloud reranking instead."
+            )
             self._model = TextCrossEncoder(model_name=self._model_name)
             logger.info("Local reranker model loaded")
         return self._model

@@ -19,7 +19,9 @@ async def test_search_success():
 
         result = await search(action="search", query="test query")
 
-        assert result == "Search Results"
+        assert "Search Results" in result
+        assert "<untrusted_search_content>" in result
+        assert "[SECURITY:" in result
         mock_ensure.assert_called_once()
         mock_search.assert_called_once_with(
             searxng_url="http://localhost:8080",
@@ -44,7 +46,9 @@ async def test_extract_success():
 
         result = await extract(action="extract", urls=["https://example.com"])
 
-        assert result == "Extracted Content"
+        assert "Extracted Content" in result
+        assert "<untrusted_extract_content>" in result
+        assert "[SECURITY:" in result
         mock_extract.assert_called_once_with(
             urls=["https://example.com"],
             format="markdown",
@@ -65,7 +69,8 @@ async def test_extract_with_options():
             stealth=False,
         )
 
-        assert result == "Extracted Content"
+        assert "Extracted Content" in result
+        assert "<untrusted_extract_content>" in result
         mock_extract.assert_called_once_with(
             urls=["https://example.com"],
             format="json",
@@ -95,7 +100,8 @@ async def test_crawl_success():
             stealth=False,
         )
 
-        assert result == "Crawl Results"
+        assert "Crawl Results" in result
+        assert "<untrusted_extract_content>" in result
         mock_crawl.assert_called_once_with(
             urls=["https://example.com"],
             depth=3,
@@ -113,7 +119,8 @@ async def test_crawl_defaults():
 
         result = await extract(action="crawl", urls=["https://example.com"])
 
-        assert result == "Crawl Results"
+        assert "Crawl Results" in result
+        assert "<untrusted_extract_content>" in result
         mock_crawl.assert_called_once_with(
             urls=["https://example.com"],
             depth=2,
@@ -140,7 +147,8 @@ async def test_map_success():
             action="map", urls=["https://example.com"], depth=3, max_pages=50
         )
 
-        assert result == "Sitemap Content"
+        assert "Sitemap Content" in result
+        assert "<untrusted_extract_content>" in result
         mock_sitemap.assert_called_once_with(
             urls=["https://example.com"],
             depth=3,
@@ -156,7 +164,8 @@ async def test_map_defaults():
 
         result = await extract(action="map", urls=["https://example.com"])
 
-        assert result == "Sitemap Content"
+        assert "Sitemap Content" in result
+        assert "<untrusted_extract_content>" in result
         mock_sitemap.assert_called_once_with(
             urls=["https://example.com"],
             depth=2,

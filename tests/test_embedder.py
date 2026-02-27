@@ -461,6 +461,77 @@ class TestLegacyCompat:
 # -----------------------------------------------------------------------
 
 
+class TestCheckAvailableApiKeyValidation:
+    """check_available() distinguishes API key errors from other failures."""
+
+    def test_api_key_401_returns_zero(self):
+        """401 errors are caught and return 0."""
+        backend = LiteLLMBackend("model")
+        with patch("litellm.embedding", side_effect=Exception("401 Unauthorized")):
+            assert backend.check_available() == 0
+
+    def test_api_key_403_returns_zero(self):
+        """403 forbidden returns 0."""
+        backend = LiteLLMBackend("model")
+        with patch("litellm.embedding", side_effect=Exception("403 Forbidden")):
+            assert backend.check_available() == 0
+
+    def test_invalid_key_detected(self):
+        """'invalid' keyword in error is caught."""
+        backend = LiteLLMBackend("model")
+        with patch(
+            "litellm.embedding",
+            side_effect=Exception("Invalid API key provided"),
+        ):
+            assert backend.check_available() == 0
+
+    def test_unauthorized_detected(self):
+        """'unauthorized' keyword in error is caught."""
+        backend = LiteLLMBackend("model")
+        with patch(
+            "litellm.embedding",
+            side_effect=Exception("Unauthorized access"),
+        ):
+            assert backend.check_available() == 0
+
+    def test_non_auth_error_returns_zero(self):
+        """Non-auth errors (e.g. model not found) also return 0."""
+        backend = LiteLLMBackend("model")
+        with patch(
+            "litellm.embedding",
+            side_effect=Exception("Model not found"),
+        ):
+            assert backend.check_available() == 0
+
+    def test_success_returns_dims(self):
+        """Successful check returns embedding dimensions."""
+        backend = LiteLLMBackend("model")
+        mock_response = MagicMock()
+        mock_response.data = [{"embedding": [0.1, 0.2, 0.3]}]
+        with patch("litellm.embedding", return_value=mock_response):
+            assert backend.check_available() == 3
+
+
+class TestQwen3GetModelWarning:
+    """_get_model() logs download warning and check_available edge cases."""
+
+    def test_check_available_import_error(self):
+        """Returns 0 when qwen3-embed is not installed."""
+        backend = Qwen3EmbedBackend()
+        with patch.object(backend, "_get_model", side_effect=ImportError("No module")):
+            assert backend.check_available() == 0
+
+    def test_check_available_success(self):
+        """Returns dims when local model works."""
+        import numpy as np
+
+        backend = Qwen3EmbedBackend()
+        mock_model = MagicMock()
+        mock_model.embed.return_value = iter([np.array([0.1, 0.2, 0.3])])
+        with patch.object(backend, "_get_model", return_value=mock_model):
+            assert backend.check_available() == 3
+
+
 class TestLoggingSuppression:
     def test_litellm_logger_suppressed(self):
         """LiteLLM logger should be suppressed to ERROR level after backend init."""

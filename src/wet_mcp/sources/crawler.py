@@ -9,6 +9,7 @@ overwhelm the browser or exhaust system memory.
 """
 
 import asyncio
+import collections
 import json
 import os
 import tempfile
@@ -19,6 +20,7 @@ import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
+from wet_mcp.config import settings
 from wet_mcp.security import is_safe_url
 
 # ---------------------------------------------------------------------------
@@ -273,10 +275,13 @@ async def crawl(
             logger.warning(f"Skipping unsafe URL: {root_url}")
             continue
 
-        to_crawl: list[tuple[str, int]] = [(root_url, 0)]
+        # Use deque for O(1) pops (BFS)
+        to_crawl: collections.deque[tuple[str, int]] = collections.deque(
+            [(root_url, 0)]
+        )
 
         while to_crawl and len(all_results) < max_pages:
-            url, current_depth = to_crawl.pop(0)
+            url, current_depth = to_crawl.popleft()
 
             if url in visited or current_depth > depth:
                 continue
@@ -353,11 +358,14 @@ async def sitemap(
             logger.warning(f"Skipping unsafe URL: {root_url}")
             continue
 
-        to_visit: list[tuple[str, int]] = [(root_url, 0)]
+        # Use deque for O(1) pops (BFS)
+        to_visit: collections.deque[tuple[str, int]] = collections.deque(
+            [(root_url, 0)]
+        )
         site_urls: list[dict[str, object]] = []
 
         while to_visit and len(site_urls) < max_pages:
-            url, current_depth = to_visit.pop(0)
+            url, current_depth = to_visit.popleft()
 
             if url in visited or current_depth > depth:
                 continue
@@ -531,7 +539,7 @@ async def download_media(
                 }
 
     async with httpx.AsyncClient(
-        timeout=60, transport=transport, headers=headers
+        timeout=settings.crawler_timeout, transport=transport, headers=headers
     ) as client:
         tasks = [_download_one(url, client) for url in media_urls]
         results = await asyncio.gather(*tasks)
