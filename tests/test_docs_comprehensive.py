@@ -50,13 +50,13 @@ async def test_all_registries():
             "repository": {"url": "git://github.com/a/b.git"},
             "homepage": "http://a.com",
         }
-        await _discover_from_npm("test")
+        await _discover_from_npm("test")  # type: ignore
 
         # pypi
         mock_response.json.return_value = {
             "info": {"project_urls": {"Documentation": "http://docs.org"}}
         }
-        await _discover_from_pypi("test")
+        await _discover_from_pypi("test")  # type: ignore
 
         # crates
         mock_response.json.return_value = {
@@ -65,52 +65,52 @@ async def test_all_registries():
                 "repository": "http://github.com",
             }
         }
-        await _discover_from_crates("test")
+        await _discover_from_crates("test")  # type: ignore
 
         # go
         mock_response.text = 'href="https://pkg.go.dev/test"'
-        await _discover_from_go("test")
+        await _discover_from_go("test")  # type: ignore
 
         # hex
         mock_response.json.return_value = {
             "meta": {"links": {"GitHub": "http://github.com"}}
         }
-        await _discover_from_hex("test")
+        await _discover_from_hex("test")  # type: ignore
 
         # packagist
         mock_response.json.return_value = {
             "packages": {"test": [{"source": {"url": "http://github.com"}}]}
         }
-        await _discover_from_packagist("test")
+        await _discover_from_packagist("test")  # type: ignore
 
         # pubdev
         mock_response.json.return_value = {
             "latest": {"pubspec": {"homepage": "http://pub.dev"}}
         }
-        await _discover_from_pubdev("test")
+        await _discover_from_pubdev("test")  # type: ignore
 
         # rubygems
         mock_response.json.return_value = {"documentation_uri": "http://docs.ruby"}
-        await _discover_from_rubygems("test")
+        await _discover_from_rubygems("test")  # type: ignore
 
         # nuget
         mock_response.json.return_value = {
             "data": [{"projectUrl": "http://docs.nuget"}]
         }
-        await _discover_from_nuget("test")
+        await _discover_from_nuget("test")  # type: ignore
 
         # maven
         mock_response.json.return_value = {
             "response": {"docs": [{"g": "com", "a": "test"}]}
         }
-        await _discover_from_maven("test")
+        await _discover_from_maven("test")  # type: ignore
 
         # Github search
         mock_response.json.return_value = {
             "items": [
                 {
                     "html_url": "http://github.com/test",
-                    "homepage": "http://docs.test",
+                    "homepage": "https://docs.test",
                     "description": "Test",
                 }
             ]
@@ -122,7 +122,7 @@ async def test_all_registries():
 @patch("wet_mcp.sources.docs._get_github_homepage")
 @patch("wet_mcp.sources.docs._probe_docs_url")
 async def test_discover_library(mock_probe, mock_get_gh):
-    mock_probe.return_value = "http://docs.test"
+    mock_probe.return_value = "https://docs.test"
     mock_get_gh.return_value = "http://gh"
 
     with patch("httpx.AsyncClient") as MockClient:
@@ -140,7 +140,7 @@ async def test_discover_library(mock_probe, mock_get_gh):
 
         res = await discover_library("test", "javascript")
         assert res is not None
-        assert res["homepage"] == "http://docs.test"
+        assert res["homepage"] == "https://docs.test"
 
 
 @pytest.mark.asyncio
@@ -171,7 +171,7 @@ async def test_try_llms_txt():
         mock_response.text = "Some LLM text"
         mock_instance.get.return_value = mock_response
 
-        await try_llms_txt("http://docs.test")
+        await try_llms_txt("https://docs.test")
 
 
 @pytest.mark.asyncio
@@ -200,13 +200,13 @@ async def test_fetch_docs_pages():
             ) as mock_objects:
                 mock_objects.return_value = []
 
-                res = await fetch_docs_pages("http://docs.test", query="test")
+                res = await fetch_docs_pages("https://docs.test", query="test")  # type: ignore
                 assert len(res) > 0
 
 
 def test_sync_functions():
-    chunk_markdown("## Test\n\nContent", "http://docs.test", "test")
-    chunk_llms_txt("## Section 1\nContent 1", "http://docs.test")
+    chunk_markdown("## Test\n\nContent", "https://docs.test", "test")  # type: ignore
+    chunk_llms_txt("## Section 1\nContent 1", "https://docs.test")
 
 
 @pytest.mark.asyncio
@@ -378,7 +378,7 @@ async def test_fetch_docs_pages_thorough():
             ) as mock_objects:
                 mock_objects.return_value = []
 
-                res = await fetch_docs_pages("http://docs.test", max_pages=10)
+                res = await fetch_docs_pages("https://docs.test", max_pages=10)
                 assert len(res) == 3
                 urls = [r["url"] for r in res]
                 assert "http://docs.test/" in urls
