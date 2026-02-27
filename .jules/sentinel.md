@@ -1,0 +1,4 @@
+## 2026-02-27 - URL Encoded Path Traversal Bypass
+**Vulnerability:** A path traversal vulnerability was found in the `download_media` file download logic (`src/wet_mcp/sources/crawler.py`). The attacker could bypass path traversal checks (`filepath.is_relative_to(output_path)`) using URL-encoded sequences (e.g., `%2e%2e%2f` for `../`).
+**Learning:** `Path.resolve()` and string splitting do not decode URL-encoded characters. Because of this, `is_relative_to` considers a path like `/tmp/out/%2e%2e%2fetc%2fpasswd` safe (relative to `/tmp/out`), even though the decoded intent is malicious (`/etc/passwd`). Depending on how downstream functions or other tools handle the generated filename, this could allow arbitrary file reads or writes.
+**Prevention:** Always `unquote` paths retrieved from a URL with `urllib.parse.unquote`, then use `Path(unquoted_path).name` to extract just the base filename securely, completely stripping out any traversal elements before saving.
