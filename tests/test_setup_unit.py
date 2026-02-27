@@ -3,7 +3,6 @@
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 import sys
-import importlib.metadata
 
 import pytest
 
