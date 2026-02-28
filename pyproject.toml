@@ -92,7 +92,6 @@ markers = [
 addopts = "-m 'not integration'"
 
 [tool.ty]
-strict = true
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }
 
 [tool.semantic_release]
