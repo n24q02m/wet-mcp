@@ -51,6 +51,8 @@ dev = [
     "ty",
     "pre-commit",
     "pytest-cov>=7.0.0",
+    "pytest-xdist>=3.8.0",
+    "syrupy>=5.1.0",
 ]
 
 [project.scripts]
@@ -90,6 +92,7 @@ markers = [
 addopts = "-m 'not integration'"
 
 [tool.ty]
+strict = true
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }
 
 [tool.semantic_release]

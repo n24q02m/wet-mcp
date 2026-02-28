@@ -39,6 +39,14 @@
 
 **On first run**, the server automatically installs SearXNG, Playwright chromium, and starts the embedded search engine.
 
+The recommended way to run this server is via `uvx`:
+
+```bash
+uvx --python 3.13 wet-mcp@latest
+```
+
+> Alternatively, you can use `pipx run --python python3.13 wet-mcp`.
+
 ### Option 1: uvx (Recommended)
 
 ```jsonc
