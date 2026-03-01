@@ -2,7 +2,17 @@ import ipaddress
 import socket
 from urllib.parse import urlparse
 
+import httpx
 from loguru import logger
+
+
+async def verify_safe_request(request: httpx.Request) -> None:
+    """HTTPX event hook to verify URLs are safe before fetching."""
+    url_str = str(request.url)
+    if not is_safe_url(url_str):
+        raise httpx.RequestError(
+            f"Security Alert: Unsafe URL blocked ({url_str})", request=request
+        )
 
 
 def is_safe_url(url: str) -> bool:

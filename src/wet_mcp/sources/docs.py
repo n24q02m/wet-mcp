@@ -24,6 +24,8 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from loguru import logger
 
+from wet_mcp.security import verify_safe_request
+
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
 DISCOVERY_VERSION = 24
@@ -187,7 +189,11 @@ async def _discover_from_go(name: str) -> dict | None:
     This enables discovery of Go-only libraries like gin, echo, etc.
     """
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=15,
+            follow_redirects=True,
+            event_hooks={"request": [verify_safe_request]},
+        ) as client:
             # For Go packages with slash (e.g. "gorilla/mux"), search by
             # org or full name; for simple names, search by name alone.
             search_name = name.split("/")[-1] if "/" in name else name
@@ -632,7 +638,11 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
     async def _search_github(query: str) -> list[dict]:
         """Execute a single GitHub search and return items."""
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                timeout=15,
+                follow_redirects=True,
+                event_hooks={"request": [verify_safe_request]},
+            ) as client:
                 resp = await client.get(
                     "https://api.github.com/search/repositories",
                     params={
@@ -761,7 +771,11 @@ async def _get_github_homepage(url: str) -> str | None:
     owner, repo = m.group(1), m.group(2)
 
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=10,
+            follow_redirects=True,
+            event_hooks={"request": [verify_safe_request]},
+        ) as client:
             resp = await client.get(
                 f"https://api.github.com/repos/{owner}/{repo}",
                 headers=_github_headers(),
@@ -888,7 +902,11 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
 
     async def _check(label: str, url: str) -> tuple[str, str, int, bool] | None:
         try:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                timeout=10,
+                follow_redirects=True,
+                event_hooks={"request": [verify_safe_request]},
+            ) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     return None
@@ -1555,7 +1573,11 @@ async def try_llms_txt(base_url: str) -> str | None:
     for filename in ("llms-full.txt", "llms.txt"):
         url = f"{origin}/{filename}"
         try:
-            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                timeout=20,
+                follow_redirects=True,
+                event_hooks={"request": [verify_safe_request]},
+            ) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     content = resp.text
@@ -2592,7 +2614,11 @@ async def _fetch_github_readme(repo_url: str) -> list[dict] | None:
 
     owner, repo = match.group(1), match.group(2)
 
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+    async with httpx.AsyncClient(
+        timeout=15,
+        follow_redirects=True,
+        event_hooks={"request": [verify_safe_request]},
+    ) as client:
         # Try common README filenames on HEAD (avoids an API call to
         # resolve default branch).
         for fname in (
@@ -2832,7 +2858,11 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
     for path in ("/sitemap.xml", "/sitemap_index.xml"):
         url = f"{origin}{path}"
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                timeout=15,
+                follow_redirects=True,
+                event_hooks={"request": [verify_safe_request]},
+            ) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     continue
@@ -2903,7 +2933,11 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
     """
     # Resolve the actual base URL (handle redirects like / -> /en/latest/)
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=15,
+            follow_redirects=True,
+            event_hooks={"request": [verify_safe_request]},
+        ) as client:
             resp = await client.get(base_url)
             actual_url = str(resp.url).rstrip("/") + "/"
     except Exception:
@@ -2927,7 +2961,11 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
             unique_candidates.append(c)
 
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=15,
+            follow_redirects=True,
+            event_hooks={"request": [verify_safe_request]},
+        ) as client:
             for inv_url in unique_candidates:
                 try:
                     resp = await client.get(inv_url)
