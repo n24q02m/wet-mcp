@@ -1,0 +1,3 @@
+## 2025-02-17 - Optimize Registry Discovery Client Initialization
+**Learning:** `discover_library` concurrently executes multiple registry discovery tasks (`_discover_from_npm`, `_discover_from_pypi`, etc.). Previously, each discovery function redundantly initialized its own `httpx.AsyncClient`. This resulted in excessive client creation and socket setup overhead when querying registries in parallel.
+**Action:** Lift `httpx.AsyncClient` creation into the parent `discover_library` function and pass it as an argument (`client: httpx.AsyncClient`) to all nested API calls. This allows connection pooling and significantly speeds up library documentation discovery.

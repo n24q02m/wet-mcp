@@ -43,143 +43,140 @@ def _github_headers() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-async def _discover_from_npm(name: str) -> dict | None:
+async def _discover_from_npm(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query npm registry for package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(f"https://registry.npmjs.org/{name}")
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
+        resp = await client.get(f"https://registry.npmjs.org/{name}")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
 
-            # Detect deprecated packages (npm deprecate-holder, squatted names)
-            is_deprecated = False
-            dist_tags = data.get("dist-tags", {})
-            latest_ver = dist_tags.get("latest", "")
-            if latest_ver and isinstance(data.get("versions"), dict):
-                ver_info = data["versions"].get(latest_ver, {})
-                if ver_info.get("deprecated"):
-                    is_deprecated = True
+        # Detect deprecated packages (npm deprecate-holder, squatted names)
+        is_deprecated = False
+        dist_tags = data.get("dist-tags", {})
+        latest_ver = dist_tags.get("latest", "")
+        if latest_ver and isinstance(data.get("versions"), dict):
+            ver_info = data["versions"].get(latest_ver, {})
+            if ver_info.get("deprecated"):
+                is_deprecated = True
 
-            repo_url = (
-                data.get("repository", {}).get("url", "")
-                if isinstance(data.get("repository"), dict)
-                else (data.get("repository") or "")
-            )
-            # npm shorthand "owner/repo" → full GitHub URL
-            if (
-                repo_url
-                and "/" in repo_url
-                and "://" not in repo_url
-                and not repo_url.startswith("git+")
-            ):
-                repo_url = f"https://github.com/{repo_url}"
-            return {
-                "name": data.get("name", name),
-                "description": data.get("description", ""),
-                "homepage": data.get("homepage") or "",
-                "repository": repo_url,
-                "registry": "npm",
-                "deprecated": is_deprecated,
-            }
+        repo_url = (
+            data.get("repository", {}).get("url", "")
+            if isinstance(data.get("repository"), dict)
+            else (data.get("repository") or "")
+        )
+        # npm shorthand "owner/repo" → full GitHub URL
+        if (
+            repo_url
+            and "/" in repo_url
+            and "://" not in repo_url
+            and not repo_url.startswith("git+")
+        ):
+            repo_url = f"https://github.com/{repo_url}"
+        return {
+            "name": data.get("name", name),
+            "description": data.get("description", ""),
+            "homepage": data.get("homepage") or "",
+            "repository": repo_url,
+            "registry": "npm",
+            "deprecated": is_deprecated,
+        }
     except Exception as e:
         logger.debug(f"npm lookup failed for {name}: {e}")
         return None
 
 
-async def _discover_from_pypi(name: str) -> dict | None:
+async def _discover_from_pypi(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query PyPI JSON API for package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(f"https://pypi.org/pypi/{name}/json")
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            info = data.get("info", {})
-            project_urls = info.get("project_urls") or {}
-            # Case-insensitive project_urls lookup (PyPI has inconsistent casing)
-            project_urls_lower = {k.lower(): v for k, v in project_urls.items() if v}
-            docs_url = (
-                project_urls_lower.get("documentation")
-                or project_urls_lower.get("docs")
-                or project_urls_lower.get("homepage")
-                or info.get("docs_url")
-                or info.get("home_page")
-                or ""
-            )
-            repo_url = (
-                project_urls_lower.get("repository")
-                or project_urls_lower.get("source")
-                or project_urls_lower.get("source code")
-                or project_urls_lower.get("code")
-                or ""
-            )
-            # Fallback: extract GitHub URL from any project_urls value
-            # Many PyPI packages list GitHub under "Homepage", "Bug Tracker",
-            # "Changelog", etc. without a dedicated "Repository" key.
-            if not repo_url or "github.com" not in repo_url:
-                for _key, url_val in project_urls_lower.items():
-                    if url_val and "github.com" in url_val:
-                        repo_url = url_val
-                        break
-            # Last resort: check top-level home_page field
-            if not repo_url or "github.com" not in repo_url:
-                hp = info.get("home_page") or ""
-                if "github.com" in hp:
-                    repo_url = hp
-            return {
-                "name": info.get("name", name),
-                "description": info.get("summary") or "",
-                "homepage": docs_url or info.get("home_page") or "",
-                "repository": repo_url,
-                "registry": "pypi",
-            }
+        resp = await client.get(f"https://pypi.org/pypi/{name}/json")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        info = data.get("info", {})
+        project_urls = info.get("project_urls") or {}
+        # Case-insensitive project_urls lookup (PyPI has inconsistent casing)
+        project_urls_lower = {k.lower(): v for k, v in project_urls.items() if v}
+        docs_url = (
+            project_urls_lower.get("documentation")
+            or project_urls_lower.get("docs")
+            or project_urls_lower.get("homepage")
+            or info.get("docs_url")
+            or info.get("home_page")
+            or ""
+        )
+        repo_url = (
+            project_urls_lower.get("repository")
+            or project_urls_lower.get("source")
+            or project_urls_lower.get("source code")
+            or project_urls_lower.get("code")
+            or ""
+        )
+        # Fallback: extract GitHub URL from any project_urls value
+        # Many PyPI packages list GitHub under "Homepage", "Bug Tracker",
+        # "Changelog", etc. without a dedicated "Repository" key.
+        if not repo_url or "github.com" not in repo_url:
+            for _key, url_val in project_urls_lower.items():
+                if url_val and "github.com" in url_val:
+                    repo_url = url_val
+                    break
+        # Last resort: check top-level home_page field
+        if not repo_url or "github.com" not in repo_url:
+            hp = info.get("home_page") or ""
+            if "github.com" in hp:
+                repo_url = hp
+        return {
+            "name": info.get("name", name),
+            "description": info.get("summary") or "",
+            "homepage": docs_url or info.get("home_page") or "",
+            "repository": repo_url,
+            "registry": "pypi",
+        }
     except Exception as e:
         logger.debug(f"PyPI lookup failed for {name}: {e}")
         return None
 
 
-async def _discover_from_crates(name: str) -> dict | None:
+async def _discover_from_crates(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query crates.io API for package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                f"https://crates.io/api/v1/crates/{name}",
-                headers={"User-Agent": "wet-mcp/1.0"},
-            )
-            if resp.status_code != 200:
-                return None
-            crate = resp.json().get("crate", {})
-            docs_url = crate.get("documentation") or ""
-            hp_url = crate.get("homepage") or ""
-            # Filter self-referencing crates.io URLs (listing page, not docs)
-            if hp_url and "crates.io" in hp_url:
-                hp_url = ""
-            # Prefer homepage over docs.rs auto-generated documentation
-            if hp_url:
-                explicit_url = hp_url
-            elif docs_url and "docs.rs" not in docs_url:
-                explicit_url = docs_url
-            else:
-                explicit_url = ""
-            # Use docs.rs fallback when no custom homepage/docs URL exists
-            is_fallback = not explicit_url
-            final_url = explicit_url or docs_url or f"https://docs.rs/{name}"
-            return {
-                "name": crate.get("name", name),
-                "description": crate.get("description") or "",
-                "homepage": final_url,
-                "repository": crate.get("repository") or "",
-                "registry": "crates",
-                "docs_rs_fallback": is_fallback,
-                "downloads": crate.get("downloads") or 0,
-            }
+        resp = await client.get(
+            f"https://crates.io/api/v1/crates/{name}",
+            headers={"User-Agent": "wet-mcp/1.0"},
+        )
+        if resp.status_code != 200:
+            return None
+        crate = resp.json().get("crate", {})
+        docs_url = crate.get("documentation") or ""
+        hp_url = crate.get("homepage") or ""
+        # Filter self-referencing crates.io URLs (listing page, not docs)
+        if hp_url and "crates.io" in hp_url:
+            hp_url = ""
+        # Prefer homepage over docs.rs auto-generated documentation
+        if hp_url:
+            explicit_url = hp_url
+        elif docs_url and "docs.rs" not in docs_url:
+            explicit_url = docs_url
+        else:
+            explicit_url = ""
+        # Use docs.rs fallback when no custom homepage/docs URL exists
+        is_fallback = not explicit_url
+        final_url = explicit_url or docs_url or f"https://docs.rs/{name}"
+        return {
+            "name": crate.get("name", name),
+            "description": crate.get("description") or "",
+            "homepage": final_url,
+            "repository": crate.get("repository") or "",
+            "registry": "crates",
+            "docs_rs_fallback": is_fallback,
+            "downloads": crate.get("downloads") or 0,
+        }
     except Exception as e:
         logger.debug(f"crates.io lookup failed for {name}: {e}")
         return None
 
 
-async def _discover_from_go(name: str) -> dict | None:
+async def _discover_from_go(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query pkg.go.dev for Go module metadata.
 
     Searches pkg.go.dev for the package name and returns the top result.
@@ -187,63 +184,62 @@ async def _discover_from_go(name: str) -> dict | None:
     This enables discovery of Go-only libraries like gin, echo, etc.
     """
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            # For Go packages with slash (e.g. "gorilla/mux"), search by
-            # org or full name; for simple names, search by name alone.
-            search_name = name.split("/")[-1] if "/" in name else name
-            # Try GitHub search for Go repos with this name
-            resp = await client.get(
-                "https://api.github.com/search/repositories",
-                params={
-                    "q": f"{search_name} language:go",
-                    "sort": "stars",
-                    "per_page": 5,
-                },
-                headers=_github_headers(),
-            )
-            if resp.status_code != 200:
-                return None
-            items = resp.json().get("items", [])
-            if not items:
-                return None
+        # For Go packages with slash (e.g. "gorilla/mux"), search by
+        # org or full name; for simple names, search by name alone.
+        search_name = name.split("/")[-1] if "/" in name else name
+        # Try GitHub search for Go repos with this name
+        resp = await client.get(
+            "https://api.github.com/search/repositories",
+            params={
+                "q": f"{search_name} language:go",
+                "sort": "stars",
+                "per_page": 5,
+            },
+            headers=_github_headers(),
+        )
+        if resp.status_code != 200:
+            return None
+        items = resp.json().get("items", [])
+        if not items:
+            return None
 
-            # Find the most relevant Go repo
-            name_lower = name.lower()
-            for item in items:
-                repo_name = item.get("name", "").lower()
-                full_name = item.get("full_name", "")
-                full_name_lower = full_name.lower()
-                # Match by repo name OR full_name for org/repo style
-                name_match = False
-                if "/" in name_lower:
-                    # "gorilla/mux" should match full_name "gorilla/mux"
-                    name_match = full_name_lower == name_lower
-                else:
-                    name_match = repo_name == name_lower
-                if not name_match:
-                    continue
-                if item.get("language", "").lower() != "go":
-                    continue
-                # Require minimum popularity to avoid junk/clone repos
-                stars = item.get("stargazers_count", 0)
-                if stars < 50:
-                    continue
-                homepage = item.get("homepage") or ""
-                description = item.get("description") or ""
-                repo_url = item.get("html_url") or ""
-                # Use homepage if it's a real docs domain (not github.com itself)
-                if homepage and "github.com" not in homepage.lower():
-                    docs_url = homepage
-                else:
-                    docs_url = f"https://pkg.go.dev/github.com/{full_name}"
-                return {
-                    "name": name,
-                    "description": description,
-                    "homepage": docs_url,
-                    "repository": repo_url,
-                    "registry": "go",
-                    "stars": stars,
-                }
+        # Find the most relevant Go repo
+        name_lower = name.lower()
+        for item in items:
+            repo_name = item.get("name", "").lower()
+            full_name = item.get("full_name", "")
+            full_name_lower = full_name.lower()
+            # Match by repo name OR full_name for org/repo style
+            name_match = False
+            if "/" in name_lower:
+                # "gorilla/mux" should match full_name "gorilla/mux"
+                name_match = full_name_lower == name_lower
+            else:
+                name_match = repo_name == name_lower
+            if not name_match:
+                continue
+            if item.get("language", "").lower() != "go":
+                continue
+            # Require minimum popularity to avoid junk/clone repos
+            stars = item.get("stargazers_count", 0)
+            if stars < 50:
+                continue
+            homepage = item.get("homepage") or ""
+            description = item.get("description") or ""
+            repo_url = item.get("html_url") or ""
+            # Use homepage if it's a real docs domain (not github.com itself)
+            if homepage and "github.com" not in homepage.lower():
+                docs_url = homepage
+            else:
+                docs_url = f"https://pkg.go.dev/github.com/{full_name}"
+            return {
+                "name": name,
+                "description": description,
+                "homepage": docs_url,
+                "repository": repo_url,
+                "registry": "go",
+                "stars": stars,
+            }
     except Exception as e:
         logger.debug(f"Go module lookup failed for {name}: {e}")
         return None
@@ -254,221 +250,216 @@ async def _discover_from_go(name: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-async def _discover_from_hex(name: str) -> dict | None:
+async def _discover_from_hex(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query Hex.pm API for Elixir/Erlang package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                f"https://hex.pm/api/packages/{name}",
-                headers={"Accept": "application/json"},
-            )
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            meta = data.get("meta", {})
-            links = meta.get("links", {})
-            # Case-insensitive links lookup
-            links_lower = {k.lower(): v for k, v in links.items() if v}
-            docs_url = (
-                data.get("docs_html_url")
-                or links_lower.get("documentation")
-                or links_lower.get("docs")
-                or links_lower.get("homepage")
-                or ""
-            )
-            repo_url = (
-                links_lower.get("github")
-                or links_lower.get("repository")
-                or links_lower.get("source")
-                or ""
-            )
-            # Fallback: hexdocs.pm is the standard Elixir docs host
-            if not docs_url:
-                docs_url = f"https://hexdocs.pm/{name}"
-            return {
-                "name": data.get("name", name),
-                "description": meta.get("description") or "",
-                "homepage": docs_url,
-                "repository": repo_url,
-                "registry": "hex",
-                "downloads": data.get("downloads", {}).get("all", 0),
-            }
+        resp = await client.get(
+            f"https://hex.pm/api/packages/{name}",
+            headers={"Accept": "application/json"},
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        meta = data.get("meta", {})
+        links = meta.get("links", {})
+        # Case-insensitive links lookup
+        links_lower = {k.lower(): v for k, v in links.items() if v}
+        docs_url = (
+            data.get("docs_html_url")
+            or links_lower.get("documentation")
+            or links_lower.get("docs")
+            or links_lower.get("homepage")
+            or ""
+        )
+        repo_url = (
+            links_lower.get("github")
+            or links_lower.get("repository")
+            or links_lower.get("source")
+            or ""
+        )
+        # Fallback: hexdocs.pm is the standard Elixir docs host
+        if not docs_url:
+            docs_url = f"https://hexdocs.pm/{name}"
+        return {
+            "name": data.get("name", name),
+            "description": meta.get("description") or "",
+            "homepage": docs_url,
+            "repository": repo_url,
+            "registry": "hex",
+            "downloads": data.get("downloads", {}).get("all", 0),
+        }
     except Exception as e:
         logger.debug(f"Hex.pm lookup failed for {name}: {e}")
         return None
 
 
-async def _discover_from_packagist(name: str) -> dict | None:
+async def _discover_from_packagist(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query Packagist API for PHP package metadata.
 
     ``name`` can be either ``vendor/package`` (exact) or just ``package``
     (searches by keyword and picks the best match).
     """
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            if "/" in name:
-                # Exact vendor/package lookup
-                resp = await client.get(f"https://repo.packagist.org/p2/{name}.json")
-                if resp.status_code != 200:
-                    return None
-                data = resp.json()
-                packages = data.get("packages", {}).get(name, [])
-                if not packages:
-                    return None
-                latest = packages[0]  # First entry is latest
-                return {
-                    "name": name,
-                    "description": latest.get("description") or "",
-                    "homepage": latest.get("homepage") or "",
-                    "repository": latest.get("source", {})
-                    .get("url", "")
-                    .replace("git+", "")
-                    .replace(".git", ""),
-                    "registry": "packagist",
-                }
-            else:
-                # Search by keyword
-                resp = await client.get(
-                    "https://packagist.org/search.json",
-                    params={"q": name, "per_page": 5},
+        if "/" in name:
+            # Exact vendor/package lookup
+            resp = await client.get(f"https://repo.packagist.org/p2/{name}.json")
+            if resp.status_code != 200:
+                return None
+            data = resp.json()
+            packages = data.get("packages", {}).get(name, [])
+            if not packages:
+                return None
+            latest = packages[0]  # First entry is latest
+            return {
+                "name": name,
+                "description": latest.get("description") or "",
+                "homepage": latest.get("homepage") or "",
+                "repository": latest.get("source", {})
+                .get("url", "")
+                .replace("git+", "")
+                .replace(".git", ""),
+                "registry": "packagist",
+            }
+        else:
+            # Search by keyword
+            resp = await client.get(
+                "https://packagist.org/search.json",
+                params={"q": name, "per_page": 5},
+            )
+            if resp.status_code != 200:
+                return None
+            results = resp.json().get("results", [])
+            if not results:
+                return None
+            # Prefer exact name match on package part
+            name_lower = name.lower()
+            best = None
+            for r in results:
+                pkg_name = r.get("name", "")
+                pkg_part = (
+                    pkg_name.split("/")[-1].lower()
+                    if "/" in pkg_name
+                    else pkg_name.lower()
                 )
-                if resp.status_code != 200:
-                    return None
-                results = resp.json().get("results", [])
-                if not results:
-                    return None
-                # Prefer exact name match on package part
-                name_lower = name.lower()
-                best = None
-                for r in results:
-                    pkg_name = r.get("name", "")
-                    pkg_part = (
-                        pkg_name.split("/")[-1].lower()
-                        if "/" in pkg_name
-                        else pkg_name.lower()
-                    )
-                    if pkg_part == name_lower:
-                        best = r
-                        break
-                if not best:
-                    best = results[0]
-                repo_url = best.get("repository") or ""
-                return {
-                    "name": best.get("name", name),
-                    "description": best.get("description") or "",
-                    "homepage": best.get("url") or "",
-                    "repository": repo_url.replace(".git", ""),
-                    "registry": "packagist",
-                    "downloads": best.get("downloads", 0),
-                }
+                if pkg_part == name_lower:
+                    best = r
+                    break
+            if not best:
+                best = results[0]
+            repo_url = best.get("repository") or ""
+            return {
+                "name": best.get("name", name),
+                "description": best.get("description") or "",
+                "homepage": best.get("url") or "",
+                "repository": repo_url.replace(".git", ""),
+                "registry": "packagist",
+                "downloads": best.get("downloads", 0),
+            }
     except Exception as e:
         logger.debug(f"Packagist lookup failed for {name}: {e}")
         return None
 
 
-async def _discover_from_pubdev(name: str) -> dict | None:
+async def _discover_from_pubdev(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query pub.dev API for Dart/Flutter package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(f"https://pub.dev/api/packages/{name}")
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            latest = data.get("latest", {})
-            pubspec = latest.get("pubspec", {})
-            docs_url = pubspec.get("documentation") or pubspec.get("homepage") or ""
-            repo_url = pubspec.get("repository") or ""
-            # Fallback: pub.dev documentation page
-            if not docs_url:
-                docs_url = f"https://pub.dev/documentation/{name}/latest/"
-            return {
-                "name": pubspec.get("name", name),
-                "description": pubspec.get("description") or "",
-                "homepage": docs_url,
-                "repository": repo_url,
-                "registry": "pubdev",
-            }
+        resp = await client.get(f"https://pub.dev/api/packages/{name}")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        latest = data.get("latest", {})
+        pubspec = latest.get("pubspec", {})
+        docs_url = pubspec.get("documentation") or pubspec.get("homepage") or ""
+        repo_url = pubspec.get("repository") or ""
+        # Fallback: pub.dev documentation page
+        if not docs_url:
+            docs_url = f"https://pub.dev/documentation/{name}/latest/"
+        return {
+            "name": pubspec.get("name", name),
+            "description": pubspec.get("description") or "",
+            "homepage": docs_url,
+            "repository": repo_url,
+            "registry": "pubdev",
+        }
     except Exception as e:
         logger.debug(f"pub.dev lookup failed for {name}: {e}")
         return None
 
 
-async def _discover_from_rubygems(name: str) -> dict | None:
+async def _discover_from_rubygems(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query RubyGems API for Ruby gem metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(f"https://rubygems.org/api/v1/gems/{name}.json")
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            docs_url = data.get("documentation_uri") or data.get("homepage_uri") or ""
-            repo_url = data.get("source_code_uri") or ""
-            # Fallback: extract GitHub URL from any URI field
-            if not repo_url or "github.com" not in repo_url:
-                for key in ("homepage_uri", "bug_tracker_uri", "changelog_uri"):
-                    val = data.get(key) or ""
-                    if "github.com" in val:
-                        repo_url = val
-                        break
-            return {
-                "name": data.get("name", name),
-                "description": data.get("info") or "",
-                "homepage": docs_url,
-                "repository": repo_url,
-                "registry": "rubygems",
-                "downloads": data.get("downloads", 0),
-            }
+        resp = await client.get(f"https://rubygems.org/api/v1/gems/{name}.json")
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        docs_url = data.get("documentation_uri") or data.get("homepage_uri") or ""
+        repo_url = data.get("source_code_uri") or ""
+        # Fallback: extract GitHub URL from any URI field
+        if not repo_url or "github.com" not in repo_url:
+            for key in ("homepage_uri", "bug_tracker_uri", "changelog_uri"):
+                val = data.get(key) or ""
+                if "github.com" in val:
+                    repo_url = val
+                    break
+        return {
+            "name": data.get("name", name),
+            "description": data.get("info") or "",
+            "homepage": docs_url,
+            "repository": repo_url,
+            "registry": "rubygems",
+            "downloads": data.get("downloads", 0),
+        }
     except Exception as e:
         logger.debug(f"RubyGems lookup failed for {name}: {e}")
         return None
 
 
-async def _discover_from_nuget(name: str) -> dict | None:
+async def _discover_from_nuget(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query NuGet API for .NET/C# package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            # NuGet service index → registration endpoint
-            resp = await client.get(
-                f"https://api.nuget.org/v3/registration5-gz-semver2/{name.lower()}/index.json",
-                headers={"Accept": "application/json"},
-            )
-            if resp.status_code != 200:
-                return None
-            data = resp.json()
-            # Get the latest catalog entry
-            pages = data.get("items", [])
-            if not pages:
-                return None
-            last_page = pages[-1]
-            items = last_page.get("items")
-            if not items:
-                # Need to fetch the page
-                page_url = last_page.get("@id")
-                if page_url:
-                    page_resp = await client.get(page_url)
-                    if page_resp.status_code == 200:
-                        items = page_resp.json().get("items", [])
-            if not items:
-                return None
-            latest = items[-1].get("catalogEntry", {})
-            project_url = latest.get("projectUrl") or ""
-            repo_url = ""
-            # Extract GitHub repo from project URL if available
-            if project_url and "github.com" in project_url:
-                repo_url = project_url
-            return {
-                "name": latest.get("id", name),
-                "description": latest.get("description") or "",
-                "homepage": project_url,
-                "repository": repo_url,
-                "registry": "nuget",
-            }
+        # NuGet service index → registration endpoint
+        resp = await client.get(
+            f"https://api.nuget.org/v3/registration5-gz-semver2/{name.lower()}/index.json",
+            headers={"Accept": "application/json"},
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        # Get the latest catalog entry
+        pages = data.get("items", [])
+        if not pages:
+            return None
+        last_page = pages[-1]
+        items = last_page.get("items")
+        if not items:
+            # Need to fetch the page
+            page_url = last_page.get("@id")
+            if page_url:
+                page_resp = await client.get(page_url)
+                if page_resp.status_code == 200:
+                    items = page_resp.json().get("items", [])
+        if not items:
+            return None
+        latest = items[-1].get("catalogEntry", {})
+        project_url = latest.get("projectUrl") or ""
+        repo_url = ""
+        # Extract GitHub repo from project URL if available
+        if project_url and "github.com" in project_url:
+            repo_url = project_url
+        return {
+            "name": latest.get("id", name),
+            "description": latest.get("description") or "",
+            "homepage": project_url,
+            "repository": repo_url,
+            "registry": "nuget",
+        }
     except Exception as e:
         logger.debug(f"NuGet lookup failed for {name}: {e}")
         return None
 
 
-async def _discover_from_maven(name: str) -> dict | None:
+async def _discover_from_maven(name: str, client: httpx.AsyncClient) -> dict | None:
     """Query Maven Central for Java/Kotlin/Scala package metadata.
 
     ``name`` can be:
@@ -476,61 +467,60 @@ async def _discover_from_maven(name: str) -> dict | None:
     - ``groupId:artifactId`` (e.g. "com.google.inject:guice") — exact lookup
     """
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            if ":" in name:
-                group_id, artifact_id = name.split(":", 1)
-                q = f'g:"{group_id}" AND a:"{artifact_id}"'
-            else:
-                q = f'a:"{name}"'
-            resp = await client.get(
-                "https://search.maven.org/solrsearch/select",
-                params={"q": q, "rows": 5, "wt": "json"},
-            )
-            if resp.status_code != 200:
-                return None
-            docs = resp.json().get("response", {}).get("docs", [])
-            if not docs:
-                return None
-            # Prefer exact artifactId match
-            name_lower = name.split(":")[-1].lower() if ":" in name else name.lower()
-            best = None
-            for doc in docs:
-                if doc.get("a", "").lower() == name_lower:
-                    best = doc
-                    break
-            if not best:
-                best = docs[0]
-            group_id = best.get("g", "")
-            artifact_id = best.get("a", "")
-            # Build javadoc URL (standard Maven Central pattern)
-            version = best.get("latestVersion") or best.get("v", "")
-            homepage = ""
-            if group_id and artifact_id and version:
-                homepage = f"https://javadoc.io/doc/{group_id}/{artifact_id}/{version}"
-            repo_url = ""
-            # Try to find GitHub repo from scm info via additional API call
-            if group_id and artifact_id and version:
-                try:
-                    pom_url = (
-                        f"https://search.maven.org/solrsearch/select"
-                        f"?q=g:{group_id}+AND+a:{artifact_id}+AND+v:{version}"
-                        f"&rows=1&wt=json"
-                    )
-                    pom_resp = await client.get(pom_url)
-                    if pom_resp.status_code == 200:
-                        pom_docs = pom_resp.json().get("response", {}).get("docs", [])
-                        if pom_docs:
-                            # ec field contains extra info in some responses
-                            pass
-                except Exception:
-                    pass
-            return {
-                "name": f"{group_id}:{artifact_id}" if group_id else name,
-                "description": "",
-                "homepage": homepage,
-                "repository": repo_url,
-                "registry": "maven",
-            }
+        if ":" in name:
+            group_id, artifact_id = name.split(":", 1)
+            q = f'g:"{group_id}" AND a:"{artifact_id}"'
+        else:
+            q = f'a:"{name}"'
+        resp = await client.get(
+            "https://search.maven.org/solrsearch/select",
+            params={"q": q, "rows": 5, "wt": "json"},
+        )
+        if resp.status_code != 200:
+            return None
+        docs = resp.json().get("response", {}).get("docs", [])
+        if not docs:
+            return None
+        # Prefer exact artifactId match
+        name_lower = name.split(":")[-1].lower() if ":" in name else name.lower()
+        best = None
+        for doc in docs:
+            if doc.get("a", "").lower() == name_lower:
+                best = doc
+                break
+        if not best:
+            best = docs[0]
+        group_id = best.get("g", "")
+        artifact_id = best.get("a", "")
+        # Build javadoc URL (standard Maven Central pattern)
+        version = best.get("latestVersion") or best.get("v", "")
+        homepage = ""
+        if group_id and artifact_id and version:
+            homepage = f"https://javadoc.io/doc/{group_id}/{artifact_id}/{version}"
+        repo_url = ""
+        # Try to find GitHub repo from scm info via additional API call
+        if group_id and artifact_id and version:
+            try:
+                pom_url = (
+                    f"https://search.maven.org/solrsearch/select"
+                    f"?q=g:{group_id}+AND+a:{artifact_id}+AND+v:{version}"
+                    f"&rows=1&wt=json"
+                )
+                pom_resp = await client.get(pom_url)
+                if pom_resp.status_code == 200:
+                    pom_docs = pom_resp.json().get("response", {}).get("docs", [])
+                    if pom_docs:
+                        # ec field contains extra info in some responses
+                        pass
+            except Exception:
+                pass
+        return {
+            "name": f"{group_id}:{artifact_id}" if group_id else name,
+            "description": "",
+            "homepage": homepage,
+            "repository": repo_url,
+            "registry": "maven",
+        }
     except Exception as e:
         logger.debug(f"Maven Central lookup failed for {name}: {e}")
         return None
@@ -601,7 +591,9 @@ _GITHUB_LANGUAGE_ACCEPT: dict[str, set[str]] = {
 }
 
 
-async def _discover_from_github_search(name: str, language: str) -> dict | None:
+async def _discover_from_github_search(
+    name: str, language: str, client: httpx.AsyncClient
+) -> dict | None:
     """Search GitHub for a library repo by name and language.
 
     Generic fallback for languages without a dedicated package registry
@@ -632,22 +624,19 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
     async def _search_github(query: str) -> list[dict]:
         """Execute a single GitHub search and return items."""
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-                resp = await client.get(
-                    "https://api.github.com/search/repositories",
-                    params={
-                        "q": query,
-                        "sort": "stars",
-                        "per_page": 10,
-                    },
-                    headers=_github_headers(),
-                )
-                if resp.status_code != 200:
-                    logger.debug(
-                        f"GitHub search returned {resp.status_code} for q={query}"
-                    )
-                    return []
-                return resp.json().get("items", [])
+            resp = await client.get(
+                "https://api.github.com/search/repositories",
+                params={
+                    "q": query,
+                    "sort": "stars",
+                    "per_page": 10,
+                },
+                headers=_github_headers(),
+            )
+            if resp.status_code != 200:
+                logger.debug(f"GitHub search returned {resp.status_code} for q={query}")
+                return []
+            return resp.json().get("items", [])
         except Exception as e:
             logger.debug(f"GitHub search failed for q={query}: {e}")
             return []
@@ -743,7 +732,7 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
     return None
 
 
-async def _get_github_homepage(url: str) -> str | None:
+async def _get_github_homepage(url: str, client: httpx.AsyncClient) -> str | None:
     """Fetch the GitHub repository's homepage URL via the API.
 
     When a package registry (npm) lists a GitHub URL as the homepage
@@ -761,28 +750,27 @@ async def _get_github_homepage(url: str) -> str | None:
     owner, repo = m.group(1), m.group(2)
 
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
-            resp = await client.get(
-                f"https://api.github.com/repos/{owner}/{repo}",
-                headers=_github_headers(),
-            )
-            if resp.status_code != 200:
+        resp = await client.get(
+            f"https://api.github.com/repos/{owner}/{repo}",
+            headers=_github_headers(),
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        gh_homepage = data.get("homepage", "")
+        if gh_homepage and "github.com" not in gh_homepage.lower():
+            # Filter registry listing pages (uninformative, not docs)
+            gh_lower = gh_homepage.lower()
+            if any(
+                reg in gh_lower
+                for reg in (
+                    "crates.io/crates/",
+                    "pypi.org/project/",
+                    "npmjs.com/package/",
+                )
+            ):
                 return None
-            data = resp.json()
-            gh_homepage = data.get("homepage", "")
-            if gh_homepage and "github.com" not in gh_homepage.lower():
-                # Filter registry listing pages (uninformative, not docs)
-                gh_lower = gh_homepage.lower()
-                if any(
-                    reg in gh_lower
-                    for reg in (
-                        "crates.io/crates/",
-                        "pypi.org/project/",
-                        "npmjs.com/package/",
-                    )
-                ):
-                    return None
-                return gh_homepage.rstrip("/")
+            return gh_homepage.rstrip("/")
     except Exception as e:
         logger.debug(f"GitHub homepage check failed for {owner}/{repo}: {e}")
 
@@ -1245,30 +1233,260 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
     This prevents e.g. npm's obscure "fastapi" package from shadowing
     Python's FastAPI, or npm "torch" from shadowing PyTorch.
     """
-    # -------------------------------------------------------------------
-    # Priority 0: Well-known docs — handles tools/platforms not on standard
-    # registries, sub-frameworks, and libraries with generic names that
-    # cause wrong discovery (e.g. "boost" → xgboost, "protobuf" → npm pkg).
-    # -------------------------------------------------------------------
-    well_known = _WELL_KNOWN_DOCS.get(name.lower())
-    if well_known:
-        logger.info(f"Using well-known docs for {name}: {well_known['homepage']}")
-        return {**well_known, "name": name, "registry": "well_known"}
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        # -------------------------------------------------------------------
+        # Priority 0: Well-known docs — handles tools/platforms not on standard
+        # registries, sub-frameworks, and libraries with generic names that
+        # cause wrong discovery (e.g. "boost" → xgboost, "protobuf" → npm pkg).
+        # -------------------------------------------------------------------
+        well_known = _WELL_KNOWN_DOCS.get(name.lower())
+        if well_known:
+            logger.info(f"Using well-known docs for {name}: {well_known['homepage']}")
+            return {**well_known, "name": name, "registry": "well_known"}
 
-    # Build registry tasks based on language filter
-    if language:
-        lang = _normalize_language(language)
-        registry_names = _LANGUAGE_REGISTRIES.get(lang)
-        if registry_names is not None:
-            if not registry_names:
-                # Known language but no registry — try GitHub search
-                logger.info(
-                    f"No registry for language '{language}', "
-                    "trying GitHub search fallback"
+        # Build registry tasks based on language filter
+        if language:
+            lang = _normalize_language(language)
+            registry_names = _LANGUAGE_REGISTRIES.get(lang)
+            if registry_names is not None:
+                if not registry_names:
+                    # Known language but no registry — try GitHub search
+                    logger.info(
+                        f"No registry for language '{language}', "
+                        "trying GitHub search fallback"
+                    )
+                    gh_result = await _discover_from_github_search(name, lang, client)
+                    if gh_result:
+                        # Probe for better docs URL
+                        homepage = gh_result.get("homepage", "")
+                        if homepage and "github.com" not in urlparse(homepage).netloc:
+                            probed = await _probe_docs_url(
+                                homepage, name, registry="github"
+                            )
+                            if probed != homepage:
+                                logger.info(
+                                    f"Probed {name} docs: {homepage} -> {probed}"
+                                )
+                                gh_result["homepage"] = probed
+                        # Try to upgrade GitHub-only homepage via API
+                        repo_url = gh_result.get("repository", "")
+                        if (
+                            homepage
+                            and "github.com" in urlparse(homepage).netloc
+                            and repo_url
+                        ):
+                            gh_hp = await _get_github_homepage(repo_url, client)
+                            if gh_hp:
+                                logger.info(
+                                    f"Upgraded {name} homepage: {homepage} -> {gh_hp}"
+                                )
+                                gh_result["homepage"] = gh_hp
+                        return gh_result
+                    # GitHub search failed — let SearXNG handle
+                    return None
+                # Query only matching registries
+                tasks = [
+                    _REGISTRY_FUNCTIONS[r](name, client)
+                    for r in registry_names
+                    if r in _REGISTRY_FUNCTIONS
+                ]
+            else:
+                # Unknown language — query all registries as fallback
+                tasks = [
+                    _discover_from_npm(name, client),
+                    _discover_from_pypi(name, client),
+                    _discover_from_crates(name, client),
+                    _discover_from_go(name, client),
+                    _discover_from_hex(name, client),
+                    _discover_from_packagist(name, client),
+                    _discover_from_pubdev(name, client),
+                    _discover_from_rubygems(name, client),
+                    _discover_from_nuget(name, client),
+                    _discover_from_maven(name, client),
+                ]
+        else:
+            # No language specified — query all registries (default)
+            tasks = [
+                _discover_from_npm(name, client),
+                _discover_from_pypi(name, client),
+                _discover_from_crates(name, client),
+                _discover_from_go(name, client),
+                _discover_from_hex(name, client),
+                _discover_from_packagist(name, client),
+                _discover_from_pubdev(name, client),
+                _discover_from_rubygems(name, client),
+                _discover_from_nuget(name, client),
+                _discover_from_maven(name, client),
+            ]
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Pre-upgrade: for results with a GitHub homepage or repo but no
+        # non-GitHub homepage, try to fill homepage from the GitHub API
+        # before scoring.  This catches PyPI packages that only list their
+        # GitHub page as "homepage" (e.g. crawl4ai → crawl4ai.com).
+        upgrade_tasks = []
+        upgrade_indices = []
+        valid_results = [r for r in results if isinstance(r, dict)]
+        for i, r in enumerate(valid_results):
+            homepage = r.get("homepage") or ""
+            repo_url = r.get("repository") or ""
+            hp_is_github = "github.com" in homepage
+            # Upgrade when NO homepage at all, OR homepage IS a GitHub URL
+            if (not homepage or hp_is_github) and (repo_url or homepage):
+                gh_url = repo_url if "github.com" in repo_url else homepage
+                if "github.com" in gh_url:
+                    upgrade_tasks.append(_get_github_homepage(gh_url, client))
+                    upgrade_indices.append(i)
+
+        if upgrade_tasks:
+            gh_results = await asyncio.gather(*upgrade_tasks, return_exceptions=True)
+            for idx, gh_hp in zip(upgrade_indices, gh_results, strict=False):
+                if isinstance(gh_hp, str) and gh_hp:
+                    valid_results[idx]["homepage"] = gh_hp
+                    logger.debug(
+                        f"Pre-upgraded {valid_results[idx].get('name')}"
+                        f" homepage from GitHub: {gh_hp}"
+                    )
+
+        # Score each result for relevance
+        scored: list[tuple[int, dict]] = []
+        for r in valid_results:
+            score = 0
+            # Exact name match is the strongest signal
+            if r.get("name", "").lower() == name.lower():
+                score += 10
+            # Has a docs/homepage URL
+            homepage = r.get("homepage", "")
+            if homepage:
+                score += 5
+                # Non-GitHub homepage = established project with custom domain
+                parsed_hp = urlparse(homepage)
+                if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
+                    lib_norm = name.lower().replace("-", "")
+                    if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
+                        score += 1  # Auto-generated docs, minimal boost
+                        # Don't give name-in-path bonus: always true for these
+                    else:
+                        score += 3
+                        # Library name appears in the domain → likely official site
+                        # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
+                        host_norm = parsed_hp.netloc.lower().replace("-", "")
+                        if lib_norm in host_norm:
+                            score += 3
+                    # ReadTheDocs bonus: only when subdomain exactly matches lib name
+                    # Prevents e.g. "app-turbo.readthedocs.org" scoring for "turbo"
+                    if any(p in parsed_hp.netloc for p in ("readthedocs", "rtfd.io")):
+                        subdomain = (
+                            parsed_hp.netloc.split(".")[0].lower().replace("-", "")
+                        )
+                        if subdomain == lib_norm:
+                            score += 2
+            # Description quality (longer = more established)
+            desc = r.get("description", "")
+            if desc:
+                desc_len = len(desc)
+                if desc_len > 100:
+                    score += 3
+                elif desc_len > 50:
+                    score += 2
+                elif desc_len > 20:
+                    score += 1
+
+            # Penalize deprecated packages (npm deprecate-holder, squatted names)
+            if r.get("deprecated"):
+                score -= 20
+
+            # Penalize known placeholder/junk homepage patterns
+            all_urls = ((homepage or "") + " " + (r.get("repository") or "")).lower()
+            if any(p in all_urls for p in ("deprecate-holder", "placeholder")):
+                score -= 15
+
+            # Penalize crates.io auto-generated docs.rs fallback URLs
+            if r.get("docs_rs_fallback"):
+                score -= 2
+
+            # Popularity boost for packages with star count data (Go, GitHub)
+            # Helps disambiguate generic names like "echo", "gin", etc.
+            stars = r.get("stars", 0)
+            if stars >= 10000:
+                score += 3
+            elif stars >= 1000:
+                score += 2
+            elif stars >= 100:
+                score += 1
+
+            # Download count boost for crates.io packages
+            # Helps disambiguate generic names: clap (668M), diesel (22M), etc.
+            # Higher bonuses than stars because download counts are more reliable
+            # for popularity (no manual curation needed).
+            downloads = r.get("downloads", 0)
+            if downloads >= 50_000_000:
+                score += 5
+            elif downloads >= 5_000_000:
+                score += 3
+            elif downloads >= 500_000:
+                score += 1
+
+            # Registry trust: npm/PyPI are direct package registries (exact API match),
+            # while Go uses GitHub search (may return tangentially related repos).
+            # Give primary registries a small bonus to break ties.
+            reg = r.get("registry", "")
+            if reg in ("npm", "pypi"):
+                score += 2
+
+            scored.append((score, r))
+
+        # Sort by score descending, pick best
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        if scored:
+            best_score, best = scored[0]
+
+            # GitHub homepage upgrade: when the homepage is a GitHub URL,
+            # check the GitHub API for a better homepage (e.g. vuejs.org).
+            homepage = best.get("homepage", "")
+            repo_url = best.get("repository", "")
+            if homepage and "github.com" in urlparse(homepage).netloc:
+                # Try to extract owner/repo from either homepage or repo URL
+                gh_url = repo_url if repo_url else homepage
+                gh_homepage = await _get_github_homepage(gh_url, client)
+                if gh_homepage:
+                    logger.info(
+                        f"Upgraded {name} homepage: {homepage} -> {gh_homepage}"
+                    )
+                    best["homepage"] = gh_homepage
+
+            if best.get("homepage"):
+                # Probe for better docs URL (docs subdomain, ReadTheDocs, /docs/)
+                original_hp = best["homepage"]
+                probed_url = await _probe_docs_url(
+                    original_hp, name, registry=best.get("registry", "")
                 )
-                gh_result = await _discover_from_github_search(name, lang)
+                if probed_url != original_hp:
+                    logger.info(
+                        f"Upgraded {name} docs URL: {original_hp} -> {probed_url}"
+                    )
+                    best["homepage"] = probed_url
+
+                logger.info(
+                    f"Discovered {name} docs: {best['homepage']} "
+                    f"(via {best['registry']}, score={best_score})"
+                )
+                return best
+            # No homepage but has some data
+            return best
+
+        # All registries failed — try GitHub search as last resort
+        if language:
+            lang = _normalize_language(language)
+            if lang in _GITHUB_LANGUAGE_NAMES:
+                logger.info(
+                    f"All registries failed for {name} ({language}), "
+                    "trying GitHub search as last resort"
+                )
+                gh_result = await _discover_from_github_search(name, lang, client)
                 if gh_result:
-                    # Probe for better docs URL
                     homepage = gh_result.get("homepage", "")
                     if homepage and "github.com" not in urlparse(homepage).netloc:
                         probed = await _probe_docs_url(
@@ -1277,234 +1495,21 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
                         if probed != homepage:
                             logger.info(f"Probed {name} docs: {homepage} -> {probed}")
                             gh_result["homepage"] = probed
-                    # Try to upgrade GitHub-only homepage via API
                     repo_url = gh_result.get("repository", "")
                     if (
                         homepage
                         and "github.com" in urlparse(homepage).netloc
                         and repo_url
                     ):
-                        gh_hp = await _get_github_homepage(repo_url)
+                        gh_hp = await _get_github_homepage(repo_url, client)
                         if gh_hp:
                             logger.info(
                                 f"Upgraded {name} homepage: {homepage} -> {gh_hp}"
                             )
                             gh_result["homepage"] = gh_hp
                     return gh_result
-                # GitHub search failed — let SearXNG handle
-                return None
-            # Query only matching registries
-            tasks = [
-                _REGISTRY_FUNCTIONS[r](name)
-                for r in registry_names
-                if r in _REGISTRY_FUNCTIONS
-            ]
-        else:
-            # Unknown language — query all registries as fallback
-            tasks = [
-                _discover_from_npm(name),
-                _discover_from_pypi(name),
-                _discover_from_crates(name),
-                _discover_from_go(name),
-                _discover_from_hex(name),
-                _discover_from_packagist(name),
-                _discover_from_pubdev(name),
-                _discover_from_rubygems(name),
-                _discover_from_nuget(name),
-                _discover_from_maven(name),
-            ]
-    else:
-        # No language specified — query all registries (default)
-        tasks = [
-            _discover_from_npm(name),
-            _discover_from_pypi(name),
-            _discover_from_crates(name),
-            _discover_from_go(name),
-            _discover_from_hex(name),
-            _discover_from_packagist(name),
-            _discover_from_pubdev(name),
-            _discover_from_rubygems(name),
-            _discover_from_nuget(name),
-            _discover_from_maven(name),
-        ]
 
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Pre-upgrade: for results with a GitHub homepage or repo but no
-    # non-GitHub homepage, try to fill homepage from the GitHub API
-    # before scoring.  This catches PyPI packages that only list their
-    # GitHub page as "homepage" (e.g. crawl4ai → crawl4ai.com).
-    upgrade_tasks = []
-    upgrade_indices = []
-    valid_results = [r for r in results if isinstance(r, dict)]
-    for i, r in enumerate(valid_results):
-        homepage = r.get("homepage") or ""
-        repo_url = r.get("repository") or ""
-        hp_is_github = "github.com" in homepage
-        # Upgrade when NO homepage at all, OR homepage IS a GitHub URL
-        if (not homepage or hp_is_github) and (repo_url or homepage):
-            gh_url = repo_url if "github.com" in repo_url else homepage
-            if "github.com" in gh_url:
-                upgrade_tasks.append(_get_github_homepage(gh_url))
-                upgrade_indices.append(i)
-
-    if upgrade_tasks:
-        gh_results = await asyncio.gather(*upgrade_tasks, return_exceptions=True)
-        for idx, gh_hp in zip(upgrade_indices, gh_results, strict=False):
-            if isinstance(gh_hp, str) and gh_hp:
-                valid_results[idx]["homepage"] = gh_hp
-                logger.debug(
-                    f"Pre-upgraded {valid_results[idx].get('name')}"
-                    f" homepage from GitHub: {gh_hp}"
-                )
-
-    # Score each result for relevance
-    scored: list[tuple[int, dict]] = []
-    for r in valid_results:
-        score = 0
-        # Exact name match is the strongest signal
-        if r.get("name", "").lower() == name.lower():
-            score += 10
-        # Has a docs/homepage URL
-        homepage = r.get("homepage", "")
-        if homepage:
-            score += 5
-            # Non-GitHub homepage = established project with custom domain
-            parsed_hp = urlparse(homepage)
-            if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
-                lib_norm = name.lower().replace("-", "")
-                if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
-                    score += 1  # Auto-generated docs, minimal boost
-                    # Don't give name-in-path bonus: always true for these
-                else:
-                    score += 3
-                    # Library name appears in the domain → likely official site
-                    # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
-                    host_norm = parsed_hp.netloc.lower().replace("-", "")
-                    if lib_norm in host_norm:
-                        score += 3
-                # ReadTheDocs bonus: only when subdomain exactly matches lib name
-                # Prevents e.g. "app-turbo.readthedocs.org" scoring for "turbo"
-                if any(p in parsed_hp.netloc for p in ("readthedocs", "rtfd.io")):
-                    subdomain = parsed_hp.netloc.split(".")[0].lower().replace("-", "")
-                    if subdomain == lib_norm:
-                        score += 2
-        # Description quality (longer = more established)
-        desc = r.get("description", "")
-        if desc:
-            desc_len = len(desc)
-            if desc_len > 100:
-                score += 3
-            elif desc_len > 50:
-                score += 2
-            elif desc_len > 20:
-                score += 1
-
-        # Penalize deprecated packages (npm deprecate-holder, squatted names)
-        if r.get("deprecated"):
-            score -= 20
-
-        # Penalize known placeholder/junk homepage patterns
-        all_urls = ((homepage or "") + " " + (r.get("repository") or "")).lower()
-        if any(p in all_urls for p in ("deprecate-holder", "placeholder")):
-            score -= 15
-
-        # Penalize crates.io auto-generated docs.rs fallback URLs
-        if r.get("docs_rs_fallback"):
-            score -= 2
-
-        # Popularity boost for packages with star count data (Go, GitHub)
-        # Helps disambiguate generic names like "echo", "gin", etc.
-        stars = r.get("stars", 0)
-        if stars >= 10000:
-            score += 3
-        elif stars >= 1000:
-            score += 2
-        elif stars >= 100:
-            score += 1
-
-        # Download count boost for crates.io packages
-        # Helps disambiguate generic names: clap (668M), diesel (22M), etc.
-        # Higher bonuses than stars because download counts are more reliable
-        # for popularity (no manual curation needed).
-        downloads = r.get("downloads", 0)
-        if downloads >= 50_000_000:
-            score += 5
-        elif downloads >= 5_000_000:
-            score += 3
-        elif downloads >= 500_000:
-            score += 1
-
-        # Registry trust: npm/PyPI are direct package registries (exact API match),
-        # while Go uses GitHub search (may return tangentially related repos).
-        # Give primary registries a small bonus to break ties.
-        reg = r.get("registry", "")
-        if reg in ("npm", "pypi"):
-            score += 2
-
-        scored.append((score, r))
-
-    # Sort by score descending, pick best
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    if scored:
-        best_score, best = scored[0]
-
-        # GitHub homepage upgrade: when the homepage is a GitHub URL,
-        # check the GitHub API for a better homepage (e.g. vuejs.org).
-        homepage = best.get("homepage", "")
-        repo_url = best.get("repository", "")
-        if homepage and "github.com" in urlparse(homepage).netloc:
-            # Try to extract owner/repo from either homepage or repo URL
-            gh_url = repo_url if repo_url else homepage
-            gh_homepage = await _get_github_homepage(gh_url)
-            if gh_homepage:
-                logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_homepage}")
-                best["homepage"] = gh_homepage
-
-        if best.get("homepage"):
-            # Probe for better docs URL (docs subdomain, ReadTheDocs, /docs/)
-            original_hp = best["homepage"]
-            probed_url = await _probe_docs_url(
-                original_hp, name, registry=best.get("registry", "")
-            )
-            if probed_url != original_hp:
-                logger.info(f"Upgraded {name} docs URL: {original_hp} -> {probed_url}")
-                best["homepage"] = probed_url
-
-            logger.info(
-                f"Discovered {name} docs: {best['homepage']} "
-                f"(via {best['registry']}, score={best_score})"
-            )
-            return best
-        # No homepage but has some data
-        return best
-
-    # All registries failed — try GitHub search as last resort
-    if language:
-        lang = _normalize_language(language)
-        if lang in _GITHUB_LANGUAGE_NAMES:
-            logger.info(
-                f"All registries failed for {name} ({language}), "
-                "trying GitHub search as last resort"
-            )
-            gh_result = await _discover_from_github_search(name, lang)
-            if gh_result:
-                homepage = gh_result.get("homepage", "")
-                if homepage and "github.com" not in urlparse(homepage).netloc:
-                    probed = await _probe_docs_url(homepage, name, registry="github")
-                    if probed != homepage:
-                        logger.info(f"Probed {name} docs: {homepage} -> {probed}")
-                        gh_result["homepage"] = probed
-                repo_url = gh_result.get("repository", "")
-                if homepage and "github.com" in urlparse(homepage).netloc and repo_url:
-                    gh_hp = await _get_github_homepage(repo_url)
-                    if gh_hp:
-                        logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_hp}")
-                        gh_result["homepage"] = gh_hp
-                return gh_result
-
-    return None
+        return None
 
 
 def _normalize_docs_url(url: str) -> str:

@@ -50,13 +50,13 @@ async def test_all_registries():
             "repository": {"url": "git://github.com/a/b.git"},
             "homepage": "http://a.com",
         }
-        await _discover_from_npm("test")
+        await _discover_from_npm("test", mock_instance)
 
         # pypi
         mock_response.json.return_value = {
             "info": {"project_urls": {"Documentation": "http://docs.org"}}
         }
-        await _discover_from_pypi("test")
+        await _discover_from_pypi("test", mock_instance)
 
         # crates
         mock_response.json.return_value = {
@@ -65,45 +65,45 @@ async def test_all_registries():
                 "repository": "http://github.com",
             }
         }
-        await _discover_from_crates("test")
+        await _discover_from_crates("test", mock_instance)
 
         # go
         mock_response.text = 'href="https://pkg.go.dev/test"'
-        await _discover_from_go("test")
+        await _discover_from_go("test", mock_instance)
 
         # hex
         mock_response.json.return_value = {
             "meta": {"links": {"GitHub": "http://github.com"}}
         }
-        await _discover_from_hex("test")
+        await _discover_from_hex("test", mock_instance)
 
         # packagist
         mock_response.json.return_value = {
             "packages": {"test": [{"source": {"url": "http://github.com"}}]}
         }
-        await _discover_from_packagist("test")
+        await _discover_from_packagist("test", mock_instance)
 
         # pubdev
         mock_response.json.return_value = {
             "latest": {"pubspec": {"homepage": "http://pub.dev"}}
         }
-        await _discover_from_pubdev("test")
+        await _discover_from_pubdev("test", mock_instance)
 
         # rubygems
         mock_response.json.return_value = {"documentation_uri": "http://docs.ruby"}
-        await _discover_from_rubygems("test")
+        await _discover_from_rubygems("test", mock_instance)
 
         # nuget
         mock_response.json.return_value = {
             "data": [{"projectUrl": "http://docs.nuget"}]
         }
-        await _discover_from_nuget("test")
+        await _discover_from_nuget("test", mock_instance)
 
         # maven
         mock_response.json.return_value = {
             "response": {"docs": [{"g": "com", "a": "test"}]}
         }
-        await _discover_from_maven("test")
+        await _discover_from_maven("test", mock_instance)
 
         # Github search
         mock_response.json.return_value = {
@@ -115,7 +115,7 @@ async def test_all_registries():
                 }
             ]
         }
-        await _discover_from_github_search("test", "python")
+        await _discover_from_github_search("test", "python", mock_instance)
 
 
 @pytest.mark.asyncio
