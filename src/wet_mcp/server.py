@@ -687,6 +687,7 @@ async def media(
                 return "Error: media_urls is required for download action"
 
             from pathlib import Path
+
             base_dir = Path(settings.download_dir).expanduser().resolve()
             if output_dir:
                 target_dir = Path(output_dir).expanduser().resolve()

@@ -52,7 +52,8 @@ async def test_media_download_success(mock_settings):
         )
 
         mock_download_media.assert_called_once_with(
-            media_urls=["http://example.com/img.jpg"], output_dir="/tmp/downloads/custom"
+            media_urls=["http://example.com/img.jpg"],
+            output_dir="/tmp/downloads/custom",
         )
         assert '["file1.jpg"]' in result
         assert "<untrusted_media_content>" in result
