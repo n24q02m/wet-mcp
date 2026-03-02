@@ -743,6 +743,8 @@ class DocsDB:
         max_per_url = 2
         url_counts: dict[str, int] = {}
         results = []
+
+        # First pass: collect the chunks to return
         for cid, score in scored:
             if len(results) >= limit:
                 break
@@ -768,31 +770,60 @@ class DocsDB:
                 "library": lib_row["name"] if lib_row else "",
                 "score": round(score, 4),
             }
+            results.append((result, chunk))
 
-            # Cross-chunk context: include adjacent chunks for better RAG
+        if not results:
+            return []
+
+        # Second pass: batch query for all adjacent chunks
+        context_queries = []
+        context_params = []
+
+        for _, chunk in results:
             chunk_url = chunk.get("url", "")
             chunk_idx = chunk.get("chunk_index", -1)
             ver_id_val = chunk.get("version_id", "")
             if chunk_url and ver_id_val and chunk_idx >= 0:
-                prev = self._conn.execute(
-                    "SELECT content FROM doc_chunks "
-                    "WHERE url = ? AND version_id = ? AND chunk_index = ?",
-                    (chunk_url, ver_id_val, chunk_idx - 1),
-                ).fetchone()
-                if prev:
-                    result["context_before"] = prev["content"]
+                context_queries.append(
+                    "(url = ? AND version_id = ? AND chunk_index IN (?, ?))"
+                )
+                context_params.extend(
+                    [chunk_url, ver_id_val, chunk_idx - 1, chunk_idx + 1]
+                )
 
-                nxt = self._conn.execute(
-                    "SELECT content FROM doc_chunks "
-                    "WHERE url = ? AND version_id = ? AND chunk_index = ?",
-                    (chunk_url, ver_id_val, chunk_idx + 1),
-                ).fetchone()
-                if nxt:
-                    result["context_after"] = nxt["content"]
+        context_lookup = {}
+        if context_queries:
+            query = (
+                "SELECT url, version_id, chunk_index, content FROM doc_chunks WHERE "
+                + " OR ".join(context_queries)
+            )
+            try:
+                for row in self._conn.execute(query, context_params).fetchall():
+                    context_lookup[
+                        (row["url"], row["version_id"], row["chunk_index"])
+                    ] = row["content"]
+            except Exception as e:
+                logger.debug(f"Failed to fetch cross-chunk context: {e}")
 
-            results.append(result)
+        # Final pass: attach context to results
+        final_results = []
+        for result, chunk in results:
+            chunk_url = chunk.get("url", "")
+            chunk_idx = chunk.get("chunk_index", -1)
+            ver_id_val = chunk.get("version_id", "")
 
-        return results
+            if chunk_url and ver_id_val and chunk_idx >= 0:
+                prev_key = (chunk_url, ver_id_val, chunk_idx - 1)
+                nxt_key = (chunk_url, ver_id_val, chunk_idx + 1)
+
+                if prev_key in context_lookup:
+                    result["context_before"] = context_lookup[prev_key]
+                if nxt_key in context_lookup:
+                    result["context_after"] = context_lookup[nxt_key]
+
+            final_results.append(result)
+
+        return final_results
 
     # -----------------------------------------------------------------------
     # Export / Import (JSONL for sync)
