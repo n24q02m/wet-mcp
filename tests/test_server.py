@@ -188,6 +188,45 @@ async def test_search_invalid_action():
 
 
 @pytest.mark.asyncio
+async def test_extract_max_pages_limit():
+    """Test that max_pages is correctly limited for crawl and map actions."""
+    with patch("wet_mcp.server._crawl", new_callable=AsyncMock) as mock_crawl:
+        mock_crawl.return_value = "Crawl Results"
+
+        result = await extract(
+            action="crawl",
+            urls=["https://example.com"],
+            depth=3,
+            max_pages=150,
+            format="json",
+            stealth=False,
+        )
+
+        assert "Crawl Results" in result
+        mock_crawl.assert_called_once_with(
+            urls=["https://example.com"],
+            depth=3,
+            max_pages=100,
+            format="json",
+            stealth=False,
+        )
+
+    with patch("wet_mcp.server._sitemap", new_callable=AsyncMock) as mock_sitemap:
+        mock_sitemap.return_value = "Sitemap Content"
+
+        result = await extract(
+            action="map", urls=["https://example.com"], depth=3, max_pages=150
+        )
+
+        assert "Sitemap Content" in result
+        mock_sitemap.assert_called_once_with(
+            urls=["https://example.com"],
+            depth=3,
+            max_pages=100,
+        )
+
+
+@pytest.mark.asyncio
 async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
