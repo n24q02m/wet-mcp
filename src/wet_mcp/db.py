@@ -393,19 +393,13 @@ class DocsDB:
 
         # Remove vector entries
         if self._vec_enabled:
-            chunk_ids = [
-                r["id"]
-                for r in self._conn.execute(
-                    "SELECT id FROM doc_chunks WHERE library_id = ?", (lib_id,)
-                ).fetchall()
-            ]
-            for cid in chunk_ids:
-                try:
-                    self._conn.execute(
-                        "DELETE FROM doc_chunks_vec WHERE id = ?", (cid,)
-                    )
-                except Exception:
-                    pass
+            try:
+                self._conn.execute(
+                    "DELETE FROM doc_chunks_vec WHERE id IN (SELECT id FROM doc_chunks WHERE library_id = ?)",
+                    (lib_id,),
+                )
+            except Exception:
+                pass
 
         # Cascade deletes chunks and versions
         self._conn.execute("DELETE FROM doc_chunks WHERE library_id = ?", (lib_id,))
@@ -544,19 +538,13 @@ class DocsDB:
     def clear_version_chunks(self, version_id: str) -> int:
         """Remove all chunks for a version (before re-indexing)."""
         if self._vec_enabled:
-            chunk_ids = [
-                r["id"]
-                for r in self._conn.execute(
-                    "SELECT id FROM doc_chunks WHERE version_id = ?", (version_id,)
-                ).fetchall()
-            ]
-            for cid in chunk_ids:
-                try:
-                    self._conn.execute(
-                        "DELETE FROM doc_chunks_vec WHERE id = ?", (cid,)
-                    )
-                except Exception:
-                    pass
+            try:
+                self._conn.execute(
+                    "DELETE FROM doc_chunks_vec WHERE id IN (SELECT id FROM doc_chunks WHERE version_id = ?)",
+                    (version_id,),
+                )
+            except Exception:
+                pass
 
         cursor = self._conn.execute(
             "DELETE FROM doc_chunks WHERE version_id = ?", (version_id,)
