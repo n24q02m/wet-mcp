@@ -621,10 +621,11 @@ class DocsDB:
         for fts_query in fts_queries:
             try:
                 fts_sql = """
-                    SELECT c.*,
+                    SELECT c.*, l.name as library_name,
                            bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
                     FROM doc_chunks_fts f
                     JOIN doc_chunks c ON f.id = c.id
+                    LEFT JOIN libraries l ON c.library_id = l.id
                     WHERE doc_chunks_fts MATCH ?
                 """
                 fts_params: list = [fts_query]
@@ -695,7 +696,8 @@ class DocsDB:
                     # Load chunk data if not already from FTS
                     if vr["id"] not in fts_chunks:
                         chunk_row = self._conn.execute(
-                            "SELECT * FROM doc_chunks WHERE id = ?", (vr["id"],)
+                            "SELECT c.*, l.name as library_name FROM doc_chunks c LEFT JOIN libraries l ON c.library_id = l.id WHERE c.id = ?",
+                            (vr["id"],),
                         ).fetchone()
                         if chunk_row:
                             fts_chunks[vr["id"]] = dict(chunk_row)
@@ -755,17 +757,12 @@ class DocsDB:
                 if url_counts[chunk_url] > max_per_url:
                     continue
 
-            # Resolve library name
-            lib_row = self._conn.execute(
-                "SELECT name FROM libraries WHERE id = ?", (chunk["library_id"],)
-            ).fetchone()
-
             result: dict = {
                 "content": chunk["content"],
                 "title": chunk.get("title", ""),
                 "url": chunk.get("url", ""),
                 "heading_path": chunk.get("heading_path", ""),
-                "library": lib_row["name"] if lib_row else "",
+                "library": chunk.get("library_name", ""),
                 "score": round(score, 4),
             }
 
