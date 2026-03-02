@@ -21,6 +21,7 @@ from wet_mcp.searxng_runner import (
     _install_searxng,
     _is_pid_alive,
     _is_searxng_installed,
+    _kill_pid,
     _kill_stale_port_process,
     _quick_health_check,
     _read_discovery,
@@ -273,7 +274,7 @@ def test_kill_stale_port_process():
     with (
         patch("sys.platform", "linux"),
         patch("subprocess.run") as mock_run,
-        patch("os.kill") as mock_kill,
+        patch("wet_mcp.searxng_runner._kill_pid") as mock_kill_pid,
     ):
         mock_run_result = MagicMock()
         mock_run_result.returncode = 0
@@ -281,19 +282,56 @@ def test_kill_stale_port_process():
         mock_run.return_value = mock_run_result
 
         _kill_stale_port_process(8080)
-        mock_kill.assert_called_with(1234, signal.SIGTERM)
+        mock_kill_pid.assert_called_with(1234, force=True)
 
     # Windows
     with (
         patch("sys.platform", "win32"),
         patch("subprocess.run") as mock_run,
-        patch("os.kill") as mock_kill,
+        patch("wet_mcp.searxng_runner._kill_pid") as mock_kill_pid,
     ):
         mock_run_result = MagicMock()
         mock_run_result.stdout = "  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       1234\n"
         mock_run.return_value = mock_run_result
 
         _kill_stale_port_process(8080)
+        mock_kill_pid.assert_called_with(1234, force=True)
+
+
+def test_kill_pid():
+    with (
+        patch("sys.platform", "linux"),
+        patch("os.killpg") as mock_killpg,
+        patch("os.getpgid") as mock_getpgid,
+        patch("os.kill") as mock_kill,
+    ):
+        mock_getpgid.return_value = 1234
+
+        # Test normal
+        _kill_pid(1234, force=False)
+        mock_killpg.assert_called_with(1234, signal.SIGTERM)
+
+        # Test force
+        mock_killpg.reset_mock()
+        _kill_pid(1234, force=True)
+        mock_killpg.assert_called_with(1234, signal.SIGKILL)
+
+        # Test fallback to os.kill
+        mock_killpg.reset_mock()
+        mock_killpg.side_effect = ProcessLookupError()
+        _kill_pid(1234, force=False)
+        mock_kill.assert_called_with(1234, signal.SIGTERM)
+
+    # Windows
+    with (
+        patch("sys.platform", "win32"),
+        patch("os.kill") as mock_kill,
+    ):
+        _kill_pid(1234, force=False)
+        mock_kill.assert_called_with(1234, signal.SIGTERM)
+
+        mock_kill.reset_mock()
+        _kill_pid(1234, force=True)
         mock_kill.assert_called_with(1234, signal.SIGTERM)
 
 

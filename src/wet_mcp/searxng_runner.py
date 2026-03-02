@@ -398,6 +398,26 @@ def _get_settings_path(port: int) -> Path:
     return settings_file
 
 
+def _kill_pid(pid: int, force: bool = False) -> None:
+    """Kill a process by PID, handling cross-platform differences.
+
+    Tries graceful SIGTERM first, then SIGKILL if force=True.
+    On Unix, tries to kill the entire process group.
+    """
+    try:
+        if sys.platform != "win32":
+            sig = signal.SIGKILL if force else signal.SIGTERM
+            try:
+                os.killpg(os.getpgid(pid), sig)
+            except (ProcessLookupError, PermissionError, OSError):
+                os.kill(pid, sig)
+        else:
+            # Windows doesn't support SIGKILL easily via os.kill, but SIGTERM works for force too
+            os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
 def _force_kill_process(proc: subprocess.Popen) -> None:
     """Force-kill a subprocess and all its children.
 
@@ -411,14 +431,11 @@ def _force_kill_process(proc: subprocess.Popen) -> None:
     logger.debug(f"Force-killing SearXNG process (PID={pid})...")
 
     try:
-        if sys.platform != "win32":
-            # Kill the entire process group on Unix
-            try:
-                os.killpg(os.getpgid(pid), signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                proc.terminate()
-        else:
+        _kill_pid(pid, force=False)
+        try:
             proc.terminate()
+        except Exception:
+            pass
 
         # Wait briefly for graceful shutdown
         try:
@@ -429,13 +446,11 @@ def _force_kill_process(proc: subprocess.Popen) -> None:
             pass
 
         # Force kill
-        if sys.platform != "win32":
-            try:
-                os.killpg(os.getpgid(pid), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                proc.kill()
-        else:
+        _kill_pid(pid, force=True)
+        try:
             proc.kill()
+        except Exception:
+            pass
 
         try:
             proc.wait(timeout=3)
@@ -471,11 +486,11 @@ def _kill_stale_port_process(port: int) -> None:
                     try:
                         pid = int(pid_str)
                         if pid > 0:
-                            os.kill(pid, signal.SIGTERM)
+                            _kill_pid(pid, force=True)
                             logger.debug(
                                 f"Killed stale process on port {port} (PID={pid})"
                             )
-                    except (ValueError, ProcessLookupError, PermissionError):
+                    except ValueError:
                         pass
         except Exception:
             pass
@@ -494,11 +509,11 @@ def _kill_stale_port_process(port: int) -> None:
                     try:
                         pid = int(pid_str.strip())
                         if pid > 0 and pid != os.getpid():
-                            os.kill(pid, signal.SIGTERM)
+                            _kill_pid(pid, force=True)
                             logger.debug(
                                 f"Killed stale process on port {port} (PID={pid})"
                             )
-                    except (ValueError, ProcessLookupError, PermissionError):
+                    except ValueError:
                         pass
         except FileNotFoundError:
             # lsof not available, try fuser
