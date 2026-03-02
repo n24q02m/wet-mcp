@@ -192,3 +192,42 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_search_docs_success():
+    """Test docs action success path."""
+    with patch("wet_mcp.server._do_docs_search", new_callable=AsyncMock) as mock_docs:
+        mock_docs.return_value = "Docs Results"
+
+        result = await search(
+            action="docs",
+            query="how to install",
+            library="react",
+            version="18",
+            language="javascript",
+            limit=5,
+        )
+
+        assert "Docs Results" in result
+        mock_docs.assert_called_once_with(
+            library="react",
+            query="how to install",
+            language="javascript",
+            version="18",
+            limit=5,
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_docs_missing_library():
+    """Test docs action missing library."""
+    result = await search(action="docs", query="test query")
+    assert "Error: library is required for docs action" in result
+
+
+@pytest.mark.asyncio
+async def test_search_docs_missing_query():
+    """Test docs action missing query."""
+    result = await search(action="docs", library="react")
+    assert "Error: query is required for docs action" in result
