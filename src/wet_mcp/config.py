@@ -92,7 +92,9 @@ class Settings(BaseSettings):
     download_dir: str = "~/.wet-mcp/downloads"
 
     # Media Analysis (LiteLLM)
-    api_keys: SecretStr | None = None  # ENV_VAR:key,ENV_VAR:key (multiple providers)
+    api_keys: SecretStr | None = (
+        None  # ENV_VAR:key,ENV_VAR:key (multiple providers) [SECURE]
+    )
     llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
     llm_temperature: float | None = None
 
