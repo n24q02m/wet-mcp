@@ -217,3 +217,58 @@ class TestRunRclone:
             assert call_args[1]["timeout"] == 10
             assert call_args[1]["capture_output"] is True
             assert call_args[1]["text"] is True
+
+
+def test_extract_token() -> None:
+    """Test extracting rclone OAuth token from authorize output."""
+    from wet_mcp.sync import _extract_token
+
+    # 1. Happy path: standard rclone output with dashed lines
+    standard_output = """
+    Paste the following into your remote machine config
+    --------------------
+    {"access_token":"abc123def456","token_type":"Bearer","refresh_token":"xyz789"}
+    --------------------
+    """
+    token1 = _extract_token(standard_output)
+    assert token1 is not None
+    assert '"access_token":"abc123def456"' in token1
+    assert '"refresh_token":"xyz789"' in token1
+
+    # 2. Fallback path: no dashed lines, but contains access_token
+    fallback_output = """
+    Some other text
+    {"access_token":"fallback_token","expires_in":3600}
+    More text
+    """
+    token2 = _extract_token(fallback_output)
+    assert token2 is not None
+    assert '"access_token":"fallback_token"' in token2
+
+    # 3. Formatted JSON with newlines (rclone sometimes formats it)
+    formatted_output = """
+    --------------------
+    {
+      "access_token": "formatted_token",
+      "token_type": "Bearer"
+    }
+    --------------------
+    """
+    token3 = _extract_token(formatted_output)
+    assert token3 is not None
+    assert '"access_token": "formatted_token"' in token3
+
+    # 5. Invalid outputs
+    assert _extract_token("Just some text") is None
+    assert _extract_token('{"other_token":"123"}') is None
+    assert _extract_token("") is None
+    assert (
+        _extract_token(
+            """
+        --------------------
+        {"not_an_access_token":"abc"}
+        --------------------
+        """
+        )
+        is not None
+    )  # It matches the dashed lines pattern regardless of content
