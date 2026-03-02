@@ -200,12 +200,7 @@ def test_needs_setup_false(mock_marker):
 @patch("shutil.which")
 @patch("sys.executable", "/usr/bin/python3")
 def test_get_pip_command_uv(mock_which):
-    def which_side_effect(name):
-        if name == "uv":
-            return "/path/to/uv"
-        return None
-
-    mock_which.side_effect = which_side_effect
+    mock_which.side_effect = lambda n: "/path/to/uv" if n == "uv" else None
 
     cmd = _get_pip_command()
     assert cmd == ["/path/to/uv", "pip", "install", "--python", "/usr/bin/python3"]
@@ -214,12 +209,7 @@ def test_get_pip_command_uv(mock_which):
 @patch("shutil.which")
 @patch("sys.executable", "/usr/bin/python3")
 def test_get_pip_command_pip(mock_which):
-    def which_side_effect(name):
-        if name == "pip":
-            return "/path/to/pip"
-        return None
-
-    mock_which.side_effect = which_side_effect
+    mock_which.side_effect = lambda n: "/path/to/pip" if n == "pip" else None
 
     cmd = _get_pip_command()
     assert cmd == ["/path/to/pip", "install"]
