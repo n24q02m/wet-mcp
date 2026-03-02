@@ -192,3 +192,10 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_extract_max_pages_limit():
+    """Test extract action prevents max_pages > 100 to avoid resource exhaustion."""
+    result = await extract(action="crawl", urls=["https://example.com"], max_pages=101)
+    assert "Error: max_pages exceeds maximum limit of 100" in result

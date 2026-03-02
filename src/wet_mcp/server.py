@@ -404,6 +404,7 @@ _DISCOVERY_TIMEOUT = 30  # discover_library() — registry + probe
 _FETCH_TIMEOUT = 90  # _fetch_and_chunk_docs() — llms.txt + GH raw + crawl
 _EMBED_TIMEOUT = 60  # _embed_batch() — ONNX for all chunks
 _FALLBACK_TIMEOUT = 60  # SearXNG fallback fetch
+_MAX_PAGES_LIMIT = 100  # extract tool hard limit to prevent resource exhaustion
 
 
 async def _with_timeout(coro, action: str) -> str:
@@ -575,6 +576,9 @@ async def extract(
     - map: Discover site structure without content (requires urls)
     Use `help` tool for full documentation.
     """
+    if max_pages > _MAX_PAGES_LIMIT:
+        return f"Error: max_pages exceeds maximum limit of {_MAX_PAGES_LIMIT}"
+
     match action:
         case "extract":
             if not urls:
