@@ -14,7 +14,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -514,7 +514,9 @@ async def download_media(
 
                 response.raise_for_status()
 
-                filename = target_url.split("/")[-1].split("?")[0] or "download"
+                parsed_url = urlparse(target_url)
+                decoded_path = unquote(parsed_url.path)
+                filename = Path(decoded_path).name or "download"
                 filepath = (output_path / filename).resolve()
 
                 # Security check: Ensure the resolved path is still

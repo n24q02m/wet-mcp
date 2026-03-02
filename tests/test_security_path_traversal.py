@@ -21,11 +21,6 @@ async def test_download_media_path_traversal(tmp_path):
     mock_client.__aenter__.return_value = mock_client
     mock_client.__aexit__.return_value = None
 
-    # We need to simulate is_safe_url passing for these URLs, or mock it.
-    # Since we are testing path traversal, we assume the URL is "safe" network-wise but malicious filename-wise.
-    # But wait, is_safe_url checks scheme and IP.
-    # "http://example.com/.." is safe network-wise (resolves to example.com IP).
-
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
         with patch(
             "wet_mcp.sources.crawler.httpx.AsyncClient", return_value=mock_client
@@ -64,3 +59,30 @@ async def test_download_media_safe(tmp_path):
             expected_file = tmp_path / "image.png"
             assert expected_file.exists()
             assert expected_file.read_bytes() == b"safe content"
+
+@pytest.mark.asyncio
+async def test_download_media_path_traversal_urlencode(tmp_path):
+    mock_response = MagicMock()
+    mock_response.content = b"fake content"
+    mock_response.raise_for_status = MagicMock()
+    mock_response.is_redirect = False
+
+    mock_client = AsyncMock()
+    mock_client.get.return_value = mock_response
+    mock_client.__aenter__.return_value = mock_client
+    mock_client.__aexit__.return_value = None
+
+    with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
+        with patch("wet_mcp.sources.crawler.httpx.AsyncClient", return_value=mock_client):
+            # Traversal attempt with URL-encoded '../' as filename
+            url1 = "http://example.com/..%2f..%2f..%2fetc%2fpasswd"
+            res1 = await download_media([url1], str(tmp_path))
+
+            # Our fix now safely resolves the filename to 'passwd' and prevents path traversal
+            # Verify that the filename was correctly safely resolved to 'passwd' inside the output path
+            assert "passwd" in res1
+            assert "Security Alert" not in res1
+
+            expected_file = tmp_path / "passwd"
+            assert expected_file.exists()
+            assert expected_file.read_bytes() == b"fake content"
