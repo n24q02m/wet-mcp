@@ -170,7 +170,8 @@ async def _lifespan(_server: FastMCP):
     if settings.sync_enabled:
         from wet_mcp.sync import start_auto_sync
 
-        start_auto_sync(_docs_db)
+        if _docs_db:
+            start_auto_sync(_docs_db)
 
     yield
 
