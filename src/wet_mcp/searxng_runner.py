@@ -398,6 +398,32 @@ def _get_settings_path(port: int) -> Path:
     return settings_file
 
 
+def _send_process_signal(
+    proc: __import__("subprocess").Popen, sig: int, fallback_method
+) -> None:
+    """Send a signal to a process group on Unix, or fallback to the provided method."""
+    if sys.platform != "win32":
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except (ProcessLookupError, PermissionError):
+            fallback_method()
+    else:
+        fallback_method()
+
+
+def _kill_process_by_pid(pid_str: str, port: int) -> None:
+    """Safely parse a PID string and kill the corresponding process."""
+    try:
+        pid = int(pid_str.strip())
+        if pid > 0 and pid != os.getpid():
+            os.kill(pid, signal.SIGTERM)
+            from loguru import logger
+
+            logger.debug(f"Killed stale process on port {port} (PID={pid})")
+    except (ValueError, ProcessLookupError, PermissionError):
+        pass
+
+
 def _force_kill_process(proc: subprocess.Popen) -> None:
     """Force-kill a subprocess and all its children.
 
@@ -411,14 +437,7 @@ def _force_kill_process(proc: subprocess.Popen) -> None:
     logger.debug(f"Force-killing SearXNG process (PID={pid})...")
 
     try:
-        if sys.platform != "win32":
-            # Kill the entire process group on Unix
-            try:
-                os.killpg(os.getpgid(pid), signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                proc.terminate()
-        else:
-            proc.terminate()
+        _send_process_signal(proc, signal.SIGTERM, proc.terminate)
 
         # Wait briefly for graceful shutdown
         try:
@@ -429,13 +448,7 @@ def _force_kill_process(proc: subprocess.Popen) -> None:
             pass
 
         # Force kill
-        if sys.platform != "win32":
-            try:
-                os.killpg(os.getpgid(pid), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                proc.kill()
-        else:
-            proc.kill()
+        _send_process_signal(proc, signal.SIGKILL, proc.kill)
 
         try:
             proc.wait(timeout=3)
@@ -468,15 +481,7 @@ def _kill_stale_port_process(port: int) -> None:
                 if f"127.0.0.1:{port}" in line and "LISTENING" in line:
                     parts = line.split()
                     pid_str = parts[-1]
-                    try:
-                        pid = int(pid_str)
-                        if pid > 0:
-                            os.kill(pid, signal.SIGTERM)
-                            logger.debug(
-                                f"Killed stale process on port {port} (PID={pid})"
-                            )
-                    except (ValueError, ProcessLookupError, PermissionError):
-                        pass
+                    _kill_process_by_pid(pid_str, port)
         except Exception:
             pass
     else:
@@ -491,15 +496,7 @@ def _kill_stale_port_process(port: int) -> None:
             )
             if result.returncode == 0 and result.stdout.strip():
                 for pid_str in result.stdout.strip().splitlines():
-                    try:
-                        pid = int(pid_str.strip())
-                        if pid > 0 and pid != os.getpid():
-                            os.kill(pid, signal.SIGTERM)
-                            logger.debug(
-                                f"Killed stale process on port {port} (PID={pid})"
-                            )
-                    except (ValueError, ProcessLookupError, PermissionError):
-                        pass
+                    _kill_process_by_pid(pid_str, port)
         except FileNotFoundError:
             # lsof not available, try fuser
             try:
