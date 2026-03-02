@@ -279,52 +279,87 @@ async def crawl(
         to_crawl: collections.deque[tuple[str, int]] = collections.deque(
             [(root_url, 0)]
         )
+        active_tasks: set[asyncio.Task] = set()
 
-        while to_crawl and len(all_results) < max_pages:
-            url, current_depth = to_crawl.popleft()
-
-            if url in visited or current_depth > depth:
-                continue
-
-            visited.add(url)
-
+        async def _crawl_one(
+            crawl_url: str, current_depth: int
+        ) -> tuple[dict | None, list[str]]:
             async with sem:
                 try:
                     result = await crawler.arun(
-                        url,  # type: ignore[invalid-argument-type]
+                        crawl_url,  # type: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
                     )  # type: ignore[missing-argument]
 
                     if result.success:
-                        content = (
+                        content_str = (
                             result.markdown
                             if format == "markdown"
                             else result.cleaned_html
                         )
-                        all_results.append(
-                            {
-                                "url": url,
-                                "depth": current_depth,
-                                "title": result.metadata.get("title", ""),
-                                "content": content[:5000],  # Limit content size
-                            }
-                        )
+                        res_dict = {
+                            "url": crawl_url,
+                            "depth": current_depth,
+                            "title": result.metadata.get("title", ""),
+                            "content": content_str[:5000],  # Limit content size
+                        }
 
-                        # Add internal links for next depth
+                        new_links = []
                         if current_depth < depth:
                             internal_links = result.links.get("internal", [])
                             for link_item in internal_links[:10]:
-                                # Crawl4AI returns dicts with 'href' key
                                 link_url = (
                                     link_item.get("href", "")
                                     if isinstance(link_item, dict)
                                     else link_item
                                 )
-                                if link_url and link_url not in visited:
-                                    to_crawl.append((link_url, current_depth + 1))
+                                if link_url:
+                                    new_links.append(link_url)
+
+                        return res_dict, new_links
 
                 except Exception as e:
-                    logger.error(f"Error crawling {url}: {e}")
+                    logger.error(f"Error crawling {crawl_url}: {e}")
+
+            return None, []
+
+        while (to_crawl or active_tasks) and len(all_results) < max_pages:
+            # Spawn new tasks up to concurrency limit and max_pages allowance
+            while (
+                to_crawl
+                and len(active_tasks) < _MAX_CONCURRENT_OPS
+                and len(all_results) + len(active_tasks) < max_pages
+            ):
+                url, current_depth = to_crawl.popleft()
+                if url in visited or current_depth > depth:
+                    continue
+                visited.add(url)
+                task = asyncio.create_task(_crawl_one(url, current_depth))
+                active_tasks.add(task)
+
+            if not active_tasks:
+                break
+
+            # Wait for at least one task to complete
+            done, pending = await asyncio.wait(
+                active_tasks, return_when=asyncio.FIRST_COMPLETED
+            )
+            active_tasks = pending
+
+            for task in done:
+                res_dict, new_links = task.result()
+                if res_dict and len(all_results) < max_pages:
+                    all_results.append(res_dict)
+                    # Enqueue new links
+                    for link_url in new_links:
+                        if link_url not in visited:
+                            to_crawl.append((link_url, res_dict["depth"] + 1))
+
+        # Clean up any remaining tasks
+        if active_tasks:
+            for task in active_tasks:
+                task.cancel()
+            await asyncio.gather(*active_tasks, return_exceptions=True)
 
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
