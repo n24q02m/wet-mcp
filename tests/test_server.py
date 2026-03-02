@@ -1,6 +1,6 @@
 """Tests for src/wet_mcp/server.py."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -192,3 +192,54 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_help_success():
+    from wet_mcp.server import help
+
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.return_value = "Help content for search"
+        mock_files.return_value.joinpath.return_value = mock_path
+
+        result = await help(tool_name="search")
+
+        assert result == "Help content for search"
+        mock_files.assert_called_once_with("wet_mcp.docs")
+        mock_files.return_value.joinpath.assert_called_once_with("search.md")
+        mock_path.read_text.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_help_not_found():
+    from wet_mcp.server import help
+
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.side_effect = FileNotFoundError()
+        mock_files.return_value.joinpath.return_value = mock_path
+
+        result = await help(tool_name="unknown_tool")
+
+        assert result == "Error: No documentation found for tool 'unknown_tool'"
+        mock_files.assert_called_once_with("wet_mcp.docs")
+        mock_files.return_value.joinpath.assert_called_once_with("unknown_tool.md")
+        mock_path.read_text.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_help_exception():
+    from wet_mcp.server import help
+
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.side_effect = Exception("Test exception")
+        mock_files.return_value.joinpath.return_value = mock_path
+
+        result = await help(tool_name="search")
+
+        assert result == "Error loading documentation: Test exception"
+        mock_files.assert_called_once_with("wet_mcp.docs")
+        mock_files.return_value.joinpath.assert_called_once_with("search.md")
+        mock_path.read_text.assert_called_once()
