@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from wet_mcp.server import extract, search
+from wet_mcp.server import extract, help, search
 
 
 @pytest.mark.asyncio
@@ -192,3 +192,46 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_help_success():
+    """Test help action success path."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = mock_files.return_value.joinpath.return_value
+        mock_path.read_text.return_value = "# Search Tool\nDocumentation here."
+
+        result = await help(tool_name="search")
+
+        assert "# Search Tool\nDocumentation here." in result
+        mock_files.assert_called_once_with("wet_mcp.docs")
+        mock_files.return_value.joinpath.assert_called_once_with("search.md")
+        mock_path.read_text.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_help_file_not_found():
+    """Test help action when documentation is not found."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = mock_files.return_value.joinpath.return_value
+        mock_path.read_text.side_effect = FileNotFoundError()
+
+        result = await help(tool_name="unknown_tool")
+
+        assert result == "Error: No documentation found for tool 'unknown_tool'"
+        mock_files.assert_called_once_with("wet_mcp.docs")
+        mock_files.return_value.joinpath.assert_called_once_with("unknown_tool.md")
+
+
+@pytest.mark.asyncio
+async def test_help_exception():
+    """Test help action with unexpected exception."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = mock_files.return_value.joinpath.return_value
+        mock_path.read_text.side_effect = Exception("File system error")
+
+        result = await help(tool_name="search")
+
+        assert result == "Error loading documentation: File system error"
+        mock_files.assert_called_once_with("wet_mcp.docs")
+        mock_files.return_value.joinpath.assert_called_once_with("search.md")
