@@ -1,8 +1,44 @@
 import ipaddress
 import socket
+import time
 from urllib.parse import urlparse
 
 from loguru import logger
+
+# Cache for safe IP resolutions to prevent DNS rebinding attacks.
+# We map hostnames to the IP that we verified as safe.
+_safe_dns_cache: dict[str, tuple[str, float]] = {}
+_DNS_CACHE_TTL = 30  # seconds
+
+_original_getaddrinfo = socket.getaddrinfo
+
+
+def _patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    """
+    Patched getaddrinfo to prevent DNS rebinding attacks.
+    If we've recently verified a host as safe, we force it to resolve to the verified safe IP.
+    """
+    if isinstance(host, bytes):
+        host_str = host.decode("utf-8")
+    else:
+        host_str = host
+
+    if isinstance(host_str, str) and host_str in _safe_dns_cache:
+        safe_ip, timestamp = _safe_dns_cache[host_str]
+        if time.time() - timestamp < _DNS_CACHE_TTL:
+            try:
+                # Use the original getaddrinfo to parse the safe IP literal
+                return _original_getaddrinfo(safe_ip, port, family, type, proto, flags)
+            except socket.gaierror:
+                pass
+
+    return _original_getaddrinfo(host, port, family, type, proto, flags)
+
+
+# Monkey-patch socket.getaddrinfo globally
+if getattr(socket, "_patched_for_dns_rebinding", False) is False:
+    socket.getaddrinfo = _patched_getaddrinfo  # type: ignore[invalid-assignment]
+    socket._patched_for_dns_rebinding = True
 
 
 def is_safe_url(url: str) -> bool:
@@ -55,6 +91,10 @@ def is_safe_url(url: str) -> bool:
                         f"Blocked private/unsafe IP: {ip} for host {hostname}"
                     )
                     return False
+
+                # Cache the verified safe IP to prevent DNS rebinding
+                _safe_dns_cache[hostname] = (ip_str, time.time())
+                break  # Only need to verify and cache one valid IP
             except ValueError:
                 continue
 
