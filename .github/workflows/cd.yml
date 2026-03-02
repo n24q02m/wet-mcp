@@ -74,6 +74,8 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.tag }}
       - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.5.21"
       - run: uv build
       - name: Publish to PyPI
         run: uv publish
