@@ -60,6 +60,7 @@ async def test_download_media_safe(tmp_path):
             assert expected_file.exists()
             assert expected_file.read_bytes() == b"safe content"
 
+
 @pytest.mark.asyncio
 async def test_download_media_path_traversal_urlencode(tmp_path):
     mock_response = MagicMock()
@@ -73,7 +74,9 @@ async def test_download_media_path_traversal_urlencode(tmp_path):
     mock_client.__aexit__.return_value = None
 
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
-        with patch("wet_mcp.sources.crawler.httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "wet_mcp.sources.crawler.httpx.AsyncClient", return_value=mock_client
+        ):
             # Traversal attempt with URL-encoded '../' as filename
             url1 = "http://example.com/..%2f..%2f..%2fetc%2fpasswd"
             res1 = await download_media([url1], str(tmp_path))
