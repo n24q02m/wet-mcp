@@ -192,3 +192,26 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+@pytest.mark.asyncio
+async def test_research_success():
+    """Test research action success path."""
+    with patch("wet_mcp.server._do_research", new_callable=AsyncMock) as mock_research:
+        mock_research.return_value = "Research Results"
+
+        result = await search(action="research", query="test query", max_results=5)
+
+        assert "Research Results" in result
+        assert "<untrusted_search_content>" in result
+        assert "[SECURITY:" in result
+        mock_research.assert_called_once_with(
+            query="test query",
+            max_results=5,
+        )
+
+
+@pytest.mark.asyncio
+async def test_research_missing_query():
+    """Test research action missing query."""
+    result = await search(action="research", query=None)
+    assert "Error: query is required" in result
