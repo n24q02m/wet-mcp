@@ -192,3 +192,31 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_extract_max_pages_limit():
+    from wet_mcp.server import _MAX_PAGES_LIMIT
+
+    with patch("wet_mcp.server._crawl", new_callable=AsyncMock) as mock_crawl:
+        mock_crawl.return_value = "Success"
+        with patch(
+            "wet_mcp.server._with_timeout", new_callable=AsyncMock
+        ) as mock_with_timeout:
+
+            async def mock_timeout(coro, name):
+                await coro
+                return "Success"
+
+            mock_with_timeout.side_effect = mock_timeout
+
+            # Test that max_pages is capped at _MAX_PAGES_LIMIT
+            await extract(
+                action="crawl",
+                urls=["https://example.com"],
+                max_pages=_MAX_PAGES_LIMIT + 50,
+            )
+
+            mock_crawl.assert_called_once()
+            _, kwargs = mock_crawl.call_args
+            assert kwargs["max_pages"] == _MAX_PAGES_LIMIT
