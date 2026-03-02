@@ -154,3 +154,23 @@ def test_analyze_media_large_text_file(mock_completion, mock_settings, tmp_path)
 
     assert expected_body in sent_content
     assert "a" * 100001 not in sent_content
+
+
+def test_encode_image(tmp_path):
+    """Test image encoding to base64."""
+    img_path = tmp_path / "test.png"
+    # Create valid dummy image file
+    img_path.write_bytes(b"fake-image-data")
+
+    from wet_mcp.llm import encode_image
+
+    result = encode_image(str(img_path))
+    assert result == "ZmFrZS1pbWFnZS1kYXRh"
+
+
+def test_encode_image_file_not_found():
+    """Test encode_image with non-existent file."""
+    from wet_mcp.llm import encode_image
+
+    with pytest.raises(FileNotFoundError):
+        encode_image("non_existent_file.png")
