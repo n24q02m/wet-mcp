@@ -742,9 +742,11 @@ class DocsDB:
         # Cap results per URL to avoid returning 4-5 chunks from the same page
         max_per_url = 2
         url_counts: dict[str, int] = {}
-        results = []
+
+        # First pass: collect the chunks we want to return
+        candidates = []
         for cid, score in scored:
-            if len(results) >= limit:
+            if len(candidates) >= limit:
                 break
             chunk = fts_chunks.get(cid)
             if not chunk:
@@ -754,18 +756,31 @@ class DocsDB:
                 url_counts[chunk_url] = url_counts.get(chunk_url, 0) + 1
                 if url_counts[chunk_url] > max_per_url:
                     continue
+            candidates.append((score, chunk))
 
-            # Resolve library name
-            lib_row = self._conn.execute(
-                "SELECT name FROM libraries WHERE id = ?", (chunk["library_id"],)
-            ).fetchone()
+        # Resolve library names in bulk to avoid N+1 queries
+        library_ids = {
+            chunk.get("library_id")
+            for _, chunk in candidates
+            if chunk.get("library_id")
+        }
+        library_names = {}
+        if library_ids:
+            placeholders = ",".join(["?"] * len(library_ids))
+            rows = self._conn.execute(
+                f"SELECT id, name FROM libraries WHERE id IN ({placeholders})",
+                tuple(library_ids),
+            ).fetchall()
+            library_names = {row["id"]: row["name"] for row in rows}
 
+        results = []
+        for score, chunk in candidates:
             result: dict = {
                 "content": chunk["content"],
                 "title": chunk.get("title", ""),
                 "url": chunk.get("url", ""),
                 "heading_path": chunk.get("heading_path", ""),
-                "library": lib_row["name"] if lib_row else "",
+                "library": library_names.get(chunk.get("library_id"), ""),
                 "score": round(score, 4),
             }
 
