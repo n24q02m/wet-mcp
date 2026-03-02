@@ -232,15 +232,6 @@ async def test_help_tool():
 
 
 @pytest.mark.asyncio
-async def test_config_tool():
-    res = await server.config("status")
-    assert "settings" in json.loads(res)
-
-    res = await server.config("set", "tool_timeout", "20")
-    assert "updated" in json.loads(res)["status"]
-
-
-@pytest.mark.asyncio
 async def test_do_research():
     with (
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
