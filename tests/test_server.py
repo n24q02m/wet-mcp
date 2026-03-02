@@ -110,6 +110,7 @@ async def test_extract_max_pages_limit():
             stealth=False,
         )
 
+
 @pytest.mark.asyncio
 async def test_crawl_success():
     """Test crawl action success path."""
