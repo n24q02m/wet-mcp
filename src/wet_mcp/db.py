@@ -502,12 +502,13 @@ class DocsDB:
         now = _now_ts()
         count = 0
 
+        chunk_data = []
+        vec_data = []
+
         for i, chunk in enumerate(chunks):
             chunk_id = uuid.uuid4().hex[:12]
-            self._conn.execute(
-                """INSERT INTO doc_chunks
-                   (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+
+            chunk_data.append(
                 (
                     chunk_id,
                     version_id,
@@ -518,7 +519,7 @@ class DocsDB:
                     chunk["content"],
                     chunk.get("heading_path", ""),
                     now,
-                ),
+                )
             )
 
             # Store embedding if available
@@ -528,17 +529,29 @@ class DocsDB:
                 and i < len(embeddings)
                 and embeddings[i]
             ):
-                try:
-                    self._conn.execute(
-                        "INSERT INTO doc_chunks_vec (id, embedding) VALUES (?, ?)",
-                        (chunk_id, _serialize_f32(embeddings[i])),
-                    )
-                except Exception as e:
-                    logger.debug(f"Failed to store embedding: {e}")
+                vec_data.append((chunk_id, _serialize_f32(embeddings[i])))
 
-            count += 1
+        # Insert document chunks in bulk
+        if chunk_data:
+            self._conn.executemany(
+                """INSERT INTO doc_chunks
+                   (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                chunk_data,
+            )
+
+        # Insert vectors in bulk if available
+        if vec_data:
+            try:
+                self._conn.executemany(
+                    "INSERT INTO doc_chunks_vec (id, embedding) VALUES (?, ?)",
+                    vec_data,
+                )
+            except Exception as e:
+                logger.debug(f"Failed to store embedding: {e}")
 
         self._conn.commit()
+        count = len(chunk_data)
         return count
 
     def clear_version_chunks(self, version_id: str) -> int:
