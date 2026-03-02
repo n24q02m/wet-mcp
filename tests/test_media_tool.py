@@ -48,11 +48,11 @@ async def test_media_download_success(mock_settings):
         result = await media(
             action="download",
             media_urls=["http://example.com/img.jpg"],
-            output_dir="/custom/dir",
+            output_dir="/tmp/downloads/custom",
         )
 
         mock_download_media.assert_called_once_with(
-            media_urls=["http://example.com/img.jpg"], output_dir="/custom/dir"
+            media_urls=["http://example.com/img.jpg"], output_dir="/tmp/downloads/custom"
         )
         assert '["file1.jpg"]' in result
         assert "<untrusted_media_content>" in result
@@ -113,3 +113,15 @@ async def test_media_unknown_action():
     result = await media(action="unknown_action")
     assert "Error: Unknown action 'unknown_action'" in result
     assert "Valid actions: list, download, analyze" in result
+
+
+@pytest.mark.asyncio
+async def test_media_download_path_traversal(mock_settings):
+    """Test media download action prevents writing outside download directory."""
+    result = await media(
+        action="download",
+        media_urls=["http://example.com/img.jpg"],
+        output_dir="/tmp/outside_dir",
+    )
+    assert "Error: Security violation" in result
+    assert "outside configured download directory" in result

@@ -685,10 +685,20 @@ async def media(
         case "download":
             if not media_urls:
                 return "Error: media_urls is required for download action"
+
+            from pathlib import Path
+            base_dir = Path(settings.download_dir).expanduser().resolve()
+            if output_dir:
+                target_dir = Path(output_dir).expanduser().resolve()
+                if not target_dir.is_relative_to(base_dir):
+                    return f"Error: Security violation - output_dir '{output_dir}' is outside configured download directory '{settings.download_dir}'"
+            else:
+                target_dir = base_dir
+
             return await _with_timeout(
                 download_media(
                     media_urls=media_urls,
-                    output_dir=output_dir or settings.download_dir,
+                    output_dir=str(target_dir),
                 ),
                 "media.download",
             )
