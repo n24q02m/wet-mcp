@@ -554,6 +554,9 @@ async def search(
 # ---------------------------------------------------------------------------
 
 
+_MAX_PAGES_LIMIT = 100
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -575,6 +578,9 @@ async def extract(
     - map: Discover site structure without content (requires urls)
     Use `help` tool for full documentation.
     """
+    if max_pages > _MAX_PAGES_LIMIT:
+        max_pages = _MAX_PAGES_LIMIT
+
     match action:
         case "extract":
             if not urls:
