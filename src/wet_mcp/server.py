@@ -1210,75 +1210,71 @@ async def _background_index_and_search(
         logger.error(f"Background indexing failed for {library}: {e}")
 
 
-async def _do_docs_search(
+async def _search_indexed_docs(
+    lib_key: str,
     library: str,
     query: str,
-    language: str | None = None,
-    version: str | None = None,
-    limit: int = 10,
-) -> str:
-    """Search library documentation. Auto-discovers and indexes if needed."""
-    if not _docs_db:
-        return "Error: Docs database not initialized"
-
-    # Build library identity — include language for DB disambiguation
-    # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
-    lib_key = f"{library}:{language.lower()}" if language else library
-
+    version: str | None,
+    limit: int,
+) -> str | None:
+    """Check if library is already indexed and perform a search if so."""
     from wet_mcp.sources.docs import DISCOVERY_VERSION
 
-    # Step 1: Check if library is already indexed
     lib = _docs_db.get_library(lib_key)
+    if not lib:
+        return None
 
-    if lib:
-        # Invalidate cache if discovery scoring has been updated
-        cached_version = lib.get("discovery_version", 0)
-        if cached_version < DISCOVERY_VERSION:
-            logger.info(
-                f"Library '{lib_key}' cached with discovery v{cached_version} "
-                f"(current v{DISCOVERY_VERSION}), forcing re-index"
+    # Invalidate cache if discovery scoring has been updated
+    cached_version = lib.get("discovery_version", 0)
+    if cached_version < DISCOVERY_VERSION:
+        logger.info(
+            f"Library '{lib_key}' cached with discovery v{cached_version} "
+            f"(current v{DISCOVERY_VERSION}), forcing re-index"
+        )
+        return None
+
+    # Check if we have indexed chunks
+    ver = _docs_db.get_best_version(lib["id"], version)
+    if ver and ver.get("chunk_count", 0) > 0:
+        # Search existing index — retrieve extra candidates for reranking
+        query_embedding = await _embed(query, is_query=True)
+        retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
+
+        results = _docs_db.search(
+            query=query,
+            library_name=lib_key,
+            version=version,
+            limit=retrieve_limit,
+            query_embedding=query_embedding,
+        )
+
+        if results:
+            import json
+
+            # Rerank if available, otherwise truncate to limit
+            results = await _rerank_results(query, results, limit)
+            return json.dumps(
+                {
+                    "library": library,
+                    "version": ver.get("version", "latest"),
+                    "results": results,
+                    "total": len(results),
+                    "source": "cached_index",
+                },
+                ensure_ascii=False,
+                indent=2,
             )
-            lib = None  # Force re-discovery below
+    return None
 
-    if lib:
-        # Check if we have indexed chunks
-        ver = _docs_db.get_best_version(lib["id"], version)
-        if ver and ver.get("chunk_count", 0) > 0:
-            # Search existing index — retrieve extra candidates for reranking
-            query_embedding = await _embed(query, is_query=True)
-            retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
-            results = _docs_db.search(
-                query=query,
-                library_name=lib_key,
-                version=version,
-                limit=retrieve_limit,
-                query_embedding=query_embedding,
-            )
+async def _discover_library_metadata(
+    library: str, language: str | None
+) -> tuple[str, str, str, str]:
+    """Discover documentation URLs and metadata for a library."""
+    import json
 
-            if results:
-                # Rerank if available, otherwise truncate to limit
-                results = await _rerank_results(query, results, limit)
-                return json.dumps(
-                    {
-                        "library": library,
-                        "version": ver.get("version", "latest"),
-                        "results": results,
-                        "total": len(results),
-                        "source": "cached_index",
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
+    from wet_mcp.sources.docs import discover_library
 
-    # Step 2: Auto-discover and index
-    logger.info(f"Library '{lib_key}' not indexed, discovering docs...")
-
-    from wet_mcp.sources.docs import (
-        discover_library,
-    )
-
-    # Discover library metadata from registries (with sub-timeout)
     docs_url = ""
     repo_url = ""
     registry = ""
@@ -1330,6 +1326,73 @@ async def _do_docs_search(
         except json.JSONDecodeError:
             pass
 
+    return docs_url, repo_url, registry, description
+
+
+async def _perform_fallback_search(
+    library: str, query: str, language: str | None, docs_url: str, limit: int
+) -> list[dict]:
+    """Perform an immediate fallback web search to return temporary results."""
+    import json
+
+    fallback_search_query = (
+        f"site:{urlparse(docs_url).netloc} {query}"
+        if docs_url
+        else f"{library} {language} {query}"
+    )
+    fallback_data = {"results": []}
+    try:
+        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
+        fallback_result = await asyncio.wait_for(
+            searxng_search(
+                searxng_url=searxng_url,
+                query=fallback_search_query,
+                categories="general",
+                max_results=limit,
+            ),
+            timeout=15,
+        )
+        fallback_data = json.loads(fallback_result)
+        if "results" in fallback_data and fallback_data["results"]:
+            fallback_data["results"] = await _rerank_results(
+                query, fallback_data["results"], top_n=limit
+            )
+    except Exception as e:
+        logger.debug(f"Immediate fallback search failed: {e}")
+
+    return fallback_data.get("results", [])
+
+
+async def _do_docs_search(
+    library: str,
+    query: str,
+    language: str | None = None,
+    version: str | None = None,
+    limit: int = 10,
+) -> str:
+    """Search library documentation. Auto-discovers and indexes if needed."""
+    import json
+
+    if not _docs_db:
+        return "Error: Docs database not initialized"
+
+    # Build library identity — include language for DB disambiguation
+    # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
+    lib_key = f"{library}:{language.lower()}" if language else library
+
+    # Step 1: Check if library is already indexed
+    cached_result = await _search_indexed_docs(
+        lib_key=lib_key, library=library, query=query, version=version, limit=limit
+    )
+    if cached_result:
+        return cached_result
+
+    # Step 2: Auto-discover and index
+    logger.info(f"Library '{lib_key}' not indexed, discovering docs...")
+    docs_url, repo_url, registry, description = await _discover_library_metadata(
+        library=library, language=language
+    )
+
     if not docs_url:
         # When no docs URL found but we have a GitHub repo URL,
         # use it as the docs source — _fetch_and_chunk_docs will
@@ -1378,36 +1441,19 @@ async def _do_docs_search(
     )
 
     # Do immediate fallback web search
-    fallback_search_query = (
-        f"site:{urlparse(docs_url).netloc} {query}"
-        if docs_url
-        else f"{library} {language} {query}"
+    temporary_results = await _perform_fallback_search(
+        library=library,
+        query=query,
+        language=language,
+        docs_url=docs_url,
+        limit=limit,
     )
-    fallback_data = {"results": []}
-    try:
-        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
-        fallback_result = await asyncio.wait_for(
-            searxng_search(
-                searxng_url=searxng_url,
-                query=fallback_search_query,
-                categories="general",
-                max_results=limit,
-            ),
-            timeout=15,
-        )
-        fallback_data = json.loads(fallback_result)
-        if "results" in fallback_data and fallback_data["results"]:
-            fallback_data["results"] = await _rerank_results(
-                query, fallback_data["results"], top_n=limit
-            )
-    except Exception as e:
-        logger.debug(f"Immediate fallback search failed: {e}")
 
     return json.dumps(
         {
             "status": "indexing_in_progress",
             "message": f"Library '{library}' is currently being downloaded and indexed in the background (this may take 3-5 minutes). In the meantime, here are temporary web search results.",
-            "temporary_results": fallback_data.get("results", []),
+            "temporary_results": temporary_results,
             "library": library,
             "docs_url": docs_url,
         },
