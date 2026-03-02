@@ -448,6 +448,20 @@ def _force_kill_process(proc: subprocess.Popen) -> None:
         logger.debug(f"Error killing SearXNG process: {e}")
 
 
+def _try_kill_stale_pid(pid_str: str, port: int) -> None:
+    """Parse a PID string and try to gracefully terminate the stale process.
+
+    Avoids killing the current process if it accidentally matches the port.
+    """
+    try:
+        pid = int(pid_str.strip())
+        if pid > 0 and pid != os.getpid():
+            os.kill(pid, signal.SIGTERM)
+            logger.debug(f"Killed stale process on port {port} (PID={pid})")
+    except (ValueError, ProcessLookupError, PermissionError, OSError):
+        pass
+
+
 def _kill_stale_port_process(port: int) -> None:
     """Kill any process still holding the target port.
 
@@ -468,15 +482,7 @@ def _kill_stale_port_process(port: int) -> None:
                 if f"127.0.0.1:{port}" in line and "LISTENING" in line:
                     parts = line.split()
                     pid_str = parts[-1]
-                    try:
-                        pid = int(pid_str)
-                        if pid > 0:
-                            os.kill(pid, signal.SIGTERM)
-                            logger.debug(
-                                f"Killed stale process on port {port} (PID={pid})"
-                            )
-                    except (ValueError, ProcessLookupError, PermissionError):
-                        pass
+                    _try_kill_stale_pid(pid_str, port)
         except Exception:
             pass
     else:
@@ -491,15 +497,7 @@ def _kill_stale_port_process(port: int) -> None:
             )
             if result.returncode == 0 and result.stdout.strip():
                 for pid_str in result.stdout.strip().splitlines():
-                    try:
-                        pid = int(pid_str.strip())
-                        if pid > 0 and pid != os.getpid():
-                            os.kill(pid, signal.SIGTERM)
-                            logger.debug(
-                                f"Killed stale process on port {port} (PID={pid})"
-                            )
-                    except (ValueError, ProcessLookupError, PermissionError):
-                        pass
+                    _try_kill_stale_pid(pid_str, port)
         except FileNotFoundError:
             # lsof not available, try fuser
             try:
