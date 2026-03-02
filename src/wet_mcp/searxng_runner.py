@@ -670,11 +670,10 @@ async def ensure_searxng() -> str:
         return await _ensure_searxng_locked()
 
 
-async def _ensure_searxng_locked() -> str:
-    """Inner ensure_searxng logic, called under lock."""
-    global _searxng_process, _searxng_port, _restart_count, _last_restart_time
+async def _check_own_process_health() -> str | None:
+    """Check if own SearXNG process is healthy. Returns URL if healthy, None otherwise."""
+    global _searxng_process, _searxng_port
 
-    # Fast path: our own process is alive and port is known
     if (
         _is_process_alive()
         and _searxng_port is not None
@@ -693,6 +692,55 @@ async def _ensure_searxng_locked() -> str:
         _force_kill_process(_searxng_process)
         _searxng_process = None
         _searxng_port = None
+    return None
+
+
+async def _check_and_update_restart_budget() -> bool:
+    """Check restart budget and handle cooldowns. Returns False if budget exceeded."""
+    global _restart_count, _last_restart_time
+
+    # Reset restart counter if enough time has passed since last restart
+    now = time.time()
+    if now - _last_restart_time > 300:  # 5 minutes
+        _restart_count = 0
+
+    # Check restart budget
+    if _restart_count >= _MAX_RESTART_ATTEMPTS:
+        logger.error(
+            f"SearXNG restart limit reached ({_MAX_RESTART_ATTEMPTS} attempts). "
+            "Falling back to external URL."
+        )
+        return False
+
+    # Attempt to start with cooldown between restarts
+    if _restart_count > 0:
+        cooldown = _RESTART_COOLDOWN * _restart_count
+        logger.info(
+            f"Waiting {cooldown:.1f}s before SearXNG restart attempt {_restart_count + 1}..."
+        )
+        await asyncio.sleep(cooldown)
+
+    _restart_count += 1
+    _last_restart_time = time.time()
+    return True
+
+
+async def _ensure_installation() -> bool:
+    """Ensure SearXNG is installed. Returns True if installed successfully."""
+    if not await asyncio.to_thread(_is_searxng_installed):
+        if not await asyncio.to_thread(_install_searxng):
+            logger.warning("SearXNG installation failed, using external URL")
+            return False
+    return True
+
+
+async def _ensure_searxng_locked() -> str:
+    """Inner ensure_searxng logic, called under lock."""
+    global _searxng_process, _restart_count
+
+    url = await _check_own_process_health()
+    if url:
+        return url
 
     # Try reusing existing SearXNG from another MCP server instance
     reused_url = await _try_reuse_existing()
@@ -717,35 +765,11 @@ async def _ensure_searxng_locked() -> str:
         )
         _searxng_process = None
 
-    # Reset restart counter if enough time has passed since last restart
-    now = time.time()
-    if now - _last_restart_time > 300:  # 5 minutes
-        _restart_count = 0
-
-    # Check restart budget
-    if _restart_count >= _MAX_RESTART_ATTEMPTS:
-        logger.error(
-            f"SearXNG restart limit reached ({_MAX_RESTART_ATTEMPTS} attempts). "
-            "Falling back to external URL."
-        )
+    if not await _check_and_update_restart_budget():
         return settings.searxng_url
 
-    # Ensure SearXNG package is installed
-    if not await asyncio.to_thread(_is_searxng_installed):
-        if not await asyncio.to_thread(_install_searxng):
-            logger.warning("SearXNG installation failed, using external URL")
-            return settings.searxng_url
-
-    # Attempt to start with cooldown between restarts
-    if _restart_count > 0:
-        cooldown = _RESTART_COOLDOWN * _restart_count
-        logger.info(
-            f"Waiting {cooldown:.1f}s before SearXNG restart attempt {_restart_count + 1}..."
-        )
-        await asyncio.sleep(cooldown)
-
-    _restart_count += 1
-    _last_restart_time = time.time()
+    if not await _ensure_installation():
+        return settings.searxng_url
 
     url = await _start_searxng_subprocess()
     if url is not None:
