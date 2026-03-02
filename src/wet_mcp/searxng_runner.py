@@ -398,6 +398,26 @@ def _get_settings_path(port: int) -> Path:
     return settings_file
 
 
+def _kill_pid(pid: int, force: bool = False) -> None:
+    """Kill a process by PID, handling process groups on Unix.
+
+    On Unix, it sends SIGTERM or SIGKILL to the entire process group
+    to avoid leaving orphaned child processes.
+    """
+    try:
+        if sys.platform != "win32":
+            sig = signal.SIGKILL if force else signal.SIGTERM
+            try:
+                os.killpg(os.getpgid(pid), sig)
+            except (ProcessLookupError, PermissionError):
+                os.kill(pid, sig)
+        else:
+            # Windows doesn't have signal.SIGKILL or process groups
+            os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass
+
+
 def _force_kill_process(proc: subprocess.Popen) -> None:
     """Force-kill a subprocess and all its children.
 
@@ -411,14 +431,7 @@ def _force_kill_process(proc: subprocess.Popen) -> None:
     logger.debug(f"Force-killing SearXNG process (PID={pid})...")
 
     try:
-        if sys.platform != "win32":
-            # Kill the entire process group on Unix
-            try:
-                os.killpg(os.getpgid(pid), signal.SIGTERM)
-            except (ProcessLookupError, PermissionError):
-                proc.terminate()
-        else:
-            proc.terminate()
+        _kill_pid(pid, force=False)
 
         # Wait briefly for graceful shutdown
         try:
@@ -429,13 +442,7 @@ def _force_kill_process(proc: subprocess.Popen) -> None:
             pass
 
         # Force kill
-        if sys.platform != "win32":
-            try:
-                os.killpg(os.getpgid(pid), signal.SIGKILL)
-            except (ProcessLookupError, PermissionError):
-                proc.kill()
-        else:
-            proc.kill()
+        _kill_pid(pid, force=True)
 
         try:
             proc.wait(timeout=3)
@@ -471,7 +478,7 @@ def _kill_stale_port_process(port: int) -> None:
                     try:
                         pid = int(pid_str)
                         if pid > 0:
-                            os.kill(pid, signal.SIGTERM)
+                            _kill_pid(pid, force=False)
                             logger.debug(
                                 f"Killed stale process on port {port} (PID={pid})"
                             )
@@ -494,7 +501,7 @@ def _kill_stale_port_process(port: int) -> None:
                     try:
                         pid = int(pid_str.strip())
                         if pid > 0 and pid != os.getpid():
-                            os.kill(pid, signal.SIGTERM)
+                            _kill_pid(pid, force=False)
                             logger.debug(
                                 f"Killed stale process on port {port} (PID={pid})"
                             )
