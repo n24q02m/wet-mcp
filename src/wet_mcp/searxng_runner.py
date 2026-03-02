@@ -670,11 +670,9 @@ async def ensure_searxng() -> str:
         return await _ensure_searxng_locked()
 
 
-async def _ensure_searxng_locked() -> str:
-    """Inner ensure_searxng logic, called under lock."""
-    global _searxng_process, _searxng_port, _restart_count, _last_restart_time
-
-    # Fast path: our own process is alive and port is known
+async def _check_own_process() -> str | None:
+    """Check if our own process is alive and healthy."""
+    global _searxng_process, _searxng_port
     if (
         _is_process_alive()
         and _searxng_port is not None
@@ -693,14 +691,12 @@ async def _ensure_searxng_locked() -> str:
         _force_kill_process(_searxng_process)
         _searxng_process = None
         _searxng_port = None
+    return None
 
-    # Try reusing existing SearXNG from another MCP server instance
-    reused_url = await _try_reuse_existing()
-    if reused_url:
-        logger.info(f"Reusing existing SearXNG instance at {reused_url}")
-        return reused_url
 
-    # Process is dead or not started — need to (re)start
+def _handle_crashed_process() -> None:
+    """Log crash details and clean up dead process reference."""
+    global _searxng_process
     if _searxng_process is not None:
         # Process existed but crashed
         exit_code = _searxng_process.poll()
@@ -717,6 +713,34 @@ async def _ensure_searxng_locked() -> str:
         )
         _searxng_process = None
 
+
+async def _ensure_installed() -> bool:
+    """Ensure SearXNG package is installed."""
+    if not await asyncio.to_thread(_is_searxng_installed):
+        if not await asyncio.to_thread(_install_searxng):
+            logger.warning("SearXNG installation failed, using external URL")
+            return False
+    return True
+
+
+async def _ensure_searxng_locked() -> str:
+    """Inner ensure_searxng logic, called under lock."""
+    global _searxng_process, _searxng_port, _restart_count, _last_restart_time
+
+    # Fast path: our own process is alive and port is known
+    own_url = await _check_own_process()
+    if own_url:
+        return own_url
+
+    # Try reusing existing SearXNG from another MCP server instance
+    reused_url = await _try_reuse_existing()
+    if reused_url:
+        logger.info(f"Reusing existing SearXNG instance at {reused_url}")
+        return reused_url
+
+    # Process is dead or not started — need to (re)start
+    _handle_crashed_process()
+
     # Reset restart counter if enough time has passed since last restart
     now = time.time()
     if now - _last_restart_time > 300:  # 5 minutes
@@ -731,10 +755,8 @@ async def _ensure_searxng_locked() -> str:
         return settings.searxng_url
 
     # Ensure SearXNG package is installed
-    if not await asyncio.to_thread(_is_searxng_installed):
-        if not await asyncio.to_thread(_install_searxng):
-            logger.warning("SearXNG installation failed, using external URL")
-            return settings.searxng_url
+    if not await _ensure_installed():
+        return settings.searxng_url
 
     # Attempt to start with cooldown between restarts
     if _restart_count > 0:
