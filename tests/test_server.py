@@ -131,6 +131,33 @@ async def test_crawl_defaults():
 
 
 @pytest.mark.asyncio
+async def test_extract_max_pages_limit():
+    """Test that max_pages is correctly capped at _MAX_PAGES_LIMIT."""
+    from wet_mcp.server import _MAX_PAGES_LIMIT
+
+    with patch("wet_mcp.server._crawl", new_callable=AsyncMock) as mock_crawl:
+        mock_crawl.return_value = "Crawl Results"
+
+        # Pass a max_pages value far larger than the limit
+        huge_max_pages = 1000000
+        result = await extract(
+            action="crawl",
+            urls=["https://example.com"],
+            depth=3,
+            max_pages=huge_max_pages,
+        )
+
+        assert "Crawl Results" in result
+        mock_crawl.assert_called_once_with(
+            urls=["https://example.com"],
+            depth=3,
+            max_pages=_MAX_PAGES_LIMIT,
+            format="markdown",
+            stealth=False,
+        )
+
+
+@pytest.mark.asyncio
 async def test_crawl_missing_urls():
     """Test crawl action missing urls."""
     result = await extract(action="crawl", urls=None)
