@@ -1,10 +1,10 @@
 """Tests for src/wet_mcp/server.py."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from wet_mcp.server import extract, search
+from wet_mcp.server import extract, help, search
 
 
 @pytest.mark.asyncio
@@ -192,3 +192,36 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+@pytest.mark.asyncio
+async def test_help_success():
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.return_value = "help_text"
+        mock_files.return_value.joinpath.return_value = mock_path
+
+        res = await help("search")
+        assert res == "help_text"
+
+
+@pytest.mark.asyncio
+async def test_help_not_found():
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.side_effect = FileNotFoundError()
+        mock_files.return_value.joinpath.return_value = mock_path
+
+        res = await help("nonexistent_tool")
+        assert "Error: No documentation found for tool 'nonexistent_tool'" in res
+
+
+@pytest.mark.asyncio
+async def test_help_exception():
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.side_effect = Exception("test exception")
+        mock_files.return_value.joinpath.return_value = mock_path
+
+        res = await help("search")
+        assert "Error loading documentation: test exception" in res
