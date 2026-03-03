@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -44,18 +45,33 @@ async def test_media_download_success(mock_settings):
     """Test media download action successfully calls download_media."""
     mock_download_media = AsyncMock(return_value='["file1.jpg"]')
 
+    # output_dir must be within the configured download_dir
+    sub_dir = "/tmp/downloads/images"
+
     with patch("wet_mcp.sources.crawler.download_media", mock_download_media):
         result = await media(
             action="download",
             media_urls=["http://example.com/img.jpg"],
-            output_dir="/custom/dir",
+            output_dir=sub_dir,
         )
 
         mock_download_media.assert_called_once_with(
-            media_urls=["http://example.com/img.jpg"], output_dir="/custom/dir"
+            media_urls=["http://example.com/img.jpg"],
+            output_dir=str(Path(sub_dir).expanduser().resolve()),
         )
         assert '["file1.jpg"]' in result
         assert "<untrusted_media_content>" in result
+
+
+@pytest.mark.asyncio
+async def test_media_download_outside_download_dir(mock_settings):
+    """Test media download rejects output_dir outside the configured download_dir."""
+    result = await media(
+        action="download",
+        media_urls=["http://example.com/img.jpg"],
+        output_dir="/etc/evil",
+    )
+    assert "Security Alert" in result
 
 
 @pytest.mark.asyncio
@@ -105,6 +121,50 @@ async def test_media_analyze_missing_url():
     """Test media analyze action fails without url (local path)."""
     result = await media(action="analyze")
     assert result == "Error: url (local path) is required for analyze action"
+
+
+@pytest.mark.asyncio
+async def test_media_download_adds_extension_from_content_type(mock_settings, tmp_path):
+    """Test download adds file extension from Content-Type when filename has none."""
+    import json
+
+    import httpx
+
+    # Mock a response with Content-Type but no extension in URL path
+    mock_response = httpx.Response(
+        200,
+        content=b"fake-png-data",
+        headers={"Content-Type": "image/png"},
+        request=httpx.Request("GET", "https://example.com/image/photo"),
+    )
+
+    async def mock_get(url, **kwargs):
+        return mock_response
+
+    mock_client = AsyncMock()
+    mock_client.get = mock_get
+
+    with (
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+        patch("wet_mcp.sources.crawler.httpx.AsyncClient") as MockClient,
+        patch("wet_mcp.sources.crawler.settings") as crawler_settings,
+    ):
+        crawler_settings.crawler_timeout = 30
+        # Use tmp_path as output dir to capture real writes
+        MockClient.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+        MockClient.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        from wet_mcp.sources.crawler import download_media
+
+        result_str = await download_media(
+            media_urls=["https://example.com/image/photo"],
+            output_dir=str(tmp_path),
+        )
+        result = json.loads(result_str)
+        assert len(result) == 1
+        assert "path" in result[0]
+        # Filename should have .png extension inferred from Content-Type
+        assert result[0]["path"].endswith(".png")
 
 
 @pytest.mark.asyncio

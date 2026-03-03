@@ -514,7 +514,24 @@ async def download_media(
 
                 response.raise_for_status()
 
-                filename = target_url.split("/")[-1].split("?")[0] or "download"
+                # Extract filename and decode URL-encoded characters to
+                # prevent path traversal via %2F..%2F sequences.
+                import mimetypes
+                from urllib.parse import unquote
+
+                raw_name = target_url.split("/")[-1].split("?")[0] or "download"
+                decoded_name = unquote(raw_name)
+                # Strip any directory components to get a flat filename
+                filename = Path(decoded_name).name or "download"
+
+                # If filename has no extension, infer from Content-Type
+                if "." not in filename:
+                    content_type = response.headers.get("content-type", "")
+                    # Strip parameters like charset
+                    mime = content_type.split(";")[0].strip()
+                    ext = mimetypes.guess_extension(mime) if mime else None
+                    if ext:
+                        filename = f"{filename}{ext}"
                 filepath = (output_path / filename).resolve()
 
                 # Security check: Ensure the resolved path is still

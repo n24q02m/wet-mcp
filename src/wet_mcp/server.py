@@ -7,6 +7,7 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from importlib.resources import files
+from pathlib import Path
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -575,10 +576,19 @@ async def extract(
     - map: Discover site structure without content (requires urls)
     Use `help` tool for full documentation.
     """
+    # Security: enforce hard limits to prevent resource exhaustion
+    _MAX_EXTRACT_URLS = 20
+    _MAX_CRAWL_PAGES = 100
+    _MAX_DEPTH = 5
+
+    max_pages = min(max_pages, _MAX_CRAWL_PAGES)
+    depth = min(depth, _MAX_DEPTH)
+
     match action:
         case "extract":
             if not urls:
                 return "Error: urls is required for extract action"
+            urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
             if _web_cache:
                 cached = _web_cache.get("extract", cache_params)
@@ -595,6 +605,7 @@ async def extract(
         case "crawl":
             if not urls:
                 return "Error: urls is required for crawl action"
+            urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
                 "depth": depth,
@@ -621,6 +632,7 @@ async def extract(
         case "map":
             if not urls:
                 return "Error: urls is required for map action"
+            urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
                 "depth": depth,
@@ -685,10 +697,23 @@ async def media(
         case "download":
             if not media_urls:
                 return "Error: media_urls is required for download action"
+
+            # Security: validate output_dir is within the configured
+            # download directory to prevent arbitrary file writes.
+            resolved_download_dir = Path(settings.download_dir).expanduser().resolve()
+            target_dir = (
+                Path(output_dir or settings.download_dir).expanduser().resolve()
+            )
+            if not target_dir.is_relative_to(resolved_download_dir):
+                return (
+                    "Error: Security Alert — output_dir must be within "
+                    f"the configured download directory ({resolved_download_dir})"
+                )
+
             return await _with_timeout(
                 download_media(
                     media_urls=media_urls,
-                    output_dir=output_dir or settings.download_dir,
+                    output_dir=str(target_dir),
                 ),
                 "media.download",
             )
