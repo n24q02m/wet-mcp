@@ -3,6 +3,10 @@ from unittest.mock import patch
 
 from wet_mcp.security import is_safe_url
 
+# Tests mock ``wet_mcp.security._original_getaddrinfo`` because
+# ``is_safe_url`` calls the saved reference (not ``socket.getaddrinfo``
+# directly) to avoid being affected by its own DNS-pinning monkey-patch.
+
 
 def test_ssrf_basic():
     # Loopback
@@ -29,7 +33,7 @@ def test_ssrf_basic():
 
 def test_ssrf_dns_rebinding_simulation():
     # Simulate a domain resolving to 127.0.0.1
-    with patch("socket.getaddrinfo") as mock_dns:
+    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
         # Mock return value structure: list of (family, type, proto, canonname, sockaddr)
         # sockaddr is (address, port) for AF_INET
         mock_dns.return_value = [
@@ -41,7 +45,7 @@ def test_ssrf_dns_rebinding_simulation():
 
 def test_safe_urls():
     # Should allow normal domains (mocking DNS to public IP)
-    with patch("socket.getaddrinfo") as mock_dns:
+    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
         mock_dns.return_value = [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 80))
         ]
@@ -51,7 +55,7 @@ def test_safe_urls():
 
 def test_dns_failure_fallback():
     # If DNS fails, we allow it (connection will fail anyway)
-    with patch("socket.getaddrinfo", side_effect=socket.gaierror):
+    with patch("wet_mcp.security._original_getaddrinfo", side_effect=socket.gaierror):
         assert is_safe_url("http://non-existent-domain.com")
 
 
@@ -60,7 +64,7 @@ def test_extended_ssrf_scenarios():
 
     # 1. IPv6 Unique Local Address (ULA) - fc00::/7
     # Mock getaddrinfo to return a ULA address
-    with patch("socket.getaddrinfo") as mock_dns:
+    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
         # Mock IPv6 return: (family, type, proto, canonname, sockaddr)
         # sockaddr for AF_INET6 is (address, port, flowinfo, scopeid)
         mock_dns.return_value = [
@@ -73,7 +77,7 @@ def test_extended_ssrf_scenarios():
 
     # 2. 0.0.0.0 (Reserved / Current Network)
     # Mock getaddrinfo to return 0.0.0.0
-    with patch("socket.getaddrinfo") as mock_dns:
+    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
         mock_dns.return_value = [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("0.0.0.0", 80))
         ]
@@ -84,7 +88,7 @@ def test_extended_ssrf_scenarios():
     # urlparse converts scheme to lowercase, so "HtTp" becomes "http".
     # We need to verify if is_safe_url handles this correctly.
     # We'll mock getaddrinfo to return a safe IP so only the scheme check matters.
-    with patch("socket.getaddrinfo") as mock_dns:
+    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
         mock_dns.return_value = [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 80))
         ]
@@ -94,9 +98,15 @@ def test_extended_ssrf_scenarios():
     # 4. Link-local with scope ID
     # Mock getaddrinfo to return an IPv6 link-local address with scope ID
     # The code splits by '%' so it should handle it.
-    with patch("socket.getaddrinfo") as mock_dns:
+    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
         mock_dns.return_value = [
-            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("fe80::1%eth0", 80, 0, 0))
+            (
+                socket.AF_INET6,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("fe80::1%eth0", 80, 0, 0),
+            )
         ]
         assert not is_safe_url("http://[fe80::1%eth0]")
 

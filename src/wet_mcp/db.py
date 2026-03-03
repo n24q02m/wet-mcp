@@ -391,21 +391,16 @@ class DocsDB:
 
         lib_id = lib["id"]
 
-        # Remove vector entries
+        # Remove vector entries in a single bulk query
         if self._vec_enabled:
-            chunk_ids = [
-                r["id"]
-                for r in self._conn.execute(
-                    "SELECT id FROM doc_chunks WHERE library_id = ?", (lib_id,)
-                ).fetchall()
-            ]
-            for cid in chunk_ids:
-                try:
-                    self._conn.execute(
-                        "DELETE FROM doc_chunks_vec WHERE id = ?", (cid,)
-                    )
-                except Exception:
-                    pass
+            try:
+                self._conn.execute(
+                    "DELETE FROM doc_chunks_vec WHERE id IN "
+                    "(SELECT id FROM doc_chunks WHERE library_id = ?)",
+                    (lib_id,),
+                )
+            except Exception:
+                pass
 
         # Cascade deletes chunks and versions
         self._conn.execute("DELETE FROM doc_chunks WHERE library_id = ?", (lib_id,))
@@ -544,19 +539,16 @@ class DocsDB:
     def clear_version_chunks(self, version_id: str) -> int:
         """Remove all chunks for a version (before re-indexing)."""
         if self._vec_enabled:
-            chunk_ids = [
-                r["id"]
-                for r in self._conn.execute(
-                    "SELECT id FROM doc_chunks WHERE version_id = ?", (version_id,)
-                ).fetchall()
-            ]
-            for cid in chunk_ids:
-                try:
-                    self._conn.execute(
-                        "DELETE FROM doc_chunks_vec WHERE id = ?", (cid,)
-                    )
-                except Exception:
-                    pass
+            # Bulk delete vector entries in a single query instead of N
+            # individual DELETEs (eliminates N+1 pattern).
+            try:
+                self._conn.execute(
+                    "DELETE FROM doc_chunks_vec WHERE id IN "
+                    "(SELECT id FROM doc_chunks WHERE version_id = ?)",
+                    (version_id,),
+                )
+            except Exception:
+                pass
 
         cursor = self._conn.execute(
             "DELETE FROM doc_chunks WHERE version_id = ?", (version_id,)
@@ -743,6 +735,20 @@ class DocsDB:
         max_per_url = 2
         url_counts: dict[str, int] = {}
         results = []
+
+        # Pre-fetch library names for all candidate chunks to avoid N+1 queries.
+        all_library_ids = {
+            c["library_id"] for c in fts_chunks.values() if c.get("library_id")
+        }
+        lib_name_map: dict[str, str] = {}
+        if all_library_ids:
+            placeholders = ",".join("?" for _ in all_library_ids)
+            lib_rows = self._conn.execute(
+                f"SELECT id, name FROM libraries WHERE id IN ({placeholders})",
+                list(all_library_ids),
+            ).fetchall()
+            lib_name_map = {r["id"]: r["name"] for r in lib_rows}
+
         for cid, score in scored:
             if len(results) >= limit:
                 break
@@ -755,17 +761,12 @@ class DocsDB:
                 if url_counts[chunk_url] > max_per_url:
                     continue
 
-            # Resolve library name
-            lib_row = self._conn.execute(
-                "SELECT name FROM libraries WHERE id = ?", (chunk["library_id"],)
-            ).fetchone()
-
             result: dict = {
                 "content": chunk["content"],
                 "title": chunk.get("title", ""),
                 "url": chunk.get("url", ""),
                 "heading_path": chunk.get("heading_path", ""),
-                "library": lib_row["name"] if lib_row else "",
+                "library": lib_name_map.get(chunk.get("library_id", ""), ""),
                 "score": round(score, 4),
             }
 
