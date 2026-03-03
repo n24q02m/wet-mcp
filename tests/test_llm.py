@@ -1,6 +1,7 @@
 """Tests for LLM integration."""
 
 import asyncio
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,21 +12,24 @@ from wet_mcp.llm import analyze_media, get_llm_config
 
 
 @pytest.fixture
-def mock_settings():
+def mock_settings(tmp_path):
     """Mock settings for testing."""
     original_keys = settings.api_keys
     original_models = settings.llm_models
     original_temperature = settings.llm_temperature
+    original_download_dir = settings.download_dir
 
     settings.api_keys = SecretStr("GOOGLE_API_KEY:fake-key")
     settings.llm_models = "gemini/fake-model"
     settings.llm_temperature = None
+    settings.download_dir = str(tmp_path / "downloads")
 
-    yield
+    yield settings
 
     settings.api_keys = original_keys
     settings.llm_models = original_models
     settings.llm_temperature = original_temperature
+    settings.download_dir = original_download_dir
 
 
 def test_get_llm_config(mock_settings):
@@ -47,7 +51,9 @@ def test_get_llm_config_with_temperature(mock_settings):
 def test_analyze_media(mock_completion, mock_settings, tmp_path):
     """Test analyze_media function using real temp file."""
     # Create valid dummy image file
-    img_path = tmp_path / "test.jpg"
+    dl_dir = Path(mock_settings.download_dir)
+    dl_dir.mkdir(parents=True, exist_ok=True)
+    img_path = dl_dir / "test.jpg"
     img_path.write_bytes(b"fake-image-data")
 
     # Mock completion response
@@ -90,16 +96,34 @@ def test_analyze_media_no_keys():
     assert "Error: LLM analysis requires API_KEYS" in result
 
 
-def test_analyze_media_file_not_found(mock_settings):
+def test_analyze_media_outside_download_dir(mock_settings, tmp_path):
+    """Test analyze_media rejects files outside the configured download_dir."""
+    # Create valid dummy image file outside download_dir
+    img_path = tmp_path / "test.jpg"
+    img_path.write_bytes(b"fake-image-data")
+
+    result = asyncio.run(analyze_media(str(img_path)))
+    assert "Security Alert" in result
+    assert "analyze_media target must be within" in result
+
+
+def test_analyze_media_file_not_found(mock_settings, tmp_path):
     """Test file not found error."""
-    result = asyncio.run(analyze_media("non_existent_file.jpg"))
+    # Place inside the correct download dir
+    dl_dir = Path(mock_settings.download_dir)
+    dl_dir.mkdir(parents=True, exist_ok=True)
+    non_existent = dl_dir / "non_existent_file.jpg"
+
+    result = asyncio.run(analyze_media(str(non_existent)))
     assert "Error: File not found" in result
 
 
 @patch("wet_mcp.llm.acompletion")
 def test_analyze_media_text_file(mock_completion, mock_settings, tmp_path):
     """Test text file analysis."""
-    txt_path = tmp_path / "test.txt"
+    dl_dir = Path(mock_settings.download_dir)
+    dl_dir.mkdir(parents=True, exist_ok=True)
+    txt_path = dl_dir / "test.txt"
     txt_path.write_text("Hello")
 
     # Mock response
@@ -118,7 +142,9 @@ def test_analyze_media_text_file(mock_completion, mock_settings, tmp_path):
 
 def test_analyze_media_unsupported_type(mock_settings, tmp_path):
     """Test unsupported file type."""
-    bin_path = tmp_path / "test.bin"
+    dl_dir = Path(mock_settings.download_dir)
+    dl_dir.mkdir(parents=True, exist_ok=True)
+    bin_path = dl_dir / "test.bin"
     bin_path.write_bytes(b"\x00\x01")  # unknown binary
 
     result = asyncio.run(analyze_media(str(bin_path)))
@@ -131,7 +157,9 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
 @patch("wet_mcp.llm.acompletion")
 def test_analyze_media_large_text_file(mock_completion, mock_settings, tmp_path):
     """Test truncation of large text files."""
-    txt_path = tmp_path / "large.txt"
+    dl_dir = Path(mock_settings.download_dir)
+    dl_dir.mkdir(parents=True, exist_ok=True)
+    txt_path = dl_dir / "large.txt"
     # Create content larger than 100,000 chars
     large_content = "a" * 100005
     txt_path.write_text(large_content)

@@ -78,6 +78,18 @@ async def analyze_media(
         return "Error: LLM analysis requires API_KEYS to be configured."
 
     path_obj = Path(media_path)
+
+    # Security: Ensure path is within the configured download directory
+    # to prevent path traversal / arbitrary file read
+    resolved_download_dir = Path(settings.download_dir).expanduser().resolve()
+    resolved_path = path_obj.expanduser().resolve()
+
+    if not resolved_path.is_relative_to(resolved_download_dir):
+        return (
+            "Error: Security Alert — analyze_media target must be within "
+            f"the configured download directory ({resolved_download_dir})"
+        )
+
     if not path_obj.exists():
         return f"Error: File not found at {media_path}"
 
