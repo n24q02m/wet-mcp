@@ -125,18 +125,21 @@ class WebCache:
         This enables docs action to reuse already-extracted content
         without re-crawling.
         """
-        # Check extract cache with url in params
-        for action in ("extract", "crawl"):
-            row = self._conn.execute(
-                """SELECT content FROM web_cache
-                   WHERE action = ? AND expires_at > ?
-                   AND params LIKE ?
-                   LIMIT 1""",
-                (action, time.time(), f'%"{url}"%'),
-            ).fetchone()
-            if row:
-                logger.debug(f"Extract cache HIT for URL: {url[:60]}...")
-                return row["content"]
+        # Optimization: Combine 'extract' and 'crawl' action lookups into a single
+        # SQL query using an IN clause and an explicit ORDER BY to prioritize 'extract'.
+        # This prevents an N+1 query pattern where a cache miss on 'extract' would
+        # trigger a second full index scan for 'crawl'.
+        row = self._conn.execute(
+            """SELECT content FROM web_cache
+               WHERE action IN ('extract', 'crawl') AND expires_at > ?
+               AND params LIKE ?
+               ORDER BY CASE action WHEN 'extract' THEN 1 WHEN 'crawl' THEN 2 END
+               LIMIT 1""",
+            (time.time(), f'%"{url}"%'),
+        ).fetchone()
+        if row:
+            logger.debug(f"Extract cache HIT for URL: {url[:60]}...")
+            return row["content"]
         return None
 
     def _purge_expired(self) -> None:
