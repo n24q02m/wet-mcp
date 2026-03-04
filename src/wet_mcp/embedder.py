@@ -101,8 +101,12 @@ class LiteLLMBackend:
     # Other providers (OpenAI, Cohere) allow more but 100 is safe for all.
     MAX_BATCH_SIZE = 100
 
-    def __init__(self, model: str):
+    def __init__(
+        self, model: str, api_base: str | None = None, api_key: str | None = None
+    ):
         self.model = model
+        self.api_base = api_base
+        self.api_key = api_key
         self._setup_litellm()
 
     def _setup_litellm(self) -> None:
@@ -129,6 +133,10 @@ class LiteLLMBackend:
         }
         if dimensions:
             kwargs["dimensions"] = dimensions
+        if self.api_base:
+            kwargs["api_base"] = self.api_base
+        if self.api_key:
+            kwargs["api_key"] = self.api_key
 
         last_exc: Exception | None = None
         for attempt in range(MAX_RETRIES):
@@ -200,7 +208,12 @@ class LiteLLMBackend:
         try:
             from litellm import embedding as litellm_embedding
 
-            response = litellm_embedding(model=self.model, input=["test"])
+            kwargs = {"model": self.model, "input": ["test"]}
+            if self.api_base:
+                kwargs["api_base"] = self.api_base
+            if self.api_key:
+                kwargs["api_key"] = self.api_key
+            response = litellm_embedding(**kwargs)
             if response.data:
                 dim = len(response.data[0]["embedding"])
                 logger.info(f"Embedding model {self.model} available (dims={dim})")
@@ -326,12 +339,19 @@ def get_backend() -> EmbeddingBackend | None:
     return _backend
 
 
-def init_backend(backend_type: str, model: str | None = None) -> EmbeddingBackend:
+def init_backend(
+    backend_type: str,
+    model: str | None = None,
+    api_base: str | None = None,
+    api_key: str | None = None,
+) -> EmbeddingBackend:
     """Initialize and cache the embedding backend.
 
     Args:
         backend_type: 'litellm' or 'local'
         model: Model name (required for litellm, optional for local)
+        api_base: Custom API base URL (litellm only)
+        api_key: Custom API key (litellm only)
 
     Returns:
         Initialized backend instance.
@@ -341,7 +361,7 @@ def init_backend(backend_type: str, model: str | None = None) -> EmbeddingBacken
     if backend_type == "litellm":
         if not model:
             raise ValueError("model is required for litellm backend")
-        _backend = LiteLLMBackend(model)
+        _backend = LiteLLMBackend(model, api_base=api_base, api_key=api_key)
     elif backend_type == "local":
         _backend = Qwen3EmbedBackend(model)
     else:

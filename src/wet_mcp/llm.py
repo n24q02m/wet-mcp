@@ -39,6 +39,7 @@ def get_llm_config() -> dict:
         "model": primary,
         "fallbacks": fallbacks,
         "temperature": settings.llm_temperature,
+        **settings.get_llm_litellm_kwargs(),
     }
 
 
@@ -74,8 +75,9 @@ async def analyze_media(
     media_path: str, prompt: str = "Describe this media in detail."
 ) -> str:
     """Analyze media file using configured LLM with auto-capability detection."""
-    if not settings.api_keys:
-        return "Error: LLM analysis requires API_KEYS to be configured."
+    mode = settings.resolve_litellm_mode()
+    if mode == "local":
+        return "Error: LLM analysis requires LITELLM_PROXY_URL or API_KEYS to be configured."
 
     path_obj = Path(media_path).resolve()
     download_dir = Path(settings.download_dir).expanduser().resolve()
@@ -111,6 +113,8 @@ async def analyze_media(
                 messages=messages,
                 fallbacks=config["fallbacks"],
                 temperature=config["temperature"],
+                api_base=config.get("api_base"),
+                api_key=config.get("api_key"),
             )
             return str(response.choices[0].message.content)
         except Exception as e:
@@ -153,6 +157,8 @@ async def analyze_media(
             messages=messages,
             fallbacks=config["fallbacks"],
             temperature=config["temperature"],
+            api_base=config.get("api_base"),
+            api_key=config.get("api_key"),
         )
 
         return str(response.choices[0].message.content)

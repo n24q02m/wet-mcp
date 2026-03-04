@@ -22,7 +22,10 @@ def mock_settings():
         mock.resolve_embedding_model.return_value = "gemini"
         mock.resolve_rerank_model.return_value = "gemini-rerank"
         mock.wet_auto_searxng = False
-        mock.setup_api_keys.return_value = {"GEMINI_API_KEY": "test"}
+        mock.setup_litellm.return_value = "sdk"
+        mock.get_embedding_litellm_kwargs.return_value = {}
+        mock.get_rerank_litellm_kwargs.return_value = {}
+        mock.get_llm_litellm_kwargs.return_value = {}
         # For tests, pretend we don't have timeout so tasks run synchronously
         mock.tool_timeout = 0
         yield mock
@@ -90,7 +93,7 @@ async def test_init_embedding_backend():
         mock_backend.check_available.return_value = 768
         mock_init.return_value = mock_backend
 
-        await server._init_embedding_backend({"K": "V"})
+        await server._init_embedding_backend("sdk")
         assert server._embedding_dims == 768
 
 
@@ -101,7 +104,7 @@ async def test_init_reranker_backend():
         mock_reranker.check_available.return_value = True
         mock_init.return_value = mock_reranker
 
-        await server._init_reranker_backend()
+        await server._init_reranker_backend("sdk")
 
 
 @pytest.mark.asyncio
