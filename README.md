@@ -3,7 +3,7 @@
 **Open-source MCP Server for web search, content extraction, library docs & multimodal analysis.**
 
 [![CI](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml)
-[![Codecov](https://img.shields.io/codecov/c/github/n24q02m/wet-mcp?logo=codecov&logoColor=white)](https://codecov.io/gh/n24q02m/wet-mcp)
+[![codecov](https://codecov.io/gh/n24q02m/wet-mcp/graph/badge.svg?token=JK19TRLPEX)](https://codecov.io/gh/n24q02m/wet-mcp)
 [![PyPI](https://img.shields.io/pypi/v/wet-mcp?logo=pypi&logoColor=white)](https://pypi.org/project/wet-mcp/)
 [![Docker](https://img.shields.io/docker/v/n24q02m/wet-mcp?label=docker&logo=docker&logoColor=white&sort=semver)](https://hub.docker.com/r/n24q02m/wet-mcp)
 [![License: MIT](https://img.shields.io/github/license/n24q02m/wet-mcp)](LICENSE)
