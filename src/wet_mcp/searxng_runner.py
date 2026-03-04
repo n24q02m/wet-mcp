@@ -694,7 +694,7 @@ async def ensure_searxng() -> str:
 
 async def _ensure_searxng_locked() -> str:
     """Inner ensure_searxng logic, called under lock."""
-    global _searxng_process, _searxng_port, _restart_count, _last_restart_time
+    global _searxng_process, _searxng_port
 
     # Fast path: our own process is alive and port is known
     if (
@@ -723,6 +723,18 @@ async def _ensure_searxng_locked() -> str:
         return reused_url
 
     # Process is dead or not started — need to (re)start
+    return await _handle_restart_and_start()
+
+
+async def _handle_restart_and_start() -> str:
+    """Detect crashes, manage restart budget, install if needed, and start.
+
+    Encapsulates the restart/start phase of ``_ensure_searxng_locked``.
+    Returns the local SearXNG URL on success, or falls back to the external URL.
+    """
+    global _searxng_process, _searxng_port, _restart_count, _last_restart_time
+
+    # Crash detection — log diagnostics and clear stale process reference
     if _searxng_process is not None:
         # Process existed but crashed
         exit_code = _searxng_process.poll()

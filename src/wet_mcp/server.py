@@ -85,6 +85,13 @@ async def _warmup_searxng() -> None:
 @asynccontextmanager
 async def _lifespan(_server: FastMCP):
     """Server lifespan: startup SearXNG, init cache/docs DB, cleanup on shutdown."""
+    warmup_task = await _lifespan_startup()
+    yield
+    await _lifespan_shutdown(warmup_task)
+
+
+async def _lifespan_startup() -> asyncio.Task | None:
+    """Initialize all server components. Returns SearXNG warmup task."""
     global _web_cache, _docs_db, _embedding_dims
 
     logger.info("Starting WET MCP Server...")
@@ -107,9 +114,9 @@ async def _lifespan(_server: FastMCP):
     # startup latency on the first search call. If this instance finds an
     # existing healthy SearXNG (started by another MCP server instance), it
     # reuses it instead of spawning a new subprocess.
-    _searxng_warmup_task: asyncio.Task | None = None
+    warmup_task: asyncio.Task | None = None
     if settings.wet_auto_searxng:
-        _searxng_warmup_task = asyncio.create_task(_warmup_searxng())
+        warmup_task = asyncio.create_task(_warmup_searxng())
 
     # 2. Initialize web cache
     if settings.wet_cache:
@@ -143,19 +150,26 @@ async def _lifespan(_server: FastMCP):
 
         start_auto_sync(_docs_db)
 
-    yield
+    return warmup_task
+
+
+async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
+    """Shut down all server components."""
+    global _web_cache, _docs_db
 
     logger.info("Shutting down WET MCP Server...")
 
     # Cancel SearXNG warmup task if still running
-    if _searxng_warmup_task and not _searxng_warmup_task.done():
-        _searxng_warmup_task.cancel()
+    if warmup_task and not warmup_task.done():
+        warmup_task.cancel()
         try:
-            await _searxng_warmup_task
+            await warmup_task
         except (asyncio.CancelledError, Exception):
             pass
 
     # Stop auto-sync
+    from wet_mcp.config import settings
+
     if settings.sync_enabled:
         from wet_mcp.sync import stop_auto_sync
 
@@ -1235,24 +1249,20 @@ async def _background_index_and_search(
         logger.error(f"Background indexing failed for {library}: {e}")
 
 
-async def _do_docs_search(
-    library: str,
+async def _search_cached_index(
+    lib_key: str,
     query: str,
-    language: str | None = None,
-    version: str | None = None,
-    limit: int = 10,
-) -> str:
-    """Search library documentation. Auto-discovers and indexes if needed."""
-    if not _docs_db:
-        return "Error: Docs database not initialized"
+    version: str | None,
+    limit: int,
+) -> str | None:
+    """Search an already-indexed library and return JSON results.
 
-    # Build library identity — include language for DB disambiguation
-    # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
-    lib_key = f"{library}:{language.lower()}" if language else library
-
+    Returns a JSON string with cached search results if the library is
+    indexed and has matching chunks, or None if the library needs
+    (re-)indexing.
+    """
     from wet_mcp.sources.docs import DISCOVERY_VERSION
 
-    # Step 1: Check if library is already indexed
     lib = _docs_db.get_library(lib_key)
 
     if lib:
@@ -1265,49 +1275,69 @@ async def _do_docs_search(
             )
             lib = None  # Force re-discovery below
 
-    if lib:
-        # Check if we have indexed chunks
-        ver = _docs_db.get_best_version(lib["id"], version)
-        if ver and ver.get("chunk_count", 0) > 0:
-            # Search existing index — retrieve extra candidates for reranking
-            query_embedding = await _embed(query, is_query=True)
-            retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
+    if not lib:
+        return None
 
-            results = _docs_db.search(
-                query=query,
-                library_name=lib_key,
-                version=version,
-                limit=retrieve_limit,
-                query_embedding=query_embedding,
-            )
+    # Check if we have indexed chunks
+    ver = _docs_db.get_best_version(lib["id"], version)
+    if not ver or ver.get("chunk_count", 0) <= 0:
+        return None
 
-            if results:
-                # Rerank if available, otherwise truncate to limit
-                results = await _rerank_results(query, results, limit)
-                return json.dumps(
-                    {
-                        "library": library,
-                        "version": ver.get("version", "latest"),
-                        "results": results,
-                        "total": len(results),
-                        "source": "cached_index",
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
+    # Search existing index — retrieve extra candidates for reranking
+    query_embedding = await _embed(query, is_query=True)
+    retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
-    # Step 2: Auto-discover and index
-    logger.info(f"Library '{lib_key}' not indexed, discovering docs...")
+    results = _docs_db.search(
+        query=query,
+        library_name=lib_key,
+        version=version,
+        limit=retrieve_limit,
+        query_embedding=query_embedding,
+    )
 
+    if not results:
+        return None
+
+    # Extract original library name (strip language suffix for display)
+    library = lib_key.split(":")[0]
+
+    # Rerank if available, otherwise truncate to limit
+    results = await _rerank_results(query, results, limit)
+    return json.dumps(
+        {
+            "library": library,
+            "version": ver.get("version", "latest"),
+            "results": results,
+            "total": len(results),
+            "source": "cached_index",
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+async def _discover_docs_url(
+    library: str,
+    language: str | None,
+) -> tuple[str, str, str, str]:
+    """Auto-discover documentation URL for a library.
+
+    Tries registry discovery first, then falls back to SearXNG web search.
+
+    Returns:
+        Tuple of (docs_url, repo_url, registry, description). Any field
+        may be an empty string if discovery failed.
+    """
     from wet_mcp.sources.docs import (
         discover_library,
     )
 
-    # Discover library metadata from registries (with sub-timeout)
     docs_url = ""
     repo_url = ""
     registry = ""
     description = ""
+
+    # Discover library metadata from registries (with sub-timeout)
     try:
         discovery = await asyncio.wait_for(
             discover_library(library, language=language),
@@ -1354,6 +1384,36 @@ async def _do_docs_search(
             logger.warning("SearXNG discovery fallback timed out")
         except json.JSONDecodeError:
             pass
+
+    return docs_url, repo_url, registry, description
+
+
+async def _do_docs_search(
+    library: str,
+    query: str,
+    language: str | None = None,
+    version: str | None = None,
+    limit: int = 10,
+) -> str:
+    """Search library documentation. Auto-discovers and indexes if needed."""
+    if not _docs_db:
+        return "Error: Docs database not initialized"
+
+    # Build library identity — include language for DB disambiguation
+    # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
+    lib_key = f"{library}:{language.lower()}" if language else library
+
+    # Step 1: Check if library is already indexed
+    cached = await _search_cached_index(lib_key, query, version, limit)
+    if cached:
+        return cached
+
+    # Step 2: Auto-discover and index
+    logger.info(f"Library '{lib_key}' not indexed, discovering docs...")
+
+    docs_url, repo_url, registry, description = await _discover_docs_url(
+        library, language
+    )
 
     if not docs_url:
         # When no docs URL found but we have a GitHub repo URL,

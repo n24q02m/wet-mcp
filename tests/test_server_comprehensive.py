@@ -554,3 +554,172 @@ def test_main():
     with patch("wet_mcp.server.mcp.run") as mock_run:
         server.main()
         mock_run.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Config tool edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_config_cache_clear(mock_web_cache):
+    """Test cache_clear action clears the web cache."""
+    res = await server.config("cache_clear")
+    data = json.loads(res)
+    assert data["status"] == "cache cleared"
+    mock_web_cache.clear.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_config_cache_clear_disabled():
+    """Test cache_clear when cache is None."""
+    server._web_cache = None
+    res = await server.config("cache_clear")
+    data = json.loads(res)
+    assert "error" in data
+    assert "not enabled" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_docs_reindex(mock_docs_db):
+    """Test docs_reindex action clears chunks for a known library."""
+    mock_docs_db.get_library.return_value = {"id": 1, "discovery_version": 1}
+    mock_docs_db.get_best_version.return_value = {"id": 10, "chunk_count": 5}
+
+    res = await server.config("docs_reindex", key="react")
+    data = json.loads(res)
+    assert data["status"] == "cleared"
+    assert data["library"] == "react"
+    mock_docs_db.clear_version_chunks.assert_called_once_with(10)
+
+
+@pytest.mark.asyncio
+async def test_config_docs_reindex_not_found(mock_docs_db):
+    """Test docs_reindex with library not in index."""
+    mock_docs_db.get_library.return_value = None
+
+    res = await server.config("docs_reindex", key="unknown-lib")
+    data = json.loads(res)
+    assert "error" in data
+    assert "not found" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_set_invalid_key():
+    """Test setting an invalid config key."""
+    res = await server.config("set", key="nonexistent_key", value="123")
+    data = json.loads(res)
+    assert "error" in data
+    assert "Invalid key" in data["error"]
+    assert "valid_keys" in data
+
+
+@pytest.mark.asyncio
+async def test_config_set_missing_value():
+    """Test set action without value."""
+    res = await server.config("set", key="log_level")
+    data = json.loads(res)
+    assert "error" in data
+    assert "key and value are required" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_unknown_action():
+    """Test calling config with an invalid action."""
+    res = await server.config("foobar")
+    data = json.loads(res)
+    assert "error" in data
+    assert "Unknown action" in data["error"]
+    assert "valid_actions" in data
+
+
+@pytest.mark.asyncio
+async def test_config_set_log_level():
+    """Test changing log level via config set."""
+    with patch("wet_mcp.server.logger") as mock_logger:
+        res = await server.config("set", key="log_level", value="warning")
+        data = json.loads(res)
+        assert data["status"] == "updated"
+        assert data["key"] == "log_level"
+        mock_logger.remove.assert_called_once()
+        mock_logger.add.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_config_set_wet_cache(mock_settings):
+    """Test toggling cache via config set."""
+    res = await server.config("set", key="wet_cache", value="false")
+    data = json.loads(res)
+    assert data["status"] == "updated"
+    assert data["key"] == "wet_cache"
+
+
+@pytest.mark.asyncio
+async def test_config_set_sync_enabled(mock_settings):
+    """Test toggling sync_enabled via config set."""
+    res = await server.config("set", key="sync_enabled", value="true")
+    data = json.loads(res)
+    assert data["status"] == "updated"
+    assert data["key"] == "sync_enabled"
+
+
+# ---------------------------------------------------------------------------
+# Help tool edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_help_tool_not_found():
+    """Test help with a non-existent tool name."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_files.return_value.joinpath.return_value.read_text.side_effect = (
+            FileNotFoundError("not found")
+        )
+        res = await server.help("nonexistent_tool")
+        assert "Error: No documentation found" in res
+        assert "nonexistent_tool" in res
+
+
+@pytest.mark.asyncio
+async def test_help_tool_exception():
+    """Test help when file read raises a generic exception."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_files.return_value.joinpath.return_value.read_text.side_effect = (
+            RuntimeError("disk failure")
+        )
+        res = await server.help("search")
+        assert "Error loading documentation" in res
+        assert "disk failure" in res
+
+
+@pytest.mark.asyncio
+async def test_help_tool_extract():
+    """Test help for 'extract' tool."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.return_value = "# Extract Help\nExtract content."
+        mock_files.return_value.joinpath.return_value = mock_path
+        res = await server.help("extract")
+        assert res == "# Extract Help\nExtract content."
+
+
+@pytest.mark.asyncio
+async def test_help_tool_media():
+    """Test help for 'media' tool."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.return_value = "# Media Help\nMedia discovery."
+        mock_files.return_value.joinpath.return_value = mock_path
+        res = await server.help("media")
+        assert res == "# Media Help\nMedia discovery."
+
+
+@pytest.mark.asyncio
+async def test_help_tool_config():
+    """Test help for 'config' tool."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_path = MagicMock()
+        mock_path.read_text.return_value = "# Config Help\nServer config."
+        mock_files.return_value.joinpath.return_value = mock_path
+        res = await server.help("config")
+        assert res == "# Config Help\nServer config."
