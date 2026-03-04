@@ -179,8 +179,16 @@ Opens a browser for OAuth and outputs env vars (`RCLONE_CONFIG_*`) to set. Both 
 | `WET_SEARXNG_PORT` | `41592` | SearXNG port (optional) |
 | `SEARXNG_URL` | `http://localhost:41592` | External SearXNG URL (optional, when auto disabled) |
 | `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
-| `API_KEYS` | - | LLM API keys (optional, format: `ENV_VAR:key,...`) |
+| `LITELLM_PROXY_URL` | - | LiteLLM Proxy URL (e.g. `http://10.0.0.20:4000`). Enables proxy mode |
+| `LITELLM_PROXY_KEY` | - | LiteLLM Proxy virtual key (e.g. `sk-...`) |
+| `API_KEYS` | - | LLM API keys for SDK mode (format: `ENV_VAR:key,...`) |
 | `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
+| `LLM_API_BASE` | - | Custom LLM endpoint URL (optional, for SDK mode) |
+| `LLM_API_KEY` | - | Custom LLM endpoint key (optional) |
+| `EMBEDDING_API_BASE` | - | Custom embedding endpoint URL (optional, for SDK mode) |
+| `EMBEDDING_API_KEY` | - | Custom embedding endpoint key (optional) |
+| `RERANK_API_BASE` | - | Custom rerank endpoint URL (optional, for SDK mode) |
+| `RERANK_API_KEY` | - | Custom rerank endpoint key (optional) |
 | `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3). Auto: API_KEYS -> litellm, else local (always available) |
 | `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model (optional) |
 | `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
@@ -215,14 +223,51 @@ Both embedding and reranking are **always available** — local models are built
 API_KEYS=GOOGLE_API_KEY:AIza...,OPENAI_API_KEY:sk-...,COHERE_API_KEY:co-...
 ```
 
-### LLM Configuration (Optional)
+### LLM Configuration (3-Mode Architecture)
 
-For media analysis, configure API keys:
+LLM access (for media analysis) supports 3 modes, resolved by priority:
 
+| Priority | Mode | Config | Use case |
+|:---------|:-----|:-------|:---------|
+| 1 | **Proxy** | `LITELLM_PROXY_URL` + `LITELLM_PROXY_KEY` | Production (OCI VM, selfhosted gateway) |
+| 2 | **SDK** | `API_KEYS` or custom `*_API_BASE` | Dev/local with direct API access |
+| 3 | **Local** | Nothing needed | Offline, embedding/rerank only (no LLM) |
+
+No cross-mode fallback — if proxy is configured but unreachable, calls fail (no silent fallback to direct API).
+
+**Proxy mode** (recommended for production):
+```bash
+LITELLM_PROXY_URL=http://10.0.0.20:4000
+LITELLM_PROXY_KEY=sk-your-virtual-key
+```
+
+**SDK mode** (direct API):
 ```bash
 API_KEYS=GOOGLE_API_KEY:AIza...
 LLM_MODELS=gemini/gemini-3-flash-preview
 ```
+
+**Custom endpoints** (e.g. modalcom-ai-workers on Modal.com):
+```bash
+EMBEDDING_API_BASE=https://your-worker.modal.run
+EMBEDDING_API_KEY=your-key
+```
+
+### SearXNG Configuration (2-Mode)
+
+Web search is powered by [SearXNG](https://github.com/searxng/searxng), a privacy-respecting metasearch engine.
+
+| Mode | Config | Description |
+|:-----|:-------|:------------|
+| **Embedded** (default) | `WET_AUTO_SEARXNG=true` | Auto-installs and manages SearXNG as subprocess. Zero config needed. |
+| **External** | `WET_AUTO_SEARXNG=false` + `SEARXNG_URL=http://host:port` | Connects to pre-existing SearXNG instance (e.g. Docker container, shared server). |
+
+**Embedded mode** is best for local development and single-user deployments. On first run, wet-mcp automatically downloads and configures SearXNG.
+
+**External mode** is recommended when:
+- Running in Docker (use a separate SearXNG container)
+- Sharing a SearXNG instance across multiple services
+- SearXNG is already deployed on your infrastructure
 
 ---
 
