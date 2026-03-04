@@ -46,9 +46,9 @@ def _warmup() -> None:
     # 2. Check API keys -- if valid cloud keys exist, skip local download
     from wet_mcp.config import settings
 
-    keys = settings.setup_api_keys()
-    if keys:
-        print(f"  API keys found: {', '.join(keys.keys())}")
+    mode = settings.setup_litellm()
+    if mode in ("proxy", "sdk"):
+        print(f"  LiteLLM mode: {mode}")
         print("  Step 2/3: Validating cloud embedding models...")
 
         from wet_mcp.embedder import init_backend
@@ -56,11 +56,12 @@ def _warmup() -> None:
 
         model = settings.resolve_embedding_model()
         candidates = [model] if model else _EMBEDDING_CANDIDATES
+        litellm_kwargs = settings.get_embedding_litellm_kwargs()
 
         cloud_ok = False
         for candidate in candidates:
             try:
-                backend = init_backend("litellm", candidate)
+                backend = init_backend("litellm", candidate, **litellm_kwargs)
                 dims = backend.check_available()
                 if dims > 0:
                     print(f"  Cloud embedding ready: {candidate} (dims={dims})")
@@ -76,8 +77,9 @@ def _warmup() -> None:
             if rerank_model:
                 from wet_mcp.reranker import init_reranker
 
+                rerank_kwargs = settings.get_rerank_litellm_kwargs()
                 try:
-                    reranker = init_reranker("litellm", rerank_model)
+                    reranker = init_reranker("litellm", rerank_model, **rerank_kwargs)
                     if reranker.check_available():
                         print(f"  Cloud reranker ready: {rerank_model}")
                         print("Warmup complete! Cloud models will be used.")

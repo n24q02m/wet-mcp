@@ -96,12 +96,10 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
     logger.info("Starting WET MCP Server...")
 
-    # 1. Setup API keys (+ aliases like GOOGLE_API_KEY -> GEMINI_API_KEY)
+    # 1. Setup LiteLLM mode (proxy, sdk, or local)
     from wet_mcp.config import settings
 
-    keys = settings.setup_api_keys()
-    if keys:
-        logger.info(f"API keys configured: {', '.join(keys.keys())}")
+    mode = settings.setup_litellm()
 
     # Warn about GitHub token for library docs discovery
     if not (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")):
@@ -132,8 +130,8 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
     async def _init_backends_task():
         try:
-            await _init_embedding_backend(keys)
-            await _init_reranker_backend()
+            await _init_embedding_backend(mode)
+            await _init_reranker_backend(mode)
         except Exception as e:
             logger.error(f"Background backend init failed: {e}")
 
@@ -192,7 +190,7 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
     stop_searxng()
 
 
-async def _init_embedding_backend(keys: dict) -> None:
+async def _init_embedding_backend(mode: str) -> None:
     """Initialize the embedding backend based on config.
 
     Always initializes a backend (never FTS5-only):
@@ -203,13 +201,16 @@ async def _init_embedding_backend(keys: dict) -> None:
     from wet_mcp.embedder import init_backend
 
     backend_type = settings.resolve_embedding_backend()
+    litellm_kwargs = settings.get_embedding_litellm_kwargs()
 
     if backend_type == "litellm":
         model = settings.resolve_embedding_model()
         if model:
             # Explicit model -- validate it
             try:
-                backend = await asyncio.to_thread(init_backend, "litellm", model)
+                backend = await asyncio.to_thread(
+                    init_backend, "litellm", model, **litellm_kwargs
+                )
                 native_dims = await asyncio.to_thread(backend.check_available)
                 if native_dims > 0:
                     if _embedding_dims == 0:
@@ -221,12 +222,12 @@ async def _init_embedding_backend(keys: dict) -> None:
                     return
             except Exception as e:
                 logger.warning(f"Embedding model {model} not available: {e}")
-        elif keys:
+        elif mode in ("proxy", "sdk"):
             # Auto-detect: try candidate models
             for candidate in _EMBEDDING_CANDIDATES:
                 try:
                     backend = await asyncio.to_thread(
-                        init_backend, "litellm", candidate
+                        init_backend, "litellm", candidate, **litellm_kwargs
                     )
                     native_dims = await asyncio.to_thread(backend.check_available)
                     if native_dims > 0:
@@ -260,7 +261,7 @@ async def _init_embedding_backend(keys: dict) -> None:
         logger.error(f"Local embedding init failed: {e}")
 
 
-async def _init_reranker_backend() -> None:
+async def _init_reranker_backend(mode: str) -> None:
     """Initialize the reranker backend based on config.
 
     Always initializes a backend unless reranking is disabled:
@@ -275,11 +276,15 @@ async def _init_reranker_backend() -> None:
 
     from wet_mcp.reranker import init_reranker
 
+    rerank_kwargs = settings.get_rerank_litellm_kwargs()
+
     if rerank_backend_type == "litellm":
         model = settings.resolve_rerank_model()
         if model:
             try:
-                reranker = await asyncio.to_thread(init_reranker, "litellm", model)
+                reranker = await asyncio.to_thread(
+                    init_reranker, "litellm", model, **rerank_kwargs
+                )
                 available = await asyncio.to_thread(reranker.check_available)
                 if available:
                     logger.info(f"Reranker: {model} (cloud)")

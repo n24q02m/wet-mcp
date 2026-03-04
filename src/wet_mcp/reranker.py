@@ -55,8 +55,12 @@ class RerankerBackend(Protocol):
 class LiteLLMReranker:
     """Cloud reranking via LiteLLM arerank() API."""
 
-    def __init__(self, model: str):
+    def __init__(
+        self, model: str, api_base: str | None = None, api_key: str | None = None
+    ):
         self.model = model
+        self.api_base = api_base
+        self.api_key = api_key
 
     def rerank(
         self,
@@ -71,12 +75,18 @@ class LiteLLMReranker:
         try:
             import litellm
 
-            response = litellm.rerank(
-                model=self.model,
-                query=query,
-                documents=documents,
-                top_n=top_n,
-            )
+            kwargs = {
+                "model": self.model,
+                "query": query,
+                "documents": documents,
+                "top_n": top_n,
+            }
+            if self.api_base:
+                kwargs["api_base"] = self.api_base
+            if self.api_key:
+                kwargs["api_key"] = self.api_key
+
+            response = litellm.rerank(**kwargs)
 
             results = []
             for item in response.results:
@@ -99,12 +109,18 @@ class LiteLLMReranker:
         try:
             import litellm
 
-            response = litellm.rerank(
-                model=self.model,
-                query="test",
-                documents=["test document"],
-                top_n=1,
-            )
+            kwargs = {
+                "model": self.model,
+                "query": "test",
+                "documents": ["test document"],
+                "top_n": 1,
+            }
+            if self.api_base:
+                kwargs["api_base"] = self.api_base
+            if self.api_key:
+                kwargs["api_key"] = self.api_key
+
+            response = litellm.rerank(**kwargs)
             return bool(response.results)
         except Exception as e:
             msg = str(e).lower()
@@ -204,12 +220,19 @@ def get_reranker() -> RerankerBackend | None:
     return _backend
 
 
-def init_reranker(backend_type: str, model: str | None = None) -> RerankerBackend:
+def init_reranker(
+    backend_type: str,
+    model: str | None = None,
+    api_base: str | None = None,
+    api_key: str | None = None,
+) -> RerankerBackend:
     """Initialize and cache the reranker backend.
 
     Args:
         backend_type: 'litellm' or 'local'
         model: Model name (required for litellm, optional for local)
+        api_base: Custom API base URL (litellm only)
+        api_key: Custom API key (litellm only)
 
     Returns:
         Initialized reranker backend instance.
@@ -219,7 +242,7 @@ def init_reranker(backend_type: str, model: str | None = None) -> RerankerBacken
     if backend_type == "litellm":
         if not model:
             raise ValueError("model is required for litellm reranker")
-        _backend = LiteLLMReranker(model)
+        _backend = LiteLLMReranker(model, api_base=api_base, api_key=api_key)
     elif backend_type == "local":
         _backend = Qwen3Reranker(model)
     else:

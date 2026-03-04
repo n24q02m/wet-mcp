@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 
+from loguru import logger
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
@@ -59,6 +60,14 @@ class Settings(BaseSettings):
         Example: "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:..."
         Embedding providers: Google, OpenAI, Cohere
         Reranking providers: Cohere (auto-detected)
+    - LITELLM_PROXY_URL: LiteLLM Proxy base URL (e.g. http://10.0.0.20:4000)
+    - LITELLM_PROXY_KEY: API key for the LiteLLM Proxy
+    - EMBEDDING_API_BASE: Custom embedding endpoint URL
+    - EMBEDDING_API_KEY: API key for custom embedding endpoint
+    - RERANK_API_BASE: Custom rerank endpoint URL
+    - RERANK_API_KEY: API key for custom rerank endpoint
+    - LLM_API_BASE: Custom LLM chat completion endpoint URL
+    - LLM_API_KEY: API key for custom LLM endpoint
     - EMBEDDING_MODEL: LiteLLM embedding model (auto-detected if not set)
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
     - EMBEDDING_BACKEND: "litellm" | "local" (auto: API_KEYS -> litellm, else local)
@@ -71,6 +80,11 @@ class Settings(BaseSettings):
     - SYNC_REMOTE: Rclone remote name (e.g., "gdrive")
     - SYNC_FOLDER: Remote folder name (default: "wet-mcp")
     - SYNC_INTERVAL: Auto-sync interval in seconds (0 = manual only)
+
+    LiteLLM Mode Detection (resolve_litellm_mode):
+    - "proxy": LITELLM_PROXY_URL is set → all calls routed through proxy
+    - "sdk": API_KEYS or custom endpoints set → direct LiteLLM SDK calls
+    - "local": no keys/proxy → local ONNX models only
     """
 
     # SearXNG
@@ -93,6 +107,19 @@ class Settings(BaseSettings):
 
     # Media Analysis (LiteLLM)
     api_keys: SecretStr | None = None  # ENV_VAR:key,ENV_VAR:key (multiple providers)
+
+    # LiteLLM Proxy (selfhosted gateway)
+    litellm_proxy_url: str = ""  # e.g. http://10.0.0.20:4000
+    litellm_proxy_key: str = ""
+
+    # Custom endpoints (e.g. modalcom-ai-workers on Modal.com)
+    embedding_api_base: str = ""
+    embedding_api_key: str = ""
+    rerank_api_base: str = ""
+    rerank_api_key: str = ""
+    llm_api_base: str = ""
+    llm_api_key: str = ""
+
     llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
     llm_temperature: float | None = None
 
@@ -244,12 +271,13 @@ class Settings(BaseSettings):
 
         Auto-detect order:
         1. Explicit EMBEDDING_BACKEND setting
-        2. 'litellm' if API keys are configured
+        2. 'litellm' if in proxy or sdk mode
         3. 'local' (qwen3-embed built-in, always available)
         """
         if self.embedding_backend:
             return self.embedding_backend
-        if self.api_keys:
+        mode = self.resolve_litellm_mode()
+        if mode in ("proxy", "sdk"):
             return "litellm"
         return "local"
 
@@ -270,14 +298,18 @@ class Settings(BaseSettings):
 
         Auto-detect order:
         1. Explicit RERANK_BACKEND setting
-        2. 'litellm' if RERANK_MODEL is set
-        3. 'litellm' if API_KEYS contains a rerank-capable provider (Cohere)
-        4. 'local' (qwen3-embed built-in, always available)
+        2. 'litellm' if proxy mode (proxy handles routing)
+        3. 'litellm' if RERANK_MODEL is set
+        4. 'litellm' if API_KEYS contains a rerank-capable provider (Cohere)
+        5. 'local' (qwen3-embed built-in, always available)
         """
         if not self.rerank_enabled:
             return ""
         if self.rerank_backend:
             return self.rerank_backend
+        # Proxy mode: always litellm (proxy handles routing)
+        if self.litellm_proxy_url:
+            return "litellm"
         if self.rerank_model:
             return "litellm"
 
@@ -311,6 +343,70 @@ class Settings(BaseSettings):
                     if provider_key in val:
                         return model
         return None
+
+    # --- LiteLLM mode resolution ---
+
+    def resolve_litellm_mode(self) -> str:
+        """Detect LiteLLM mode: 'proxy', 'sdk', or 'local'."""
+        if self.litellm_proxy_url:
+            return "proxy"
+        if (
+            self.api_keys
+            or self.embedding_api_base
+            or self.rerank_api_base
+            or self.llm_api_base
+        ):
+            return "sdk"
+        return "local"
+
+    def setup_litellm(self) -> str:
+        """One-time LiteLLM configuration. Call once during lifespan startup.
+
+        Returns mode string: 'proxy', 'sdk', or 'local'.
+        """
+        mode = self.resolve_litellm_mode()
+
+        if mode == "proxy":
+            import litellm
+
+            os.environ["LITELLM_PROXY_API_BASE"] = self.litellm_proxy_url
+            os.environ["LITELLM_PROXY_API_KEY"] = self.litellm_proxy_key
+            litellm.use_litellm_proxy = True
+            logger.info(f"LiteLLM Proxy mode: {self.litellm_proxy_url}")
+        elif mode == "sdk":
+            self.setup_api_keys()
+            logger.info("LiteLLM SDK direct mode")
+        else:
+            logger.info("Local mode (no LiteLLM)")
+
+        return mode
+
+    def get_embedding_litellm_kwargs(self) -> dict:
+        """Get extra kwargs for litellm embedding calls (api_base, api_key for Mode 2b)."""
+        kwargs = {}
+        if self.embedding_api_base:
+            kwargs["api_base"] = self.embedding_api_base
+        if self.embedding_api_key:
+            kwargs["api_key"] = self.embedding_api_key
+        return kwargs
+
+    def get_rerank_litellm_kwargs(self) -> dict:
+        """Get extra kwargs for litellm rerank calls."""
+        kwargs = {}
+        if self.rerank_api_base:
+            kwargs["api_base"] = self.rerank_api_base
+        if self.rerank_api_key:
+            kwargs["api_key"] = self.rerank_api_key
+        return kwargs
+
+    def get_llm_litellm_kwargs(self) -> dict:
+        """Get extra kwargs for litellm chat completion calls."""
+        kwargs = {}
+        if self.llm_api_base:
+            kwargs["api_base"] = self.llm_api_base
+        if self.llm_api_key:
+            kwargs["api_key"] = self.llm_api_key
+        return kwargs
 
 
 settings = Settings()

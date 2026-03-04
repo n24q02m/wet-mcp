@@ -87,7 +87,7 @@ class TestWarmupCorruptedCache:
         """When TextEmbedding raises NO_SUCHFILE, clears cache and retries."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {}
+        mock_settings.setup_litellm.return_value = "local"
         mock_settings.resolve_local_embedding_model.return_value = "org/embed"
         mock_settings.rerank_enabled = False
 
@@ -113,7 +113,7 @@ class TestWarmupCorruptedCache:
         """When TextCrossEncoder raises NO_SUCHFILE, clears cache and retries."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {}
+        mock_settings.setup_litellm.return_value = "local"
         mock_settings.resolve_local_embedding_model.return_value = "org/embed"
         mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
         mock_settings.rerank_enabled = True
@@ -141,7 +141,7 @@ class TestWarmupCorruptedCache:
         """Non-cache errors (e.g. import error) are re-raised."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {}
+        mock_settings.setup_litellm.return_value = "local"
         mock_settings.resolve_local_embedding_model.return_value = "org/model"
         mock_settings.rerank_enabled = False
 
@@ -166,9 +166,11 @@ class TestWarmup:
         """When cloud embedding + reranker work, skip local downloads."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {"GEMINI_API_KEY": "k"}
+        mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
+        mock_settings.get_embedding_litellm_kwargs.return_value = {}
+        mock_settings.get_rerank_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 768
@@ -193,7 +195,7 @@ class TestWarmup:
         """Without API keys, downloads local embedding model."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {}
+        mock_settings.setup_litellm.return_value = "local"
         mock_settings.resolve_local_embedding_model.return_value = "local/embed"
         mock_settings.rerank_enabled = False
 
@@ -216,7 +218,7 @@ class TestWarmup:
         """Downloads both local embedding and reranker when rerank_enabled."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {}
+        mock_settings.setup_litellm.return_value = "local"
         mock_settings.resolve_local_embedding_model.return_value = "local/embed"
         mock_settings.resolve_local_rerank_model.return_value = "local/rerank"
         mock_settings.rerank_enabled = True
@@ -241,7 +243,7 @@ class TestWarmup:
         """When rerank_enabled=False, skips reranker download."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {}
+        mock_settings.setup_litellm.return_value = "local"
         mock_settings.resolve_local_embedding_model.return_value = "local/embed"
         mock_settings.rerank_enabled = False
 
@@ -265,10 +267,11 @@ class TestWarmup:
         """When cloud embedding fails, falls back to local download."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {"KEY": "val"}
+        mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_local_embedding_model.return_value = "local/m"
         mock_settings.rerank_enabled = False
+        mock_settings.get_embedding_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 0
@@ -292,9 +295,11 @@ class TestWarmup:
         """When cloud embedding works but reranker fails, still succeeds."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {"KEY": "val"}
+        mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
+        mock_settings.get_embedding_litellm_kwargs.return_value = {}
+        mock_settings.get_rerank_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 768
@@ -315,10 +320,11 @@ class TestWarmup:
         """When init_backend raises, catches exception and falls back."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {"KEY": "val"}
+        mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_local_embedding_model.return_value = "local/m"
         mock_settings.rerank_enabled = False
+        mock_settings.get_embedding_litellm_kwargs.return_value = {}
 
         mock_init.side_effect = Exception("init failed")
 
@@ -339,9 +345,10 @@ class TestWarmup:
         """When EMBEDDING_MODEL is set, uses that instead of candidates."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {"KEY": "val"}
+        mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = "explicit/model"
         mock_settings.resolve_rerank_model.return_value = None
+        mock_settings.get_embedding_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 512
@@ -361,9 +368,10 @@ class TestWarmup:
         """When resolve_rerank_model returns None, skip reranker validation."""
         from wet_mcp.__main__ import _warmup
 
-        mock_settings.setup_api_keys.return_value = {"KEY": "val"}
+        mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = None
+        mock_settings.get_embedding_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 768

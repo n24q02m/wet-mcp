@@ -92,7 +92,7 @@ def test_analyze_media_no_keys():
     result = asyncio.run(analyze_media("test.jpg"))
 
     settings.api_keys = original_keys
-    assert "Error: LLM analysis requires API_KEYS" in result
+    assert "Error: LLM analysis requires LITELLM_PROXY_URL or API_KEYS" in result
 
 
 def test_analyze_media_file_not_found(mock_settings, tmp_path):
