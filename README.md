@@ -328,6 +328,12 @@ docker build -t n24q02m/wet-mcp:latest .
 
 ---
 
+## Related Projects
+
+- **[modalcom-ai-workers](https://github.com/n24q02m/modalcom-ai-workers)** — GPU-accelerated AI workers on Modal.com (embedding, reranking)
+- **[mnemo-mcp](https://github.com/n24q02m/mnemo-mcp)** — MCP persistent memory server with semantic search
+- **[qwen3-embed](https://github.com/n24q02m/qwen3-embed)** — Local embedding/reranking library used by wet-mcp
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md)
