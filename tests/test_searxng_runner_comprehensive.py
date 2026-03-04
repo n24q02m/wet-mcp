@@ -274,27 +274,43 @@ def test_kill_stale_port_process():
         patch("sys.platform", "linux"),
         patch("subprocess.run") as mock_run,
         patch("os.kill") as mock_kill,
+        patch("time.sleep"),
     ):
         mock_run_result = MagicMock()
         mock_run_result.returncode = 0
         mock_run_result.stdout = "1234\n"
         mock_run.return_value = mock_run_result
 
+        # After SIGTERM, the signal-0 alive check should raise ProcessLookupError
+        # to indicate the process terminated gracefully.
+        def kill_side_effect(pid, sig):
+            if sig == 0:
+                raise ProcessLookupError()
+
+        mock_kill.side_effect = kill_side_effect
+
         _kill_stale_port_process(8080)
-        mock_kill.assert_called_with(1234, signal.SIGTERM)
+        mock_kill.assert_any_call(1234, signal.SIGTERM)
 
     # Windows
     with (
         patch("sys.platform", "win32"),
         patch("subprocess.run") as mock_run,
         patch("os.kill") as mock_kill,
+        patch("time.sleep"),
     ):
         mock_run_result = MagicMock()
         mock_run_result.stdout = "  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       1234\n"
         mock_run.return_value = mock_run_result
 
+        def kill_side_effect_win(pid, sig):
+            if sig == 0:
+                raise ProcessLookupError()
+
+        mock_kill.side_effect = kill_side_effect_win
+
         _kill_stale_port_process(8080)
-        mock_kill.assert_called_with(1234, signal.SIGTERM)
+        mock_kill.assert_any_call(1234, signal.SIGTERM)
 
 
 def test_is_process_alive():

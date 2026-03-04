@@ -412,51 +412,6 @@ class TestBackendFactory:
 
 
 # -----------------------------------------------------------------------
-# Legacy compatibility functions
-# -----------------------------------------------------------------------
-
-
-class TestLegacyCompat:
-    def test_embed_texts_legacy(self):
-        """Legacy embed_texts function works."""
-        from wet_mcp.embedder import embed_texts
-
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"index": 0, "embedding": [0.1, 0.2, 0.3]},
-        ]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            vecs = embed_texts(["hello"], model="text-embedding-3-small")
-
-        assert vecs == [[0.1, 0.2, 0.3]]
-
-    def test_embed_single_legacy(self):
-        """Legacy embed_single function works."""
-        from wet_mcp.embedder import embed_single
-
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.1, 0.2]}]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            vec = embed_single("hello", model="test-model")
-
-        assert vec == [0.1, 0.2]
-
-    def test_check_embedding_available_legacy(self):
-        """Legacy check_embedding_available works."""
-        from wet_mcp.embedder import check_embedding_available
-
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.0] * 768}]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            dims = check_embedding_available("text-embedding-3-small")
-
-        assert dims == 768
-
-
-# -----------------------------------------------------------------------
 # LiteLLM logging suppression
 # -----------------------------------------------------------------------
 

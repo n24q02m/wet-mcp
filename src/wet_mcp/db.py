@@ -495,46 +495,52 @@ class DocsDB:
         Each chunk dict: {url, title, content, heading_path, chunk_index}
         """
         now = _now_ts()
-        count = 0
 
-        for i, chunk in enumerate(chunks):
-            chunk_id = uuid.uuid4().hex[:12]
-            self._conn.execute(
-                """INSERT INTO doc_chunks
-                   (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    chunk_id,
-                    version_id,
-                    library_id,
-                    chunk.get("url", ""),
-                    chunk.get("title", ""),
-                    chunk.get("chunk_index", i),
-                    chunk["content"],
-                    chunk.get("heading_path", ""),
-                    now,
-                ),
+        # Pre-generate IDs for all chunks
+        chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
+
+        # Batch insert all doc chunks
+        chunk_rows = [
+            (
+                chunk_ids[i],
+                version_id,
+                library_id,
+                chunk.get("url", ""),
+                chunk.get("title", ""),
+                chunk.get("chunk_index", i),
+                chunk["content"],
+                chunk.get("heading_path", ""),
+                now,
             )
+            for i, chunk in enumerate(chunks)
+        ]
+        self._conn.executemany(
+            """INSERT INTO doc_chunks
+               (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            chunk_rows,
+        )
 
-            # Store embedding if available
-            if (
-                self._vec_enabled
-                and embeddings
-                and i < len(embeddings)
-                and embeddings[i]
-            ):
+        # Batch insert vector embeddings if available
+        if self._vec_enabled and embeddings:
+            vec_rows = []
+            for i, emb in enumerate(embeddings):
+                if i < len(chunk_ids) and emb:
+                    try:
+                        vec_rows.append((chunk_ids[i], _serialize_f32(emb)))
+                    except Exception as e:
+                        logger.debug(f"Failed to serialize embedding: {e}")
+            if vec_rows:
                 try:
-                    self._conn.execute(
+                    self._conn.executemany(
                         "INSERT INTO doc_chunks_vec (id, embedding) VALUES (?, ?)",
-                        (chunk_id, _serialize_f32(embeddings[i])),
+                        vec_rows,
                     )
                 except Exception as e:
-                    logger.debug(f"Failed to store embedding: {e}")
-
-            count += 1
+                    logger.debug(f"Failed to batch-insert embeddings: {e}")
 
         self._conn.commit()
-        return count
+        return len(chunks)
 
     def clear_version_chunks(self, version_id: str) -> int:
         """Remove all chunks for a version (before re-indexing)."""
@@ -749,6 +755,37 @@ class DocsDB:
             ).fetchall()
             lib_name_map = {r["id"]: r["name"] for r in lib_rows}
 
+        # ---- Prefetch adjacent chunks in one batch query ----
+        _adj_keys: list[tuple[str, str, int]] = []
+        for _cid, _sc in scored:
+            _ch = fts_chunks.get(_cid)
+            if not _ch:
+                continue
+            _url = _ch.get("url", "")
+            _ver = _ch.get("version_id", "")
+            _idx = _ch.get("chunk_index", -1)
+            if _url and _ver and _idx >= 0:
+                _adj_keys.append((_url, _ver, _idx - 1))
+                _adj_keys.append((_url, _ver, _idx + 1))
+
+        _adj_map: dict[tuple[str, str, int], str] = {}
+        if _adj_keys:
+            # Use VALUES list to batch lookup
+            placeholders = " UNION ALL ".join(
+                ["SELECT ? AS url, ? AS ver, ? AS idx"] * len(_adj_keys)
+            )
+            flat_params = [v for k in _adj_keys for v in k]
+            rows = self._conn.execute(
+                f"""SELECT dc.url, dc.version_id, dc.chunk_index, dc.content
+                    FROM doc_chunks dc
+                    INNER JOIN ({placeholders}) q
+                    ON dc.url = q.url AND dc.version_id = q.ver
+                    AND dc.chunk_index = q.idx""",
+                flat_params,
+            ).fetchall()
+            for r in rows:
+                _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r["content"]
+
         for cid, score in scored:
             if len(results) >= limit:
                 break
@@ -775,21 +812,12 @@ class DocsDB:
             chunk_idx = chunk.get("chunk_index", -1)
             ver_id_val = chunk.get("version_id", "")
             if chunk_url and ver_id_val and chunk_idx >= 0:
-                prev = self._conn.execute(
-                    "SELECT content FROM doc_chunks "
-                    "WHERE url = ? AND version_id = ? AND chunk_index = ?",
-                    (chunk_url, ver_id_val, chunk_idx - 1),
-                ).fetchone()
-                if prev:
-                    result["context_before"] = prev["content"]
-
-                nxt = self._conn.execute(
-                    "SELECT content FROM doc_chunks "
-                    "WHERE url = ? AND version_id = ? AND chunk_index = ?",
-                    (chunk_url, ver_id_val, chunk_idx + 1),
-                ).fetchone()
-                if nxt:
-                    result["context_after"] = nxt["content"]
+                ctx_before = _adj_map.get((chunk_url, ver_id_val, chunk_idx - 1))
+                if ctx_before:
+                    result["context_before"] = ctx_before
+                ctx_after = _adj_map.get((chunk_url, ver_id_val, chunk_idx + 1))
+                if ctx_after:
+                    result["context_after"] = ctx_after
 
             results.append(result)
 

@@ -24,9 +24,34 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from loguru import logger
 
+from wet_mcp.security import is_safe_url
+
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
 DISCOVERY_VERSION = 24
+
+
+def _ssrf_event_hook(request: httpx.Request) -> None:
+    """httpx event hook that blocks requests to unsafe (private/internal) URLs.
+
+    Attached to every ``httpx.AsyncClient`` in this module so that even
+    followed redirects are validated against SSRF.
+    """
+    url_str = str(request.url)
+    if not is_safe_url(url_str):
+        raise httpx.RequestError(
+            f"SSRF blocked: {url_str} resolves to a private/internal address",
+            request=request,
+        )
+
+
+def _safe_httpx_client(**kwargs: Any) -> httpx.AsyncClient:
+    """Create an httpx.AsyncClient with SSRF protection event hook."""
+    hooks = kwargs.pop("event_hooks", {})
+    request_hooks = list(hooks.get("request", []))
+    request_hooks.insert(0, _ssrf_event_hook)
+    hooks["request"] = request_hooks
+    return httpx.AsyncClient(event_hooks=hooks, **kwargs)
 
 
 def _github_headers() -> dict[str, str]:
@@ -46,7 +71,7 @@ def _github_headers() -> dict[str, str]:
 async def _discover_from_npm(name: str) -> dict | None:
     """Query npm registry for package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             resp = await client.get(f"https://registry.npmjs.org/{name}")
             if resp.status_code != 200:
                 return None
@@ -90,7 +115,7 @@ async def _discover_from_npm(name: str) -> dict | None:
 async def _discover_from_pypi(name: str) -> dict | None:
     """Query PyPI JSON API for package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             resp = await client.get(f"https://pypi.org/pypi/{name}/json")
             if resp.status_code != 200:
                 return None
@@ -142,7 +167,7 @@ async def _discover_from_pypi(name: str) -> dict | None:
 async def _discover_from_crates(name: str) -> dict | None:
     """Query crates.io API for package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             resp = await client.get(
                 f"https://crates.io/api/v1/crates/{name}",
                 headers={"User-Agent": "wet-mcp/1.0"},
@@ -187,7 +212,7 @@ async def _discover_from_go(name: str) -> dict | None:
     This enables discovery of Go-only libraries like gin, echo, etc.
     """
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
             # For Go packages with slash (e.g. "gorilla/mux"), search by
             # org or full name; for simple names, search by name alone.
             search_name = name.split("/")[-1] if "/" in name else name
@@ -257,7 +282,7 @@ async def _discover_from_go(name: str) -> dict | None:
 async def _discover_from_hex(name: str) -> dict | None:
     """Query Hex.pm API for Elixir/Erlang package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             resp = await client.get(
                 f"https://hex.pm/api/packages/{name}",
                 headers={"Accept": "application/json"},
@@ -305,7 +330,7 @@ async def _discover_from_packagist(name: str) -> dict | None:
     (searches by keyword and picks the best match).
     """
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             if "/" in name:
                 # Exact vendor/package lookup
                 resp = await client.get(f"https://repo.packagist.org/p2/{name}.json")
@@ -369,7 +394,7 @@ async def _discover_from_packagist(name: str) -> dict | None:
 async def _discover_from_pubdev(name: str) -> dict | None:
     """Query pub.dev API for Dart/Flutter package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             resp = await client.get(f"https://pub.dev/api/packages/{name}")
             if resp.status_code != 200:
                 return None
@@ -396,7 +421,7 @@ async def _discover_from_pubdev(name: str) -> dict | None:
 async def _discover_from_rubygems(name: str) -> dict | None:
     """Query RubyGems API for Ruby gem metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             resp = await client.get(f"https://rubygems.org/api/v1/gems/{name}.json")
             if resp.status_code != 200:
                 return None
@@ -426,7 +451,7 @@ async def _discover_from_rubygems(name: str) -> dict | None:
 async def _discover_from_nuget(name: str) -> dict | None:
     """Query NuGet API for .NET/C# package metadata."""
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             # NuGet service index → registration endpoint
             resp = await client.get(
                 f"https://api.nuget.org/v3/registration5-gz-semver2/{name.lower()}/index.json",
@@ -476,7 +501,7 @@ async def _discover_from_maven(name: str) -> dict | None:
     - ``groupId:artifactId`` (e.g. "com.google.inject:guice") — exact lookup
     """
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with _safe_httpx_client(timeout=15) as client:
             if ":" in name:
                 group_id, artifact_id = name.split(":", 1)
                 q = f'g:"{group_id}" AND a:"{artifact_id}"'
@@ -632,7 +657,7 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
     async def _search_github(query: str) -> list[dict]:
         """Execute a single GitHub search and return items."""
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
                 resp = await client.get(
                     "https://api.github.com/search/repositories",
                     params={
@@ -761,7 +786,7 @@ async def _get_github_homepage(url: str) -> str | None:
     owner, repo = m.group(1), m.group(2)
 
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+        async with _safe_httpx_client(timeout=10, follow_redirects=True) as client:
             resp = await client.get(
                 f"https://api.github.com/repos/{owner}/{repo}",
                 headers=_github_headers(),
@@ -888,7 +913,7 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
 
     async def _check(label: str, url: str) -> tuple[str, str, int, bool] | None:
         try:
-            async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            async with _safe_httpx_client(timeout=10, follow_redirects=True) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     return None
@@ -1555,7 +1580,7 @@ async def try_llms_txt(base_url: str) -> str | None:
     for filename in ("llms-full.txt", "llms.txt"):
         url = f"{origin}/{filename}"
         try:
-            async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+            async with _safe_httpx_client(timeout=20, follow_redirects=True) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     content = resp.text
@@ -2592,7 +2617,7 @@ async def _fetch_github_readme(repo_url: str) -> list[dict] | None:
 
     owner, repo = match.group(1), match.group(2)
 
-    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+    async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
         # Try common README filenames on HEAD (avoids an API call to
         # resolve default branch).
         for fname in (
@@ -2651,7 +2676,7 @@ async def _try_github_raw_docs(
     api_base = f"https://api.github.com/repos/{owner}/{repo}"
     raw_base = f"https://raw.githubusercontent.com/{owner}/{repo}"
 
-    async with httpx.AsyncClient(timeout=20) as client:
+    async with _safe_httpx_client(timeout=20) as client:
         # Resolve default branch
         try:
             resp = await client.get(
@@ -2832,7 +2857,7 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
     for path in ("/sitemap.xml", "/sitemap_index.xml"):
         url = f"{origin}{path}"
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+            async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
                 resp = await client.get(url)
                 if resp.status_code != 200:
                     continue
@@ -2903,7 +2928,7 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
     """
     # Resolve the actual base URL (handle redirects like / -> /en/latest/)
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
             resp = await client.get(base_url)
             actual_url = str(resp.url).rstrip("/") + "/"
     except Exception:
@@ -2927,7 +2952,7 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
             unique_candidates.append(c)
 
     try:
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+        async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
             for inv_url in unique_candidates:
                 try:
                     resp = await client.get(inv_url)

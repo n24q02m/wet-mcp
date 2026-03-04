@@ -77,7 +77,10 @@ async def analyze_media(
     if not settings.api_keys:
         return "Error: LLM analysis requires API_KEYS to be configured."
 
-    path_obj = Path(media_path)
+    path_obj = Path(media_path).resolve()
+    download_dir = Path(settings.download_dir).resolve()
+    if not path_obj.is_relative_to(download_dir):
+        return f"Error: Access denied — file must be within download directory ({download_dir})"
     if not path_obj.exists():
         return f"Error: File not found at {media_path}"
 
