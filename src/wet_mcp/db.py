@@ -779,21 +779,26 @@ class DocsDB:
 
         _adj_map: dict[tuple[str, str, int], str] = {}
         if _adj_keys:
-            # Use VALUES list to batch lookup
-            placeholders = " UNION ALL ".join(
-                ["SELECT ? AS url, ? AS ver, ? AS idx"] * len(_adj_keys)
-            )
-            flat_params = [v for k in _adj_keys for v in k]
-            rows = self._conn.execute(
-                f"""SELECT dc.url, dc.version_id, dc.chunk_index, dc.content
-                    FROM doc_chunks dc
-                    INNER JOIN ({placeholders}) q
-                    ON dc.url = q.url AND dc.version_id = q.ver
-                    AND dc.chunk_index = q.idx""",
-                flat_params,
-            ).fetchall()
-            for r in rows:
-                _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r["content"]
+            # Use IN with row values to batch lookup (supported in sqlite >= 3.15)
+            # This avoids "too many terms in compound SELECT" errors when there are many keys.
+            # We also chunk the parameters to stay well below SQLite's SQLITE_MAX_VARIABLE_NUMBER.
+            # Older SQLite versions limit this to 999, so 300 keys = 900 params is universally safe.
+            _adj_keys_list = list(_adj_keys)
+            batch_size = 300
+            for i in range(0, len(_adj_keys_list), batch_size):
+                batch_keys = _adj_keys_list[i : i + batch_size]
+                placeholders = ",".join(["(?, ?, ?)"] * len(batch_keys))
+                flat_params = [v for k in batch_keys for v in k]
+                rows = self._conn.execute(
+                    f"""SELECT dc.url, dc.version_id, dc.chunk_index, dc.content
+                        FROM doc_chunks dc
+                        WHERE (dc.url, dc.version_id, dc.chunk_index) IN (VALUES {placeholders})""",
+                    flat_params,
+                ).fetchall()
+                for r in rows:
+                    _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
+                        "content"
+                    ]
 
         for cid, score in scored:
             if len(results) >= limit:
