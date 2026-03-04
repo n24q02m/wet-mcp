@@ -654,25 +654,22 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
     # Languages accepted for this user-facing language
     accept_langs = _GITHUB_LANGUAGE_ACCEPT.get(language, {gh_lang.lower()})
 
-    async def _search_github(query: str) -> list[dict]:
+    async def _search_github(client: httpx.AsyncClient, query: str) -> list[dict]:
         """Execute a single GitHub search and return items."""
         try:
-            async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
-                resp = await client.get(
-                    "https://api.github.com/search/repositories",
-                    params={
-                        "q": query,
-                        "sort": "stars",
-                        "per_page": 10,
-                    },
-                    headers=_github_headers(),
-                )
-                if resp.status_code != 200:
-                    logger.debug(
-                        f"GitHub search returned {resp.status_code} for q={query}"
-                    )
-                    return []
-                return resp.json().get("items", [])
+            resp = await client.get(
+                "https://api.github.com/search/repositories",
+                params={
+                    "q": query,
+                    "sort": "stars",
+                    "per_page": 10,
+                },
+                headers=_github_headers(),
+            )
+            if resp.status_code != 200:
+                logger.debug(f"GitHub search returned {resp.status_code} for q={query}")
+                return []
+            return resp.json().get("items", [])
         except Exception as e:
             logger.debug(f"GitHub search failed for q={query}: {e}")
             return []
@@ -720,50 +717,51 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
             queries.append(f"{search_name} language:{alt_gh}")
     queries.append(search_name)
 
-    for query in queries:
-        items = await _search_github(query)
-        if not items:
-            continue
-
-        # Exact name match
-        for item in items:
-            repo_name = item.get("name", "").lower()
-            full_name = item.get("full_name", "").lower()
-
-            if "/" in name_lower:
-                name_match = full_name == name_lower
-            else:
-                name_match = repo_name == name_lower
-
-            if not name_match:
+    async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
+        for query in queries:
+            items = await _search_github(client, query)
+            if not items:
                 continue
 
-            repo_lang = item.get("language") or ""
-            stars = item.get("stargazers_count", 0)
+            # Exact name match
+            for item in items:
+                repo_name = item.get("name", "").lower()
+                full_name = item.get("full_name", "").lower()
 
-            if not _is_lang_ok(repo_lang, stars):
-                continue
-            if stars < 20:
-                continue
+                if "/" in name_lower:
+                    name_match = full_name == name_lower
+                else:
+                    name_match = repo_name == name_lower
 
-            return _build_result(item, "found")
+                if not name_match:
+                    continue
 
-        # Fuzzy match: name contained in repo name (top result only)
-        top = items[0]
-        top_name = top.get("name", "").lower()
-        top_lang = top.get("language") or ""
-        top_stars = top.get("stargazers_count", 0)
+                repo_lang = item.get("language") or ""
+                stars = item.get("stargazers_count", 0)
 
-        if (
-            _is_lang_ok(top_lang, top_stars)
-            and top_stars >= 100
-            and (
-                name_lower in top_name
-                or top_name in name_lower
-                or name_lower.replace("-", "") == top_name.replace("-", "")
-            )
-        ):
-            return _build_result(top, "fuzzy match")
+                if not _is_lang_ok(repo_lang, stars):
+                    continue
+                if stars < 20:
+                    continue
+
+                return _build_result(item, "found")
+
+            # Fuzzy match: name contained in repo name (top result only)
+            top = items[0]
+            top_name = top.get("name", "").lower()
+            top_lang = top.get("language") or ""
+            top_stars = top.get("stargazers_count", 0)
+
+            if (
+                _is_lang_ok(top_lang, top_stars)
+                and top_stars >= 100
+                and (
+                    name_lower in top_name
+                    or top_name in name_lower
+                    or name_lower.replace("-", "") == top_name.replace("-", "")
+                )
+            ):
+                return _build_result(top, "fuzzy match")
 
     return None
 
@@ -911,101 +909,101 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     if not candidates:
         return homepage
 
-    async def _check(label: str, url: str) -> tuple[str, str, int, bool] | None:
+    async def _check(
+        client: httpx.AsyncClient, label: str, url: str
+    ) -> tuple[str, str, int, bool] | None:
         try:
-            async with _safe_httpx_client(timeout=10, follow_redirects=True) as client:
-                resp = await client.get(url)
-                if resp.status_code != 200:
-                    return None
-                content = resp.text
-                content_len = len(content)
-                # Must be substantial HTML/text, not an error page
-                if content_len < 500:
-                    return None
-                final_url = str(resp.url)
-                # Reject login/auth/account pages (false positive redirects)
-                final_path = urlparse(final_url).path.lower()
-                _auth_segments = (
-                    "/login",
-                    "/signin",
-                    "/signup",
-                    "/account",
-                    "/auth",
-                    "/register",
-                )
-                if any(seg in final_path for seg in _auth_segments):
-                    return None
-                # Avoid redirect loops back to the original homepage
-                if urlparse(final_url).netloc == parsed.netloc and label != "docs_path":
-                    final_parsed = urlparse(final_url)
-                    if not final_parsed.path.startswith("/docs"):
-                        if "docs" not in final_parsed.netloc:
-                            return None
-                # Check for objects.inv (Sphinx docs indicator)
-                has_inv = False
-                inv_url = final_url.rstrip("/") + "/objects.inv"
-                try:
-                    inv_resp = await client.get(inv_url)
-                    if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
-                        b"# Sphinx inventory version"
-                    ):
-                        # For ReadTheDocs: validate project name matches lib
-                        # and has enough objects (>= 50) to be real docs,
-                        # not a squatter/placeholder project.
-                        if label == "readthedocs":
-                            inv_content = inv_resp.content
-                            inv_text = inv_content[:500].decode(
-                                "utf-8", errors="replace"
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                return None
+            content = resp.text
+            content_len = len(content)
+            # Must be substantial HTML/text, not an error page
+            if content_len < 500:
+                return None
+            final_url = str(resp.url)
+            # Reject login/auth/account pages (false positive redirects)
+            final_path = urlparse(final_url).path.lower()
+            _auth_segments = (
+                "/login",
+                "/signin",
+                "/signup",
+                "/account",
+                "/auth",
+                "/register",
+            )
+            if any(seg in final_path for seg in _auth_segments):
+                return None
+            # Avoid redirect loops back to the original homepage
+            if urlparse(final_url).netloc == parsed.netloc and label != "docs_path":
+                final_parsed = urlparse(final_url)
+                if not final_parsed.path.startswith("/docs"):
+                    if "docs" not in final_parsed.netloc:
+                        return None
+            # Check for objects.inv (Sphinx docs indicator)
+            has_inv = False
+            inv_url = final_url.rstrip("/") + "/objects.inv"
+            try:
+                inv_resp = await client.get(inv_url)
+                if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
+                    b"# Sphinx inventory version"
+                ):
+                    # For ReadTheDocs: validate project name matches lib
+                    # and has enough objects (>= 50) to be real docs,
+                    # not a squatter/placeholder project.
+                    if label == "readthedocs":
+                        inv_content = inv_resp.content
+                        inv_text = inv_content[:500].decode("utf-8", errors="replace")
+                        proj_match = re.search(
+                            r"^# Project:\s*(.+)$", inv_text, re.MULTILINE
+                        )
+                        if proj_match:
+                            proj_name = (
+                                proj_match.group(1)
+                                .strip()
+                                .lower()
+                                .replace("-", "")
+                                .replace("_", "")
+                                .replace(" ", "")
                             )
-                            proj_match = re.search(
-                                r"^# Project:\s*(.+)$", inv_text, re.MULTILINE
-                            )
-                            if proj_match:
-                                proj_name = (
-                                    proj_match.group(1)
-                                    .strip()
-                                    .lower()
-                                    .replace("-", "")
-                                    .replace("_", "")
-                                    .replace(" ", "")
+                            if clean_name_norm not in proj_name:
+                                logger.debug(
+                                    f"RTD project '{proj_match.group(1).strip()}'"
+                                    f" doesn't match '{lib_name}', skipping"
                                 )
-                                if clean_name_norm not in proj_name:
-                                    logger.debug(
-                                        f"RTD project '{proj_match.group(1).strip()}'"
-                                        f" doesn't match '{lib_name}', skipping"
-                                    )
-                                    return None
-                            # Count objects: real docs have 50+, squatters < 30
-                            try:
-                                # Find end of header (4 lines starting with #)
-                                hdr_pos = 0
-                                for _ in range(4):
-                                    hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
-                                decompressed = zlib.decompress(inv_content[hdr_pos:])
-                                obj_count = len(decompressed.split(b"\n")) - 1
-                                if obj_count < 50:
-                                    logger.debug(
-                                        f"RTD {lib_name}: only {obj_count} "
-                                        f"objects, likely squatter — skipping"
-                                    )
-                                    return None
-                            except Exception:
-                                # Can't count objects — reject for safety
                                 return None
-                        has_inv = True
-                except Exception:
-                    pass
-                # ReadTheDocs without objects.inv is unreliable — skip
-                if label == "readthedocs" and not has_inv:
-                    return None
-                return (label, final_url, content_len, has_inv)
+                        # Count objects: real docs have 50+, squatters < 30
+                        try:
+                            # Find end of header (4 lines starting with #)
+                            hdr_pos = 0
+                            for _ in range(4):
+                                hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
+                            decompressed = zlib.decompress(inv_content[hdr_pos:])
+                            obj_count = len(decompressed.split(b"\n")) - 1
+                            if obj_count < 50:
+                                logger.debug(
+                                    f"RTD {lib_name}: only {obj_count} "
+                                    f"objects, likely squatter — skipping"
+                                )
+                                return None
+                        except Exception:
+                            # Can't count objects — reject for safety
+                            return None
+                    has_inv = True
+            except Exception:
+                pass
+            # ReadTheDocs without objects.inv is unreliable — skip
+            if label == "readthedocs" and not has_inv:
+                return None
+            return (label, final_url, content_len, has_inv)
         except Exception:
             return None
 
-    results = await asyncio.gather(
-        *[_check(label, url) for label, url in candidates],
-        return_exceptions=True,
-    )
+    async with _safe_httpx_client(timeout=10, follow_redirects=True) as client:
+        results = await asyncio.gather(
+            *[_check(client, label, url) for label, url in candidates],
+            return_exceptions=True,
+        )
 
     valid = [r for r in results if isinstance(r, tuple)]
     if not valid:

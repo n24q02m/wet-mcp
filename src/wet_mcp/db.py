@@ -566,6 +566,48 @@ class DocsDB:
     # Search
     # -----------------------------------------------------------------------
 
+    def _combine_scores(
+        self,
+        fts_scores: dict[str, float],
+        vec_scores: dict[str, float],
+        fts_chunks: dict[str, dict],
+    ) -> list[tuple[str, float]]:
+        """Combine FTS and vector scores using RRF or FTS-only scoring."""
+        all_ids = set(fts_scores.keys()) | set(vec_scores.keys())
+        scored: list[tuple[str, float]] = []
+
+        if vec_scores:
+            # RRF fusion when both FTS and vector signals available
+            k = 60
+            fts_ranked = sorted(
+                all_ids, key=lambda x: fts_scores.get(x, 0.0), reverse=True
+            )
+            vec_ranked = sorted(
+                all_ids, key=lambda x: vec_scores.get(x, 0.0), reverse=True
+            )
+            fts_rank = {cid: i + 1 for i, cid in enumerate(fts_ranked)}
+            vec_rank = {cid: i + 1 for i, cid in enumerate(vec_ranked)}
+
+            for cid in all_ids:
+                fr = fts_rank.get(cid, len(all_ids))
+                vr = vec_rank.get(cid, len(all_ids))
+                rrf = 1.0 / (k + fr) + 1.0 / (k + vr)
+                # Small quality boost
+                chunk = fts_chunks.get(cid)
+                quality = _chunk_quality_score(chunk["content"]) if chunk else 0.0
+                scored.append((cid, rrf + quality * 0.005))
+        else:
+            # FTS-only: normalized score + quality boost
+            for cid in fts_scores:
+                fts = fts_scores[cid]
+                chunk = fts_chunks.get(cid)
+                quality = _chunk_quality_score(chunk["content"]) if chunk else 0.0
+                score = fts * 0.85 + quality * 0.15
+                scored.append((cid, score))
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored
+
     def search(
         self,
         query: str,
@@ -701,40 +743,7 @@ class DocsDB:
                 logger.debug(f"Vector search error: {e}")
 
         # --- Combine scores ---
-        all_ids = set(fts_scores.keys()) | set(vec_scores.keys())
-        scored: list[tuple[str, float]] = []
-
-        if vec_scores:
-            # RRF fusion when both FTS and vector signals available
-            k = 60
-            fts_ranked = sorted(
-                all_ids, key=lambda x: fts_scores.get(x, 0.0), reverse=True
-            )
-            vec_ranked = sorted(
-                all_ids, key=lambda x: vec_scores.get(x, 0.0), reverse=True
-            )
-            fts_rank = {cid: i + 1 for i, cid in enumerate(fts_ranked)}
-            vec_rank = {cid: i + 1 for i, cid in enumerate(vec_ranked)}
-
-            for cid in all_ids:
-                fr = fts_rank.get(cid, len(all_ids))
-                vr = vec_rank.get(cid, len(all_ids))
-                rrf = 1.0 / (k + fr) + 1.0 / (k + vr)
-                # Small quality boost
-                chunk = fts_chunks.get(cid)
-                quality = _chunk_quality_score(chunk["content"]) if chunk else 0.0
-                scored.append((cid, rrf + quality * 0.005))
-        else:
-            # FTS-only: normalized score + quality boost
-            for cid in fts_scores:
-                fts = fts_scores[cid]
-                chunk = fts_chunks.get(cid)
-                quality = _chunk_quality_score(chunk["content"]) if chunk else 0.0
-                score = fts * 0.85 + quality * 0.15
-                scored.append((cid, score))
-
-        # Sort by score descending
-        scored.sort(key=lambda x: x[1], reverse=True)
+        scored = self._combine_scores(fts_scores, vec_scores, fts_chunks)
 
         # Build results with cross-chunk context + URL diversity limit
         # Cap results per URL to avoid returning 4-5 chunks from the same page

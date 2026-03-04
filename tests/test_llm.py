@@ -181,6 +181,28 @@ def test_analyze_media_path_traversal(mock_settings, tmp_path):
     assert "download directory" in result
 
 
+def test_encode_image_valid(tmp_path):
+    """Test encode_image with a valid image file."""
+    from wet_mcp.llm import encode_image
+
+    img_path = tmp_path / "test.png"
+    img_path.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00")
+    result = encode_image(str(img_path))
+    # base64 of above bytes
+    import base64
+
+    expected = base64.b64encode(b"\x89PNG\r\n\x1a\n\x00\x00").decode("utf-8")
+    assert result == expected
+
+
+def test_encode_image_not_found(tmp_path):
+    """Test encode_image with a non-existent file raises FileNotFoundError."""
+    from wet_mcp.llm import encode_image
+
+    with pytest.raises(FileNotFoundError):
+        encode_image(str(tmp_path / "nonexistent.png"))
+
+
 def test_analyze_media_path_traversal_dotdot(mock_settings, tmp_path):
     """Test that path traversal via .. is blocked."""
     download_dir = tmp_path / "downloads"

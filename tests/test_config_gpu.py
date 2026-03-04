@@ -1,7 +1,12 @@
 import sys
 from unittest import mock
 
-from wet_mcp.config import _detect_gpu, _has_gguf_support, _resolve_local_model
+from wet_mcp.config import (
+    Settings,
+    _detect_gpu,
+    _has_gguf_support,
+    _resolve_local_model,
+)
 
 
 def test_detect_gpu_cuda():
@@ -128,3 +133,51 @@ def test_resolve_local_model_no_gpu_no_gguf():
         mock.patch("wet_mcp.config._has_gguf_support", return_value=False),
     ):
         assert _resolve_local_model("onnx", "gguf") == "onnx"
+
+
+def test_resolve_local_embedding_model_gpu():
+    """Test resolve_local_embedding_model returns GGUF when GPU and GGUF available."""
+    s = Settings()
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=True),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=True),
+    ):
+        result = s.resolve_local_embedding_model()
+        assert "GGUF" in result
+        assert "Embedding" in result
+
+
+def test_resolve_local_embedding_model_no_gpu():
+    """Test resolve_local_embedding_model returns ONNX when no GPU."""
+    s = Settings()
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=False),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=True),
+    ):
+        result = s.resolve_local_embedding_model()
+        assert "ONNX" in result
+        assert "Embedding" in result
+
+
+def test_resolve_local_rerank_model_gpu():
+    """Test resolve_local_rerank_model returns GGUF when GPU and GGUF available."""
+    s = Settings()
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=True),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=True),
+    ):
+        result = s.resolve_local_rerank_model()
+        assert "GGUF" in result
+        assert "Reranker" in result
+
+
+def test_resolve_local_rerank_model_no_gpu():
+    """Test resolve_local_rerank_model returns ONNX when no GPU."""
+    s = Settings()
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=False),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=False),
+    ):
+        result = s.resolve_local_rerank_model()
+        assert "ONNX" in result
+        assert "Reranker" in result
