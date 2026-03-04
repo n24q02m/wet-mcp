@@ -399,6 +399,37 @@ def _get_settings_path(port: int) -> Path:
     return settings_file
 
 
+def _sigterm_then_kill(pid: int, label: str = "") -> bool:
+    """Send SIGTERM to a PID, wait briefly, then SIGKILL if needed.
+
+    Returns True if the process was successfully terminated.
+    """
+    tag = f" ({label})" if label else ""
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        return True  # Already dead or inaccessible
+
+    # Wait up to 3 seconds for graceful exit
+    for _ in range(30):
+        try:
+            os.kill(pid, 0)  # Check if alive
+        except ProcessLookupError:
+            logger.debug(f"Process PID={pid}{tag} terminated gracefully")
+            return True
+        except PermissionError:
+            return True
+        time.sleep(0.1)
+
+    # Force kill
+    try:
+        os.kill(pid, signal.SIGKILL)
+        logger.debug(f"Process PID={pid}{tag} force-killed")
+        return True
+    except (ProcessLookupError, PermissionError):
+        return True
+
+
 def _force_kill_process(proc: subprocess.Popen) -> None:
     """Force-kill a subprocess and all its children.
 
@@ -418,33 +449,29 @@ def _force_kill_process(proc: subprocess.Popen) -> None:
                 os.killpg(os.getpgid(pid), signal.SIGTERM)
             except (ProcessLookupError, PermissionError):
                 proc.terminate()
-        else:
-            proc.terminate()
 
-        # Wait briefly for graceful shutdown
-        try:
-            proc.wait(timeout=3)
-            logger.debug(f"SearXNG process (PID={pid}) terminated gracefully")
-            return
-        except subprocess.TimeoutExpired:
-            pass
+            try:
+                proc.wait(timeout=3)
+                logger.debug(f"SearXNG process (PID={pid}) terminated gracefully")
+                return
+            except subprocess.TimeoutExpired:
+                pass
 
-        # Force kill
-        if sys.platform != "win32":
             try:
                 os.killpg(os.getpgid(pid), signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 proc.kill()
+
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                logger.warning(f"SearXNG process (PID={pid}) could not be killed")
         else:
-            proc.kill()
-
-        try:
-            proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            logger.warning(f"SearXNG process (PID={pid}) could not be killed")
-
-        logger.debug(f"SearXNG process (PID={pid}) force-killed")
-
+            _sigterm_then_kill(pid, "SearXNG")
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
     except Exception as e:
         logger.debug(f"Error killing SearXNG process: {e}")
 
@@ -472,10 +499,7 @@ def _kill_stale_port_process(port: int) -> None:
                     try:
                         pid = int(pid_str)
                         if pid > 0:
-                            os.kill(pid, signal.SIGTERM)
-                            logger.debug(
-                                f"Killed stale process on port {port} (PID={pid})"
-                            )
+                            _sigterm_then_kill(pid, f"stale port {port}")
                     except (ValueError, ProcessLookupError, PermissionError):
                         pass
         except Exception:
@@ -495,10 +519,7 @@ def _kill_stale_port_process(port: int) -> None:
                     try:
                         pid = int(pid_str.strip())
                         if pid > 0 and pid != os.getpid():
-                            os.kill(pid, signal.SIGTERM)
-                            logger.debug(
-                                f"Killed stale process on port {port} (PID={pid})"
-                            )
+                            _sigterm_then_kill(pid, f"stale port {port}")
                     except (ValueError, ProcessLookupError, PermissionError):
                         pass
         except FileNotFoundError:
