@@ -216,3 +216,25 @@ def test_analyze_media_path_traversal_dotdot(mock_settings, tmp_path):
 
     result = asyncio.run(analyze_media(traversal_path))
     assert "Error: Access denied" in result
+
+
+def test_analyze_media_tilde_download_dir(mock_settings, tmp_path, monkeypatch):
+    """Test that tilde (~) in download_dir is expanded correctly."""
+    # Simulate download_dir with tilde like the default "~/.wet-mcp/downloads"
+    fake_home = tmp_path / "fakehome"
+    fake_home.mkdir()
+    monkeypatch.setenv("HOME", str(fake_home))
+
+    dl_dir = fake_home / ".wet-mcp" / "downloads"
+    dl_dir.mkdir(parents=True)
+    settings.download_dir = "~/.wet-mcp/downloads"
+
+    # Create a valid file inside the tilde-expanded download dir
+    img_file = dl_dir / "test.jpg"
+    img_file.write_bytes(b"fake-image-data")
+
+    # Should NOT get "Access denied" — tilde must be expanded
+    result = asyncio.run(analyze_media(str(img_file), "Describe"))
+    # File exists and is within download_dir, so we should get past the path check
+    # (will fail at LLM call since we didn't mock it, but NOT "Access denied")
+    assert "Access denied" not in result
