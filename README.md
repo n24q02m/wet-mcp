@@ -235,22 +235,25 @@ LLM access (for media analysis) supports 3 modes, resolved by priority:
 
 No cross-mode fallback — if proxy is configured but unreachable, calls fail (no silent fallback to direct API).
 
-**Proxy mode** (recommended for production):
-```bash
-LITELLM_PROXY_URL=http://10.0.0.20:4000
-LITELLM_PROXY_KEY=sk-your-virtual-key
-```
+```jsonc
+// In your MCP client config (Claude Desktop, Cursor, etc.):
+"env": {
+  // === Mode 1: Proxy (production) ===
+  "LITELLM_PROXY_URL": "http://10.0.0.20:4000",
+  "LITELLM_PROXY_KEY": "sk-your-virtual-key",
 
-**SDK mode** (direct API):
-```bash
-API_KEYS=GOOGLE_API_KEY:AIza...
-LLM_MODELS=gemini/gemini-3-flash-preview
-```
+  // === Mode 2: SDK (direct API) ===
+  "API_KEYS": "GOOGLE_API_KEY:AIza...",
+  "LLM_MODELS": "gemini/gemini-3-flash-preview",
 
-**Custom endpoints** (e.g. modalcom-ai-workers on Modal.com):
-```bash
-EMBEDDING_API_BASE=https://your-worker.modal.run
-EMBEDDING_API_KEY=your-key
+  // === Mode 2: SDK (custom endpoint, e.g. modalcom-ai-workers) ===
+  "EMBEDDING_API_BASE": "https://your-worker.modal.run",
+  "EMBEDDING_API_KEY": "your-key",
+  "RERANK_API_BASE": "https://your-worker.modal.run",
+  "RERANK_API_KEY": "your-key",
+
+  // === Mode 3: Local — no env needed, embedding/rerank always available ===
+}
 ```
 
 ### SearXNG Configuration (2-Mode)
@@ -331,7 +334,6 @@ docker build -t n24q02m/wet-mcp:latest .
 ## Related Projects
 
 - **[modalcom-ai-workers](https://github.com/n24q02m/modalcom-ai-workers)** — GPU-accelerated AI workers on Modal.com (embedding, reranking)
-- **[mnemo-mcp](https://github.com/n24q02m/mnemo-mcp)** — MCP persistent memory server with semantic search
 - **[qwen3-embed](https://github.com/n24q02m/qwen3-embed)** — Local embedding/reranking library used by wet-mcp
 
 ## Contributing
