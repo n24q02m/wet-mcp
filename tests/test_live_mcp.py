@@ -20,7 +20,6 @@ import sys
 from mcp import StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -149,7 +148,11 @@ async def run_tests():
                     "config", {"action": "docs_reindex", "key": "fastapi"}
                 )
                 t = parse(r)
-                if "clear" in t.lower() or "reindex" in t.lower() or "fastapi" in t.lower():
+                if (
+                    "clear" in t.lower()
+                    or "reindex" in t.lower()
+                    or "fastapi" in t.lower()
+                ):
                     ok("config.docs_reindex(fastapi)", t[:80])
                 else:
                     fail("config.docs_reindex(fastapi)", t[:80])
@@ -171,7 +174,11 @@ async def run_tests():
                     fail("search.search", t[:80])
             except Exception as e:
                 err = str(e)
-                if "network" in err.lower() or "searxng" in err.lower() or "connection" in err.lower():
+                if (
+                    "network" in err.lower()
+                    or "searxng" in err.lower()
+                    or "connection" in err.lower()
+                ):
                     skip("search.search", f"Network/SearXNG unavailable: {err[:60]}")
                 else:
                     fail("search.search", err[:80])
@@ -189,7 +196,11 @@ async def run_tests():
                     fail("search.research", t[:80])
             except Exception as e:
                 err = str(e)
-                if "network" in err.lower() or "searxng" in err.lower() or "connection" in err.lower():
+                if (
+                    "network" in err.lower()
+                    or "searxng" in err.lower()
+                    or "connection" in err.lower()
+                ):
                     skip("search.research", f"Network/SearXNG unavailable: {err[:60]}")
                 else:
                     fail("search.research", err[:80])
@@ -303,10 +314,17 @@ async def run_tests():
             try:
                 r = await session.call_tool(
                     "media",
-                    {"action": "download", "media_urls": ["https://httpbin.org/image/png"]},
+                    {
+                        "action": "download",
+                        "media_urls": ["https://httpbin.org/image/png"],
+                    },
                 )
                 t = parse(r)
-                if "download" in t.lower() or "path" in t.lower() or "file" in t.lower():
+                if (
+                    "download" in t.lower()
+                    or "path" in t.lower()
+                    or "file" in t.lower()
+                ):
                     ok("media.download", f"{len(t)} chars")
                 else:
                     fail("media.download", t[:80])
@@ -321,7 +339,11 @@ async def run_tests():
             try:
                 r = await session.call_tool(
                     "media",
-                    {"action": "analyze", "url": "/tmp/nonexistent.png", "prompt": "describe"},
+                    {
+                        "action": "analyze",
+                        "url": "/tmp/nonexistent.png",
+                        "prompt": "describe",
+                    },
                 )
                 t = parse(r)
                 if "api" in t.lower() or "key" in t.lower() or "error" in t.lower():
@@ -330,7 +352,11 @@ async def run_tests():
                     fail("media.analyze", t[:80])
             except Exception as e:
                 err = str(e)
-                if "api" in err.lower() or "key" in err.lower() or "not found" in err.lower():
+                if (
+                    "api" in err.lower()
+                    or "key" in err.lower()
+                    or "not found" in err.lower()
+                ):
                     ok("media.analyze", f"Expected error: {err[:60]}")
                 else:
                     fail("media.analyze", err[:80])
@@ -342,7 +368,11 @@ async def run_tests():
             try:
                 r = await session.call_tool("search", {"action": "search"})
                 t = parse(r)
-                if "error" in t.lower() or "query" in t.lower() or "required" in t.lower():
+                if (
+                    "error" in t.lower()
+                    or "query" in t.lower()
+                    or "required" in t.lower()
+                ):
                     ok("search(no query)", t[:80])
                 else:
                     fail("search(no query)", f"Expected error: {t[:60]}")
@@ -355,7 +385,11 @@ async def run_tests():
                     "search", {"action": "invalid", "query": "test"}
                 )
                 t = parse(r)
-                if "error" in t.lower() or "unknown" in t.lower() or "invalid" in t.lower():
+                if (
+                    "error" in t.lower()
+                    or "unknown" in t.lower()
+                    or "invalid" in t.lower()
+                ):
                     ok("search(invalid action)", t[:80])
                 else:
                     fail("search(invalid action)", f"Expected error: {t[:60]}")
@@ -366,7 +400,11 @@ async def run_tests():
             try:
                 r = await session.call_tool("extract", {"action": "extract"})
                 t = parse(r)
-                if "error" in t.lower() or "url" in t.lower() or "required" in t.lower():
+                if (
+                    "error" in t.lower()
+                    or "url" in t.lower()
+                    or "required" in t.lower()
+                ):
                     ok("extract(no urls)", t[:80])
                 else:
                     fail("extract(no urls)", f"Expected error: {t[:60]}")
@@ -377,7 +415,11 @@ async def run_tests():
             try:
                 r = await session.call_tool("media", {"action": "list"})
                 t = parse(r)
-                if "error" in t.lower() or "url" in t.lower() or "required" in t.lower():
+                if (
+                    "error" in t.lower()
+                    or "url" in t.lower()
+                    or "required" in t.lower()
+                ):
                     ok("media(no url)", t[:80])
                 else:
                     fail("media(no url)", f"Expected error: {t[:60]}")
@@ -390,7 +432,11 @@ async def run_tests():
                     "config", {"action": "set", "key": "invalid_key", "value": "x"}
                 )
                 t = parse(r)
-                if "error" in t.lower() or "invalid" in t.lower() or "valid" in t.lower():
+                if (
+                    "error" in t.lower()
+                    or "invalid" in t.lower()
+                    or "valid" in t.lower()
+                ):
                     ok("config.set(invalid key)", t[:80])
                 else:
                     fail("config.set(invalid key)", f"Expected error: {t[:60]}")
@@ -415,10 +461,18 @@ async def run_tests():
             try:
                 r = await session.call_tool(
                     "extract",
-                    {"action": "extract", "urls": ["http://169.254.169.254/latest/meta-data"]},
+                    {
+                        "action": "extract",
+                        "urls": ["http://169.254.169.254/latest/meta-data"],
+                    },
                 )
                 t = parse(r)
-                if "block" in t.lower() or "denied" in t.lower() or "ssrf" in t.lower() or "error" in t.lower():
+                if (
+                    "block" in t.lower()
+                    or "denied" in t.lower()
+                    or "ssrf" in t.lower()
+                    or "error" in t.lower()
+                ):
                     ok("extract(SSRF private IP)", f"Blocked: {t[:60]}")
                 else:
                     fail("extract(SSRF private IP)", f"NOT blocked: {t[:60]}")
@@ -432,7 +486,12 @@ async def run_tests():
                     {"action": "extract", "urls": ["http://127.0.0.1:8080/secret"]},
                 )
                 t = parse(r)
-                if "block" in t.lower() or "denied" in t.lower() or "ssrf" in t.lower() or "error" in t.lower():
+                if (
+                    "block" in t.lower()
+                    or "denied" in t.lower()
+                    or "ssrf" in t.lower()
+                    or "error" in t.lower()
+                ):
                     ok("extract(SSRF localhost)", f"Blocked: {t[:60]}")
                 else:
                     fail("extract(SSRF localhost)", f"NOT blocked: {t[:60]}")
@@ -450,13 +509,21 @@ async def run_tests():
                     },
                 )
                 t = parse(r)
-                if "error" in t.lower() or "denied" in t.lower() or "security" in t.lower():
+                if (
+                    "error" in t.lower()
+                    or "denied" in t.lower()
+                    or "security" in t.lower()
+                ):
                     ok("media.download(path traversal)", f"Blocked: {t[:60]}")
                 else:
                     fail("media.download(path traversal)", f"NOT blocked: {t[:60]}")
             except Exception as e:
                 err = str(e)
-                if "denied" in err.lower() or "security" in err.lower() or "error" in err.lower():
+                if (
+                    "denied" in err.lower()
+                    or "security" in err.lower()
+                    or "error" in err.lower()
+                ):
                     ok("media.download(path traversal)", f"Blocked: {err[:60]}")
                 else:
                     fail("media.download(path traversal)", err[:60])
@@ -464,12 +531,12 @@ async def run_tests():
     # ===== SUMMARY =====
     total = passed + failed
     pct = 100 * passed / total if total > 0 else 0
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(
         f"RESULT: {passed}/{total} PASS ({pct:.1f}%)"
         + (f", {skipped} skipped" if skipped else "")
     )
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     if failed > 0:
         print("\nFailed tests:")
