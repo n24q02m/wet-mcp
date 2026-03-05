@@ -779,21 +779,25 @@ class DocsDB:
 
         _adj_map: dict[tuple[str, str, int], str] = {}
         if _adj_keys:
-            # Use VALUES list to batch lookup
-            placeholders = " UNION ALL ".join(
-                ["SELECT ? AS url, ? AS ver, ? AS idx"] * len(_adj_keys)
-            )
-            flat_params = [v for k in _adj_keys for v in k]
-            rows = self._conn.execute(
-                f"""SELECT dc.url, dc.version_id, dc.chunk_index, dc.content
-                    FROM doc_chunks dc
-                    INNER JOIN ({placeholders}) q
-                    ON dc.url = q.url AND dc.version_id = q.ver
-                    AND dc.chunk_index = q.idx""",
-                flat_params,
-            ).fetchall()
-            for r in rows:
-                _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r["content"]
+            # Chunk the keys into batches of 300 to stay safely below the
+            # older SQLite maximum of 999 parameters (300 * 3 = 900 variables).
+            # Optimize by using IN (VALUES ...) which is faster than UNION ALL
+            # for batch lookups and avoids creating temporary tables.
+            for i in range(0, len(_adj_keys), 300):
+                chunk_keys = _adj_keys[i : i + 300]
+                placeholders = ", ".join(["(?, ?, ?)"] * len(chunk_keys))
+                flat_params = [v for k in chunk_keys for v in k]
+
+                rows = self._conn.execute(
+                    f"""SELECT url, version_id, chunk_index, content
+                        FROM doc_chunks
+                        WHERE (url, version_id, chunk_index) IN (VALUES {placeholders})""",
+                    flat_params,
+                ).fetchall()
+                for r in rows:
+                    _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
+                        "content"
+                    ]
 
         for cid, score in scored:
             if len(results) >= limit:
