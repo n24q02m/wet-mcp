@@ -49,7 +49,7 @@ RUN uv run python -m playwright install chromium
 # ========================
 # Stage 2: Runtime
 # ========================
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 LABEL io.modelcontextprotocol.server.name="io.github.n24q02m/wet-mcp"
 
