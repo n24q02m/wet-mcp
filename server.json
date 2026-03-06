@@ -31,28 +31,6 @@
           "name": "GITHUB_TOKEN"
         }
       ]
-    },
-    {
-      "registryType": "oci",
-      "identifier": "docker.io/n24q02m/wet-mcp:latest",
-      "runtimeHint": "docker",
-      "transport": {
-        "type": "stdio"
-      },
-      "environmentVariables": [
-        {
-          "description": "API keys for cloud embedding and media analysis (format: ENV_VAR:key)",
-          "isRequired": false,
-          "isSecret": true,
-          "name": "API_KEYS"
-        },
-        {
-          "description": "GitHub personal access token for higher rate limits on library discovery",
-          "isRequired": false,
-          "isSecret": true,
-          "name": "GITHUB_TOKEN"
-        }
-      ]
     }
   ]
 }
