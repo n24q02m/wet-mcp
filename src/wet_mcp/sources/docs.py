@@ -942,7 +942,10 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
             if any(seg in final_path for seg in _auth_segments):
                 return None
             # Avoid redirect loops back to the original homepage
-            if urlparse(final_url).netloc == parsed.netloc and label not in ("docs_path", "original"):
+            if urlparse(final_url).netloc == parsed.netloc and label not in (
+                "docs_path",
+                "original",
+            ):
                 final_parsed = urlparse(final_url)
                 if not final_parsed.path.startswith("/docs"):
                     if "docs" not in final_parsed.netloc:
