@@ -2173,7 +2173,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.10.0"
+version = "2.10.1"
 source = { editable = "." }
 dependencies = [
     { name = "crawl4ai" },
@@ -2182,7 +2182,6 @@ dependencies = [
     { name = "httpx" },
     { name = "litellm" },
     { name = "loguru" },
-    { name = "lxml" },
     { name = "mcp", extra = ["cli"] },
     { name = "nltk" },
     { name = "pillow" },
@@ -2213,7 +2212,6 @@ requires-dist = [
     { name = "httpx" },
     { name = "litellm" },
     { name = "loguru" },
-    { name = "lxml", specifier = ">=6.0" },
     { name = "mcp", extras = ["cli"] },
     { name = "nltk", specifier = ">=3.9.3" },
     { name = "pillow", specifier = ">=12.1.1" },
