@@ -1,3 +1,0 @@
-## 2024-03-03 - Batch Parameter Chunking for SQLite IN (VALUES ...)
-**Learning:** When using SQLite `IN (VALUES (?, ?, ?))` for batch lookups, parameter limits must be considered. In older SQLite versions, `SQLITE_MAX_VARIABLE_NUMBER` is 999. Chunking the lookup keys into batches (e.g. 300 keys of 3 columns each = 900 variables) safely avoids exceeding this limit while maintaining the performance benefits of batching over N+1 or temporary table construction.
-**Action:** Always calculate the total number of variables (rows * columns per row) when batching `IN (VALUES ...)` queries and chunk appropriately to stay under 999.
