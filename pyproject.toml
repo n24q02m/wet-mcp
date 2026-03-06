@@ -17,7 +17,7 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-requires-python = "==3.14.*"
+requires-python = "==3.13.*"
 dependencies = [
     # MCP Server
     "mcp[cli]",
@@ -67,10 +67,6 @@ Issues = "https://github.com/n24q02m/wet-mcp/issues"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.uv]
-# Override lxml to >=6.0 for Python 3.14 wheel availability
-# crawl4ai pins lxml~=5.3 but lxml 5.x has no cp314 wheels
-override-dependencies = ["lxml>=6.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/wet_mcp"]
