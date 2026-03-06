@@ -28,14 +28,16 @@ from wet_mcp.security import is_safe_url
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 24
+DISCOVERY_VERSION = 25
 
 
-def _ssrf_event_hook(request: httpx.Request) -> None:
+async def _ssrf_event_hook(request: httpx.Request) -> None:
     """httpx event hook that blocks requests to unsafe (private/internal) URLs.
 
     Attached to every ``httpx.AsyncClient`` in this module so that even
     followed redirects are validated against SSRF.
+
+    Must be async because httpx 0.28+ awaits event hooks on AsyncClient.
     """
     url_str = str(request.url)
     if not is_safe_url(url_str):
@@ -909,6 +911,11 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     if not candidates:
         return homepage
 
+    # Include the original homepage as a candidate so it competes fairly.
+    # This prevents ReadTheDocs/docs subdomain from incorrectly overriding
+    # an already-good docs URL (e.g. docs.djangoproject.com → django.readthedocs.io).
+    candidates.insert(0, ("original", homepage))
+
     async def _check(
         client: httpx.AsyncClient, label: str, url: str
     ) -> tuple[str, str, int, bool] | None:
@@ -935,7 +942,7 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
             if any(seg in final_path for seg in _auth_segments):
                 return None
             # Avoid redirect loops back to the original homepage
-            if urlparse(final_url).netloc == parsed.netloc and label != "docs_path":
+            if urlparse(final_url).netloc == parsed.netloc and label not in ("docs_path", "original"):
                 final_parsed = urlparse(final_url)
                 if not final_parsed.path.startswith("/docs"):
                     if "docs" not in final_parsed.netloc:
@@ -1025,6 +1032,10 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
         # docs subdomain gets small bonus (same org, high confidence)
         if label == "docs_subdomain":
             score += 3
+        # Original homepage gets bonus — it's the registry-provided URL,
+        # only replace if an alternative is strictly superior.
+        if label == "original":
+            score += 5
         if score > best_score:
             best_score = score
             best = (label, final_url)
@@ -1238,6 +1249,179 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
         "homepage": "https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck",
         "repository": "https://github.com/golang/vuln",
         "description": "govulncheck — Go vulnerability scanner",
+    },
+    # --- Popular libraries with wrong/missing npm/PyPI homepage ---
+    "chakra-ui": {
+        "homepage": "https://www.chakra-ui.com/docs",
+        "repository": "https://github.com/chakra-ui/chakra-ui",
+        "description": "Chakra UI — accessible React component library",
+    },
+    "@chakra-ui/react": {
+        "homepage": "https://www.chakra-ui.com/docs",
+        "repository": "https://github.com/chakra-ui/chakra-ui",
+        "description": "Chakra UI — accessible React component library",
+    },
+    "clerk": {
+        "homepage": "https://clerk.com/docs",
+        "repository": "https://github.com/clerk/javascript",
+        "description": "Clerk — authentication and user management",
+    },
+    "@clerk/nextjs": {
+        "homepage": "https://clerk.com/docs",
+        "repository": "https://github.com/clerk/javascript",
+        "description": "Clerk — authentication and user management for Next.js",
+    },
+    "supabase": {
+        "homepage": "https://supabase.com/docs",
+        "repository": "https://github.com/supabase/supabase",
+        "description": "Supabase — open-source Firebase alternative",
+    },
+    "@supabase/supabase-js": {
+        "homepage": "https://supabase.com/docs/reference/javascript/",
+        "repository": "https://github.com/supabase/supabase-js",
+        "description": "Supabase JavaScript client library",
+    },
+    # --- Scoped / monorepo sub-packages with missing homepage ---
+    "@vue/router": {
+        "homepage": "https://router.vuejs.org/",
+        "repository": "https://github.com/vuejs/router",
+        "description": "Vue Router — official router for Vue.js",
+    },
+    "vue-router": {
+        "homepage": "https://router.vuejs.org/",
+        "repository": "https://github.com/vuejs/router",
+        "description": "Vue Router — official router for Vue.js",
+    },
+    "@vue/pinia": {
+        "homepage": "https://pinia.vuejs.org/",
+        "repository": "https://github.com/vuejs/pinia",
+        "description": "Pinia — intuitive store for Vue.js",
+    },
+    "pinia": {
+        "homepage": "https://pinia.vuejs.org/",
+        "repository": "https://github.com/vuejs/pinia",
+        "description": "Pinia — intuitive store for Vue.js",
+    },
+    # --- Ambiguous short names (deprecated/squatted on npm) ---
+    "nest": {
+        "homepage": "https://docs.nestjs.com/",
+        "repository": "https://github.com/nestjs/nest",
+        "description": "NestJS — progressive Node.js framework",
+    },
+    "nestjs": {
+        "homepage": "https://docs.nestjs.com/",
+        "repository": "https://github.com/nestjs/nest",
+        "description": "NestJS — progressive Node.js framework",
+    },
+    # --- Name aliasing (common name != package name) ---
+    "beautiful-soup": {
+        "homepage": "https://www.crummy.com/software/BeautifulSoup/bs4/doc/",
+        "repository": "https://code.launchpad.net/beautifulsoup",
+        "description": "Beautiful Soup — HTML/XML parser for Python",
+    },
+    "beautifulsoup": {
+        "homepage": "https://www.crummy.com/software/BeautifulSoup/bs4/doc/",
+        "repository": "https://code.launchpad.net/beautifulsoup",
+        "description": "Beautiful Soup — HTML/XML parser for Python",
+    },
+    "bs4": {
+        "homepage": "https://www.crummy.com/software/BeautifulSoup/bs4/doc/",
+        "repository": "https://code.launchpad.net/beautifulsoup",
+        "description": "Beautiful Soup — HTML/XML parser for Python",
+    },
+    "pytorch": {
+        "homepage": "https://pytorch.org/docs/stable/",
+        "repository": "https://github.com/pytorch/pytorch",
+        "description": "PyTorch — open-source deep learning framework",
+    },
+    "torch": {
+        "homepage": "https://pytorch.org/docs/stable/",
+        "repository": "https://github.com/pytorch/pytorch",
+        "description": "PyTorch — open-source deep learning framework",
+    },
+    "tensorflow": {
+        "homepage": "https://www.tensorflow.org/api_docs",
+        "repository": "https://github.com/tensorflow/tensorflow",
+        "description": "TensorFlow — end-to-end ML platform",
+    },
+    "sklearn": {
+        "homepage": "https://scikit-learn.org/stable/",
+        "repository": "https://github.com/scikit-learn/scikit-learn",
+        "description": "scikit-learn — machine learning in Python",
+    },
+    # --- Generic names (multi-language/ecosystem collision) ---
+    "graphql": {
+        "homepage": "https://graphql.org/learn/",
+        "repository": "https://github.com/graphql/graphql-spec",
+        "description": "GraphQL — query language for APIs",
+    },
+    "redis": {
+        "homepage": "https://redis.io/docs/",
+        "repository": "https://github.com/redis/redis",
+        "description": "Redis — in-memory data store",
+    },
+    "kafka": {
+        "homepage": "https://kafka.apache.org/documentation/",
+        "repository": "https://github.com/apache/kafka",
+        "description": "Apache Kafka — distributed event streaming platform",
+    },
+    "grpc": {
+        "homepage": "https://grpc.io/docs/",
+        "repository": "https://github.com/grpc/grpc",
+        "description": "gRPC — high-performance RPC framework",
+    },
+    "htmx": {
+        "homepage": "https://htmx.org/docs/",
+        "repository": "https://github.com/bigskysoftware/htmx",
+        "description": "htmx — high power tools for HTML",
+    },
+    # --- Java/Spring ecosystem ---
+    "spring-boot": {
+        "homepage": "https://docs.spring.io/spring-boot/reference/",
+        "repository": "https://github.com/spring-projects/spring-boot",
+        "description": "Spring Boot — Java application framework",
+    },
+    "spring": {
+        "homepage": "https://docs.spring.io/spring-framework/reference/",
+        "repository": "https://github.com/spring-projects/spring-framework",
+        "description": "Spring Framework — comprehensive Java application framework",
+    },
+    "spring-security": {
+        "homepage": "https://docs.spring.io/spring-security/reference/",
+        "repository": "https://github.com/spring-projects/spring-security",
+        "description": "Spring Security — authentication and authorization for Java",
+    },
+    # --- Rust crates with no custom homepage ---
+    "axum": {
+        "homepage": "https://docs.rs/axum/latest/axum/",
+        "repository": "https://github.com/tokio-rs/axum",
+        "description": "axum — ergonomic and modular web framework for Rust",
+    },
+    "reqwest": {
+        "homepage": "https://docs.rs/reqwest/latest/reqwest/",
+        "repository": "https://github.com/seanmonstar/reqwest",
+        "description": "reqwest — HTTP client for Rust",
+    },
+    "sqlx": {
+        "homepage": "https://docs.rs/sqlx/latest/sqlx/",
+        "repository": "https://github.com/launchbadge/sqlx",
+        "description": "SQLx — async SQL toolkit for Rust",
+    },
+    # --- Python popular but ambiguous ---
+    "celery": {
+        "homepage": "https://docs.celeryq.dev/en/stable/",
+        "repository": "https://github.com/celery/celery",
+        "description": "Celery — distributed task queue for Python",
+    },
+    "numpy": {
+        "homepage": "https://numpy.org/doc/stable/",
+        "repository": "https://github.com/numpy/numpy",
+        "description": "NumPy — numerical computing with Python",
+    },
+    "pandas": {
+        "homepage": "https://pandas.pydata.org/docs/",
+        "repository": "https://github.com/pandas-dev/pandas",
+        "description": "pandas — data analysis and manipulation for Python",
     },
 }
 
