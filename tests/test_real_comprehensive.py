@@ -456,6 +456,48 @@ class TestModalWorkers:
             top = data["results"][0]
             assert top["index"] == 0
 
+    async def test_modal_embedding_via_litellm_sdk(self):
+        """Test Modal embedding via LiteLLM SDK (openai/ provider)."""
+        import litellm
+
+        response = litellm.embedding(
+            model="openai/qwen3-embedding-0.6b",
+            input=["Hello world", "Python programming"],
+            api_base=f"{MODAL_EMBED_URL}/v1",
+            api_key=MODAL_API_KEY,
+            encoding_format="float",
+        )
+        assert len(response.data) == 2
+        assert len(response.data[0]["embedding"]) == 1024
+
+    async def test_modal_reranking_via_litellm_sdk(self):
+        """Test Modal reranking via LiteLLM SDK (cohere/ provider).
+
+        Requires Modal worker deployed with /v2/rerank route and
+        return_documents field support.
+        """
+        import litellm
+
+        try:
+            response = litellm.rerank(
+                model="cohere/qwen3-reranker-0.6b",
+                query="What is Python?",
+                documents=[
+                    "Python is a programming language",
+                    "Java is a programming language",
+                    "The weather is nice today",
+                ],
+                top_n=2,
+                api_base=MODAL_RERANK_URL,
+                api_key=MODAL_API_KEY,
+            )
+            assert len(response.results) >= 1
+        except Exception as e:
+            # /v2/rerank route may not be deployed yet
+            if "Not Found" in str(e) or "404" in str(e):
+                pytest.skip("Modal reranker /v2/rerank not deployed yet")
+            raise
+
 
 # ---------------------------------------------------------------------------
 # 6. Local ONNX embedding + reranking

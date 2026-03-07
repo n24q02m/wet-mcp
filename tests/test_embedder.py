@@ -76,6 +76,7 @@ class TestLiteLLMBackend:
             mock_embed.assert_called_once_with(
                 model="text-embedding-3-small",
                 input=["test"],
+                encoding_format="float",
                 dimensions=256,
             )
 
