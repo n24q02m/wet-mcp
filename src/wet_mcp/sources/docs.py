@@ -28,7 +28,7 @@ from wet_mcp.security import is_safe_url
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 26
+DISCOVERY_VERSION = 27
 
 
 async def _ssrf_event_hook(request: httpx.Request) -> None:
@@ -1361,6 +1361,53 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
         "homepage": "https://turbo.build/repo/docs",
         "repository": "https://github.com/vercel/turborepo",
         "description": "Turborepo — high-performance build system for JS/TS monorepos",
+    },
+    # --- Wrong/missing registry metadata (real package, bad discovery) ---
+    "vinejs": {
+        "homepage": "https://vinejs.dev/docs/introduction",
+        "repository": "https://github.com/vinejs/vine",
+        "description": "VineJS — form data validation library for Node.js",
+    },
+    "@vinejs/vine": {
+        "homepage": "https://vinejs.dev/docs/introduction",
+        "repository": "https://github.com/vinejs/vine",
+        "description": "VineJS — form data validation library for Node.js",
+    },
+    "inertia": {
+        "homepage": "https://inertiajs.com/",
+        "repository": "https://github.com/inertiajs/inertia",
+        "description": "Inertia.js — modern monolith SPA framework",
+    },
+    "inertiajs": {
+        "homepage": "https://inertiajs.com/",
+        "repository": "https://github.com/inertiajs/inertia",
+        "description": "Inertia.js — modern monolith SPA framework",
+    },
+    "@inertiajs/react": {
+        "homepage": "https://inertiajs.com/",
+        "repository": "https://github.com/inertiajs/inertia",
+        "description": "Inertia.js React adapter — modern monolith SPA framework",
+    },
+    "@inertiajs/vue3": {
+        "homepage": "https://inertiajs.com/",
+        "repository": "https://github.com/inertiajs/inertia",
+        "description": "Inertia.js Vue 3 adapter — modern monolith SPA framework",
+    },
+    # --- Umbrella orgs / meta-packages not on registries ---
+    "dry-rb": {
+        "homepage": "https://dry-rb.org/",
+        "repository": "https://github.com/dry-rb",
+        "description": "dry-rb — Ruby gems for common programming patterns",
+    },
+    "dry-validation": {
+        "homepage": "https://dry-rb.org/gems/dry-validation/",
+        "repository": "https://github.com/dry-rb/dry-validation",
+        "description": "dry-validation — data validation for Ruby",
+    },
+    "dry-types": {
+        "homepage": "https://dry-rb.org/gems/dry-types/",
+        "repository": "https://github.com/dry-rb/dry-types",
+        "description": "dry-types — flexible type system for Ruby",
     },
     # --- Cross-ecosystem collisions (name exists on wrong registry) ---
     "rails": {
