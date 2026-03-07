@@ -125,8 +125,9 @@ async def search(
                 # Deduplicate by URL: with multiple engines, the same page
                 # may appear several times.  Keep the entry with the longest
                 # snippet (most informative) and merge engine sources.
+                # Python 3.7+ preserves dictionary insertion order, eliminating the need
+                # for a separate 'deduped' list mapping to track the first-seen order.
                 seen: dict[str, dict] = {}
-                deduped: list[dict] = []
                 for item in formatted:
                     url = item["url"]
                     if url in seen:
@@ -142,10 +143,9 @@ async def search(
                             existing["title"] = item["title"] or existing["title"]
                     else:
                         seen[url] = item
-                        deduped.append(item)
 
-                # Trim to requested limit after dedup
-                deduped = deduped[:max_results]
+                # Convert dict values to list and trim to requested limit after dedup
+                deduped = list(seen.values())[:max_results]
 
                 output = {
                     "results": deduped,
