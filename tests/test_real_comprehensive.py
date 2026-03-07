@@ -157,7 +157,9 @@ class TestExternalSearXNG:
                 SEARXNG_EXTERNAL_URL + "/search",
                 params={"q": "test", "format": "json"},
             )
-            assert resp.status_code == 200, f"External SearXNG unreachable: {resp.status_code}"
+            assert resp.status_code == 200, (
+                f"External SearXNG unreachable: {resp.status_code}"
+            )
             data = resp.json()
             assert len(data.get("results", [])) > 0
 
@@ -286,8 +288,13 @@ class TestLiteLLMSDK:
         import subprocess
 
         result = subprocess.run(
-            ["bash", "-c", "cat /proc/$(pgrep -f 'bin/wet-mcp' | head -1)/environ 2>/dev/null | tr '\\0' '\\n' | grep '^API_KEYS='"],
-            capture_output=True, text=True,
+            [
+                "bash",
+                "-c",
+                "cat /proc/$(pgrep -f 'bin/wet-mcp' | head -1)/environ 2>/dev/null | tr '\\0' '\\n' | grep '^API_KEYS='",
+            ],
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0 or not result.stdout.strip():
             pytest.skip("No running wet-mcp process with API_KEYS")
