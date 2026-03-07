@@ -726,3 +726,1287 @@ async def test_help_tool_config():
         mock_files.return_value.joinpath.return_value = mock_path
         res = await server.help("config")
         assert res == "# Config Help\nServer config."
+
+
+# ---------------------------------------------------------------------------
+# Lifespan startup/shutdown edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_lifespan_startup_no_github_token():
+    """Test lifespan warns when GITHUB_TOKEN is not set (line 106)."""
+    mock_fastmcp = MagicMock()
+    with (
+        patch("wet_mcp.server.WebCache"),
+        patch("wet_mcp.server.DocsDB"),
+        patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
+        patch("wet_mcp.server.stop_searxng"),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        async with server._lifespan(mock_fastmcp):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_lifespan_startup_backend_init_error():
+    """Test lifespan handles backend init failure gracefully (lines 134-136)."""
+    mock_fastmcp = MagicMock()
+    with (
+        patch("wet_mcp.server.WebCache"),
+        patch("wet_mcp.server.DocsDB"),
+        patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
+        patch("wet_mcp.server.stop_searxng"),
+        patch(
+            "wet_mcp.server._init_embedding_backend",
+            new_callable=AsyncMock,
+            side_effect=Exception("backend init error"),
+        ),
+    ):
+        async with server._lifespan(mock_fastmcp):
+            # Allow background tasks to run
+            await asyncio.sleep(0.1)
+
+
+@pytest.mark.asyncio
+async def test_lifespan_startup_sync_enabled():
+    """Test lifespan starts auto-sync when sync_enabled (lines 147-149)."""
+    mock_fastmcp = MagicMock()
+    # The lifespan function re-imports settings from wet_mcp.config,
+    # so we patch at the config level to affect the local import.
+    with (
+        patch("wet_mcp.server.WebCache"),
+        patch("wet_mcp.server.DocsDB"),
+        patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
+        patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.config.settings") as ms,
+        patch("wet_mcp.sync.start_auto_sync") as mock_start_sync,
+        patch("wet_mcp.sync.stop_auto_sync") as mock_stop_sync,
+    ):
+        ms.setup_litellm.return_value = "sdk"
+        ms.wet_auto_searxng = False
+        ms.wet_cache = False
+        ms.sync_enabled = True
+        ms.resolve_embedding_dims.return_value = 768
+        ms.get_db_path.return_value = MagicMock()
+        ms.get_db_path.return_value.parent = MagicMock()
+        ms.log_level = "DEBUG"
+        ms.tool_timeout = 0
+        async with server._lifespan(mock_fastmcp):
+            await asyncio.sleep(0.1)
+        mock_start_sync.assert_called_once()
+        mock_stop_sync.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_shutdown_sync_enabled():
+    """Test lifespan shutdown stops auto-sync (lines 172-174)."""
+    mock_fastmcp = MagicMock()
+    with (
+        patch("wet_mcp.server.WebCache"),
+        patch("wet_mcp.server.DocsDB"),
+        patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
+        patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.config.settings") as ms,
+        patch("wet_mcp.sync.start_auto_sync"),
+        patch("wet_mcp.sync.stop_auto_sync") as mock_stop,
+    ):
+        ms.setup_litellm.return_value = "sdk"
+        ms.wet_auto_searxng = False
+        ms.wet_cache = False
+        ms.sync_enabled = True
+        ms.resolve_embedding_dims.return_value = 768
+        ms.get_db_path.return_value = MagicMock()
+        ms.get_db_path.return_value.parent = MagicMock()
+        ms.log_level = "DEBUG"
+        ms.tool_timeout = 0
+        async with server._lifespan(mock_fastmcp):
+            pass
+        mock_stop.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_shutdown_crawler_error():
+    """Test lifespan handles crawler shutdown error (lines 187-188)."""
+    mock_fastmcp = MagicMock()
+    with (
+        patch("wet_mcp.server.WebCache"),
+        patch("wet_mcp.server.DocsDB"),
+        patch(
+            "wet_mcp.server.shutdown_crawler",
+            new_callable=AsyncMock,
+            side_effect=Exception("browser crash"),
+        ),
+        patch("wet_mcp.server.stop_searxng"),
+    ):
+        async with server._lifespan(mock_fastmcp):
+            pass
+
+
+# ---------------------------------------------------------------------------
+# _init_embedding_backend edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_init_embedding_backend_litellm_explicit_model():
+    """Test embedding init with explicit litellm model (lines 210-224)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.embedder.init_backend") as mock_init,
+    ):
+        ms.resolve_embedding_backend.return_value = "litellm"
+        ms.resolve_embedding_model.return_value = "text-embedding-3-large"
+        ms.get_embedding_litellm_kwargs.return_value = {}
+        ms.resolve_embedding_dims.return_value = 768
+        ms.resolve_local_embedding_model.return_value = "local-model"
+
+        mock_backend = MagicMock()
+        mock_backend.check_available.return_value = 1536
+        mock_init.return_value = mock_backend
+
+        await server._init_embedding_backend("sdk")
+        mock_init.assert_called_once_with("litellm", "text-embedding-3-large")
+
+
+@pytest.mark.asyncio
+async def test_init_embedding_backend_litellm_explicit_model_fail():
+    """Test embedding init with explicit model failure falls to local (line 224)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.embedder.init_backend") as mock_init,
+    ):
+        ms.resolve_embedding_backend.return_value = "litellm"
+        ms.resolve_embedding_model.return_value = "bad-model"
+        ms.get_embedding_litellm_kwargs.return_value = {}
+        ms.resolve_embedding_dims.return_value = 768
+        ms.resolve_local_embedding_model.return_value = "local-model"
+
+        call_count = 0
+
+        def init_side_effect(backend_type, model, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("model not available")
+            mock_backend = MagicMock()
+            mock_backend.check_available.return_value = 384
+            return mock_backend
+
+        mock_init.side_effect = init_side_effect
+
+        await server._init_embedding_backend("sdk")
+        assert mock_init.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_init_embedding_backend_autodetect_candidates():
+    """Test embedding auto-detect tries candidates (lines 226-242)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.embedder.init_backend") as mock_init,
+    ):
+        ms.resolve_embedding_backend.return_value = "litellm"
+        ms.resolve_embedding_model.return_value = None
+        ms.get_embedding_litellm_kwargs.return_value = {}
+        ms.resolve_embedding_dims.return_value = 768
+        ms.resolve_local_embedding_model.return_value = "local-model"
+
+        call_count = 0
+
+        def init_side_effect(backend_type, model, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise Exception("not available")
+            mock_backend = MagicMock()
+            mock_backend.check_available.return_value = 768
+            return mock_backend
+
+        mock_init.side_effect = init_side_effect
+
+        await server._init_embedding_backend("proxy")
+        assert call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_init_embedding_backend_all_candidates_fail():
+    """Test embedding auto-detect falls back to local when all candidates fail (lines 244-261)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.embedder.init_backend") as mock_init,
+    ):
+        ms.resolve_embedding_backend.return_value = "litellm"
+        ms.resolve_embedding_model.return_value = None
+        ms.get_embedding_litellm_kwargs.return_value = {}
+        ms.resolve_embedding_dims.return_value = 768
+        ms.resolve_local_embedding_model.return_value = "local-model"
+
+        call_count = 0
+
+        def init_side_effect(backend_type, model, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if backend_type == "litellm":
+                raise Exception("not available")
+            mock_backend = MagicMock()
+            mock_backend.check_available.return_value = 384
+            return mock_backend
+
+        mock_init.side_effect = init_side_effect
+
+        await server._init_embedding_backend("sdk")
+        # 3 candidates + 1 local = 4 calls
+        assert call_count == 4
+
+
+@pytest.mark.asyncio
+async def test_init_embedding_backend_local_fail():
+    """Test embedding init when local backend also fails (line 261)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.embedder.init_backend") as mock_init,
+    ):
+        ms.resolve_embedding_backend.return_value = "local"
+        ms.resolve_embedding_model.return_value = None
+        ms.get_embedding_litellm_kwargs.return_value = {}
+        ms.resolve_embedding_dims.return_value = 768
+        ms.resolve_local_embedding_model.return_value = "local-model"
+
+        mock_init.side_effect = Exception("local init failed")
+
+        await server._init_embedding_backend("local")
+
+
+@pytest.mark.asyncio
+async def test_init_embedding_backend_local_not_available():
+    """Test embedding init when local backend returns 0 dims (lines 258-259)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.embedder.init_backend") as mock_init,
+    ):
+        ms.resolve_embedding_backend.return_value = "local"
+        ms.resolve_embedding_model.return_value = None
+        ms.get_embedding_litellm_kwargs.return_value = {}
+        ms.resolve_embedding_dims.return_value = 768
+        ms.resolve_local_embedding_model.return_value = "local-model"
+
+        mock_backend = MagicMock()
+        mock_backend.check_available.return_value = 0
+        mock_init.return_value = mock_backend
+
+        await server._init_embedding_backend("local")
+
+
+# ---------------------------------------------------------------------------
+# _init_reranker_backend edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_init_reranker_backend_disabled():
+    """Test reranker init when disabled (lines 273-275)."""
+    with patch("wet_mcp.server.settings") as ms:
+        ms.resolve_rerank_backend.return_value = None
+
+        await server._init_reranker_backend("sdk")
+
+
+@pytest.mark.asyncio
+async def test_init_reranker_backend_litellm_cloud_fail_local_fallback():
+    """Test reranker cloud fail then local fallback (lines 292-307)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.reranker.init_reranker") as mock_init,
+    ):
+        ms.resolve_rerank_backend.return_value = "litellm"
+        ms.resolve_rerank_model.return_value = "rerank-model"
+        ms.get_rerank_litellm_kwargs.return_value = {}
+        ms.resolve_local_rerank_model.return_value = "local-rerank"
+
+        call_count = 0
+
+        def init_side_effect(backend_type, model, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if backend_type == "litellm":
+                raise Exception("cloud not available")
+            mock_reranker = MagicMock()
+            mock_reranker.check_available.return_value = True
+            return mock_reranker
+
+        mock_init.side_effect = init_side_effect
+
+        await server._init_reranker_backend("sdk")
+        assert call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_init_reranker_backend_local_fail():
+    """Test reranker init when local fails (lines 306-307)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.reranker.init_reranker") as mock_init,
+    ):
+        ms.resolve_rerank_backend.return_value = "local"
+        ms.resolve_rerank_model.return_value = None
+        ms.get_rerank_litellm_kwargs.return_value = {}
+        ms.resolve_local_rerank_model.return_value = "local-rerank"
+
+        mock_init.side_effect = Exception("local rerank init failed")
+
+        await server._init_reranker_backend("local")
+
+
+@pytest.mark.asyncio
+async def test_init_reranker_backend_local_not_available():
+    """Test reranker init when local returns not available (lines 304-305)."""
+    with (
+        patch("wet_mcp.server.settings") as ms,
+        patch("wet_mcp.reranker.init_reranker") as mock_init,
+    ):
+        ms.resolve_rerank_backend.return_value = "local"
+        ms.resolve_rerank_model.return_value = None
+        ms.get_rerank_litellm_kwargs.return_value = {}
+        ms.resolve_local_rerank_model.return_value = "local-rerank"
+
+        mock_reranker = MagicMock()
+        mock_reranker.check_available.return_value = False
+        mock_init.return_value = mock_reranker
+
+        await server._init_reranker_backend("local")
+
+
+# ---------------------------------------------------------------------------
+# _embed / _embed_batch / _rerank_results edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_embed_no_backend():
+    """Test _embed returns None when no backend (line 325)."""
+    with patch("wet_mcp.embedder.get_backend", return_value=None):
+        res = await server._embed("hello")
+        assert res is None
+
+
+@pytest.mark.asyncio
+async def test_embed_query_mode():
+    """Test _embed with is_query=True for Qwen3 (lines 327-330)."""
+    with patch("wet_mcp.embedder.get_backend") as mock_get:
+        from wet_mcp.embedder import Qwen3EmbedBackend
+
+        mock_backend = MagicMock(spec=Qwen3EmbedBackend)
+        mock_backend.embed_single_query.return_value = [0.5, 0.6]
+        mock_get.return_value = mock_backend
+
+        res = await server._embed("hello", is_query=True)
+        assert res == [0.5, 0.6]
+
+
+@pytest.mark.asyncio
+async def test_embed_exception():
+    """Test _embed returns None on exception (lines 332-334)."""
+    with patch("wet_mcp.embedder.get_backend") as mock_get:
+        mock_backend = MagicMock()
+        mock_backend.embed_single.side_effect = Exception("embed error")
+        mock_get.return_value = mock_backend
+
+        res = await server._embed("hello")
+        assert res is None
+
+
+@pytest.mark.asyncio
+async def test_embed_batch_no_backend():
+    """Test _embed_batch returns None when no backend (line 343)."""
+    with patch("wet_mcp.embedder.get_backend", return_value=None):
+        res = await server._embed_batch(["hello"])
+        assert res is None
+
+
+@pytest.mark.asyncio
+async def test_embed_batch_exception():
+    """Test _embed_batch returns None on exception (lines 346-348)."""
+    with patch("wet_mcp.embedder.get_backend") as mock_get:
+        mock_backend = MagicMock()
+        mock_backend.embed_texts.side_effect = Exception("batch error")
+        mock_get.return_value = mock_backend
+
+        res = await server._embed_batch(["hello"])
+        assert res is None
+
+
+@pytest.mark.asyncio
+async def test_rerank_results_exception():
+    """Test _rerank_results falls back on exception (lines 377-380)."""
+    with patch("wet_mcp.reranker.get_reranker") as mock_get:
+        mock_reranker = MagicMock()
+        mock_reranker.rerank.side_effect = Exception("rerank error")
+        mock_get.return_value = mock_reranker
+
+        results = [{"content": "a"}, {"content": "b"}, {"content": "c"}]
+        res = await server._rerank_results("query", results, 2)
+        assert len(res) == 2
+        assert res == [{"content": "a"}, {"content": "b"}]
+
+
+# ---------------------------------------------------------------------------
+# Search tool cache and error paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_tool_cache_hit(mock_web_cache):
+    """Test search returns cached result (lines 509-511)."""
+    mock_web_cache.get.return_value = "cached_search_result"
+    res = await server.search("search", query="test")
+    assert "cached_search_result" in res
+
+
+@pytest.mark.asyncio
+async def test_search_tool_searxng_timeout():
+    """Test search handles SearXNG timeout (lines 516-517)."""
+    with patch(
+        "wet_mcp.server.ensure_searxng",
+        new_callable=AsyncMock,
+        side_effect=TimeoutError,
+    ):
+        res = await server.search("search", query="test")
+        assert "timed out" in res
+
+
+@pytest.mark.asyncio
+async def test_search_tool_searxng_exception():
+    """Test search handles SearXNG startup exception (lines 518-519)."""
+    with patch(
+        "wet_mcp.server.ensure_searxng",
+        new_callable=AsyncMock,
+        side_effect=Exception("docker not found"),
+    ):
+        res = await server.search("search", query="test")
+        assert "startup failed" in res
+
+
+@pytest.mark.asyncio
+async def test_search_tool_research_cache_hit(mock_web_cache):
+    """Test research returns cached result (lines 538-540)."""
+    mock_web_cache.get.return_value = "cached_research_result"
+    res = await server.search("research", query="test")
+    assert "cached_research_result" in res
+
+
+@pytest.mark.asyncio
+async def test_search_tool_research_missing_query():
+    """Test research missing query (line 535)."""
+    res = await server.search("research", query=None)
+    assert "Error: query is required" in res
+
+
+@pytest.mark.asyncio
+async def test_search_tool_docs_missing_library():
+    """Test docs action missing library (line 551)."""
+    res = await server.search("docs", query="test", library=None)
+    assert "Error: library is required" in res
+
+
+@pytest.mark.asyncio
+async def test_search_tool_docs_missing_query():
+    """Test docs action missing query (line 553)."""
+    res = await server.search("docs", library="react", query=None)
+    assert "Error: query is required" in res
+
+
+# ---------------------------------------------------------------------------
+# Extract tool cache paths
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_extract_tool_extract_cache_hit(mock_web_cache):
+    """Test extract returns cached result (lines 613-615)."""
+    mock_web_cache.get.return_value = "cached_extract_result"
+    res = await server.extract("extract", urls=["http://test"])
+    assert "cached_extract_result" in res
+
+
+@pytest.mark.asyncio
+async def test_extract_tool_crawl_cache_hit(mock_web_cache):
+    """Test crawl returns cached result (lines 634-636)."""
+    mock_web_cache.get.return_value = "cached_crawl_result"
+    res = await server.extract("crawl", urls=["http://test"])
+    assert "cached_crawl_result" in res
+
+
+@pytest.mark.asyncio
+async def test_extract_tool_map_cache_hit(mock_web_cache):
+    """Test map returns cached result (lines 661-663)."""
+    mock_web_cache.get.return_value = "cached_map_result"
+    res = await server.extract("map", urls=["http://test"])
+    assert "cached_map_result" in res
+
+
+# ---------------------------------------------------------------------------
+# Media tool edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_media_tool_list_missing_url():
+    """Test media list missing url (line 710)."""
+    res = await server.media("list", url=None)
+    assert "Error: url is required" in res
+
+
+@pytest.mark.asyncio
+async def test_media_tool_download_missing_urls():
+    """Test media download missing media_urls (line 718)."""
+    res = await server.media("download", media_urls=None)
+    assert "Error: media_urls is required" in res
+
+
+@pytest.mark.asyncio
+async def test_media_tool_download_security_check():
+    """Test media download output_dir security check (lines 722-730)."""
+    with patch("wet_mcp.server.settings") as ms:
+        ms.download_dir = "/tmp/wet_downloads"
+        ms.tool_timeout = 0
+        res = await server.media(
+            "download",
+            media_urls=["http://test/img.png"],
+            output_dir="/etc/passwd",
+        )
+        assert "Security Alert" in res
+
+
+@pytest.mark.asyncio
+async def test_media_tool_analyze_missing_url():
+    """Test media analyze missing url (line 742)."""
+    res = await server.media("analyze", url=None)
+    assert "Error: url" in res
+
+
+@pytest.mark.asyncio
+async def test_media_tool_invalid_action():
+    """Test media invalid action (lines 751-752)."""
+    res = await server.media("invalid")
+    assert "Unknown action" in res
+
+
+# ---------------------------------------------------------------------------
+# Config tool edge cases (continued)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_config_set_sync_interval(mock_settings):
+    """Test setting sync_interval (lines 885-886)."""
+    res = await server.config("set", key="sync_interval", value="30")
+    data = json.loads(res)
+    assert data["status"] == "updated"
+    assert data["key"] == "sync_interval"
+
+
+@pytest.mark.asyncio
+async def test_config_set_generic_key(mock_settings):
+    """Test setting a generic key via setattr (lines 887-888)."""
+    res = await server.config("set", key="sync_remote", value="https://remote")
+    data = json.loads(res)
+    assert data["status"] == "updated"
+    assert data["key"] == "sync_remote"
+
+
+@pytest.mark.asyncio
+async def test_config_docs_reindex_missing_key():
+    """Test docs_reindex without key (line 906)."""
+    res = await server.config("docs_reindex", key=None)
+    data = json.loads(res)
+    assert "error" in data
+    assert "required" in data["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_docs_reindex_db_not_init():
+    """Test docs_reindex when docs db is not initialized (line 908)."""
+    server._docs_db = None
+    res = await server.config("docs_reindex", key="react")
+    data = json.loads(res)
+    assert "error" in data
+    assert "not initialized" in data["error"]
+
+
+# ---------------------------------------------------------------------------
+# _fetch_and_chunk_docs edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_chunk_docs_llms_txt_too_few():
+    """Test llms.txt fallthrough when too few chunks (line 1037)."""
+    with (
+        patch("wet_mcp.sources.docs.try_llms_txt", new_callable=AsyncMock) as mock_llms,
+        patch(
+            "wet_mcp.sources.docs._try_github_raw_docs", new_callable=AsyncMock
+        ) as mock_gh,
+        patch("wet_mcp.sources.docs.chunk_llms_txt") as mock_chunk_llms,
+        patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk_md,
+        patch(
+            "wet_mcp.sources.docs.fetch_docs_pages", new_callable=AsyncMock
+        ) as mock_fetch,
+    ):
+        mock_llms.return_value = "small content"
+        mock_chunk_llms.return_value = [{"content": f"c{i}"} for i in range(5)]
+        mock_gh.return_value = []
+        mock_fetch.return_value = [
+            {"content": f"page{i}", "url": f"http://docs/p{i}", "title": f"T{i}"}
+            for i in range(25)
+        ]
+        mock_chunk_md.return_value = [{"content": "chunk"}]
+
+        chunks, pages = await server._fetch_and_chunk_docs("http://docs")
+        assert pages == 25
+        assert len(chunks) == 25
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_chunk_docs_tier2_crawl():
+    """Test Tier 2 crawl produces chunks with title injection (lines 1085-1092)."""
+    with (
+        patch("wet_mcp.sources.docs.try_llms_txt", new_callable=AsyncMock) as mock_llms,
+        patch(
+            "wet_mcp.sources.docs._try_github_raw_docs", new_callable=AsyncMock
+        ) as mock_gh,
+        patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk_md,
+        patch(
+            "wet_mcp.sources.docs.fetch_docs_pages", new_callable=AsyncMock
+        ) as mock_fetch,
+    ):
+        mock_llms.return_value = None
+        mock_gh.return_value = []
+        mock_fetch.return_value = [
+            {
+                "content": "page content",
+                "url": "http://docs/page",
+                "title": "Page Title",
+            }
+        ]
+        mock_chunk_md.return_value = [{"content": "chunk1"}, {"content": "chunk2"}]
+
+        chunks, pages = await server._fetch_and_chunk_docs("http://docs")
+        assert pages == 1
+        assert len(chunks) == 2
+        # Title injection
+        assert chunks[0]["title"] == "Page Title"
+        assert chunks[1]["title"] == "Page Title"
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_chunk_docs_readme_fallback():
+    """Test Tier 3 README fallback (lines 1109-1121)."""
+    with (
+        patch("wet_mcp.sources.docs.try_llms_txt", new_callable=AsyncMock) as mock_llms,
+        patch(
+            "wet_mcp.sources.docs._try_github_raw_docs", new_callable=AsyncMock
+        ) as mock_gh,
+        patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk_md,
+        patch(
+            "wet_mcp.sources.docs.fetch_docs_pages", new_callable=AsyncMock
+        ) as mock_fetch,
+        patch(
+            "wet_mcp.sources.docs._fetch_github_readme", new_callable=AsyncMock
+        ) as mock_readme,
+    ):
+        mock_llms.return_value = None
+        mock_gh.return_value = []
+        mock_fetch.return_value = []
+        mock_chunk_md.return_value = []
+        mock_readme.return_value = [{"content": "readme chunk", "title": "README"}]
+
+        chunks, pages = await server._fetch_and_chunk_docs(
+            "http://docs", "http://github.com/repo"
+        )
+        assert pages == 1
+        assert len(chunks) == 1
+        assert chunks[0]["content"] == "readme chunk"
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_chunk_docs_all_tiers_fail():
+    """Test all tiers fail returns empty (line 1120-1121)."""
+    with (
+        patch("wet_mcp.sources.docs.try_llms_txt", new_callable=AsyncMock) as mock_llms,
+        patch(
+            "wet_mcp.sources.docs._try_github_raw_docs", new_callable=AsyncMock
+        ) as mock_gh,
+        patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk_md,
+        patch(
+            "wet_mcp.sources.docs.fetch_docs_pages", new_callable=AsyncMock
+        ) as mock_fetch,
+        patch(
+            "wet_mcp.sources.docs._fetch_github_readme", new_callable=AsyncMock
+        ) as mock_readme,
+    ):
+        mock_llms.return_value = None
+        mock_gh.return_value = []
+        mock_fetch.return_value = []
+        mock_chunk_md.return_value = []
+        mock_readme.return_value = []
+
+        chunks, pages = await server._fetch_and_chunk_docs("http://docs")
+        assert pages == 0
+        assert len(chunks) == 0
+
+
+# ---------------------------------------------------------------------------
+# _background_index_and_search edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_background_index_fetch_timeout():
+    """Test background indexing handles fetch timeout (lines 1160-1163)."""
+    with (
+        patch("wet_mcp.sources.docs._normalize_docs_url", return_value="http://docs"),
+        patch(
+            "wet_mcp.server._fetch_and_chunk_docs",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError,
+        ),
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            side_effect=Exception("no searxng"),
+        ),
+    ):
+        await server._background_index_and_search(
+            library="testlib",
+            lib_key="testlib",
+            language=None,
+            docs_url="http://docs",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+
+
+@pytest.mark.asyncio
+async def test_background_index_with_searxng_fallback():
+    """Test background indexing SearXNG fallback (lines 1185-1207)."""
+    with (
+        patch("wet_mcp.sources.docs._normalize_docs_url", return_value="http://docs"),
+        patch(
+            "wet_mcp.server._fetch_and_chunk_docs",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://searxng",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+        ) as mock_search,
+        patch("wet_mcp.server._embed_batch", new_callable=AsyncMock) as mock_embed,
+    ):
+        # First call returns few chunks, second call returns more
+        mock_fetch.side_effect = [
+            ([{"content": "c1"}], 1),
+            ([{"content": "c1"}, {"content": "c2"}, {"content": "c3"}], 3),
+        ]
+        mock_search.return_value = json.dumps(
+            {"results": [{"url": "http://alt-docs.com/guide"}]}
+        )
+        mock_embed.return_value = [[0.1], [0.2], [0.3]]
+
+        server._docs_db = MagicMock()
+
+        await server._background_index_and_search(
+            library="testlib",
+            lib_key="testlib",
+            language=None,
+            docs_url="http://docs",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+        server._docs_db.add_chunks.assert_called_once()
+        server._docs_db.mark_version_indexed.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_background_index_with_language():
+    """Test background indexing with language context (line 1168-1169)."""
+    with (
+        patch("wet_mcp.sources.docs._normalize_docs_url", return_value="http://docs"),
+        patch(
+            "wet_mcp.server._fetch_and_chunk_docs",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://searxng",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+        ) as mock_search,
+        patch("wet_mcp.server._embed_batch", new_callable=AsyncMock) as mock_embed,
+    ):
+        mock_fetch.return_value = ([{"content": "c1"}], 1)
+        mock_search.return_value = json.dumps({"results": []})
+        mock_embed.return_value = [[0.1]]
+
+        server._docs_db = MagicMock()
+
+        await server._background_index_and_search(
+            library="redis",
+            lib_key="redis:python",
+            language="python",
+            docs_url="http://docs",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+
+
+@pytest.mark.asyncio
+async def test_background_index_embeddings_and_store():
+    """Test background indexing generates embeddings and stores (lines 1218-1249)."""
+    with (
+        patch("wet_mcp.sources.docs._normalize_docs_url", return_value="http://docs"),
+        patch(
+            "wet_mcp.server._fetch_and_chunk_docs",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch("wet_mcp.embedder.get_backend") as mock_get_backend,
+        patch("wet_mcp.server._embed_batch", new_callable=AsyncMock) as mock_embed,
+    ):
+        chunks = [
+            {"content": "chunk1", "title": "T1", "heading_path": "H1"},
+            {"content": "chunk2", "title": "T2"},
+            {"content": "chunk3"},
+        ]
+        mock_fetch.return_value = (chunks, 3)
+        mock_get_backend.return_value = MagicMock()  # backend available
+        mock_embed.return_value = [[0.1], [0.2], [0.3]]
+
+        server._docs_db = MagicMock()
+
+        await server._background_index_and_search(
+            library="testlib",
+            lib_key="testlib",
+            language=None,
+            docs_url="http://docs",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+        server._docs_db.add_chunks.assert_called_once()
+        call_args = server._docs_db.add_chunks.call_args
+        assert call_args.kwargs["embeddings"] == [[0.1], [0.2], [0.3]]
+
+
+@pytest.mark.asyncio
+async def test_background_index_embed_timeout():
+    """Test background indexing handles embed timeout (lines 1238-1239)."""
+    with (
+        patch("wet_mcp.sources.docs._normalize_docs_url", return_value="http://docs"),
+        patch(
+            "wet_mcp.server._fetch_and_chunk_docs",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch("wet_mcp.embedder.get_backend") as mock_get_backend,
+        patch(
+            "wet_mcp.server._embed_batch",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError,
+        ),
+    ):
+        mock_fetch.return_value = ([{"content": "chunk1"}], 1)
+        mock_get_backend.return_value = MagicMock()
+
+        server._docs_db = MagicMock()
+
+        await server._background_index_and_search(
+            library="testlib",
+            lib_key="testlib",
+            language=None,
+            docs_url="http://docs",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+        # Should still store chunks even without embeddings
+        server._docs_db.add_chunks.assert_called_once()
+        call_args = server._docs_db.add_chunks.call_args
+        assert call_args.kwargs["embeddings"] is None
+
+
+@pytest.mark.asyncio
+async def test_background_index_exception():
+    """Test background indexing handles top-level exception (line 1254)."""
+    with patch(
+        "wet_mcp.sources.docs._normalize_docs_url",
+        side_effect=Exception("unexpected error"),
+    ):
+        # Should not raise
+        await server._background_index_and_search(
+            library="testlib",
+            lib_key="testlib",
+            language=None,
+            docs_url="http://docs",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+
+
+@pytest.mark.asyncio
+async def test_background_index_no_chunks():
+    """Test background indexing logs error when no chunks found."""
+    with (
+        patch("wet_mcp.sources.docs._normalize_docs_url", return_value="http://docs"),
+        patch(
+            "wet_mcp.server._fetch_and_chunk_docs",
+            new_callable=AsyncMock,
+            return_value=([], 0),
+        ),
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            side_effect=Exception("no searxng"),
+        ),
+    ):
+        server._docs_db = MagicMock()
+
+        await server._background_index_and_search(
+            library="testlib",
+            lib_key="testlib",
+            language=None,
+            docs_url="http://docs",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+        server._docs_db.add_chunks.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_background_index_fallback_alt_timeout():
+    """Test background indexing SearXNG fallback with alt fetch timeout (lines 1201-1202)."""
+    with (
+        patch(
+            "wet_mcp.sources.docs._normalize_docs_url",
+            return_value="http://docs.example.com",
+        ),
+        patch(
+            "wet_mcp.server._fetch_and_chunk_docs",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://searxng",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+        ) as mock_search,
+        patch("wet_mcp.server._embed_batch", new_callable=AsyncMock) as mock_embed,
+    ):
+        # First call returns few, alt fetch times out
+        mock_fetch.side_effect = [
+            ([{"content": "c1"}], 1),
+            TimeoutError("alt fetch timeout"),
+        ]
+        mock_search.return_value = json.dumps(
+            {"results": [{"url": "http://alt-docs.com/guide"}]}
+        )
+        mock_embed.return_value = [[0.1]]
+
+        server._docs_db = MagicMock()
+
+        await server._background_index_and_search(
+            library="testlib",
+            lib_key="testlib",
+            language=None,
+            docs_url="http://docs.example.com",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+        # Should still use original chunks
+        server._docs_db.add_chunks.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_background_index_fallback_same_netloc():
+    """Test background indexing skips same netloc in fallback (line 1194)."""
+    with (
+        patch(
+            "wet_mcp.sources.docs._normalize_docs_url",
+            return_value="http://docs.example.com",
+        ),
+        patch(
+            "wet_mcp.server._fetch_and_chunk_docs",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://searxng",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+        ) as mock_search,
+        patch("wet_mcp.server._embed_batch", new_callable=AsyncMock) as mock_embed,
+    ):
+        mock_fetch.return_value = ([{"content": "c1"}], 1)
+        mock_search.return_value = json.dumps(
+            {
+                "results": [
+                    {"url": "http://docs.example.com/other"},  # same netloc, skip
+                    {"url": ""},  # empty url, skip
+                ]
+            }
+        )
+        mock_embed.return_value = [[0.1]]
+
+        server._docs_db = MagicMock()
+
+        await server._background_index_and_search(
+            library="testlib",
+            lib_key="testlib",
+            language=None,
+            docs_url="http://docs.example.com",
+            repo_url="",
+            query="test",
+            version=None,
+            lib_id="1",
+            ver_id="1",
+        )
+
+
+# ---------------------------------------------------------------------------
+# _search_cached_index edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_cached_index_no_results():
+    """Test _search_cached_index returns None when no results (line 1304)."""
+    server._docs_db = MagicMock()
+    server._docs_db.get_library.return_value = {"id": 1, "discovery_version": 999}
+    server._docs_db.get_best_version.return_value = {
+        "id": 1,
+        "chunk_count": 10,
+        "version": "latest",
+    }
+    server._docs_db.search.return_value = []
+
+    with patch("wet_mcp.server._embed", new_callable=AsyncMock, return_value=[0.1]):
+        res = await server._search_cached_index("testlib", "query", None, 10)
+        assert res is None
+
+
+@pytest.mark.asyncio
+async def test_search_cached_index_no_version():
+    """Test _search_cached_index returns None when no version (line 1289)."""
+    server._docs_db = MagicMock()
+    server._docs_db.get_library.return_value = {"id": 1, "discovery_version": 999}
+    server._docs_db.get_best_version.return_value = None
+
+    res = await server._search_cached_index("testlib", "query", None, 10)
+    assert res is None
+
+
+@pytest.mark.asyncio
+async def test_search_cached_index_zero_chunks():
+    """Test _search_cached_index returns None when chunk_count is 0."""
+    server._docs_db = MagicMock()
+    server._docs_db.get_library.return_value = {"id": 1, "discovery_version": 999}
+    server._docs_db.get_best_version.return_value = {
+        "id": 1,
+        "chunk_count": 0,
+        "version": "latest",
+    }
+
+    res = await server._search_cached_index("testlib", "query", None, 10)
+    assert res is None
+
+
+# ---------------------------------------------------------------------------
+# _discover_docs_url edge cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_discover_docs_url_searxng_timeout():
+    """Test _discover_docs_url SearXNG fallback timeout (lines 1388-1389)."""
+    with (
+        patch(
+            "wet_mcp.sources.docs.discover_library",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError,
+        ),
+    ):
+        docs_url, repo_url, registry, description = await server._discover_docs_url(
+            "testlib", None
+        )
+        assert docs_url == ""
+
+
+@pytest.mark.asyncio
+async def test_discover_docs_url_searxng_json_error():
+    """Test _discover_docs_url SearXNG JSON decode error (lines 1390-1391)."""
+    with (
+        patch(
+            "wet_mcp.sources.docs.discover_library",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://searxng",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+            return_value="invalid json",
+        ),
+    ):
+        docs_url, repo_url, registry, description = await server._discover_docs_url(
+            "testlib", None
+        )
+        assert docs_url == ""
+
+
+@pytest.mark.asyncio
+async def test_discover_docs_url_with_language():
+    """Test _discover_docs_url with language context."""
+    with (
+        patch(
+            "wet_mcp.sources.docs.discover_library",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://searxng",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+        ) as mock_search,
+    ):
+        mock_search.return_value = json.dumps(
+            {"results": [{"url": "http://redis.io/docs/python"}]}
+        )
+        docs_url, _, _, _ = await server._discover_docs_url("redis", "python")
+        assert docs_url == "http://redis.io/docs/python"
+        # Verify language was included in search query
+        call_args = mock_search.call_args
+        assert "python" in call_args.kwargs["query"]
+
+
+@pytest.mark.asyncio
+async def test_discover_docs_url_discovery_timeout():
+    """Test _discover_docs_url discovery timeout."""
+    with (
+        patch(
+            "wet_mcp.sources.docs.discover_library",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError,
+        ),
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://searxng",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+            return_value=json.dumps({"results": []}),
+        ),
+    ):
+        docs_url, _, _, _ = await server._discover_docs_url("testlib", None)
+        assert docs_url == ""
+
+
+# ---------------------------------------------------------------------------
+# _do_docs_search fallback exception path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_do_docs_search_fallback_exception():
+    """Test _do_docs_search handles fallback search exception (lines 1493-1494)."""
+    server._docs_db = MagicMock()
+    server._docs_db.get_library.return_value = None
+    server._docs_db.upsert_library.return_value = "1"
+    server._docs_db.upsert_version.return_value = "1"
+
+    with (
+        patch(
+            "wet_mcp.server._search_cached_index",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "wet_mcp.server._discover_docs_url",
+            new_callable=AsyncMock,
+            return_value=("http://docs", "", "", ""),
+        ),
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            side_effect=Exception("searxng down"),
+        ),
+    ):
+        res = await server._do_docs_search("testlib", "query")
+        data = json.loads(res)
+        assert data["status"] == "indexing_in_progress"
+        assert data["temporary_results"] == []
+
+
+# ---------------------------------------------------------------------------
+# _with_timeout edge case: task raises exception
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_with_timeout_task_exception():
+    """Test _with_timeout propagates task exception when done within timeout."""
+    with patch("wet_mcp.server.settings") as mock_settings:
+        mock_settings.tool_timeout = 5
+
+        async def failing_coro():
+            raise ValueError("task failed")
+
+        with pytest.raises(ValueError, match="task failed"):
+            await server._with_timeout(failing_coro(), "test")
