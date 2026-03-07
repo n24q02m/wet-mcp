@@ -37,6 +37,8 @@ if "wet_mcp.sources" not in sys.modules:
 # Load docs module (lightweight — no crawl4ai dependency)
 _docs_file = _src_root / "wet_mcp" / "sources" / "docs.py"
 _docs_spec = importlib.util.spec_from_file_location("wet_mcp.sources.docs", _docs_file)
+assert _docs_spec is not None
+assert _docs_spec.loader is not None
 _docs_mod = importlib.util.module_from_spec(_docs_spec)
 sys.modules["wet_mcp.sources.docs"] = _docs_mod
 _docs_spec.loader.exec_module(_docs_mod)
@@ -44,6 +46,8 @@ _docs_spec.loader.exec_module(_docs_mod)
 # Now load db module
 _db_file = _src_root / "wet_mcp" / "db.py"
 _db_spec = importlib.util.spec_from_file_location("wet_mcp.db", _db_file)
+assert _db_spec is not None
+assert _db_spec.loader is not None
 _db_mod = importlib.util.module_from_spec(_db_spec)
 sys.modules["wet_mcp.db"] = _db_mod
 _db_spec.loader.exec_module(_db_mod)
