@@ -394,6 +394,70 @@ class TestLiteLLMSDK:
 
 
 # ---------------------------------------------------------------------------
+# 5c. Modal.com AI workers (custom Qwen3 models)
+# ---------------------------------------------------------------------------
+
+MODAL_EMBED_URL = (
+    "https://n24q02m--ai-workers-embedding-embeddingserver-serve.modal.run"
+)
+MODAL_RERANK_URL = "https://n24q02m--ai-workers-reranker-rerankerserver-serve.modal.run"
+MODAL_API_KEY = os.environ.get("WORKER_API_KEY", "lLqh5RXrPLolyBvo3pmHZqmcZ6ALZIDE")
+
+
+class TestModalWorkers:
+    """Test custom Qwen3 models deployed on Modal.com."""
+
+    async def test_modal_embedding(self):
+        """Test Qwen3-Embedding-0.6B via Modal (OpenAI-compatible)."""
+        import httpx
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{MODAL_EMBED_URL}/v1/embeddings",
+                headers={
+                    "Authorization": f"Bearer {MODAL_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "qwen3-embedding-0.6b",
+                    "input": ["Hello world", "Python programming"],
+                },
+            )
+            assert resp.status_code == 200, f"Modal embed failed: {resp.text}"
+            data = resp.json()
+            assert len(data["data"]) == 2
+            assert len(data["data"][0]["embedding"]) == 1024
+
+    async def test_modal_reranking(self):
+        """Test Qwen3-Reranker-0.6B via Modal (Cohere-compatible)."""
+        import httpx
+
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{MODAL_RERANK_URL}/v1/rerank",
+                headers={
+                    "Authorization": f"Bearer {MODAL_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "qwen3-reranker-0.6b",
+                    "query": "What is Python?",
+                    "documents": [
+                        "Python is a programming language",
+                        "Java is a programming language",
+                        "The weather is nice today",
+                    ],
+                },
+            )
+            assert resp.status_code == 200, f"Modal rerank failed: {resp.text}"
+            data = resp.json()
+            assert len(data["results"]) > 0
+            # Python doc should score highest
+            top = data["results"][0]
+            assert top["index"] == 0
+
+
+# ---------------------------------------------------------------------------
 # 6. Local ONNX embedding + reranking
 # ---------------------------------------------------------------------------
 
