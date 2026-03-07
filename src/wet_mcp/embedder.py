@@ -130,6 +130,7 @@ class LiteLLMBackend:
         kwargs: dict = {
             "model": self.model,
             "input": texts,
+            "encoding_format": "float",
         }
         if dimensions:
             kwargs["dimensions"] = dimensions
@@ -208,7 +209,7 @@ class LiteLLMBackend:
         try:
             from litellm import embedding as litellm_embedding
 
-            kwargs = {"model": self.model, "input": ["test"]}
+            kwargs = {"model": self.model, "input": ["test"], "encoding_format": "float"}
             if self.api_base:
                 kwargs["api_base"] = self.api_base
             if self.api_key:
