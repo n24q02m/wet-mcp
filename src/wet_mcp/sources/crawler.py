@@ -14,7 +14,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -22,6 +22,9 @@ from loguru import logger
 
 from wet_mcp.config import settings
 from wet_mcp.security import is_safe_url
+
+# Document extensions that markitdown handles better than Crawl4AI
+_DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls"}
 
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
@@ -157,6 +160,64 @@ async def shutdown_crawler() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Document conversion (markitdown)
+# ---------------------------------------------------------------------------
+
+
+def _is_document_url(url: str) -> bool:
+    """Check if URL points to a document file (PDF, DOCX, etc.)."""
+    path = urlparse(url).path.lower()
+    return any(path.endswith(ext) for ext in _DOCUMENT_EXTENSIONS)
+
+
+def _detect_document_content_type(content_type: str) -> bool:
+    """Check if HTTP Content-Type indicates a document file."""
+    doc_types = {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/msword",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.ms-excel",
+    }
+    return any(ct in content_type for ct in doc_types)
+
+
+async def _extract_with_markitdown(url: str) -> dict:
+    """Download document and convert to Markdown via markitdown."""
+    try:
+        from markitdown import MarkItDown
+    except ImportError:
+        return {
+            "url": url,
+            "error": "markitdown not installed. Install with: pip install 'markitdown[pdf,docx,pptx]'",
+        }
+
+    try:
+        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+            resp = await client.get(url)
+            resp.raise_for_status()
+
+        # Write to temp file (markitdown needs file path with extension)
+        import io
+
+        ext = Path(urlparse(url).path).suffix.lower() or ".pdf"
+        md = MarkItDown()
+        result = md.convert_stream(io.BytesIO(resp.content), file_extension=ext)
+
+        return {
+            "url": url,
+            "title": Path(urlparse(url).path).stem,
+            "content": result.text_content,
+            "converter": "markitdown",
+        }
+    except Exception as e:
+        logger.error(f"markitdown failed for {url}: {e}")
+        return {"url": url, "error": f"Document conversion failed: {e}"}
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -203,6 +264,11 @@ async def extract(
             if not is_safe_url(url):
                 logger.warning(f"Skipping unsafe URL: {url}")
                 return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+
+            # Route document URLs (PDF, DOCX, etc.) through markitdown
+            if _is_document_url(url):
+                logger.info(f"Document URL detected, using markitdown: {url}")
+                return await _extract_with_markitdown(url)
 
             try:
                 result = await crawler.arun(
