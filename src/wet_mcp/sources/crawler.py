@@ -195,8 +195,39 @@ async def _extract_with_markitdown(url: str) -> dict:
         }
 
     try:
-        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-            resp = await client.get(url)
+        async with httpx.AsyncClient(timeout=60) as client:
+            target_url = url
+            redirect_count = 0
+            max_redirects = 5
+            resp = None
+
+            while redirect_count < max_redirects:
+                if not is_safe_url(target_url):
+                    return {
+                        "url": url,
+                        "error": "Security Alert: Unsafe URL blocked during redirect",
+                    }
+
+                resp = await client.get(target_url, follow_redirects=False)
+
+                if resp.is_redirect:
+                    location = resp.headers.get("Location")
+                    if not location:
+                        break
+                    from urllib.parse import urljoin
+
+                    target_url = urljoin(target_url, location)
+                    redirect_count += 1
+                    continue
+                else:
+                    break
+
+            if redirect_count >= max_redirects:
+                raise ValueError("Too many redirects")
+
+            if not resp:
+                raise ValueError("No response received")
+
             resp.raise_for_status()
 
         # Write to temp file (markitdown needs file path with extension)

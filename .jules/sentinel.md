@@ -1,0 +1,4 @@
+## 2025-10-18 - SSRF Bypass via HTTP Redirects
+**Vulnerability:** The document extraction feature (`_extract_with_markitdown`) used `httpx.AsyncClient` with `follow_redirects=True`. Although the initial URL was validated against SSRF using `is_safe_url` (which checks for local IPs and loopback), a malicious server could return an HTTP redirect to a local service (e.g., `http://127.0.0.1:8080`). The HTTP client followed this redirect blindly, bypassing the initial safety check and allowing attackers to read internal endpoints.
+**Learning:** `is_safe_url` validation is insufficient if the underlying HTTP client automatically follows redirects without validating the target URL of each redirect.
+**Prevention:** Always set `follow_redirects=False` in HTTP clients used to fetch user-provided URLs. Implement a manual redirect handling loop that runs the same security checks (`is_safe_url`) on every `Location` header before following it.
