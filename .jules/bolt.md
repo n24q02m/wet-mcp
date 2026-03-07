@@ -1,0 +1,3 @@
+## 2026-03-07 - [Performance Improvement] Reduce SQLite queries on cache hit
+**Learning:** SQLite versions 3.35.0+ support the `RETURNING` clause on `UPDATE` statements. This allows combining a `SELECT` and `UPDATE` into a single atomic operation. In a cache implementation (like `WebCache`), cache hits previously required two queries: `SELECT` to check existence and retrieve content, followed by `UPDATE` to increment the hit count.
+**Action:** Replace separate `SELECT` and `UPDATE` statements with a single `UPDATE ... RETURNING` query to cut database operations by 50% on cache hits and eliminate potential race conditions.
