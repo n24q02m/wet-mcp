@@ -273,6 +273,50 @@ class TestLiteLLMProxy:
             data = resp.json()
             assert len(data["results"]) > 0
 
+    async def test_proxy_rerank_via_litellm_sdk(self):
+        """Test reranking via proxy using LiteLLM SDK with proxy mode flag."""
+        import os
+
+        import litellm
+
+        # Enable proxy mode (same as config.setup_litellm in proxy mode)
+        old_base = os.environ.get("LITELLM_PROXY_API_BASE")
+        old_key = os.environ.get("LITELLM_PROXY_API_KEY")
+        old_proxy = litellm.use_litellm_proxy
+        try:
+            os.environ["LITELLM_PROXY_API_BASE"] = LITELLM_PROXY_URL
+            os.environ["LITELLM_PROXY_API_KEY"] = LITELLM_PROXY_KEY
+            litellm.use_litellm_proxy = True
+
+            from wet_mcp.reranker import LiteLLMReranker
+
+            reranker = LiteLLMReranker(model="mcp/rerank-multilingual-v3")
+            results = reranker.rerank(
+                query="What is Python?",
+                documents=[
+                    "Python is a programming language",
+                    "Java is a programming language",
+                    "The weather is nice today",
+                ],
+                top_n=2,
+            )
+            assert len(results) == 2, f"Expected 2 results, got {len(results)}"
+            # Python doc should score highest
+            assert results[0][0] == 0, (
+                f"Expected Python doc first, got index {results[0][0]}"
+            )
+            assert results[0][1] > 0.5, f"Expected high score, got {results[0][1]}"
+        finally:
+            litellm.use_litellm_proxy = old_proxy
+            if old_base is None:
+                os.environ.pop("LITELLM_PROXY_API_BASE", None)
+            else:
+                os.environ["LITELLM_PROXY_API_BASE"] = old_base
+            if old_key is None:
+                os.environ.pop("LITELLM_PROXY_API_KEY", None)
+            else:
+                os.environ["LITELLM_PROXY_API_KEY"] = old_key
+
 
 # ---------------------------------------------------------------------------
 # 5b. LiteLLM SDK mode (direct API keys)

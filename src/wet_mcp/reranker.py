@@ -90,7 +90,11 @@ class LiteLLMReranker:
 
             results = []
             for item in response.results:
-                results.append((item.index, item.relevance_score))
+                # LiteLLM returns objects for direct calls, dicts via proxy
+                if isinstance(item, dict):
+                    results.append((item["index"], item["relevance_score"]))
+                else:
+                    results.append((item.index, item.relevance_score))
 
             # Sort by score descending
             results.sort(key=lambda x: x[1], reverse=True)
