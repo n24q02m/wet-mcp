@@ -12,7 +12,6 @@ Tests all configuration combinations:
 Run with: uv run pytest tests/test_real_comprehensive.py -v -m integration --timeout=120
 """
 
-import asyncio
 import json
 import os
 
