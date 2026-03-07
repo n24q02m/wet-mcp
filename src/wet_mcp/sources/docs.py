@@ -28,7 +28,7 @@ from wet_mcp.security import is_safe_url
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 25
+DISCOVERY_VERSION = 26
 
 
 async def _ssrf_event_hook(request: httpx.Request) -> None:
@@ -1314,6 +1314,87 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
         "description": "NestJS — progressive Node.js framework",
     },
     # --- Name aliasing (common name != package name) ---
+    "nextjs": {
+        "homepage": "https://nextjs.org/docs",
+        "repository": "https://github.com/vercel/next.js",
+        "description": "Next.js — the React framework for the web",
+    },
+    "next.js": {
+        "homepage": "https://nextjs.org/docs",
+        "repository": "https://github.com/vercel/next.js",
+        "description": "Next.js — the React framework for the web",
+    },
+    "vuejs": {
+        "homepage": "https://vuejs.org/",
+        "repository": "https://github.com/vuejs/core",
+        "description": "Vue.js — progressive JavaScript framework",
+    },
+    "angular": {
+        "homepage": "https://angular.dev/",
+        "repository": "https://github.com/angular/angular",
+        "description": "Angular — web application framework by Google",
+    },
+    "trpc": {
+        "homepage": "https://trpc.io/docs",
+        "repository": "https://github.com/trpc/trpc",
+        "description": "tRPC — end-to-end typesafe APIs",
+    },
+    "@trpc/server": {
+        "homepage": "https://trpc.io/docs",
+        "repository": "https://github.com/trpc/trpc",
+        "description": "tRPC — end-to-end typesafe APIs",
+    },
+    "tanstack-query": {
+        "homepage": "https://tanstack.com/query/latest",
+        "repository": "https://github.com/TanStack/query",
+        "description": "TanStack Query — async state management",
+    },
+    "react-query": {
+        "homepage": "https://tanstack.com/query/latest",
+        "repository": "https://github.com/TanStack/query",
+        "description": "TanStack Query — async state management",
+    },
+    "turborepo": {
+        "homepage": "https://turbo.build/repo/docs",
+        "repository": "https://github.com/vercel/turborepo",
+        "description": "Turborepo — high-performance build system for JS/TS monorepos",
+    },
+    # --- Cross-ecosystem collisions (name exists on wrong registry) ---
+    "rails": {
+        "homepage": "https://guides.rubyonrails.org/",
+        "repository": "https://github.com/rails/rails",
+        "description": "Ruby on Rails — full-stack web application framework",
+    },
+    "laravel": {
+        "homepage": "https://laravel.com/docs",
+        "repository": "https://github.com/laravel/laravel",
+        "description": "Laravel — PHP web application framework",
+    },
+    "symfony": {
+        "homepage": "https://symfony.com/doc/current/",
+        "repository": "https://github.com/symfony/symfony",
+        "description": "Symfony — PHP web application framework",
+    },
+    "echo": {
+        "homepage": "https://echo.labstack.com/",
+        "repository": "https://github.com/labstack/echo",
+        "description": "Echo — high-performance Go web framework",
+    },
+    "flutter": {
+        "homepage": "https://docs.flutter.dev/",
+        "repository": "https://github.com/flutter/flutter",
+        "description": "Flutter — UI toolkit for multi-platform apps by Google",
+    },
+    "swift": {
+        "homepage": "https://www.swift.org/documentation/",
+        "repository": "https://github.com/swiftlang/swift",
+        "description": "Swift — programming language by Apple",
+    },
+    "nginx": {
+        "homepage": "https://nginx.org/en/docs/",
+        "repository": "https://github.com/nginx/nginx",
+        "description": "nginx — high-performance HTTP and reverse proxy server",
+    },
     "beautiful-soup": {
         "homepage": "https://www.crummy.com/software/BeautifulSoup/bs4/doc/",
         "repository": "https://code.launchpad.net/beautifulsoup",
