@@ -110,15 +110,15 @@ class Settings(BaseSettings):
 
     # LiteLLM Proxy (selfhosted gateway)
     litellm_proxy_url: str = ""  # e.g. http://10.0.0.20:4000
-    litellm_proxy_key: str = ""
+    litellm_proxy_key: SecretStr | None = None
 
     # Custom endpoints (e.g. modalcom-ai-workers on Modal.com)
     embedding_api_base: str = ""
-    embedding_api_key: str = ""
+    embedding_api_key: SecretStr | None = None
     rerank_api_base: str = ""
-    rerank_api_key: str = ""
+    rerank_api_key: SecretStr | None = None
     llm_api_base: str = ""
-    llm_api_key: str = ""
+    llm_api_key: SecretStr | None = None
 
     llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
     llm_temperature: float | None = None
@@ -370,7 +370,11 @@ class Settings(BaseSettings):
             import litellm
 
             os.environ["LITELLM_PROXY_API_BASE"] = self.litellm_proxy_url
-            os.environ["LITELLM_PROXY_API_KEY"] = self.litellm_proxy_key
+            os.environ["LITELLM_PROXY_API_KEY"] = (
+                self.litellm_proxy_key.get_secret_value()
+                if self.litellm_proxy_key
+                else ""
+            )
             litellm.use_litellm_proxy = True
             logger.info(f"LiteLLM Proxy mode: {self.litellm_proxy_url}")
         elif mode == "sdk":
@@ -387,7 +391,7 @@ class Settings(BaseSettings):
         if self.embedding_api_base:
             kwargs["api_base"] = self.embedding_api_base
         if self.embedding_api_key:
-            kwargs["api_key"] = self.embedding_api_key
+            kwargs["api_key"] = self.embedding_api_key.get_secret_value()
         return kwargs
 
     def get_rerank_litellm_kwargs(self) -> dict:
@@ -396,7 +400,7 @@ class Settings(BaseSettings):
         if self.rerank_api_base:
             kwargs["api_base"] = self.rerank_api_base
         if self.rerank_api_key:
-            kwargs["api_key"] = self.rerank_api_key
+            kwargs["api_key"] = self.rerank_api_key.get_secret_value()
         return kwargs
 
     def get_llm_litellm_kwargs(self) -> dict:
@@ -405,7 +409,7 @@ class Settings(BaseSettings):
         if self.llm_api_base:
             kwargs["api_base"] = self.llm_api_base
         if self.llm_api_key:
-            kwargs["api_key"] = self.llm_api_key
+            kwargs["api_key"] = self.llm_api_key.get_secret_value()
         return kwargs
 
 
