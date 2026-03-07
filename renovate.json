@@ -60,6 +60,13 @@
         "github-actions"
       ],
       "pinDigests": true
+    },
+    {
+      "description": "Disable Python runtime version upgrades (pinned to 3.13 for SearXNG/onnxruntime compatibility)",
+      "matchPackageNames": [
+        "python"
+      ],
+      "enabled": false
     }
   ]
 }
