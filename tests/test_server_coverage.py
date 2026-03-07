@@ -198,6 +198,7 @@ async def test_lifespan_shutdown_browser_error():
 async def test_lifespan_shutdown_cancel_warmup_task():
     """Lines 161-166: cancel in-progress warmup task."""
     from typing import cast
+
     never_done = asyncio.Future()
     task = asyncio.ensure_future(asyncio.shield(never_done))
     with (
