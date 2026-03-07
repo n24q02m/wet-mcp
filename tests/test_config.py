@@ -163,3 +163,406 @@ def test_resolve_embedding_dims():
     """Returns explicit dims or 0 for auto-detect."""
     assert Settings(embedding_dims=768).resolve_embedding_dims() == 768
     assert Settings(embedding_dims=0).resolve_embedding_dims() == 0
+
+
+# -----------------------------------------------------------------------
+# Path helpers: get_data_dir / get_db_path with custom paths
+# -----------------------------------------------------------------------
+
+
+def test_get_data_dir_custom_cache_dir(tmp_path):
+    """get_data_dir returns custom cache_dir when set."""
+    settings = Settings(cache_dir=str(tmp_path / "custom"))
+    assert settings.get_data_dir() == tmp_path / "custom"
+
+
+def test_get_data_dir_default():
+    """get_data_dir returns ~/.wet-mcp when cache_dir is empty."""
+    from pathlib import Path
+
+    settings = Settings(cache_dir="")
+    assert settings.get_data_dir() == Path.home() / ".wet-mcp"
+
+
+def test_get_db_path_custom_docs_db_path(tmp_path):
+    """get_db_path returns custom docs_db_path when set."""
+    custom = tmp_path / "my_docs.db"
+    settings = Settings(docs_db_path=str(custom))
+    assert settings.get_db_path() == custom
+
+
+def test_get_db_path_default():
+    """get_db_path returns get_data_dir()/docs.db when docs_db_path is empty."""
+    settings = Settings(docs_db_path="")
+    assert settings.get_db_path() == settings.get_data_dir() / "docs.db"
+
+
+# -----------------------------------------------------------------------
+# setup_api_keys with @file_path format
+# -----------------------------------------------------------------------
+
+
+def test_setup_api_keys_file_path(tmp_path):
+    """setup_api_keys reads keys from a file when using @path format."""
+    keys_file = tmp_path / "keys.txt"
+    keys_file.write_text("GOOGLE_API_KEY:file_key1\nOPENAI_API_KEY:file_key2")
+
+    settings = Settings(api_keys=SecretStr(f"@{keys_file}"))
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        keys = settings.setup_api_keys()
+
+        assert keys == {
+            "GOOGLE_API_KEY": ["file_key1"],
+            "OPENAI_API_KEY": ["file_key2"],
+        }
+        assert os.environ["GOOGLE_API_KEY"] == "file_key1"
+        assert os.environ["OPENAI_API_KEY"] == "file_key2"
+
+
+def test_setup_api_keys_file_not_found():
+    """setup_api_keys raises FileNotFoundError for missing file."""
+    settings = Settings(api_keys=SecretStr("@/nonexistent/keys.txt"))
+
+    import pytest
+
+    with pytest.raises(FileNotFoundError, match="API keys file not found"):
+        settings.setup_api_keys()
+
+
+def test_setup_api_keys_file_read_error(tmp_path):
+    """setup_api_keys raises ValueError when file read fails."""
+    import pytest
+
+    keys_file = tmp_path / "keys.txt"
+    keys_file.write_text("dummy")
+
+    settings = Settings(api_keys=SecretStr(f"@{keys_file}"))
+
+    # Mock path.read_text to raise an exception
+    with mock.patch(
+        "wet_mcp.config.Path.read_text", side_effect=PermissionError("denied")
+    ):
+        with pytest.raises(ValueError, match="Failed to read API keys file"):
+            settings.setup_api_keys()
+
+
+# -----------------------------------------------------------------------
+# resolve_rerank_backend: proxy, rerank_model, env var, api_keys detection
+# -----------------------------------------------------------------------
+
+
+def test_resolve_rerank_backend_proxy_mode():
+    """Returns 'litellm' when litellm_proxy_url is set."""
+    settings = Settings(
+        rerank_enabled=True,
+        rerank_backend="",
+        litellm_proxy_url="http://proxy:4000",
+    )
+    assert settings.resolve_rerank_backend() == "litellm"
+
+
+def test_resolve_rerank_backend_rerank_model_set():
+    """Returns 'litellm' when rerank_model is explicitly set."""
+    settings = Settings(
+        rerank_enabled=True,
+        rerank_backend="",
+        rerank_model="cohere/rerank-v3",
+    )
+    assert settings.resolve_rerank_backend() == "litellm"
+
+
+def test_resolve_rerank_backend_env_var_detection():
+    """Returns 'litellm' when COHERE_API_KEY is in env."""
+    settings = Settings(
+        rerank_enabled=True,
+        rerank_backend="",
+        api_keys=None,
+    )
+    with mock.patch.dict(os.environ, {"COHERE_API_KEY": "test-key"}, clear=False):
+        assert settings.resolve_rerank_backend() == "litellm"
+
+
+def test_resolve_rerank_backend_api_keys_cohere():
+    """Returns 'litellm' when API_KEYS contains COHERE_API_KEY."""
+    settings = Settings(
+        rerank_enabled=True,
+        rerank_backend="",
+        api_keys=SecretStr("COHERE_API_KEY:test"),
+    )
+    with mock.patch.dict(os.environ, {}, clear=True):
+        assert settings.resolve_rerank_backend() == "litellm"
+
+
+def test_resolve_rerank_backend_local_fallback():
+    """Returns 'local' when no rerank provider is detected."""
+    settings = Settings(
+        rerank_enabled=True,
+        rerank_backend="",
+        api_keys=None,
+    )
+    with mock.patch.dict(os.environ, {}, clear=True):
+        # Remove COHERE_API_KEY if present
+        os.environ.pop("COHERE_API_KEY", None)
+        assert settings.resolve_rerank_backend() == "local"
+
+
+# -----------------------------------------------------------------------
+# resolve_rerank_model: auto-detection
+# -----------------------------------------------------------------------
+
+
+def test_resolve_rerank_model_explicit():
+    """Returns explicit rerank_model when set."""
+    settings = Settings(rerank_model="cohere/custom-model")
+    assert settings.resolve_rerank_model() == "cohere/custom-model"
+
+
+def test_resolve_rerank_model_env_var_auto():
+    """Auto-detects model from COHERE_API_KEY env var."""
+    settings = Settings(rerank_model="")
+    with mock.patch.dict(os.environ, {"COHERE_API_KEY": "test-key"}, clear=False):
+        assert settings.resolve_rerank_model() == "cohere/rerank-multilingual-v3.0"
+
+
+def test_resolve_rerank_model_api_keys_auto():
+    """Auto-detects model from API_KEYS containing COHERE_API_KEY."""
+    settings = Settings(
+        rerank_model="",
+        api_keys=SecretStr("COHERE_API_KEY:test-key"),
+    )
+    with mock.patch.dict(os.environ, {}, clear=True):
+        assert settings.resolve_rerank_model() == "cohere/rerank-multilingual-v3.0"
+
+
+def test_resolve_rerank_model_none():
+    """Returns None when no rerank provider detected."""
+    settings = Settings(rerank_model="", api_keys=None)
+    with mock.patch.dict(os.environ, {}, clear=True):
+        os.environ.pop("COHERE_API_KEY", None)
+        assert settings.resolve_rerank_model() is None
+
+
+# -----------------------------------------------------------------------
+# resolve_litellm_mode and setup_litellm
+# -----------------------------------------------------------------------
+
+
+def test_resolve_litellm_mode_proxy():
+    """Returns 'proxy' when litellm_proxy_url is set."""
+    settings = Settings(litellm_proxy_url="http://proxy:4000")
+    assert settings.resolve_litellm_mode() == "proxy"
+
+
+def test_setup_litellm_proxy_mode():
+    """setup_litellm configures proxy mode with env vars."""
+    settings = Settings(
+        litellm_proxy_url="http://proxy:4000",
+        litellm_proxy_key=SecretStr("sk-proxy-key"),
+    )
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        litellm_mock = mock.MagicMock()
+        with mock.patch.dict("sys.modules", {"litellm": litellm_mock}):
+            mode = settings.setup_litellm()
+
+        assert mode == "proxy"
+        assert os.environ["LITELLM_PROXY_API_BASE"] == "http://proxy:4000"
+        assert os.environ["LITELLM_PROXY_API_KEY"] == "sk-proxy-key"
+
+
+def test_setup_litellm_proxy_mode_no_key():
+    """setup_litellm proxy mode works without proxy key."""
+    settings = Settings(
+        litellm_proxy_url="http://proxy:4000",
+        litellm_proxy_key=None,
+    )
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        litellm_mock = mock.MagicMock()
+        with mock.patch.dict("sys.modules", {"litellm": litellm_mock}):
+            mode = settings.setup_litellm()
+
+        assert mode == "proxy"
+        assert os.environ["LITELLM_PROXY_API_KEY"] == ""
+
+
+def test_setup_litellm_sdk_mode():
+    """setup_litellm configures SDK mode and calls setup_api_keys."""
+    settings = Settings(
+        api_keys=SecretStr("GOOGLE_API_KEY:abc"),
+    )
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        mode = settings.setup_litellm()
+
+        assert mode == "sdk"
+        assert os.environ["GOOGLE_API_KEY"] == "abc"
+
+
+# -----------------------------------------------------------------------
+# get_*_litellm_kwargs with custom endpoints
+# -----------------------------------------------------------------------
+
+
+def test_get_embedding_litellm_kwargs_empty():
+    """Returns empty dict when no custom embedding endpoint."""
+    settings = Settings()
+    assert settings.get_embedding_litellm_kwargs() == {}
+
+
+def test_get_embedding_litellm_kwargs_custom():
+    """Returns api_base and api_key when custom embedding endpoint is set."""
+    settings = Settings(
+        embedding_api_base="http://embed:8000",
+        embedding_api_key=SecretStr("embed-key"),
+    )
+    kwargs = settings.get_embedding_litellm_kwargs()
+    assert kwargs == {"api_base": "http://embed:8000", "api_key": "embed-key"}
+
+
+def test_get_rerank_litellm_kwargs_empty():
+    """Returns empty dict when no custom rerank endpoint."""
+    settings = Settings()
+    assert settings.get_rerank_litellm_kwargs() == {}
+
+
+def test_get_rerank_litellm_kwargs_custom():
+    """Returns api_base and api_key when custom rerank endpoint is set."""
+    settings = Settings(
+        rerank_api_base="http://rerank:8000",
+        rerank_api_key=SecretStr("rerank-key"),
+    )
+    kwargs = settings.get_rerank_litellm_kwargs()
+    assert kwargs == {"api_base": "http://rerank:8000", "api_key": "rerank-key"}
+
+
+def test_get_llm_litellm_kwargs_empty():
+    """Returns empty dict when no custom LLM endpoint."""
+    settings = Settings()
+    assert settings.get_llm_litellm_kwargs() == {}
+
+
+def test_get_llm_litellm_kwargs_custom():
+    """Returns api_base and api_key when custom LLM endpoint is set."""
+    settings = Settings(
+        llm_api_base="http://llm:8000",
+        llm_api_key=SecretStr("llm-key"),
+    )
+    kwargs = settings.get_llm_litellm_kwargs()
+    assert kwargs == {"api_base": "http://llm:8000", "api_key": "llm-key"}
+
+
+# -----------------------------------------------------------------------
+# Additional coverage: helper functions, cache path, local models, local mode
+# -----------------------------------------------------------------------
+
+
+def test_get_cache_db_path():
+    """get_cache_db_path returns get_data_dir()/cache.db."""
+    settings = Settings(cache_dir="/tmp/test-wet")
+    assert (
+        settings.get_cache_db_path()
+        == Settings(cache_dir="/tmp/test-wet").get_data_dir() / "cache.db"
+    )
+
+
+def test_detect_gpu_no_onnxruntime():
+    """_detect_gpu returns False when onnxruntime is not available."""
+    from wet_mcp.config import _detect_gpu
+
+    with mock.patch.dict("sys.modules", {"onnxruntime": None}):
+        assert _detect_gpu() is False
+
+
+def test_detect_gpu_with_cuda():
+    """_detect_gpu returns True when CUDAExecutionProvider is available."""
+    from wet_mcp.config import _detect_gpu
+
+    ort_mock = mock.MagicMock()
+    ort_mock.get_available_providers.return_value = [
+        "CUDAExecutionProvider",
+        "CPUExecutionProvider",
+    ]
+    with mock.patch.dict("sys.modules", {"onnxruntime": ort_mock}):
+        assert _detect_gpu() is True
+
+
+def test_detect_gpu_cpu_only():
+    """_detect_gpu returns False with CPU-only providers."""
+    from wet_mcp.config import _detect_gpu
+
+    ort_mock = mock.MagicMock()
+    ort_mock.get_available_providers.return_value = ["CPUExecutionProvider"]
+    with mock.patch.dict("sys.modules", {"onnxruntime": ort_mock}):
+        assert _detect_gpu() is False
+
+
+def test_has_gguf_support_missing():
+    """_has_gguf_support returns False when llama_cpp is not installed."""
+    from wet_mcp.config import _has_gguf_support
+
+    with mock.patch("builtins.__import__", side_effect=ImportError("no llama_cpp")):
+        assert _has_gguf_support() is False
+
+
+def test_has_gguf_support_available():
+    """_has_gguf_support returns True when llama_cpp is installed."""
+    from wet_mcp.config import _has_gguf_support
+
+    with mock.patch.dict("sys.modules", {"llama_cpp": mock.MagicMock()}):
+        assert _has_gguf_support() is True
+
+
+def test_resolve_local_model_onnx_fallback():
+    """_resolve_local_model returns ONNX model when no GPU or no GGUF support."""
+    from wet_mcp.config import _resolve_local_model
+
+    with mock.patch("wet_mcp.config._detect_gpu", return_value=False):
+        assert _resolve_local_model("onnx-model", "gguf-model") == "onnx-model"
+
+
+def test_resolve_local_model_gguf():
+    """_resolve_local_model returns GGUF model when GPU and llama-cpp available."""
+    from wet_mcp.config import _resolve_local_model
+
+    with (
+        mock.patch("wet_mcp.config._detect_gpu", return_value=True),
+        mock.patch("wet_mcp.config._has_gguf_support", return_value=True),
+    ):
+        assert _resolve_local_model("onnx-model", "gguf-model") == "gguf-model"
+
+
+def test_resolve_local_embedding_model():
+    """resolve_local_embedding_model delegates to _resolve_local_model."""
+    settings = Settings()
+    with mock.patch(
+        "wet_mcp.config._resolve_local_model", return_value="test-model"
+    ) as m:
+        result = settings.resolve_local_embedding_model()
+        assert result == "test-model"
+        m.assert_called_once()
+
+
+def test_resolve_local_rerank_model():
+    """resolve_local_rerank_model delegates to _resolve_local_model."""
+    settings = Settings()
+    with mock.patch(
+        "wet_mcp.config._resolve_local_model", return_value="test-rerank"
+    ) as m:
+        result = settings.resolve_local_rerank_model()
+        assert result == "test-rerank"
+        m.assert_called_once()
+
+
+def test_setup_litellm_local_mode():
+    """setup_litellm returns 'local' when no proxy/keys configured."""
+    settings = Settings(
+        litellm_proxy_url="",
+        api_keys=None,
+        embedding_api_base="",
+        rerank_api_base="",
+        llm_api_base="",
+    )
+    mode = settings.setup_litellm()
+    assert mode == "local"

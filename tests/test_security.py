@@ -113,3 +113,105 @@ def test_extended_ssrf_scenarios():
     # 5. Mixed-case localhost
     # "LoCaLhOsT" -> blocked by hostname.lower() check
     assert not is_safe_url("http://LoCaLhOsT")
+
+
+def test_pinned_getaddrinfo_cache_hit_and_expiry():
+    """Test _pinned_getaddrinfo returns cached results and expires stale entries."""
+    import time
+
+    from wet_mcp.security import _dns_cache, _dns_cache_lock, _pinned_getaddrinfo
+
+    cached_results = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 80))]
+
+    # Populate cache with a fresh entry
+    with _dns_cache_lock:
+        _dns_cache["cached-host.example"] = (cached_results, time.monotonic())
+
+    try:
+        # Should return pinned results with the requested port substituted
+        result = _pinned_getaddrinfo("cached-host.example", 443)
+        assert len(result) == 1
+        family, stype, proto, canonname, sockaddr = result[0]
+        assert sockaddr[0] == "8.8.8.8"
+        assert sockaddr[1] == 443  # Port replaced
+
+        # Now simulate an expired entry
+        with _dns_cache_lock:
+            _dns_cache["expired-host.example"] = (cached_results, time.monotonic() - 60)
+
+        # Should fall through to _original_getaddrinfo (cache expired + entry deleted)
+        with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
+            mock_dns.return_value = [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.2.3.4", 443))
+            ]
+            result = _pinned_getaddrinfo("expired-host.example", 443)
+            mock_dns.assert_called_once_with("expired-host.example", 443)
+
+        # Expired entry should have been removed from cache
+        with _dns_cache_lock:
+            assert "expired-host.example" not in _dns_cache
+    finally:
+        # Clean up cache
+        with _dns_cache_lock:
+            _dns_cache.pop("cached-host.example", None)
+            _dns_cache.pop("expired-host.example", None)
+
+
+def test_check_ip_safe_ipv6_scope_id():
+    """Test _check_ip_safe strips scope ID from IPv6 link-local and catches ValueError."""
+    from wet_mcp.security import _check_ip_safe
+
+    # IPv6 link-local with scope ID should be blocked (link-local)
+    assert not _check_ip_safe("fe80::1%eth0", "test-host")
+
+    # Invalid IP string that causes ValueError should return True (skip)
+    assert _check_ip_safe("not-an-ip-at-all", "test-host")
+
+
+def test_is_safe_url_non_http_scheme():
+    """Test is_safe_url rejects non-http/https schemes."""
+    assert not is_safe_url("ftp://example.com/file")
+    assert not is_safe_url("file:///etc/passwd")
+    assert not is_safe_url("gopher://evil.com")
+    assert not is_safe_url("javascript:alert(1)")
+    assert not is_safe_url("data:text/html,<h1>hi</h1>")
+
+
+def test_is_safe_url_empty_hostname():
+    """Test is_safe_url returns False for URLs with empty hostname."""
+    assert not is_safe_url("http://")
+    assert not is_safe_url("https:///path")
+
+
+def test_is_safe_url_general_exception():
+    """Test is_safe_url returns False when _original_getaddrinfo raises unexpected exception."""
+    with patch(
+        "wet_mcp.security._original_getaddrinfo", side_effect=RuntimeError("unexpected")
+    ):
+        assert not is_safe_url("http://some-domain.com")
+
+
+def test_pinned_getaddrinfo_ipv6_sockaddr():
+    """Test _pinned_getaddrinfo correctly rebuilds IPv6 sockaddr (4-tuple)."""
+    import time
+
+    from wet_mcp.security import _dns_cache, _dns_cache_lock, _pinned_getaddrinfo
+
+    # IPv6 sockaddr is (address, port, flowinfo, scope_id)
+    cached_results = [
+        (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:db8::1", 80, 0, 0))
+    ]
+
+    with _dns_cache_lock:
+        _dns_cache["ipv6-host.example"] = (cached_results, time.monotonic())
+
+    try:
+        result = _pinned_getaddrinfo("ipv6-host.example", 8080)
+        assert len(result) == 1
+        _, _, _, _, sockaddr = result[0]
+        assert sockaddr[0] == "2001:db8::1"
+        assert sockaddr[1] == 8080  # Port replaced
+        assert sockaddr[2:] == (0, 0)  # flowinfo and scope_id preserved
+    finally:
+        with _dns_cache_lock:
+            _dns_cache.pop("ipv6-host.example", None)
