@@ -144,5 +144,5 @@ Conventional Commits: `type(scope): message`. Automated semantic release.
 
 ## TODO / Backlog
 
-- [ ] **markitdown integration**: Add `markitdown[pdf]` as optional dependency. When `extract` receives a URL pointing to PDF/DOCX/PPTX (detected via Content-Type or extension), use markitdown instead of Crawl4AI for conversion to Markdown. Crawl4AI cannot render PDF content. markitdown uses pdfminer-six + pdfplumber under the hood — CPU only, no browser needed.
+- [x] **markitdown integration**: Added `markitdown[pdf,docx,pptx]` as dependency. Extract tool auto-detects document URLs by extension and routes through markitdown instead of Crawl4AI.
 - [ ] **extract action for local files**: Support `file://` URLs or a new `convert` action for local document conversion via markitdown.
