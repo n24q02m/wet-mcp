@@ -78,13 +78,27 @@ def test_get_pip_command():
 
 def test_is_pid_alive_unix():
     with patch("sys.platform", "linux"), patch("os.kill") as mock_kill:
-        # Alive
+        # Alive (non-zombie)
         mock_kill.return_value = None
-        assert _is_pid_alive(1234) is True
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "pathlib.Path.read_text", return_value="State:\tS (sleeping)\n"
+        ):
+            assert _is_pid_alive(1234) is True
 
         # Dead
         mock_kill.side_effect = ProcessLookupError()
         assert _is_pid_alive(1234) is False
+
+
+def test_is_pid_alive_zombie():
+    """Zombie processes should be detected as dead."""
+    with patch("sys.platform", "linux"), patch("os.kill") as mock_kill:
+        mock_kill.return_value = None
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "pathlib.Path.read_text",
+            return_value="State:\tZ (zombie)\nPid:\t1234\n",
+        ):
+            assert _is_pid_alive(1234) is False
 
 
 def test_read_discovery(tmp_path):
@@ -147,24 +161,30 @@ async def test_try_reuse_existing():
         patch("wet_mcp.searxng_runner._read_discovery") as mock_read,
         patch("wet_mcp.searxng_runner._is_pid_alive") as mock_alive,
         patch("wet_mcp.searxng_runner._quick_health_check") as mock_health,
+        patch("wet_mcp.searxng_runner._remove_discovery") as mock_remove,
     ):
         # Case 1: No discovery
         mock_read.return_value = None
         assert await _try_reuse_existing() is None
+        mock_remove.assert_not_called()
 
-        # Case 2: Discovery but dead
+        # Case 2: Discovery but dead — should clean up discovery file
         mock_read.return_value = {"pid": 1234, "port": 8080}
         mock_alive.return_value = False
+        mock_remove.reset_mock()
         assert await _try_reuse_existing() is None
+        mock_remove.assert_called_once()
 
         # Case 3: Discovery, alive, healthy
         mock_alive.return_value = True
         mock_health.return_value = True
         assert await _try_reuse_existing() == "http://127.0.0.1:8080"
 
-        # Case 4: Discovery, alive, unhealthy
+        # Case 4: Discovery, alive, unhealthy — should clean up discovery file
         mock_health.return_value = False
+        mock_remove.reset_mock()
         assert await _try_reuse_existing() is None
+        mock_remove.assert_called_once()
 
 
 def test_find_available_port():

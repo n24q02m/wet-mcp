@@ -108,7 +108,7 @@ def _get_startup_lock() -> asyncio.Lock:
 
 
 def _is_pid_alive(pid: int) -> bool:
-    """Check if a process with the given PID is alive."""
+    """Check if a process with the given PID is alive (not zombie)."""
     if sys.platform == "win32":
         # os.kill(pid, 0) does not work on Windows for non-child processes.
         # Use ctypes OpenProcess to check if PID exists.
@@ -124,9 +124,25 @@ def _is_pid_alive(pid: int) -> bool:
         return False
     try:
         os.kill(pid, 0)
-        return True
     except (ProcessLookupError, PermissionError, OSError):
         return False
+
+    # On Linux, check /proc/{pid}/status for zombie state.
+    # os.kill(pid, 0) succeeds for zombie processes (PID still in table),
+    # but they are defunct and cannot serve requests.
+    try:
+        status_path = Path(f"/proc/{pid}/status")
+        if status_path.exists():
+            for line in status_path.read_text().splitlines():
+                if line.startswith("State:"):
+                    if "Z" in line.split(":")[1]:
+                        logger.debug(f"PID {pid} is a zombie process")
+                        return False
+                    break
+    except OSError:
+        pass
+
+    return True
 
 
 def _read_discovery() -> dict | None:
@@ -163,7 +179,7 @@ def _write_discovery(port: int, pid: int) -> None:
 
 
 def _remove_discovery() -> None:
-    """Remove discovery file (only called by owner on cleanup)."""
+    """Remove stale discovery file."""
     try:
         if _DISCOVERY_FILE.exists():
             _DISCOVERY_FILE.unlink()
@@ -216,7 +232,8 @@ async def _try_reuse_existing() -> str | None:
 
     # Check if the SearXNG process is still alive
     if not _is_pid_alive(pid):
-        logger.debug(f"Discovery file points to dead process (PID={pid}), ignoring")
+        logger.debug(f"Discovery file points to dead process (PID={pid}), cleaning up")
+        _remove_discovery()
         return None
 
     # Health check the existing instance
@@ -224,7 +241,8 @@ async def _try_reuse_existing() -> str | None:
     if await _quick_health_check(url):
         return url
 
-    logger.debug(f"Discovery file points to unhealthy instance at {url}, ignoring")
+    logger.debug(f"Discovery file points to unhealthy instance at {url}, cleaning up")
+    _remove_discovery()
     return None
 
 
