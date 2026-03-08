@@ -209,7 +209,11 @@ class LiteLLMBackend:
         try:
             from litellm import embedding as litellm_embedding
 
-            kwargs = {"model": self.model, "input": ["test"], "encoding_format": "float"}
+            kwargs = {
+                "model": self.model,
+                "input": ["test"],
+                "encoding_format": "float",
+            }
             if self.api_base:
                 kwargs["api_base"] = self.api_base
             if self.api_key:
