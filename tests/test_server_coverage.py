@@ -197,8 +197,10 @@ async def test_lifespan_shutdown_browser_error():
 
 async def test_lifespan_shutdown_cancel_warmup_task():
     """Lines 161-166: cancel in-progress warmup task."""
-    never_done = asyncio.Future()
-    task = asyncio.ensure_future(asyncio.shield(never_done))
+    async def _never_complete() -> None:
+        await asyncio.Future()
+
+    task = asyncio.create_task(_never_complete())
     with (
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
