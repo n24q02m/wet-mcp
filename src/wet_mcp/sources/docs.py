@@ -24,7 +24,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from loguru import logger
 
-from wet_mcp.security import is_safe_url, safe_httpx_client as _safe_httpx_client
+from wet_mcp.security import safe_httpx_client as _safe_httpx_client
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.

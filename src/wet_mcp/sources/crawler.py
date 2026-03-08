@@ -21,7 +21,8 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.security import is_safe_url, safe_httpx_client as _safe_httpx_client
+from wet_mcp.security import is_safe_url
+from wet_mcp.security import safe_httpx_client as _safe_httpx_client
 
 # Document extensions that markitdown handles better than Crawl4AI
 _DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls"}
