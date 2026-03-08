@@ -80,8 +80,9 @@ def test_is_pid_alive_unix():
     with patch("sys.platform", "linux"), patch("os.kill") as mock_kill:
         # Alive (non-zombie)
         mock_kill.return_value = None
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text", return_value="State:\tS (sleeping)\n"
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.read_text", return_value="State:\tS (sleeping)\n"),
         ):
             assert _is_pid_alive(1234) is True
 
@@ -94,9 +95,12 @@ def test_is_pid_alive_zombie():
     """Zombie processes should be detected as dead."""
     with patch("sys.platform", "linux"), patch("os.kill") as mock_kill:
         mock_kill.return_value = None
-        with patch("pathlib.Path.exists", return_value=True), patch(
-            "pathlib.Path.read_text",
-            return_value="State:\tZ (zombie)\nPid:\t1234\n",
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch(
+                "pathlib.Path.read_text",
+                return_value="State:\tZ (zombie)\nPid:\t1234\n",
+            ),
         ):
             assert _is_pid_alive(1234) is False
 
