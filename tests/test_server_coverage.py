@@ -197,6 +197,7 @@ async def test_lifespan_shutdown_browser_error():
 
 async def test_lifespan_shutdown_cancel_warmup_task():
     """Lines 161-166: cancel in-progress warmup task."""
+
     async def _never_complete() -> None:
         await asyncio.Future()
 
