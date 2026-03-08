@@ -80,16 +80,13 @@ class WebCache:
         key = _cache_key(action, params)
         now = time.time()
 
+        # ⚡ Bolt: Optimize cache lookup into a single atomic query (halves DB ops)
         row = self._conn.execute(
-            "SELECT content FROM web_cache WHERE key = ? AND expires_at > ?",
+            "UPDATE web_cache SET hit_count = hit_count + 1 WHERE key = ? AND expires_at > ? RETURNING content",
             (key, now),
         ).fetchone()
 
         if row:
-            self._conn.execute(
-                "UPDATE web_cache SET hit_count = hit_count + 1 WHERE key = ?",
-                (key,),
-            )
             self._conn.commit()
             logger.debug(f"Cache HIT: {action} ({key[:12]}...)")
             return row["content"]
