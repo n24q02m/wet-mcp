@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from wet_mcp.security import _ssrf_event_hook
 from wet_mcp.sources.docs import (
     _clean_doc_content,
     _discover_from_crates,
@@ -33,7 +34,6 @@ from wet_mcp.sources.docs import (
     _parse_objects_inv,
     _probe_docs_url,
     _safe_httpx_client,
-    _ssrf_event_hook,
     _strip_nav_blocks,
     _strip_nav_heading_blocks,
     _try_github_raw_docs,
