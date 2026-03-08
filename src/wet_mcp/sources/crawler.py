@@ -21,7 +21,7 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_url, safe_httpx_client as _safe_httpx_client
 
 # Document extensions that markitdown handles better than Crawl4AI
 _DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls"}
@@ -195,7 +195,7 @@ async def _extract_with_markitdown(url: str) -> dict:
         }
 
     try:
-        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
+        async with _safe_httpx_client(timeout=60, follow_redirects=True) as client:
             resp = await client.get(url)
             resp.raise_for_status()
 
@@ -352,6 +352,12 @@ async def crawl(
             if url in visited or current_depth > depth:
                 continue
 
+            # Validate every URL (not just root) to prevent SSRF
+            # via malicious internal links on attacker-controlled pages
+            if not is_safe_url(url):
+                logger.warning(f"Skipping unsafe discovered URL: {url}")
+                continue
+
             visited.add(url)
 
             async with sem:
@@ -434,6 +440,11 @@ async def sitemap(
             url, current_depth = to_visit.popleft()
 
             if url in visited or current_depth > depth:
+                continue
+
+            # Validate every URL (not just root) to prevent SSRF
+            if not is_safe_url(url):
+                logger.warning(f"Skipping unsafe discovered URL: {url}")
                 continue
 
             visited.add(url)

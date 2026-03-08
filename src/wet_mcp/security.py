@@ -2,8 +2,10 @@ import ipaddress
 import socket
 import threading
 import time
+from typing import Any
 from urllib.parse import urlparse
 
+import httpx
 from loguru import logger
 
 # ---------------------------------------------------------------------------
@@ -118,16 +120,43 @@ def is_safe_url(url: str) -> bool:
             _dns_cache[hostname] = (results, time.monotonic())
 
     except socket.gaierror:
-        # If DNS fails, we can't verify the IP.
-        # But if it's an IP literal, getaddrinfo shouldn't fail unless malformed.
-        # If it's a domain, failing DNS means we can't connect anyway.
-        # So treating as safe is acceptable because connection will fail.
-        pass
+        # DNS resolution failed — we cannot verify the IP is safe.
+        # Block the URL to prevent bypass via transient DNS failures
+        # or selective resolution (validation vs. request).
+        logger.warning(f"DNS resolution failed for {hostname}, blocking URL")
+        return False
     except Exception as e:
         logger.error(f"Error validating URL {url}: {e}")
         return False
 
     return True
+
+
+async def _ssrf_event_hook(request: httpx.Request) -> None:
+    """httpx event hook that blocks requests to unsafe (private/internal) URLs.
+
+    Attached to ``safe_httpx_client`` so that even followed redirects
+    are validated against SSRF.
+    """
+    url_str = str(request.url)
+    if not is_safe_url(url_str):
+        raise httpx.RequestError(
+            f"SSRF blocked: {url_str} resolves to a private/internal address",
+            request=request,
+        )
+
+
+def safe_httpx_client(**kwargs: Any) -> httpx.AsyncClient:
+    """Create an httpx.AsyncClient with SSRF protection event hook.
+
+    Every outgoing request (including redirect hops) is validated via
+    ``is_safe_url`` before the connection is made.
+    """
+    hooks = kwargs.pop("event_hooks", {})
+    request_hooks = list(hooks.get("request", []))
+    request_hooks.insert(0, _ssrf_event_hook)
+    hooks["request"] = request_hooks
+    return httpx.AsyncClient(event_hooks=hooks, **kwargs)
 
 
 def wrap_external_content(tool_name: str, result: str) -> str:

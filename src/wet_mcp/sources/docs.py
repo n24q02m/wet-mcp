@@ -24,36 +24,11 @@ from urllib.parse import urljoin, urlparse
 import httpx
 from loguru import logger
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_url, safe_httpx_client as _safe_httpx_client
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
 DISCOVERY_VERSION = 27
-
-
-async def _ssrf_event_hook(request: httpx.Request) -> None:
-    """httpx event hook that blocks requests to unsafe (private/internal) URLs.
-
-    Attached to every ``httpx.AsyncClient`` in this module so that even
-    followed redirects are validated against SSRF.
-
-    Must be async because httpx 0.28+ awaits event hooks on AsyncClient.
-    """
-    url_str = str(request.url)
-    if not is_safe_url(url_str):
-        raise httpx.RequestError(
-            f"SSRF blocked: {url_str} resolves to a private/internal address",
-            request=request,
-        )
-
-
-def _safe_httpx_client(**kwargs: Any) -> httpx.AsyncClient:
-    """Create an httpx.AsyncClient with SSRF protection event hook."""
-    hooks = kwargs.pop("event_hooks", {})
-    request_hooks = list(hooks.get("request", []))
-    request_hooks.insert(0, _ssrf_event_hook)
-    hooks["request"] = request_hooks
-    return httpx.AsyncClient(event_hooks=hooks, **kwargs)
 
 
 def _github_headers() -> dict[str, str]:

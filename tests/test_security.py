@@ -53,10 +53,10 @@ def test_safe_urls():
         assert is_safe_url("https://example.com/path?q=1")
 
 
-def test_dns_failure_fallback():
-    # If DNS fails, we allow it (connection will fail anyway)
+def test_dns_failure_blocked():
+    # DNS failure blocks the URL to prevent SSRF bypass via selective resolution
     with patch("wet_mcp.security._original_getaddrinfo", side_effect=socket.gaierror):
-        assert is_safe_url("http://non-existent-domain.com")
+        assert not is_safe_url("http://non-existent-domain.com")
 
 
 def test_extended_ssrf_scenarios():
