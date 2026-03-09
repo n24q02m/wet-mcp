@@ -1,5 +1,5 @@
 {
-  "name": "Production Ruleset",
+  "name": "Main Ruleset",
   "target": "branch",
   "source_type": "Repository",
   "source": "n24q02m/wet-mcp",
