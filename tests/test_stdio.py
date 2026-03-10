@@ -27,8 +27,8 @@ def main():
         proc.stdin.flush()
 
     def read_message(timeout: float = 15.0) -> dict | None:
-        result = [None]
-        error = [None]
+        result: list[dict | None] = [None]
+        error: list[str | None] = [None]
 
         def _read():
             try:
