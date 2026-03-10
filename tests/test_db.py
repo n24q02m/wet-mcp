@@ -1677,16 +1677,46 @@ class TestVecSearchChunkLoading:
                         # by querying a temp table
                         original_execute(
                             "CREATE TEMP TABLE IF NOT EXISTS _fake_vec "
-                            "(id TEXT, distance REAL)"
+                            "(id TEXT, distance REAL, content TEXT, title TEXT, chunk_index INTEGER, url TEXT, heading_path TEXT, version_id TEXT, library_id TEXT, created_at REAL)"
                         )
                         original_execute("DELETE FROM _fake_vec")
+
+                        vec_only_row = original_execute(
+                            "SELECT * FROM doc_chunks WHERE id = ?",
+                            (vec_only_chunk_id,),
+                        ).fetchone()
                         original_execute(
-                            "INSERT INTO _fake_vec VALUES (?, ?)",
-                            (vec_only_chunk_id, 0.1),
+                            "INSERT INTO _fake_vec VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                vec_only_chunk_id,
+                                0.1,
+                                vec_only_row["content"],
+                                vec_only_row["title"],
+                                vec_only_row["chunk_index"],
+                                vec_only_row["url"],
+                                vec_only_row["heading_path"],
+                                vec_only_row["version_id"],
+                                vec_only_row["library_id"],
+                                vec_only_row["created_at"],
+                            ),
                         )
+                        fts_row = original_execute(
+                            "SELECT * FROM doc_chunks WHERE id = ?", (fts_chunk_id,)
+                        ).fetchone()
                         original_execute(
-                            "INSERT INTO _fake_vec VALUES (?, ?)",
-                            (fts_chunk_id, 0.2),
+                            "INSERT INTO _fake_vec VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                fts_chunk_id,
+                                0.2,
+                                fts_row["content"],
+                                fts_row["title"],
+                                fts_row["chunk_index"],
+                                fts_row["url"],
+                                fts_row["heading_path"],
+                                fts_row["version_id"],
+                                fts_row["library_id"],
+                                fts_row["created_at"],
+                            ),
                         )
                         return original_execute("SELECT * FROM _fake_vec")
                     if params is not None:

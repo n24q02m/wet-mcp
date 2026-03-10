@@ -711,7 +711,7 @@ class DocsDB:
         if self._vec_enabled and query_embedding:
             try:
                 vec_sql = """
-                    SELECT v.id, v.distance
+                    SELECT v.id, v.distance, c.*
                     FROM doc_chunks_vec v
                     JOIN doc_chunks c ON v.id = c.id
                     WHERE v.embedding MATCH ?
@@ -730,15 +730,15 @@ class DocsDB:
 
                 vec_rows = self._conn.execute(vec_sql, vec_params).fetchall()
                 for vr in vec_rows:
-                    vec_scores[vr["id"]] = max(0.0, 1.0 - vr["distance"])
+                    chunk_id = vr["id"]
+                    vec_scores[chunk_id] = max(0.0, 1.0 - vr["distance"])
 
-                    # Load chunk data if not already from FTS
-                    if vr["id"] not in fts_chunks:
-                        chunk_row = self._conn.execute(
-                            "SELECT * FROM doc_chunks WHERE id = ?", (vr["id"],)
-                        ).fetchone()
-                        if chunk_row:
-                            fts_chunks[vr["id"]] = dict(chunk_row)
+                    # ⚡ Bolt Optimization: Use pre-fetched chunk data from the JOIN
+                    # instead of executing a SELECT query per row (fixes N+1 query problem).
+                    if chunk_id not in fts_chunks:
+                        chunk_data = dict(vr)
+                        chunk_data.pop("distance", None)
+                        fts_chunks[chunk_id] = chunk_data
             except Exception as e:
                 logger.debug(f"Vector search error: {e}")
 
