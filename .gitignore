@@ -53,3 +53,7 @@ htmlcov/
 node_modules/
 temp/
 tests/benchmark_results.jsonl
+
+# AI Agent
+.jules/
+JULES.md
