@@ -24,18 +24,7 @@ def _clear_model_cache(model_name: str) -> None:
         print(f"  Cleared corrupted cache: {model_cache}")
 
 
-def _warmup() -> None:
-    """Pre-download models and run setup to avoid first-run delays.
-
-    Run this before adding wet-mcp to your MCP config:
-        uvx --python 3.13 wet-mcp warmup
-
-    This installs SearXNG, Playwright/Chromium, and downloads the local
-    embedding + reranking models (~1.1 GB total) so the first real
-    connection does not timeout.
-    """
-    print("WET MCP warmup: running first-time setup...")
-
+def _warmup_auto_setup() -> None:
     # 1. Run auto-setup (SearXNG + Playwright)
     print("  Step 1/3: Installing SearXNG and Playwright...")
     from wet_mcp.setup import run_auto_setup
@@ -43,9 +32,9 @@ def _warmup() -> None:
     run_auto_setup()
     print("  SearXNG and Playwright setup complete.")
 
-    # 2. Check API keys -- if valid cloud keys exist, skip local download
-    from wet_mcp.config import settings
 
+def _warmup_check_cloud_models(settings) -> bool:
+    # 2. Check API keys -- if valid cloud keys exist, skip local download
     mode = settings.setup_litellm()
     if mode in ("proxy", "sdk"):
         print(f"  LiteLLM mode: {mode}")
@@ -83,15 +72,18 @@ def _warmup() -> None:
                     if reranker.check_available():
                         print(f"  Cloud reranker ready: {rerank_model}")
                         print("Warmup complete! Cloud models will be used.")
-                        return
+                        return True
                 except Exception:
                     pass
 
             print("Warmup complete! Cloud embedding will be used.")
-            return
+            return True
 
         print("  Cloud embedding not available, falling back to local models...")
+    return False
 
+
+def _warmup_download_local_embedding_model(settings) -> None:
     # 3. Download local embedding model
     print("  Step 2/3: Downloading local embedding model (~570 MB)...")
     print("  This may take a few minutes on first run.")
@@ -119,6 +111,8 @@ def _warmup() -> None:
         else:
             raise
 
+
+def _warmup_download_local_reranker_model(settings) -> None:
     # 4. Download local reranker model
     if settings.rerank_enabled:
         print("  Step 3/3: Downloading local reranker model (~570 MB)...")
@@ -146,6 +140,29 @@ def _warmup() -> None:
                 raise
     else:
         print("  Step 3/3: Reranking disabled, skipping.")
+
+
+def _warmup() -> None:
+    """Pre-download models and run setup to avoid first-run delays.
+
+    Run this before adding wet-mcp to your MCP config:
+        uvx --python 3.13 wet-mcp warmup
+
+    This installs SearXNG, Playwright/Chromium, and downloads the local
+    embedding + reranking models (~1.1 GB total) so the first real
+    connection does not timeout.
+    """
+    print("WET MCP warmup: running first-time setup...")
+
+    _warmup_auto_setup()
+
+    from wet_mcp.config import settings
+
+    if _warmup_check_cloud_models(settings):
+        return
+
+    _warmup_download_local_embedding_model(settings)
+    _warmup_download_local_reranker_model(settings)
 
     print("Warmup complete!")
 
