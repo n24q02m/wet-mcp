@@ -120,7 +120,8 @@ uvx --python 3.13 wet-mcp@latest
         // "RERANK_API_BASE": "https://your-worker.modal.run",
         // "RERANK_API_KEY": "your-key",
         // -- optional: higher rate limits for docs discovery (60 -> 5000 req/hr)
-        "GITHUB_TOKEN": "ghp_...",
+        // -- auto-detected from `gh auth token` if GitHub CLI is installed
+        // "GITHUB_TOKEN": "ghp_...",
         // -- optional: sync indexed docs across machines via rclone
         "SYNC_ENABLED": "true",                    // optional, default: false
         "SYNC_INTERVAL": "300"                     // optional, auto-sync every 5min (0 = manual only)
@@ -225,7 +226,7 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 | `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory (optional) |
 | `TOOL_TIMEOUT` | `120` | Tool execution timeout in seconds, 0=no timeout (optional) |
 | `WET_CACHE` | `true` | Enable/disable web cache (optional) |
-| `GITHUB_TOKEN` | - | GitHub personal access token for library discovery (optional, increases rate limit from 60 to 5000 req/hr) |
+| `GITHUB_TOKEN` | - | GitHub personal access token for library discovery (optional, increases rate limit from 60 to 5000 req/hr). **Auto-detected** from `gh auth token` if GitHub CLI is installed and authenticated — no need to set manually. |
 | `SYNC_ENABLED` | `false` | Enable rclone sync |
 | `SYNC_PROVIDER` | `drive` | rclone provider type (drive, dropbox, s3, etc.) |
 | `SYNC_REMOTE` | `gdrive` | rclone remote name |

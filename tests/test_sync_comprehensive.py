@@ -11,7 +11,6 @@ from wet_mcp.sync import (
     _auto_sync_loop,
     _download_rclone,
     _extract_token,
-    _extract_zip_sync,
     _get_platform_info,
     _get_rclone_dir,
     _get_rclone_path,
@@ -502,7 +501,8 @@ async def test_auto_sync_loop_stops_on_cancel(mock_sync, mock_sleep, mock_settin
     mock_sleep.side_effect = asyncio.CancelledError()
 
     await _auto_sync_loop(MagicMock())
-    mock_sync.assert_not_called()
+    # sync_full called once for initial sync, then cancelled during sleep
+    assert mock_sync.await_count == 1
 
 
 @patch("wet_mcp.sync.settings")

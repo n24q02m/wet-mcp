@@ -7,7 +7,6 @@ from unittest.mock import patch
 import pytest
 
 from wet_mcp.token_store import (
-    _get_token_dir,
     delete_token,
     get_token_path,
     load_token,
