@@ -215,3 +215,10 @@ def test_pinned_getaddrinfo_ipv6_sockaddr():
     finally:
         with _dns_cache_lock:
             _dns_cache.pop("ipv6-host.example", None)
+
+
+def test_is_safe_url_urlparse_exception():
+    """Test is_safe_url catches urlparse exceptions for malformed URLs."""
+    # In Python 3.12+, urlparse raises a ValueError for malformed URLs
+    # containing square brackets that do not enclose a valid IP address.
+    assert not is_safe_url("http://[example.com]/")
