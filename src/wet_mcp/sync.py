@@ -443,6 +443,15 @@ async def _auto_sync_loop(db: DocsDB) -> None:
         return
 
     logger.info(f"Auto-sync started (interval={interval}s)")
+    # Run first sync immediately (don't wait for interval)
+    try:
+        await sync_full(db)
+    except asyncio.CancelledError:
+        logger.info("Auto-sync stopped")
+        return
+    except Exception as e:
+        logger.error(f"Initial sync error: {e}")
+
     while True:
         try:
             await asyncio.sleep(interval)
