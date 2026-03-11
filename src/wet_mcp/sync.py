@@ -319,12 +319,14 @@ async def sync_full(db: DocsDB) -> dict:
         try:
             # Open remote DB and export JSONL
             remote_db = DocsDB(remote_db_path, embedding_dims=0)
-            remote_jsonl = remote_db.export_jsonl()
+            remote_jsonl = await asyncio.to_thread(remote_db.export_jsonl)
             remote_db.close()
 
             # Import into local DB (merge mode - skip existing)
             if remote_jsonl.strip():
-                import_result = db.import_jsonl(remote_jsonl, mode="merge")
+                import_result = await asyncio.to_thread(
+                    db.import_jsonl, remote_jsonl, "merge"
+                )
                 result["pull"] = import_result
                 logger.info(f"Merged remote docs: {import_result}")
             else:

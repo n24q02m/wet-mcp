@@ -842,33 +842,38 @@ class DocsDB:
 
     def export_jsonl(self) -> str:
         """Export all docs data as JSONL for sync."""
-        lines = []
+        import io
+
+        output = io.StringIO()
 
         # Export libraries
-        for row in self._conn.execute(
-            "SELECT * FROM libraries ORDER BY name"
-        ).fetchall():
+        for row in self._conn.execute("SELECT * FROM libraries ORDER BY name"):
             d = dict(row)
             d["_type"] = "library"
-            lines.append(json.dumps(d, ensure_ascii=False))
+            output.write(json.dumps(d, ensure_ascii=False))
+            output.write("\n")
 
         # Export versions
-        for row in self._conn.execute(
-            "SELECT * FROM versions ORDER BY library_id"
-        ).fetchall():
+        for row in self._conn.execute("SELECT * FROM versions ORDER BY library_id"):
             d = dict(row)
             d["_type"] = "version"
-            lines.append(json.dumps(d, ensure_ascii=False))
+            output.write(json.dumps(d, ensure_ascii=False))
+            output.write("\n")
 
         # Export chunks (without embeddings — re-generate on target)
         for row in self._conn.execute(
             "SELECT * FROM doc_chunks ORDER BY library_id, chunk_index"
-        ).fetchall():
+        ):
             d = dict(row)
             d["_type"] = "chunk"
-            lines.append(json.dumps(d, ensure_ascii=False))
+            output.write(json.dumps(d, ensure_ascii=False))
+            output.write("\n")
 
-        return "\n".join(lines)
+        result = output.getvalue()
+        if result.endswith("\n"):
+            result = result[:-1]
+
+        return result
 
     def import_jsonl(self, data: str, mode: str = "merge") -> dict:
         """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""
