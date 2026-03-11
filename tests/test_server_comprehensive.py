@@ -742,6 +742,7 @@ async def test_lifespan_startup_no_github_token():
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch.dict("os.environ", {}, clear=True),
     ):
         async with server._lifespan(mock_fastmcp):
@@ -757,6 +758,7 @@ async def test_lifespan_startup_backend_init_error():
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch(
             "wet_mcp.server._init_embedding_backend",
             new_callable=AsyncMock,
@@ -779,6 +781,7 @@ async def test_lifespan_startup_sync_enabled():
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch("wet_mcp.config.settings") as ms,
         patch("wet_mcp.sync.start_auto_sync") as mock_start_sync,
         patch("wet_mcp.sync.stop_auto_sync") as mock_stop_sync,
@@ -790,10 +793,10 @@ async def test_lifespan_startup_sync_enabled():
         ms.resolve_embedding_dims.return_value = 768
         ms.get_db_path.return_value = MagicMock()
         ms.get_db_path.return_value.parent = MagicMock()
-        ms.log_level = "DEBUG"
-        ms.tool_timeout = 0
+
         async with server._lifespan(mock_fastmcp):
-            await asyncio.sleep(0.1)
+            pass
+
         mock_start_sync.assert_called_once()
         mock_stop_sync.assert_called_once()
 
@@ -827,7 +830,7 @@ async def test_lifespan_shutdown_sync_enabled():
 
 @pytest.mark.asyncio
 async def test_lifespan_shutdown_crawler_error():
-    """Test lifespan handles crawler shutdown error (lines 187-188)."""
+    """Test lifespan continues gracefully if shutdown_crawler fails (lines 173-176)."""
     mock_fastmcp = MagicMock()
     with (
         patch("wet_mcp.server.WebCache"),
@@ -835,9 +838,10 @@ async def test_lifespan_shutdown_crawler_error():
         patch(
             "wet_mcp.server.shutdown_crawler",
             new_callable=AsyncMock,
-            side_effect=Exception("browser crash"),
+            side_effect=Exception("crawler shutdown failed"),
         ),
         patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
     ):
         async with server._lifespan(mock_fastmcp):
             pass
