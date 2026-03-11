@@ -2010,3 +2010,13 @@ async def test_with_timeout_task_exception():
 
         with pytest.raises(ValueError, match="task failed"):
             await server._with_timeout(failing_coro(), "test")
+
+
+def test_research_topic():
+    """Test research_topic prompt generation."""
+    topic = "Quantum Computing"
+    res = server.research_topic(topic)
+    assert "Research the following topic thoroughly:" in res
+    assert topic in res
+    assert "action='research'" in res
+    assert "action='extract'" in res
