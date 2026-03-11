@@ -73,13 +73,11 @@ uvx --python 3.13 wet-mcp@latest
         // -- optional: higher rate limits for docs discovery (60 -> 5000 req/hr)
         "GITHUB_TOKEN": "ghp_...",
         // -- optional: sync indexed docs across machines via rclone
+        // -- on first sync, a browser opens for OAuth (auto, no manual setup)
         "SYNC_ENABLED": "true",                    // optional, default: false
-        "SYNC_REMOTE": "gdrive",                   // required when SYNC_ENABLED=true
-        "SYNC_INTERVAL": "300",                    // optional, auto-sync every 5min (0 = manual only)
-        "RCLONE_CONFIG_GDRIVE_TYPE": "drive"       // required when SYNC_ENABLED=true
-        // Token is auto-managed: run `uvx --python 3.13 wet-mcp setup-sync drive` once,
-        // token is saved locally at ~/.wet-mcp/tokens/ and reused automatically.
-        // No need to set RCLONE_CONFIG_GDRIVE_TOKEN in config.
+        "SYNC_INTERVAL": "300"                     // optional, auto-sync every 5min (0 = manual only)
+        // "SYNC_REMOTE": "gdrive",                 // optional, default: gdrive
+        // "SYNC_PROVIDER": "drive",                // optional, default: drive (Google Drive)
       }
     }
   }
@@ -106,9 +104,7 @@ uvx --python 3.13 wet-mcp@latest
         "-e", "RERANK_API_KEY",                    // optional: pass-through from env below
         "-e", "GITHUB_TOKEN",                      // optional: pass-through from env below
         "-e", "SYNC_ENABLED",                      // optional: pass-through from env below
-        "-e", "SYNC_REMOTE",                       // required when SYNC_ENABLED=true: pass-through
         "-e", "SYNC_INTERVAL",                     // optional: pass-through from env below
-        "-e", "RCLONE_CONFIG_GDRIVE_TYPE",         // required when SYNC_ENABLED=true: pass-through
         "n24q02m/wet-mcp:latest"
       ],
       "env": {
@@ -127,10 +123,7 @@ uvx --python 3.13 wet-mcp@latest
         "GITHUB_TOKEN": "ghp_...",
         // -- optional: sync indexed docs across machines via rclone
         "SYNC_ENABLED": "true",                    // optional, default: false
-        "SYNC_REMOTE": "gdrive",                   // required when SYNC_ENABLED=true
-        "SYNC_INTERVAL": "300",                    // optional, auto-sync every 5min (0 = manual only)
-        "RCLONE_CONFIG_GDRIVE_TYPE": "drive"       // required when SYNC_ENABLED=true
-        // Token auto-managed via ~/.wet-mcp/tokens/
+        "SYNC_INTERVAL": "300"                     // optional, auto-sync every 5min (0 = manual only)
       }
     }
   }
@@ -149,19 +142,25 @@ uvx --python 3.13 wet-mcp warmup
 API_KEYS="GOOGLE_API_KEY:AIza..." uvx --python 3.13 wet-mcp warmup
 ```
 
-### Sync setup (one-time)
+### Sync setup
 
-```bash
-# Google Drive
-uvx --python 3.13 wet-mcp setup-sync drive
+Sync is fully automatic. Just set `SYNC_ENABLED=true` and the server handles everything:
 
-# Other providers (any rclone remote type)
-uvx --python 3.13 wet-mcp setup-sync dropbox
-uvx --python 3.13 wet-mcp setup-sync onedrive
-uvx --python 3.13 wet-mcp setup-sync s3
+1. **First sync**: rclone is auto-downloaded, a browser opens for OAuth authentication
+2. **Token saved**: OAuth token is stored locally at `~/.wet-mcp/tokens/` (600 permissions)
+3. **Subsequent runs**: Token is loaded automatically — no manual steps needed
+
+For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
+
+```jsonc
+{
+  "SYNC_ENABLED": "true",
+  "SYNC_PROVIDER": "dropbox",        // rclone provider type
+  "SYNC_REMOTE": "dropbox"           // rclone remote name
+}
 ```
 
-Opens a browser for OAuth. The token is automatically saved to `~/.wet-mcp/tokens/` and reused on subsequent runs. No need to manually copy tokens into your MCP config.
+> **Advanced**: You can also run `uvx --python 3.13 wet-mcp setup-sync drive` to pre-authenticate before first use, but this is optional.
 
 ---
 
@@ -228,10 +227,11 @@ Opens a browser for OAuth. The token is automatically saved to `~/.wet-mcp/token
 | `WET_CACHE` | `true` | Enable/disable web cache (optional) |
 | `GITHUB_TOKEN` | - | GitHub personal access token for library discovery (optional, increases rate limit from 60 to 5000 req/hr) |
 | `SYNC_ENABLED` | `false` | Enable rclone sync |
-| `SYNC_REMOTE` | - | rclone remote name (required when sync enabled) |
-| `SYNC_FOLDER` | `wet-mcp` | Remote folder name (optional) |
-| `SYNC_INTERVAL` | `0` | Auto-sync interval in seconds, 0=manual (optional) |
-| `LOG_LEVEL` | `INFO` | Logging level (optional) |
+| `SYNC_PROVIDER` | `drive` | rclone provider type (drive, dropbox, s3, etc.) |
+| `SYNC_REMOTE` | `gdrive` | rclone remote name |
+| `SYNC_FOLDER` | `wet-mcp` | Remote folder name |
+| `SYNC_INTERVAL` | `300` | Auto-sync interval in seconds (0=manual) |
+| `LOG_LEVEL` | `INFO` | Logging level |
 
 ### Embedding & Reranking
 
