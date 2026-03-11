@@ -79,7 +79,7 @@ def test_detect_gpu_import_error():
 
 def test_has_gguf_support_installed():
     """Test _has_gguf_support returns True if llama_cpp is importable."""
-    with mock.patch.dict(sys.modules, {"llama_cpp": mock.MagicMock()}):
+    with mock.patch("importlib.util.find_spec", return_value=mock.MagicMock()):
         assert _has_gguf_support() is True
 
 
