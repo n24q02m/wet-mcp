@@ -1,3 +1,3 @@
-## 2026-03-08 - Atomic Cache Lookups
-**Learning:** In SQLite >= 3.35.0, you can combine separate read-then-write operations into a single atomic query using the UPDATE ... RETURNING clause. This cuts database operations in half and eliminates race conditions.
-**Action:** Look for read-modify-write patterns and consider using RETURNING to make them atomic.
+## 2024-05-14 - Optimize subprocess stderr reading
+**Learning:** Sequential blocking `read()` on `subprocess.stderr` in a global asyncio event loop halts concurrent execution on the main thread, resulting in performance degradation when reading large outputs (e.g., from a crashed process).
+**Action:** Use `await asyncio.to_thread(proc.stderr.read)` for I/O bound reading of large streams to avoid blocking the main thread event loop.
