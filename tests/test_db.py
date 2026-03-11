@@ -1,3 +1,4 @@
+import typing
 """Tests for src/wet_mcp/db.py — DocsDB with FTS5 hybrid search.
 
 Covers library/version CRUD, FTS5 search scoring (phrase/AND/OR tiers),
@@ -1760,4 +1761,4 @@ class TestDocsDBInit:
         with pytest.raises(
             ValueError, match="embedding_dims must be an integer between 0 and 10000"
         ):
-            DocsDB(tmp_path / "test.db", embedding_dims="384")
+            DocsDB(tmp_path / "test.db", embedding_dims=typing.cast(int, "384"))
