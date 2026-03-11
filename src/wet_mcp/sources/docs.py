@@ -18,6 +18,7 @@ import json
 import os
 import re
 import zlib
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -2184,6 +2185,15 @@ _HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$", re.MULTILINE)
 _CODE_FENCE_RE = re.compile(r"^```")
 
 
+@dataclass
+class ChunkContext:
+    title: str
+    heading_path: str
+    url: str
+    max_chunk_size: int
+    min_chunk_size: int
+
+
 def chunk_markdown(
     content: str,
     url: str = "",
@@ -2215,15 +2225,14 @@ def chunk_markdown(
         if len(text) >= min_chunk_size:
             # Split oversized chunks by double newline, preserving code blocks
             if len(text) > max_chunk_size:
-                _split_preserving_code(
-                    text,
-                    chunks,
-                    current_title,
-                    heading_path,
-                    url,
-                    max_chunk_size,
-                    min_chunk_size,
+                ctx = ChunkContext(
+                    title=current_title,
+                    heading_path=heading_path,
+                    url=url,
+                    max_chunk_size=max_chunk_size,
+                    min_chunk_size=min_chunk_size,
                 )
+                _split_preserving_code(text, chunks, ctx)
             else:
                 chunks.append(
                     {
@@ -2273,11 +2282,7 @@ def chunk_markdown(
 def _split_preserving_code(
     text: str,
     chunks: list[dict],
-    title: str,
-    heading_path: str,
-    url: str,
-    max_chunk_size: int,
-    min_chunk_size: int,
+    ctx: ChunkContext,
 ) -> None:
     """Split oversized text by paragraphs without breaking code blocks.
 
@@ -2303,17 +2308,17 @@ def _split_preserving_code(
     if current_segment:
         segments.append("\n".join(current_segment))
 
-    # Merge segments into chunks respecting max_chunk_size
+    # Merge segments into chunks respecting ctx.max_chunk_size
     buffer = ""
     for seg in segments:
-        if buffer and len(buffer) + len(seg) + 2 > max_chunk_size:
-            if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
+        if buffer and len(buffer) + len(seg) + 2 > ctx.max_chunk_size:
+            if buffer.strip() and len(buffer.strip()) >= ctx.min_chunk_size:
                 chunks.append(
                     {
                         "content": buffer.strip(),
-                        "title": title,
-                        "heading_path": heading_path,
-                        "url": url,
+                        "title": ctx.title,
+                        "heading_path": ctx.heading_path,
+                        "url": ctx.url,
                         "chunk_index": len(chunks),
                     }
                 )
@@ -2321,13 +2326,13 @@ def _split_preserving_code(
         else:
             buffer = f"{buffer}\n\n{seg}" if buffer else seg
 
-    if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
+    if buffer.strip() and len(buffer.strip()) >= ctx.min_chunk_size:
         chunks.append(
             {
                 "content": buffer.strip(),
-                "title": title,
-                "heading_path": heading_path,
-                "url": url,
+                "title": ctx.title,
+                "heading_path": ctx.heading_path,
+                "url": ctx.url,
                 "chunk_index": len(chunks),
             }
         )
