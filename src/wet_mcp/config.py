@@ -28,11 +28,11 @@ def _detect_gpu() -> bool:
 
 def _has_gguf_support() -> bool:
     """Check if llama-cpp-python is installed for GGUF models."""
-    try:
-        import llama_cpp  # noqa: F401
+    import importlib.util
 
-        return True
-    except ImportError:
+    try:
+        return importlib.util.find_spec("llama_cpp") is not None
+    except (ImportError, ValueError):
         return False
 
 
