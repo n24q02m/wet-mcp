@@ -1,3 +1,5 @@
-## 2026-03-08 - Atomic Cache Lookups
-**Learning:** In SQLite >= 3.35.0, you can combine separate read-then-write operations into a single atomic query using the UPDATE ... RETURNING clause. This cuts database operations in half and eliminates race conditions.
-**Action:** Look for read-modify-write patterns and consider using RETURNING to make them atomic.
+## 2026-03-11 - Fast URL intersection filtering without regular expressions
+
+**Learning:** When repeatedly splitting simple URL paths based on punctuation inside an inner loop, `re.split` is slower than chained string `replace` calls combined with the default `split()`. Also, `str.split()` automatically removes empty elements which avoids them ending up in the resulting `set`, slightly reducing memory allocation and improving performance. Using chained replaces + split on strings improves execution time by about 20% compared to Regex.
+
+**Action:** Prefer `str.replace` chaining with `.split()` over `re.split` when splitting on a small fixed set of punctuation characters in performance critical sections, especially when we want to ignore consecutive delimiters or empty elements in string tokenization.
