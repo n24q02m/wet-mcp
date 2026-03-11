@@ -127,6 +127,14 @@ class DocsDB:
 
     def __init__(self, db_path: Path, embedding_dims: int = 0):
         self._db_path = db_path
+        if (
+            not isinstance(embedding_dims, int)
+            or embedding_dims < 0
+            or embedding_dims > 65536
+        ):
+            raise ValueError(
+                f"embedding_dims must be an integer 0-65536, got {embedding_dims!r}"
+            )
         self._embedding_dims = embedding_dims
         self._vec_enabled = False
 
@@ -400,7 +408,10 @@ class DocsDB:
                     (lib_id,),
                 )
             except Exception:
-                pass
+                logger.warning(
+                    f"Failed to delete vector entries for library {lib_id}",
+                    exc_info=True,
+                )
 
         # Cascade deletes chunks and versions
         self._conn.execute("DELETE FROM doc_chunks WHERE library_id = ?", (lib_id,))
@@ -554,7 +565,10 @@ class DocsDB:
                     (version_id,),
                 )
             except Exception:
-                pass
+                logger.warning(
+                    f"Failed to delete vector entries for version {version_id}",
+                    exc_info=True,
+                )
 
         cursor = self._conn.execute(
             "DELETE FROM doc_chunks WHERE version_id = ?", (version_id,)
@@ -879,7 +893,10 @@ class DocsDB:
                 try:
                     self._conn.execute("DELETE FROM doc_chunks_vec")
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to clear vector table during import replace",
+                        exc_info=True,
+                    )
             self._conn.execute("DELETE FROM doc_chunks")
             self._conn.execute("DELETE FROM versions")
             self._conn.execute("DELETE FROM libraries")

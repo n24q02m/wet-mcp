@@ -11,6 +11,7 @@ from wet_mcp.sync import (
     _auto_sync_loop,
     _download_rclone,
     _extract_token,
+    _extract_zip_sync,
     _get_platform_info,
     _get_rclone_dir,
     _get_rclone_path,
@@ -127,10 +128,8 @@ async def test_download_rclone_already_exists(
 @patch("wet_mcp.sync._get_platform_info")
 @patch.object(Path, "exists")
 @patch("wet_mcp.sync.httpx.AsyncClient")
-@patch("wet_mcp.sync.tempfile.NamedTemporaryFile")
-@patch("wet_mcp.sync.zipfile.ZipFile")
+@patch("wet_mcp.sync._extract_zip_sync")
 @patch.object(Path, "mkdir")
-@patch.object(Path, "write_bytes")
 @patch.object(Path, "chmod")
 @patch.object(Path, "stat")
 @patch.object(Path, "unlink")
@@ -138,10 +137,8 @@ async def test_download_rclone_success(
     mock_unlink,
     mock_stat,
     mock_chmod,
-    mock_write,
     mock_mkdir,
-    mock_zip,
-    mock_temp,
+    mock_extract_zip,
     mock_client,
     mock_exists,
     mock_info,
@@ -150,12 +147,13 @@ async def test_download_rclone_success(
     mock_info.return_value = ("linux", "amd64", "")
     mock_dir.return_value = Path("/mock/dir")
 
-    # Path.exists is called twice potentially, first time false
+    # Path.exists: first call (target exists check) returns False
     mock_exists.side_effect = [False]
 
     # Mock httpx response
     mock_resp = MagicMock()
     mock_resp.content = b"zip_content"
+    mock_resp.raise_for_status = MagicMock()
 
     # Setup AsyncClient context manager
     mock_client_instance = AsyncMock()
@@ -163,36 +161,22 @@ async def test_download_rclone_success(
     mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
     mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-    # Setup tempfile
-    mock_tmp = MagicMock()
-    mock_tmp.name = "/tmp/fake.zip"
-    mock_temp.return_value.__enter__.return_value = mock_tmp
-
-    # Setup zipfile
-    mock_zf = MagicMock()
-    mock_info1 = MagicMock()
-    mock_info1.filename = "rclone-v1.68.2-linux-amd64/rclone"
-    mock_info1.is_dir.return_value = False
-    mock_zf.infolist.return_value = [mock_info1]
-
-    mock_src = MagicMock()
-    mock_src.read.return_value = b"binary_content"
-    mock_zf.open.return_value.__enter__.return_value = mock_src
-
-    mock_zip.return_value.__enter__.return_value = mock_zf
+    # Mock _extract_zip_sync to return True (binary found)
+    mock_extract_zip.return_value = True
 
     # Setup stat for chmod
     mock_stat_result = MagicMock()
     mock_stat_result.st_mode = 0o644
     mock_stat.return_value = mock_stat_result
 
-    res = await _download_rclone()
+    # Skip checksum verification by emptying checksums dict
+    with patch.dict("wet_mcp.sync._RCLONE_CHECKSUMS", {}, clear=True):
+        res = await _download_rclone()
 
     assert res == Path("/mock/dir/rclone")
     mock_client_instance.get.assert_called_once()
-    mock_write.assert_called_once_with(b"binary_content")
+    mock_extract_zip.assert_called_once()
     mock_chmod.assert_called_once()
-    mock_unlink.assert_called_once_with(missing_ok=True)
 
 
 @pytest.mark.asyncio
@@ -320,9 +304,10 @@ async def test_sync_push(mock_run):
     mock_run.assert_called_once()
     assert mock_run.call_args[0][1] == [
         "copy",
+        "--progress",
+        "--",
         "/db/db.sqlite",
         "gdrive:folder",
-        "--progress",
     ]
 
 
@@ -350,9 +335,10 @@ async def test_sync_pull(mock_exists, mock_mkdir, mock_run):
     mock_run.assert_called_once()
     assert mock_run.call_args[0][1] == [
         "copyto",
+        "--progress",
+        "--",
         "gdrive:folder/db.sqlite",
         "/db/sync_temp/remote_db.sqlite",
-        "--progress",
     ]
 
 
@@ -393,10 +379,11 @@ async def test_sync_full_no_rclone(mock_ensure, mock_settings):
 
 
 @pytest.mark.asyncio
+@patch("wet_mcp.sync._has_token_available", return_value=True)
 @patch("wet_mcp.sync.settings")
 @patch("wet_mcp.sync.ensure_rclone")
 @patch("wet_mcp.sync.check_remote_configured")
-async def test_sync_full_not_configured(mock_check, mock_ensure, mock_settings):
+async def test_sync_full_not_configured(mock_check, mock_ensure, mock_settings, _mock_token):
     mock_settings.sync_enabled = True
     mock_settings.sync_remote = "gdrive"
     mock_ensure.return_value = Path("/rclone")
@@ -408,6 +395,7 @@ async def test_sync_full_not_configured(mock_check, mock_ensure, mock_settings):
 
 
 @pytest.mark.asyncio
+@patch("wet_mcp.sync._has_token_available", return_value=True)
 @patch("wet_mcp.sync.settings")
 @patch("wet_mcp.sync.ensure_rclone")
 @patch("wet_mcp.sync.check_remote_configured")
@@ -415,7 +403,7 @@ async def test_sync_full_not_configured(mock_check, mock_ensure, mock_settings):
 @patch("wet_mcp.sync.sync_push")
 @patch("wet_mcp.db.DocsDB")
 async def test_sync_full_success(
-    mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings
+    mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings, _mock_token
 ):
     mock_settings.sync_enabled = True
     mock_settings.sync_remote = "gdrive"
@@ -446,13 +434,14 @@ async def test_sync_full_success(
 
 
 @pytest.mark.asyncio
+@patch("wet_mcp.sync._has_token_available", return_value=True)
 @patch("wet_mcp.sync.settings")
 @patch("wet_mcp.sync.ensure_rclone")
 @patch("wet_mcp.sync.check_remote_configured")
 @patch("wet_mcp.sync.sync_pull")
 @patch("wet_mcp.sync.sync_push")
 async def test_sync_full_no_remote_file(
-    mock_push, mock_pull, mock_check, mock_ensure, mock_settings
+    mock_push, mock_pull, mock_check, mock_ensure, mock_settings, _mock_token
 ):
     mock_settings.sync_enabled = True
     mock_settings.sync_remote = "gdrive"
@@ -468,6 +457,7 @@ async def test_sync_full_no_remote_file(
 
 
 @pytest.mark.asyncio
+@patch("wet_mcp.sync._has_token_available", return_value=True)
 @patch("wet_mcp.sync.settings")
 @patch("wet_mcp.sync.ensure_rclone")
 @patch("wet_mcp.sync.check_remote_configured")
@@ -475,7 +465,7 @@ async def test_sync_full_no_remote_file(
 @patch("wet_mcp.sync.sync_push")
 @patch("wet_mcp.db.DocsDB")
 async def test_sync_full_merge_exception(
-    mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings
+    mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings, _mock_token
 ):
     mock_settings.sync_enabled = True
     mock_settings.sync_remote = "gdrive"
@@ -562,11 +552,14 @@ def test_setup_sync_success(
     )
     mock_extract.return_value = '{"access_token":"token"}'
 
-    setup_sync("drive")
+    with patch("wet_mcp.sync.json.loads", return_value={"access_token": "token"}), \
+         patch("wet_mcp.token_store.save_token"), \
+         patch("wet_mcp.token_store.get_token_path", return_value=Path("/home/.wet-mcp/tokens/drive.json")):
+        setup_sync("drive")
 
     captured = capsys.readouterr()
-    assert "RCLONE_CONFIG_GDRIVE_TOKEN" in captured.out
-    assert base64.b64encode(b'{"access_token":"token"}').decode() in captured.out
+    assert "SUCCESS! Token saved" in captured.out
+    assert "SYNC_ENABLED" in captured.out
     mock_exit.assert_not_called()
 
 

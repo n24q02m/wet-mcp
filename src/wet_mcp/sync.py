@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import os
 import platform
@@ -43,6 +44,18 @@ if TYPE_CHECKING:
 
 # Rclone version to download
 _RCLONE_VERSION = "v1.68.2"
+
+# Expected SHA256 checksums for rclone archives (v1.68.2)
+_RCLONE_CHECKSUMS = {
+    "linux-amd64": "0e6fa18051e67fc600d803a2dcb10ddedb092247fc6eee61be97f64ec080a13c",
+    "linux-arm64": "c6e9d4cf9c88b279f6ad80cd5675daebc068e404890fa7e191412c1bc7a4ac5f",
+    "linux-386": "8654f19f572ac90c8cf712f3e212ee499b8e5e270e209753f3e82f0b44d9447d",
+    "osx-amd64": "cdc685e16abbf35b6f47c95b2a5b4ad73a73921ff6842e5f4136c8b461756188",
+    "osx-arm64": "323f387b32bcf9ddfc3874f01879a0b2689dbd91309beb8c3a4410db04d0c41f",
+    "windows-amd64": "812bf76cc02c04cf6327f3683f3d5a88e47d36c39db84c1a745777496be7d993",
+    "windows-arm64": "cbc6584266cf62bb9f4df912cb00d566c1cbc50ce2748f5e433f1937209e807e",
+    "windows-386": "d076d341122287cf92033aeecf1dd6900ff407c22981fa5ddf49689d5301a7e2",
+}
 
 # Background sync task reference
 _sync_task: asyncio.Task | None = None
@@ -105,6 +118,17 @@ def _get_platform_info() -> tuple[str, str, str]:
     return os_name, arch, ext
 
 
+def _extract_zip_sync(zip_path: Path, target_path: Path, binary_name: str) -> bool:
+    """Synchronous helper to extract rclone binary from zip."""
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        for info in zf.infolist():
+            if info.filename.endswith(binary_name) and not info.is_dir():
+                with zf.open(info) as src:
+                    target_path.write_bytes(src.read())
+                return True
+    return False
+
+
 async def _download_rclone() -> Path | None:
     """Download rclone binary for current platform.
 
@@ -133,19 +157,37 @@ async def _download_rclone() -> Path | None:
                 tmp.write(response.content)
                 tmp_path = Path(tmp.name)
 
+        # Verify SHA256 checksum
+        expected_hash = _RCLONE_CHECKSUMS.get(f"{os_name}-{arch}")
+        if expected_hash:
+            sha256 = hashlib.sha256()
+            with open(tmp_path, "rb") as f:
+                while chunk := f.read(8192):
+                    sha256.update(chunk)
+            file_hash = sha256.hexdigest()
+
+            if file_hash != expected_hash:
+                tmp_path.unlink(missing_ok=True)
+                logger.error(
+                    f"Checksum mismatch for rclone download!\n"
+                    f"Expected: {expected_hash}\n"
+                    f"Got:      {file_hash}"
+                )
+                raise ValueError("SHA256 checksum verification failed")
+        else:
+            logger.warning(
+                f"No checksum found for platform {os_name}-{arch}. "
+                "Skipping verification."
+            )
+
         # Extract rclone binary from zip
-        with zipfile.ZipFile(tmp_path, "r") as zf:
-            # Find rclone binary in archive
-            binary_name = f"rclone{ext}"
-            for info in zf.infolist():
-                if info.filename.endswith(binary_name) and not info.is_dir():
-                    # Extract to temp, then move
-                    with zf.open(info) as src:
-                        target_path.write_bytes(src.read())
-                    break
-            else:
-                logger.error("rclone binary not found in archive")
-                return None
+        binary_name = f"rclone{ext}"
+        found = await asyncio.to_thread(
+            _extract_zip_sync, tmp_path, target_path, binary_name
+        )
+        if not found:
+            logger.error("rclone binary not found in archive")
+            return None
 
         # Make executable on Unix
         if ext == "":
@@ -176,13 +218,23 @@ async def ensure_rclone() -> Path | None:
 
 
 def _prepare_rclone_env() -> dict[str, str]:
-    """Prepare env dict for rclone, decoding base64 tokens if needed.
+    """Prepare env dict for rclone with auto-token management.
 
-    Supports both raw JSON and base64-encoded tokens in
-    ``RCLONE_CONFIG_*_TOKEN`` env vars.  Base64 avoids nested JSON
-    escaping issues in MCP config files.
+    Token resolution priority:
+    1. Env var ``RCLONE_CONFIG_*_TOKEN`` (backward compatible)
+    2. Local token file (~/.wet-mcp/tokens/<provider>.json)
+
+    Supports both raw JSON and base64-encoded tokens in env vars.
     """
+    from wet_mcp.token_store import load_token
+
     env = os.environ.copy()
+    remote = settings.sync_remote
+    remote_upper = remote.upper()
+    token_key = f"RCLONE_CONFIG_{remote_upper}_TOKEN"
+    type_key = f"RCLONE_CONFIG_{remote_upper}_TYPE"
+
+    # Priority 1: Env var tokens (decode base64 if needed)
     for key in list(env):
         if key.startswith("RCLONE_CONFIG_") and key.endswith("_TOKEN"):
             value = env[key]
@@ -193,6 +245,16 @@ def _prepare_rclone_env() -> dict[str, str]:
                     env[key] = decoded
                 except Exception:
                     pass
+
+    # Priority 2: Local token file (only if env var not set)
+    if token_key not in env or not env[token_key]:
+        token = load_token(settings.sync_provider)
+        if token:
+            env[token_key] = json.dumps(token)
+            if type_key not in env:
+                env[type_key] = settings.sync_provider
+            logger.debug(f"Using local token for {settings.sync_provider}")
+
     return env
 
 
@@ -238,7 +300,7 @@ async def sync_push(rclone_path: Path, db_path: Path, remote: str, folder: str) 
     result = await asyncio.to_thread(
         _run_rclone,
         rclone_path,
-        ["copy", str(db_path), remote_dest, "--progress"],
+        ["copy", "--progress", "--", str(db_path), remote_dest],
         300,
     )
 
@@ -268,7 +330,7 @@ async def sync_pull(
     result = await asyncio.to_thread(
         _run_rclone,
         rclone_path,
-        ["copyto", remote_src, str(temp_db), "--progress"],
+        ["copyto", "--progress", "--", remote_src, str(temp_db)],
         300,
     )
 
@@ -283,28 +345,38 @@ async def sync_pull(
 
 
 async def sync_full(db: DocsDB) -> dict:
-    """Full sync cycle: pull -> merge -> push.
+    """Full sync cycle: pull → merge → push.
+
+    Auto-provisions tokens if needed (interactive browser auth on first run).
 
     Returns:
         Dict with sync results.
     """
     from wet_mcp.db import DocsDB
 
-    if not settings.sync_enabled or not settings.sync_remote:
+    if not settings.sync_enabled:
         return {"status": "disabled", "message": "Sync not configured"}
 
     rclone_path = await ensure_rclone()
     if not rclone_path:
         return {"status": "error", "message": "rclone not available"}
 
-    # Check remote is configured
+    # Auto-provision token if needed
+    if not _has_token_available():
+        token = await _interactive_auth(rclone_path, settings.sync_provider)
+        if not token:
+            return {
+                "status": "error",
+                "message": "No sync token available. "
+                "Run the server interactively to complete OAuth setup.",
+            }
+
+    # Check remote is configured (env vars or local token loaded by _prepare_rclone_env)
     if not await check_remote_configured(rclone_path, settings.sync_remote):
-        remote_upper = settings.sync_remote.upper()
         return {
             "status": "error",
             "message": f"rclone remote '{settings.sync_remote}' not configured. "
-            f"Set RCLONE_CONFIG_{remote_upper}_TYPE and "
-            f"RCLONE_CONFIG_{remote_upper}_TOKEN env vars.",
+            "Token may be invalid — try deleting the token file and re-authenticating.",
         }
 
     db_path = settings.get_db_path()
@@ -401,6 +473,63 @@ def stop_auto_sync() -> None:
         _sync_task = None
 
 
+def _has_token_available() -> bool:
+    """Check if a sync token is available (env var or local file)."""
+    from wet_mcp.token_store import load_token
+
+    remote_upper = settings.sync_remote.upper()
+    token_key = f"RCLONE_CONFIG_{remote_upper}_TOKEN"
+
+    # Check env var
+    if os.environ.get(token_key):
+        return True
+
+    # Check local token file
+    return load_token(settings.sync_provider) is not None
+
+
+async def _interactive_auth(rclone_path: Path, provider: str) -> dict | None:
+    """Run rclone authorize interactively to get OAuth token.
+
+    Opens browser for user authentication. Blocks until complete
+    or timeout (5 minutes).
+
+    Returns token dict on success, None on failure.
+    """
+    from wet_mcp.token_store import save_token
+
+    logger.info(f"No sync token found. Starting {provider} authentication...")
+    logger.info("A browser window will open for authentication.")
+
+    result = await asyncio.to_thread(
+        lambda: subprocess.run(
+            [str(rclone_path), "authorize", "--", provider],
+            stdout=subprocess.PIPE,
+            text=True,
+            timeout=300,
+        )
+    )
+
+    if result.returncode != 0:
+        logger.error(f"Authentication failed (exit {result.returncode})")
+        return None
+
+    token_str = _extract_token(result.stdout or "")
+    if not token_str:
+        logger.error("Could not extract token from rclone output")
+        return None
+
+    try:
+        token = json.loads(token_str)
+    except json.JSONDecodeError:
+        logger.error("Invalid token JSON from rclone")
+        return None
+
+    save_token(provider, token)
+    logger.info("Authentication successful! Token saved locally.")
+    return token
+
+
 def _extract_token(output: str) -> str | None:
     """Extract rclone OAuth token JSON from authorize output.
 
@@ -428,16 +557,17 @@ def _extract_token(output: str) -> str | None:
 
 
 def setup_sync(remote_type: str = "drive") -> None:
-    """Download rclone and run authorize to get a token.
+    """Download rclone, run authorize, and save token locally.
 
     Usage: wet-mcp setup-sync [type]
     Default type: drive (Google Drive)
 
-    Captures the token from rclone output, base64-encodes it,
-    and prints ready-to-paste MCP config.
+    Token is saved to ~/.wet-mcp/tokens/<type>.json so no env vars
+    are needed for sync — just set SYNC_ENABLED=true.
     """
+    from wet_mcp.token_store import save_token
 
-    print(f"=== WET MCP: Setup Sync ({remote_type}) ===\n")
+    print(f"=== WET MCP: Setup Sync ({remote_type}) ===")
 
     # 1. Ensure rclone is available
     rclone_path = _get_rclone_path()
@@ -457,8 +587,7 @@ def setup_sync(remote_type: str = "drive") -> None:
     print("-" * 50)
 
     result = subprocess.run(
-        [str(rclone_path), "authorize", remote_type],
-        stdin=subprocess.DEVNULL,
+        [str(rclone_path), "authorize", "--", remote_type],
         stdout=subprocess.PIPE,
         text=True,
         timeout=300,
@@ -477,39 +606,39 @@ def setup_sync(remote_type: str = "drive") -> None:
     token_json = _extract_token(result.stdout or "")
 
     remote_name = "gdrive" if remote_type == "drive" else remote_type
-    remote_upper = remote_name.upper()
 
     if token_json:
-        token_b64 = base64.b64encode(token_json.encode()).decode()
+        # Save token locally
+        try:
+            token_dict = json.loads(token_json)
+            save_token(remote_type, token_dict)
+            from wet_mcp.token_store import get_token_path
 
-        print(f"\n{'=' * 60}")
-        print(f"RCLONE_CONFIG_{remote_upper}_TOKEN (base64-encoded)")
-        print(f"{'=' * 60}\n")
-        print(token_b64)
-        print(f"\n{'=' * 60}")
-        print("\nEnv vars needed for sync:")
-        print("  SYNC_ENABLED=true")
-        print(f"  SYNC_REMOTE={remote_name}")
-        print(f"  RCLONE_CONFIG_{remote_upper}_TYPE={remote_type}")
-        print(f"  RCLONE_CONFIG_{remote_upper}_TOKEN=<base64 above>")
-        print("\nServer auto-decodes base64 at runtime.")
-        print("Both raw JSON and base64 tokens are supported.")
+            token_path = get_token_path(remote_type)
+
+            print(f"\n{'=' * 60}")
+            print("SUCCESS! Token saved locally.")
+            print(f"{'=' * 60}\n")
+            print(f"Token file: {token_path}")
+            print("\nAll you need in your MCP config:")
+            print('  "SYNC_ENABLED": "true"')
+            if remote_type != "drive":
+                print(f'  "SYNC_PROVIDER": "{remote_type}"')
+            if remote_name != "gdrive":
+                print(f'  "SYNC_REMOTE": "{remote_name}"')
+            print("\nThe server will auto-load the token from disk.")
+            print("No need to copy/paste any tokens!")
+        except json.JSONDecodeError:
+            # Fallback: print base64 for manual config
+            token_b64 = base64.b64encode(token_json.encode()).decode()
+            print(f"\n{'=' * 60}")
+            print("Token saved but could not parse JSON. Base64 token:")
+            print(f"{'=' * 60}\n")
+            print(token_b64)
     else:
         print(f"\n{'=' * 60}")
         print("MANUAL SETUP")
         print(f"{'=' * 60}\n")
         print("Could not auto-extract token from rclone output.")
-        print("Copy the token JSON from above and base64-encode it:\n")
-        if sys.platform == "win32":
-            print(
-                '  python -c "import base64,sys; print(base64.b64encode(input().encode()).decode())"'
-            )
-        else:
-            print(
-                "  python3 -c 'import base64,sys; print(base64.b64encode(input().encode()).decode())'"
-            )
-        print("\nThen set these env vars:")
-        print("  SYNC_ENABLED=true")
-        print(f"  SYNC_REMOTE={remote_name}")
-        print(f"  RCLONE_CONFIG_{remote_upper}_TYPE={remote_type}")
-        print(f"  RCLONE_CONFIG_{remote_upper}_TOKEN=<base64 output>")
+        print("Try running the server with SYNC_ENABLED=true — it will")
+        print("open a browser for authentication automatically.")

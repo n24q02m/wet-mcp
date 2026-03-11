@@ -71,6 +71,7 @@ class TestSyncFullEmptyJsonl:
     """Cover sync.py L331: empty remote JSONL branch."""
 
     @pytest.mark.asyncio
+    @patch("wet_mcp.sync._has_token_available", return_value=True)
     @patch("wet_mcp.sync.settings")
     @patch("wet_mcp.sync.ensure_rclone")
     @patch("wet_mcp.sync.check_remote_configured")
@@ -78,7 +79,7 @@ class TestSyncFullEmptyJsonl:
     @patch("wet_mcp.sync.sync_push")
     @patch("wet_mcp.db.DocsDB")
     async def test_empty_remote_jsonl(
-        self, mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings
+        self, mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings, _mock_token
     ):
         from wet_mcp.sync import sync_full
 
@@ -210,7 +211,7 @@ class TestSetupSyncNoToken:
         captured = capsys.readouterr()
         assert "MANUAL SETUP" in captured.out
         assert "Could not auto-extract token" in captured.out
-        assert "python3 -c" in captured.out
+        assert "SYNC_ENABLED=true" in captured.out
 
     @patch("wet_mcp.sync._get_rclone_path")
     @patch("wet_mcp.sync.subprocess.run")
@@ -229,7 +230,7 @@ class TestSetupSyncNoToken:
 
         captured = capsys.readouterr()
         assert "MANUAL SETUP" in captured.out
-        assert 'python -c "import base64' in captured.out
+        assert "SYNC_ENABLED=true" in captured.out
 
     @patch("wet_mcp.sync._get_rclone_path")
     @patch("wet_mcp.sync.subprocess.run")
@@ -248,8 +249,8 @@ class TestSetupSyncNoToken:
             setup_sync("s3")
 
         captured = capsys.readouterr()
-        assert "RCLONE_CONFIG_S3_TYPE=s3" in captured.out
-        assert "SYNC_REMOTE=s3" in captured.out
+        assert "MANUAL SETUP" in captured.out
+        assert "SYNC_ENABLED=true" in captured.out
 
 
 # ---------------------------------------------------------------------------
