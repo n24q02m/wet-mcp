@@ -220,11 +220,12 @@ async def ensure_rclone() -> Path | None:
 def _prepare_rclone_env() -> dict[str, str]:
     """Prepare env dict for rclone with auto-token management.
 
+    Automatically sets ``RCLONE_CONFIG_<REMOTE>_TYPE`` from ``sync_provider``
+    so users never need to set ``RCLONE_CONFIG_*`` env vars manually.
+
     Token resolution priority:
     1. Env var ``RCLONE_CONFIG_*_TOKEN`` (backward compatible)
     2. Local token file (~/.wet-mcp/tokens/<provider>.json)
-
-    Supports both raw JSON and base64-encoded tokens in env vars.
     """
     from wet_mcp.token_store import load_token
 
@@ -233,6 +234,10 @@ def _prepare_rclone_env() -> dict[str, str]:
     remote_upper = remote.upper()
     token_key = f"RCLONE_CONFIG_{remote_upper}_TOKEN"
     type_key = f"RCLONE_CONFIG_{remote_upper}_TYPE"
+
+    # Always set TYPE from sync_provider (user never needs RCLONE_CONFIG_*_TYPE)
+    if type_key not in env:
+        env[type_key] = settings.sync_provider
 
     # Priority 1: Env var tokens (decode base64 if needed)
     for key in list(env):
@@ -251,8 +256,6 @@ def _prepare_rclone_env() -> dict[str, str]:
         token = load_token(settings.sync_provider)
         if token:
             env[token_key] = json.dumps(token)
-            if type_key not in env:
-                env[type_key] = settings.sync_provider
             logger.debug(f"Using local token for {settings.sync_provider}")
 
     return env
