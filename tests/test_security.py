@@ -183,6 +183,11 @@ def test_is_safe_url_empty_hostname():
     assert not is_safe_url("https:///path")
 
 
+def test_is_safe_url_urlparse_exception():
+    """Test is_safe_url catches urlparse exceptions (e.g., ValueError on malformed IPv6)."""
+    assert not is_safe_url("http://[example.com]/")
+
+
 def test_is_safe_url_general_exception():
     """Test is_safe_url returns False when _original_getaddrinfo raises unexpected exception."""
     with patch(
