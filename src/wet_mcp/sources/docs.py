@@ -3482,7 +3482,16 @@ async def fetch_docs_pages(
         query_words = set(query.lower().split())
         scored = []
         for url in urls:
-            path_words = set(re.split(r"[-_/.]", urlparse(url).path.lower()))
+            # ⚡ Bolt Optimization: Replace slow re.split with fast chained replace+split
+            path_words = set(
+                urlparse(url)
+                .path.lower()
+                .replace("-", " ")
+                .replace("_", " ")
+                .replace("/", " ")
+                .replace(".", " ")
+                .split()
+            )
             overlap = len(query_words & path_words)
             scored.append((url, overlap))
         scored.sort(key=lambda x: x[1], reverse=True)
