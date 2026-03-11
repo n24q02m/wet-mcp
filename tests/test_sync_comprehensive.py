@@ -548,6 +548,21 @@ def test_stop_auto_sync():
     assert wet_mcp.sync._sync_task is None
 
 
+def test_stop_auto_sync_none():
+    wet_mcp.sync._sync_task = None
+    stop_auto_sync()
+    assert wet_mcp.sync._sync_task is None
+
+
+def test_stop_auto_sync_already_done():
+    mock_task = MagicMock()
+    mock_task.done.return_value = True
+    wet_mcp.sync._sync_task = mock_task
+    stop_auto_sync()
+    mock_task.cancel.assert_not_called()
+    assert wet_mcp.sync._sync_task is None
+
+
 @patch("wet_mcp.sync._get_rclone_path")
 @patch("wet_mcp.sync._download_rclone")
 @patch("wet_mcp.sync.subprocess.run")

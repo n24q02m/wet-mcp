@@ -396,8 +396,9 @@ def start_auto_sync(db: DocsDB) -> None:
 def stop_auto_sync() -> None:
     """Stop background auto-sync task."""
     global _sync_task
-    if _sync_task and not _sync_task.done():
-        _sync_task.cancel()
+    if _sync_task:
+        if not _sync_task.done():
+            _sync_task.cancel()
         _sync_task = None
 
 
