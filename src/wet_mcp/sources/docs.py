@@ -2356,6 +2356,169 @@ _RST_ROLE_RE = re.compile(r":(\w+):`([^`]*)`")
 _RST_SUBST_RE = re.compile(r"\|(\w[\w\s]*)\|")
 
 
+class _RstParser:
+    """Stateful parser for converting RST to Markdown."""
+
+    def __init__(self, content: str):
+        self.lines = content.split("\n")
+        self.out: list[str] = []
+        self.i = 0
+        self.in_code_block = False
+        self.code_indent = 0
+
+    def parse(self) -> str:
+        while self.i < len(self.lines):
+            if self._handle_literal_block():
+                continue
+            if self._handle_heading():
+                continue
+            if self._handle_directive():
+                continue
+            if self._handle_literal_block_start():
+                continue
+            self._handle_inline_markup()
+
+        if self.in_code_block:
+            self.out.append("```")
+
+        return "\n".join(self.out)
+
+    def _handle_literal_block(self) -> bool:
+        if not self.in_code_block:
+            return False
+        line = self.lines[self.i]
+        stripped = line.strip()
+        if stripped and not line.startswith(" " * self.code_indent) and not line == "":
+            self.in_code_block = False
+            self.out.append("```")
+            self.out.append("")
+            return True
+        self.out.append(line)
+        self.i += 1
+        return True
+
+    def _handle_heading(self) -> bool:
+        line = self.lines[self.i]
+        if (
+            self.i + 1 < len(self.lines)
+            and line.strip()
+            and len(self.lines[self.i + 1].strip()) >= len(line.strip())
+            and self.lines[self.i + 1].strip()
+            and all(c in _RST_HEADING_CHARS for c in self.lines[self.i + 1].strip())
+            and len(set(self.lines[self.i + 1].strip())) == 1
+        ):
+            underline_char = self.lines[self.i + 1].strip()[0]
+            if underline_char == "=":
+                level = "#"
+            elif underline_char == "-":
+                level = "##"
+            elif underline_char == "~":
+                level = "###"
+            else:
+                level = "####"
+
+            if (
+                self.i > 0
+                and self.out
+                and self.out[-1].strip()
+                and all(c in _RST_HEADING_CHARS for c in self.out[-1].strip())
+                and len(set(self.out[-1].strip())) == 1
+            ):
+                self.out[-1] = ""
+
+            self.out.append(f"{level} {line.strip()}")
+            self.i += 2
+            return True
+        return False
+
+    def _handle_directive(self) -> bool:
+        line = self.lines[self.i]
+        directive_match = _RST_DIRECTIVE_RE.match(line.strip())
+        if not directive_match:
+            return False
+
+        directive = directive_match.group(1).lower()
+        args = directive_match.group(2).strip()
+        if directive in ("code-block", "code", "sourcecode", "highlight"):
+            lang = args or ""
+            self.out.append(f"```{lang}")
+            self.i += 1
+            while self.i < len(self.lines) and (
+                not self.lines[self.i].strip()
+                or self.lines[self.i].strip().startswith(":")
+            ):
+                self.i += 1
+            if self.i < len(self.lines):
+                self.code_indent = len(self.lines[self.i]) - len(
+                    self.lines[self.i].lstrip()
+                )
+                if self.code_indent < 2:
+                    self.code_indent = 3
+            self.in_code_block = True
+            return True
+        elif directive in (
+            "literalinclude",
+            "image",
+            "figure",
+            "raw",
+            "include",
+            "toctree",
+            "contents",
+            "moduleauthor",
+            "sectionauthor",
+            "meta",
+            "deprecated",
+        ):
+            self.i += 1
+            while self.i < len(self.lines) and (
+                not self.lines[self.i].strip() or self.lines[self.i].startswith("   ")
+            ):
+                self.i += 1
+            return True
+        elif directive in ("note", "warning", "tip", "important", "seealso"):
+            self.out.append(f"> **{directive.title()}:** {args}")
+            self.i += 1
+            while self.i < len(self.lines) and (
+                not self.lines[self.i].strip() or self.lines[self.i].startswith("   ")
+            ):
+                body = self.lines[self.i].strip()
+                if body:
+                    self.out.append(f"> {body}")
+                self.i += 1
+            return True
+
+        self.i += 1
+        while self.i < len(self.lines) and self.lines[self.i].strip().startswith(":"):
+            self.i += 1
+        return True
+
+    def _handle_literal_block_start(self) -> bool:
+        line = self.lines[self.i]
+        if line.rstrip().endswith("::"):
+            self.out.append(line.rstrip()[:-2] + ":" if len(line.rstrip()) > 2 else "")
+            self.i += 1
+            while self.i < len(self.lines) and not self.lines[self.i].strip():
+                self.i += 1
+            if self.i < len(self.lines):
+                self.code_indent = len(self.lines[self.i]) - len(
+                    self.lines[self.i].lstrip()
+                )
+                if self.code_indent < 2:
+                    self.code_indent = 3
+                self.out.append("```")
+                self.in_code_block = True
+            return True
+        return False
+
+    def _handle_inline_markup(self) -> None:
+        line = self.lines[self.i]
+        processed = line
+        processed = _RST_ROLE_RE.sub(r"`\2`", processed)
+        processed = processed.replace("``", "`")
+        self.out.append(processed)
+        self.i += 1
+
+
 def _rst_to_markdown(content: str) -> str:
     """Convert RST content to rough Markdown for indexing.
 
@@ -2368,151 +2531,7 @@ def _rst_to_markdown(content: str) -> str:
     """
     if not content:
         return ""
-
-    lines = content.split("\n")
-    out: list[str] = []
-    i = 0
-    in_code_block = False
-    code_indent = 0
-
-    while i < len(lines):
-        line = lines[i]
-
-        # Handle literal blocks (indented after ::)
-        if in_code_block:
-            stripped = line.strip()
-            if stripped and not line.startswith(" " * code_indent) and not line == "":
-                # End of indented block
-                in_code_block = False
-                out.append("```")
-                out.append("")
-                # Don't increment — reprocess this line
-                continue
-            out.append(line)
-            i += 1
-            continue
-
-        # Detect RST headings: line followed by underline of same length
-        if (
-            i + 1 < len(lines)
-            and line.strip()
-            and len(lines[i + 1].strip()) >= len(line.strip())
-            and lines[i + 1].strip()
-            and all(c in _RST_HEADING_CHARS for c in lines[i + 1].strip())
-            and len(set(lines[i + 1].strip())) == 1
-        ):
-            underline_char = lines[i + 1].strip()[0]
-            # Also check for overline + title + underline
-            if underline_char == "=":
-                level = "#"
-            elif underline_char == "-":
-                level = "##"
-            elif underline_char == "~":
-                level = "###"
-            else:
-                level = "####"
-
-            # Check if there's an overline (line before is same underline char)
-            if (
-                i > 0
-                and out
-                and out[-1].strip()
-                and all(c in _RST_HEADING_CHARS for c in out[-1].strip())
-                and len(set(out[-1].strip())) == 1
-            ):
-                out[-1] = ""  # Remove overline
-
-            out.append(f"{level} {line.strip()}")
-            i += 2  # Skip underline
-            continue
-
-        # Detect code-block directive
-        directive_match = _RST_DIRECTIVE_RE.match(line.strip())
-        if directive_match:
-            directive = directive_match.group(1).lower()
-            args = directive_match.group(2).strip()
-            if directive in ("code-block", "code", "sourcecode", "highlight"):
-                lang = args or ""
-                out.append(f"```{lang}")
-                # Skip any directive options (indented lines starting with :)
-                i += 1
-                while i < len(lines) and (
-                    not lines[i].strip() or lines[i].strip().startswith(":")
-                ):
-                    i += 1
-                # Remaining indented lines are the code
-                if i < len(lines):
-                    code_indent = len(lines[i]) - len(lines[i].lstrip())
-                    if code_indent < 2:
-                        code_indent = 3
-                in_code_block = True
-                continue
-            elif directive in (
-                "literalinclude",
-                "image",
-                "figure",
-                "raw",
-                "include",
-                "toctree",
-                "contents",
-                "moduleauthor",
-                "sectionauthor",
-                "meta",
-                "deprecated",
-            ):
-                # Skip these directives entirely
-                i += 1
-                while i < len(lines) and (
-                    not lines[i].strip() or lines[i].startswith("   ")
-                ):
-                    i += 1
-                continue
-            elif directive in ("note", "warning", "tip", "important", "seealso"):
-                out.append(f"> **{directive.title()}:** {args}")
-                i += 1
-                # Include indented body
-                while i < len(lines) and (
-                    not lines[i].strip() or lines[i].startswith("   ")
-                ):
-                    body = lines[i].strip()
-                    if body:
-                        out.append(f"> {body}")
-                    i += 1
-                continue
-            # Other directives: skip header, keep body
-            i += 1
-            while i < len(lines) and lines[i].strip().startswith(":"):
-                i += 1  # Skip options
-            continue
-
-        # Detect literal block ending with ::
-        if line.rstrip().endswith("::"):
-            out.append(line.rstrip()[:-2] + ":" if len(line.rstrip()) > 2 else "")
-            i += 1
-            # Skip blank lines
-            while i < len(lines) and not lines[i].strip():
-                i += 1
-            if i < len(lines):
-                code_indent = len(lines[i]) - len(lines[i].lstrip())
-                if code_indent < 2:
-                    code_indent = 3
-                out.append("```")
-                in_code_block = True
-            continue
-
-        # Process inline RST markup
-        processed = line
-        # :role:`text` → `text`
-        processed = _RST_ROLE_RE.sub(r"`\2`", processed)
-        # ``code`` → `code`
-        processed = processed.replace("``", "`")
-        out.append(processed)
-        i += 1
-
-    if in_code_block:
-        out.append("```")
-
-    return "\n".join(out)
+    return _RstParser(content).parse()
 
 
 # ---------------------------------------------------------------------------
