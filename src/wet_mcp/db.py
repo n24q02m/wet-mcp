@@ -155,6 +155,19 @@ class DocsDB:
 
     def _create_tables(self) -> None:
         # Libraries metadata
+        self._create_libraries_table()
+        # Versions
+        self._create_versions_table()
+        # Document chunks
+        self._create_chunks_table()
+        # FTS5 (content-sync mode)
+        self._create_fts_tables_and_triggers()
+        # Vector table (optional)
+        self._create_vector_table()
+
+        self._conn.commit()
+
+    def _create_libraries_table(self) -> None:
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS libraries (
                 id TEXT PRIMARY KEY,
@@ -181,7 +194,7 @@ class DocsDB:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
-        # Versions
+    def _create_versions_table(self) -> None:
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS versions (
                 id TEXT PRIMARY KEY,
@@ -197,7 +210,7 @@ class DocsDB:
             )
         """)
 
-        # Document chunks
+    def _create_chunks_table(self) -> None:
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS doc_chunks (
                 id TEXT PRIMARY KEY,
@@ -226,7 +239,7 @@ class DocsDB:
             ON doc_chunks(url, version_id, chunk_index)
         """)
 
-        # FTS5 (content-sync mode)
+    def _create_fts_tables_and_triggers(self) -> None:
         self._conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks_fts
             USING fts5(
@@ -262,7 +275,7 @@ class DocsDB:
             END
         """)
 
-        # Vector table (optional)
+    def _create_vector_table(self) -> None:
         if self._vec_enabled and self._embedding_dims > 0:
             row = self._conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
@@ -275,8 +288,6 @@ class DocsDB:
                         embedding float[{self._embedding_dims}]
                     )
                 """)
-
-        self._conn.commit()
 
     # -----------------------------------------------------------------------
     # Stats
