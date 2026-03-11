@@ -82,6 +82,34 @@ async def _warmup_searxng() -> None:
         logger.debug(f"SearXNG pre-warm failed (non-fatal): {e}")
 
 
+def _detect_gh_token() -> str | None:
+    """Try to get GitHub token from gh CLI (GitHub CLI).
+
+    Runs 'gh auth token' and returns the token string if available.
+    Returns None if gh CLI is not installed or not authenticated.
+    """
+    import shutil
+    import subprocess
+
+    if not shutil.which("gh"):
+        return None
+
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0:
+            token = result.stdout.strip()
+            if token:
+                return token
+    except Exception:
+        pass
+    return None
+
+
 @asynccontextmanager
 async def _lifespan(_server: FastMCP):
     """Server lifespan: startup SearXNG, init cache/docs DB, cleanup on shutdown."""
@@ -103,10 +131,16 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
     # Warn about GitHub token for library docs discovery
     if not (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")):
-        logger.warning(
-            "No GITHUB_TOKEN set. Library docs discovery will use unauthenticated "
-            "GitHub API (60 req/hr limit). Set GITHUB_TOKEN for 5000 req/hr."
-        )
+        # Try to get token from gh CLI (GitHub CLI)
+        gh_token = _detect_gh_token()
+        if gh_token:
+            os.environ["GITHUB_TOKEN"] = gh_token
+            logger.info("GITHUB_TOKEN loaded from gh CLI (gh auth token)")
+        else:
+            logger.warning(
+                "No GITHUB_TOKEN set. Library docs discovery will use unauthenticated "
+                "GitHub API (60 req/hr limit). Set GITHUB_TOKEN or run 'gh auth login'."
+            )
 
     # SearXNG is pre-warmed eagerly as a background task to eliminate
     # startup latency on the first search call. If this instance finds an
