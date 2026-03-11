@@ -7,6 +7,7 @@ requiring rclone or network access.
 
 import base64
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,7 @@ from wet_mcp.sync import (
     _prepare_rclone_env,
     _run_rclone,
     check_remote_configured,
+    setup_sync,
 )
 
 # -----------------------------------------------------------------------
@@ -217,3 +219,182 @@ class TestRunRclone:
             assert call_args[1]["timeout"] == 10
             assert call_args[1]["capture_output"] is True
             assert call_args[1]["text"] is True
+
+
+# -----------------------------------------------------------------------
+# setup_sync
+# -----------------------------------------------------------------------
+
+
+class TestSetupSync:
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    @patch("wet_mcp.sync._extract_token")
+    @patch("wet_mcp.sync.subprocess.run")
+    @patch("wet_mcp.sync._get_rclone_path")
+    def test_success_existing_rclone_valid_token(
+        self, mock_get_rclone, mock_sub_run, mock_extract, mock_stderr, mock_stdout
+    ):
+        mock_get_rclone.return_value = Path("/usr/bin/rclone")
+        mock_sub_run.return_value = MagicMock(returncode=0)
+        mock_sub_run.return_value.stdout = "token output"
+        mock_extract.return_value = '{"access_token": "abc"}'
+
+        setup_sync("drive")
+
+        mock_get_rclone.assert_called_once()
+        mock_sub_run.assert_called_once_with(
+            ["/usr/bin/rclone", "authorize", "drive"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            text=True,
+            timeout=300,
+        )
+        mock_extract.assert_called_once_with("token output")
+
+        printed_text = "".join(
+            call.args[0] for call in mock_stdout.write.call_args_list
+        )
+        assert "=== WET MCP: Setup Sync (drive) ===" in printed_text
+        assert "rclone found: /usr/bin/rclone" in printed_text
+        assert "RCLONE_CONFIG_GDRIVE_TOKEN (base64-encoded)" in printed_text
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    @patch("wet_mcp.sync._extract_token")
+    @patch("wet_mcp.sync.subprocess.run")
+    @patch("asyncio.run")
+    @patch("wet_mcp.sync._get_rclone_path")
+    def test_success_downloaded_rclone(
+        self,
+        mock_get_rclone,
+        mock_asyncio_run,
+        mock_sub_run,
+        mock_extract,
+        mock_stderr,
+        mock_stdout,
+    ):
+        mock_get_rclone.return_value = None
+        mock_asyncio_run.return_value = Path("/downloaded/rclone")
+        mock_sub_run.return_value = MagicMock(returncode=0)
+        mock_sub_run.return_value.stdout = "token output"
+        mock_extract.return_value = '{"access_token": "abc"}'
+
+        # To avoid the unawaited coroutine warning from the real _download_rclone being instantiated
+        with patch("wet_mcp.sync._download_rclone"):
+            setup_sync("drive")
+
+        mock_get_rclone.assert_called_once()
+        mock_asyncio_run.assert_called_once()
+        mock_sub_run.assert_called_once_with(
+            ["/downloaded/rclone", "authorize", "drive"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            text=True,
+            timeout=300,
+        )
+        mock_extract.assert_called_once_with("token output")
+
+        printed_text = "".join(
+            call.args[0] for call in mock_stdout.write.call_args_list
+        )
+        assert "Downloading rclone..." in printed_text
+        assert "rclone installed: /downloaded/rclone" in printed_text
+        assert "RCLONE_CONFIG_GDRIVE_TOKEN (base64-encoded)" in printed_text
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    @patch("sys.exit")
+    @patch("asyncio.run")
+    @patch("wet_mcp.sync._get_rclone_path")
+    def test_failure_download(
+        self, mock_get_rclone, mock_asyncio_run, mock_exit, mock_stderr, mock_stdout
+    ):
+        mock_get_rclone.return_value = None
+        mock_asyncio_run.return_value = None
+        mock_exit.side_effect = SystemExit(1)
+
+        with patch("wet_mcp.sync._download_rclone"):
+            try:
+                setup_sync("drive")
+            except SystemExit:
+                pass
+
+        mock_exit.assert_called_once_with(1)
+
+        printed_stderr = "".join(
+            call.args[0] for call in mock_stderr.write.call_args_list
+        )
+        assert "ERROR: Failed to download rclone" in printed_stderr
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    @patch("sys.exit")
+    @patch("wet_mcp.sync.subprocess.run")
+    @patch("wet_mcp.sync._get_rclone_path")
+    def test_failure_authorize(
+        self, mock_get_rclone, mock_sub_run, mock_exit, mock_stderr, mock_stdout
+    ):
+        mock_get_rclone.return_value = Path("/usr/bin/rclone")
+        mock_sub_run.return_value = MagicMock(returncode=1)
+        mock_sub_run.return_value.stdout = ""
+        mock_exit.side_effect = SystemExit(1)
+
+        try:
+            setup_sync("drive")
+        except SystemExit:
+            pass
+
+        mock_sub_run.assert_called_once()
+        mock_exit.assert_called_once_with(1)
+
+        printed_stderr = "".join(
+            call.args[0] for call in mock_stderr.write.call_args_list
+        )
+        assert "ERROR: rclone authorize failed (exit 1)" in printed_stderr
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    @patch("wet_mcp.sync._extract_token")
+    @patch("wet_mcp.sync.subprocess.run")
+    @patch("wet_mcp.sync._get_rclone_path")
+    def test_success_manual_setup(
+        self, mock_get_rclone, mock_sub_run, mock_extract, mock_stderr, mock_stdout
+    ):
+        mock_get_rclone.return_value = Path("/usr/bin/rclone")
+        mock_sub_run.return_value = MagicMock(returncode=0)
+        mock_sub_run.return_value.stdout = "no token here"
+        mock_extract.return_value = None
+
+        with patch("sys.platform", "linux"):
+            setup_sync("drive")
+
+        printed_text = "".join(
+            call.args[0] for call in mock_stdout.write.call_args_list
+        )
+        assert "MANUAL SETUP" in printed_text
+        assert "Could not auto-extract token from rclone output." in printed_text
+        assert "python3 -c" in printed_text
+
+    @patch("sys.stdout")
+    @patch("sys.stderr")
+    @patch("wet_mcp.sync._extract_token")
+    @patch("wet_mcp.sync.subprocess.run")
+    @patch("wet_mcp.sync._get_rclone_path")
+    def test_success_manual_setup_win32(
+        self, mock_get_rclone, mock_sub_run, mock_extract, mock_stderr, mock_stdout
+    ):
+        mock_get_rclone.return_value = Path("/usr/bin/rclone")
+        mock_sub_run.return_value = MagicMock(returncode=0)
+        mock_sub_run.return_value.stdout = "no token here"
+        mock_extract.return_value = None
+
+        with patch("sys.platform", "win32"):
+            setup_sync("drive")
+
+        printed_text = "".join(
+            call.args[0] for call in mock_stdout.write.call_args_list
+        )
+        assert "MANUAL SETUP" in printed_text
+        assert "Could not auto-extract token from rclone output." in printed_text
+        assert "python -c" in printed_text
