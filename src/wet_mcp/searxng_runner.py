@@ -518,8 +518,10 @@ def _kill_stale_port_process(port: int) -> None:
                         pid = int(pid_str)
                         if pid > 0:
                             _sigterm_then_kill(pid, f"stale port {port}")
-                    except (ValueError, ProcessLookupError, PermissionError):
-                        pass
+                    except (ValueError, ProcessLookupError, PermissionError) as e:
+                        logger.debug(
+                            f"Failed to kill stale port process {pid_str}: {e}"
+                        )
         except Exception:
             pass
     else:
@@ -538,8 +540,10 @@ def _kill_stale_port_process(port: int) -> None:
                         pid = int(pid_str.strip())
                         if pid > 0 and pid != os.getpid():
                             _sigterm_then_kill(pid, f"stale port {port}")
-                    except (ValueError, ProcessLookupError, PermissionError):
-                        pass
+                    except (ValueError, ProcessLookupError, PermissionError) as e:
+                        logger.debug(
+                            f"Failed to kill stale port process {pid_str.strip()}: {e}"
+                        )
         except FileNotFoundError:
             # lsof not available, try fuser
             try:
