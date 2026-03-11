@@ -98,8 +98,10 @@ def test_save_token_creates_dir(tmp_path):
 
 def test_save_token_windows_permissions(token_dir):
     """On Windows, skip chmod calls."""
-    with patch("wet_mcp.token_store.settings") as mock_settings, \
-         patch("wet_mcp.token_store.os.name", "nt"):
+    with (
+        patch("wet_mcp.token_store.settings") as mock_settings,
+        patch("wet_mcp.token_store.os.name", "nt"),
+    ):
         mock_settings.get_data_dir.return_value = token_dir.parent
         save_token("drive", {"access_token": "test"})
         assert load_token("drive") == {"access_token": "test"}
