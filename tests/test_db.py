@@ -1,4 +1,3 @@
-import typing
 """Tests for src/wet_mcp/db.py — DocsDB with FTS5 hybrid search.
 
 Covers library/version CRUD, FTS5 search scoring (phrase/AND/OR tiers),
@@ -12,6 +11,7 @@ import json
 import struct
 import sys
 import types
+import typing
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
