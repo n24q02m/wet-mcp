@@ -25,7 +25,9 @@ class TestHasTokenAvailable:
     def test_env_var_present(self, mock_settings):
         mock_settings.sync_remote = "gdrive"
         mock_settings.sync_provider = "drive"
-        with patch.dict(os.environ, {"RCLONE_CONFIG_GDRIVE_TOKEN": '{"access_token":"x"}'}):
+        with patch.dict(
+            os.environ, {"RCLONE_CONFIG_GDRIVE_TOKEN": '{"access_token":"x"}'}
+        ):
             assert _has_token_available() is True
 
     @patch("wet_mcp.sync.settings")
@@ -80,11 +82,16 @@ class TestInteractiveAuth:
     @pytest.mark.asyncio
     async def test_invalid_json_token(self):
         result = subprocess.CompletedProcess(
-            args=[], returncode=0,
+            args=[],
+            returncode=0,
             stdout='----\n{"access_token": invalid}\n----',
         )
-        with patch("wet_mcp.sync.asyncio.to_thread", return_value=result), \
-             patch("wet_mcp.sync._extract_token", return_value='{"access_token": invalid}'):
+        with (
+            patch("wet_mcp.sync.asyncio.to_thread", return_value=result),
+            patch(
+                "wet_mcp.sync._extract_token", return_value='{"access_token": invalid}'
+            ),
+        ):
             token = await _interactive_auth(Path("/rclone"), "drive")
         assert token is None
 
@@ -188,9 +195,14 @@ class TestSetupSyncTokenSuccess:
         )
         mock_extract.return_value = '{"access_token":"tok"}'
 
-        with patch("wet_mcp.sync.json.loads", return_value={"access_token": "tok"}), \
-             patch("wet_mcp.token_store.save_token"), \
-             patch("wet_mcp.token_store.get_token_path", return_value=Path("/home/.wet-mcp/tokens/s3.json")):
+        with (
+            patch("wet_mcp.sync.json.loads", return_value={"access_token": "tok"}),
+            patch("wet_mcp.token_store.save_token"),
+            patch(
+                "wet_mcp.token_store.get_token_path",
+                return_value=Path("/home/.wet-mcp/tokens/s3.json"),
+            ),
+        ):
             setup_sync("s3")
 
         captured = capsys.readouterr()
@@ -201,7 +213,9 @@ class TestSetupSyncTokenSuccess:
     @patch("wet_mcp.sync._get_rclone_path")
     @patch("wet_mcp.sync.subprocess.run")
     @patch("wet_mcp.sync._extract_token")
-    def test_token_json_decode_error(self, mock_extract, mock_run, mock_get_path, capsys):
+    def test_token_json_decode_error(
+        self, mock_extract, mock_run, mock_get_path, capsys
+    ):
         """Cover the JSONDecodeError fallback in setup_sync."""
         mock_get_path.return_value = Path("/rclone")
         mock_run.return_value = subprocess.CompletedProcess(
@@ -209,7 +223,9 @@ class TestSetupSyncTokenSuccess:
         )
         mock_extract.return_value = '{"access_token":"tok"}'
 
-        with patch("wet_mcp.sync.json.loads", side_effect=json.JSONDecodeError("err", "doc", 0)):
+        with patch(
+            "wet_mcp.sync.json.loads", side_effect=json.JSONDecodeError("err", "doc", 0)
+        ):
             setup_sync("drive")
 
         captured = capsys.readouterr()
@@ -253,13 +269,17 @@ class TestDownloadRcloneChecksum:
 
         mock_client_instance = AsyncMock()
         mock_client_instance.get = AsyncMock(return_value=mock_resp)
-        mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client.return_value.__aenter__ = AsyncMock(
+            return_value=mock_client_instance
+        )
         mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
         # Set checksum that won't match
         with patch.dict(
             "wet_mcp.sync._RCLONE_CHECKSUMS",
-            {"linux-amd64": "0000000000000000000000000000000000000000000000000000000000000000"},
+            {
+                "linux-amd64": "0000000000000000000000000000000000000000000000000000000000000000"
+            },
         ):
             res = await _download_rclone()
 

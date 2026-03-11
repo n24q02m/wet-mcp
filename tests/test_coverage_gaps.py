@@ -79,7 +79,14 @@ class TestSyncFullEmptyJsonl:
     @patch("wet_mcp.sync.sync_push")
     @patch("wet_mcp.db.DocsDB")
     async def test_empty_remote_jsonl(
-        self, mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings, _mock_token
+        self,
+        mock_DocsDB,
+        mock_push,
+        mock_pull,
+        mock_check,
+        mock_ensure,
+        mock_settings,
+        _mock_token,
     ):
         from wet_mcp.sync import sync_full
 

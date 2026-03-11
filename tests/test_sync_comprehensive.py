@@ -382,7 +382,9 @@ async def test_sync_full_no_rclone(mock_ensure, mock_settings):
 @patch("wet_mcp.sync.settings")
 @patch("wet_mcp.sync.ensure_rclone")
 @patch("wet_mcp.sync.check_remote_configured")
-async def test_sync_full_not_configured(mock_check, mock_ensure, mock_settings, _mock_token):
+async def test_sync_full_not_configured(
+    mock_check, mock_ensure, mock_settings, _mock_token
+):
     mock_settings.sync_enabled = True
     mock_settings.sync_remote = "gdrive"
     mock_ensure.return_value = Path("/rclone")
@@ -402,7 +404,13 @@ async def test_sync_full_not_configured(mock_check, mock_ensure, mock_settings, 
 @patch("wet_mcp.sync.sync_push")
 @patch("wet_mcp.db.DocsDB")
 async def test_sync_full_success(
-    mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings, _mock_token
+    mock_DocsDB,
+    mock_push,
+    mock_pull,
+    mock_check,
+    mock_ensure,
+    mock_settings,
+    _mock_token,
 ):
     mock_settings.sync_enabled = True
     mock_settings.sync_remote = "gdrive"
@@ -464,7 +472,13 @@ async def test_sync_full_no_remote_file(
 @patch("wet_mcp.sync.sync_push")
 @patch("wet_mcp.db.DocsDB")
 async def test_sync_full_merge_exception(
-    mock_DocsDB, mock_push, mock_pull, mock_check, mock_ensure, mock_settings, _mock_token
+    mock_DocsDB,
+    mock_push,
+    mock_pull,
+    mock_check,
+    mock_ensure,
+    mock_settings,
+    _mock_token,
 ):
     mock_settings.sync_enabled = True
     mock_settings.sync_remote = "gdrive"
@@ -552,9 +566,14 @@ def test_setup_sync_success(
     )
     mock_extract.return_value = '{"access_token":"token"}'
 
-    with patch("wet_mcp.sync.json.loads", return_value={"access_token": "token"}), \
-         patch("wet_mcp.token_store.save_token"), \
-         patch("wet_mcp.token_store.get_token_path", return_value=Path("/home/.wet-mcp/tokens/drive.json")):
+    with (
+        patch("wet_mcp.sync.json.loads", return_value={"access_token": "token"}),
+        patch("wet_mcp.token_store.save_token"),
+        patch(
+            "wet_mcp.token_store.get_token_path",
+            return_value=Path("/home/.wet-mcp/tokens/drive.json"),
+        ),
+    ):
         setup_sync("drive")
 
     captured = capsys.readouterr()
