@@ -1739,3 +1739,25 @@ class TestVecSearchChunkLoading:
             assert any("different topic" in c for c in all_contents)
         finally:
             db.close()
+
+
+class TestDocsDBInit:
+    def test_embedding_dims_validation(self, tmp_path):
+        import pytest
+
+        from wet_mcp.db import DocsDB
+
+        with pytest.raises(
+            ValueError, match="embedding_dims must be an integer between 0 and 10000"
+        ):
+            DocsDB(tmp_path / "test.db", embedding_dims=-1)
+
+        with pytest.raises(
+            ValueError, match="embedding_dims must be an integer between 0 and 10000"
+        ):
+            DocsDB(tmp_path / "test.db", embedding_dims=10001)
+
+        with pytest.raises(
+            ValueError, match="embedding_dims must be an integer between 0 and 10000"
+        ):
+            DocsDB(tmp_path / "test.db", embedding_dims="384")

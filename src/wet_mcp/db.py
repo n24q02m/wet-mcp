@@ -126,6 +126,8 @@ class DocsDB:
     """SQLite-backed docs storage with FTS5 hybrid search."""
 
     def __init__(self, db_path: Path, embedding_dims: int = 0):
+        if not isinstance(embedding_dims, int) or not (0 <= embedding_dims <= 10000):
+            raise ValueError("embedding_dims must be an integer between 0 and 10000")
         self._db_path = db_path
         self._embedding_dims = embedding_dims
         self._vec_enabled = False
