@@ -407,9 +407,13 @@ def _get_settings_path(port: int) -> Path:
     )
 
     # Generate random secret key for this session
-    # This prevents using the hardcoded secret from the template
+    # We inject it dynamically under the server block to avoid keeping placeholder secrets in the config file
     secret = secrets.token_hex(32)
-    content = content.replace("REPLACE_WITH_REAL_SECRET", secret)
+    content = content.replace(
+        "server:",
+        f'server:\n  secret_key: "{secret}"',
+        1,
+    )
 
     settings_file.write_text(content)
     logger.debug(f"SearXNG settings written to: {settings_file}")
