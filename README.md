@@ -16,6 +16,10 @@ mcp-name: io.github.n24q02m/wet-mcp
 [![semantic-release](https://img.shields.io/badge/semantic--release-e10079?logo=semantic-release&logoColor=white)](https://github.com/python-semantic-release/python-semantic-release)
 [![Renovate](https://img.shields.io/badge/renovate-enabled-1A1F6C?logo=renovatebot&logoColor=white)](https://developer.mend.io/)
 
+<a href="https://glama.ai/mcp/servers/n24q02m/wet-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/n24q02m/wet-mcp/badge" alt="WET MCP server" />
+</a>
+
 ## Features
 
 - **Web Search** - Search via embedded SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave)
