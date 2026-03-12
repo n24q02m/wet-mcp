@@ -1,7 +1,5 @@
 # WET - Web Extended Toolkit MCP Server
 
-mcp-name: io.github.n24q02m/wet-mcp
-
 **Open-source MCP Server for web search, content extraction, library docs & multimodal analysis.**
 
 [![CI](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml)
