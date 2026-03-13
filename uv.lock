@@ -1747,7 +1747,7 @@ wheels = [
 
 [[package]]
 name = "qwen3-embed"
-version = "1.2.0"
+version = "1.4.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -1758,9 +1758,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6e/71/144cfc2b2294d1c374487dd6dcb93620f420352e4b3b643c0ecdf7d5675e/qwen3_embed-1.2.0.tar.gz", hash = "sha256:f37ac2698a98217d4d24e2c9d18bd0a7a657b964356a08645c3daf567d1d6214", size = 125293, upload-time = "2026-03-01T10:20:24.055Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/43/3c/9730f02bfae7704a0dd23313188dbcd51e67470d70c1bed636fc065572a6/qwen3_embed-1.4.3.tar.gz", hash = "sha256:6eedd35410f37b6d2173edd60bb9f076928054d92fb6a39fde652e40618f7b13", size = 169130, upload-time = "2026-03-13T12:47:33.893Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0a/d8/70280a6e70c0dd6635a270809cb0296c4d54112c6963965121f1f20e5818/qwen3_embed-1.2.0-py3-none-any.whl", hash = "sha256:945b5e010cd3a1c1997daffcc88b23adaf99f373254245542de486428402ab99", size = 53677, upload-time = "2026-03-01T10:20:22.836Z" },
+    { url = "https://files.pythonhosted.org/packages/2e/4b/1ce39c29d4903c633e6d4e813bdef03b3cfcd133ce789909e1822e83c899/qwen3_embed-1.4.3-py3-none-any.whl", hash = "sha256:88bce92809c9a41b4e80efd68d9d9f111b2aea8fc978d43d82fa4f62f9c46a9b", size = 54643, upload-time = "2026-03-13T12:47:35.066Z" },
 ]
 
 [[package]]
@@ -2286,7 +2286,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.12.0"
+version = "2.13.0"
 source = { editable = "." }
 dependencies = [
     { name = "crawl4ai" },
@@ -2332,7 +2332,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", specifier = ">=1.2.0" },
+    { name = "qwen3-embed", specifier = ">=1.4.3" },
     { name = "sqlite-vec" },
 ]
 
