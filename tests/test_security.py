@@ -215,3 +215,9 @@ def test_pinned_getaddrinfo_ipv6_sockaddr():
     finally:
         with _dns_cache_lock:
             _dns_cache.pop("ipv6-host.example", None)
+
+
+def test_is_safe_url_urlparse_exception():
+    """Test is_safe_url catches exceptions from urlparse."""
+    with patch("wet_mcp.security.urlparse", side_effect=ValueError("malformed URL")):
+        assert not is_safe_url("http://invalid-url.com")
