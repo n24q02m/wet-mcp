@@ -502,6 +502,7 @@ def _kill_stale_port_process(port: int) -> None:
     """
     if not isinstance(port, int) or not (1 <= port <= 65535):
         return
+    port = int(port)
     if sys.platform == "win32":
         # On Windows, use netstat to find the PID
         try:
