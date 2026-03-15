@@ -128,7 +128,7 @@ class DocsDB:
     def __init__(self, db_path: Path, embedding_dims: int = 0):
         self._db_path = db_path
         if (
-            not isinstance(embedding_dims, int)
+            type(embedding_dims) is not int
             or embedding_dims < 0
             or embedding_dims > 65536
         ):
@@ -276,11 +276,15 @@ class DocsDB:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
             ).fetchone()
             if not row:
+                if type(self._embedding_dims) is not int or not (
+                    0 <= self._embedding_dims <= 65536
+                ):
+                    raise ValueError("embedding_dims must be a strict integer.")
                 self._conn.execute(f"""
                     CREATE VIRTUAL TABLE doc_chunks_vec
                     USING vec0(
                         id TEXT PRIMARY KEY,
-                        embedding float[{self._embedding_dims}]
+                        embedding float[{int(self._embedding_dims)}]
                     )
                 """)
 

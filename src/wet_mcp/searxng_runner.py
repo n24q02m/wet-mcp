@@ -500,8 +500,9 @@ def _kill_stale_port_process(port: int) -> None:
     This prevents 'address already in use' errors when restarting
     after a crash that left a zombie process behind.
     """
-    if not isinstance(port, int) or not (1 <= port <= 65535):
+    if type(port) is not int or not (1 <= port <= 65535):
         return
+    port = int(port)
     if sys.platform == "win32":
         # On Windows, use netstat to find the PID
         try:
