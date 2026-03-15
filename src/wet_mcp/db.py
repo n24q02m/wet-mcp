@@ -858,29 +858,16 @@ class DocsDB:
         """Export all docs data as JSONL for sync."""
         lines = []
 
-        # Export libraries
-        for row in self._conn.execute(
-            "SELECT * FROM libraries ORDER BY name"
-        ).fetchall():
-            d = dict(row)
-            d["_type"] = "library"
-            lines.append(json.dumps(d, ensure_ascii=False))
-
-        # Export versions
-        for row in self._conn.execute(
-            "SELECT * FROM versions ORDER BY library_id"
-        ).fetchall():
-            d = dict(row)
-            d["_type"] = "version"
-            lines.append(json.dumps(d, ensure_ascii=False))
-
-        # Export chunks (without embeddings — re-generate on target)
-        for row in self._conn.execute(
-            "SELECT * FROM doc_chunks ORDER BY library_id, chunk_index"
-        ).fetchall():
-            d = dict(row)
-            d["_type"] = "chunk"
-            lines.append(json.dumps(d, ensure_ascii=False))
+        for table, _type, order in [
+            ("libraries", "library", "name"),
+            ("versions", "version", "library_id"),
+            ("doc_chunks", "chunk", "library_id, chunk_index"),
+        ]:
+            cols = [r[1] for r in self._conn.execute(f"PRAGMA table_info({table})")]
+            json_obj_args = ", ".join([f"'{c}', {c}" for c in cols])
+            query = f"SELECT json_insert(json_object({json_obj_args}), '$._type', '{_type}') FROM {table} ORDER BY {order}"
+            for row in self._conn.execute(query):
+                lines.append(row[0])
 
         return "\n".join(lines)
 
