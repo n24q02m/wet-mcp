@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from wet_mcp.sources.docs import (
+    ChunkContext,
     _is_blocked_content,
     _rst_to_markdown,
     _split_preserving_code,
@@ -412,12 +413,11 @@ class TestSplitPreservingCode:
             "Conclusion text with enough content to matter."
         )
         chunks: list[dict] = []
+        ctx = ChunkContext(title="title", heading_path="heading", url="url")
         _split_preserving_code(
             text,
             chunks,
-            "title",
-            "heading",
-            "url",
+            ctx,
             max_chunk_size=100,
             min_chunk_size=20,
         )
@@ -432,12 +432,11 @@ class TestSplitPreservingCode:
             [f"Paragraph {i} with enough text to fill. " * 3 for i in range(10)]
         )
         chunks: list[dict] = []
+        ctx = ChunkContext(title="t", heading_path="h", url="u")
         _split_preserving_code(
             text,
             chunks,
-            "t",
-            "h",
-            "u",
+            ctx,
             max_chunk_size=200,
             min_chunk_size=20,
         )
@@ -450,12 +449,13 @@ class TestSplitPreservingCode:
         """Each produced chunk has correct title, heading_path, url."""
         text = "Some content. " * 50
         chunks: list[dict] = []
+        ctx = ChunkContext(
+            title="My Title", heading_path="Section > Sub", url="https://example.com"
+        )
         _split_preserving_code(
             text,
             chunks,
-            "My Title",
-            "Section > Sub",
-            "https://example.com",
+            ctx,
             max_chunk_size=100,
             min_chunk_size=10,
         )
@@ -472,12 +472,11 @@ class TestSplitPreservingCode:
             {"content": "existing2", "chunk_index": 1},
         ]
         text = "New content paragraph. " * 20
+        ctx = ChunkContext(title="t", heading_path="h", url="u")
         _split_preserving_code(
             text,
             existing_chunks,
-            "t",
-            "h",
-            "u",
+            ctx,
             max_chunk_size=100,
             min_chunk_size=10,
         )
