@@ -502,7 +502,7 @@ def test_has_gguf_support_missing():
     """_has_gguf_support returns False when llama_cpp is not installed."""
     from wet_mcp.config import _has_gguf_support
 
-    with mock.patch("builtins.__import__", side_effect=ImportError("no llama_cpp")):
+    with mock.patch("importlib.util.find_spec", return_value=None):
         assert _has_gguf_support() is False
 
 
@@ -510,7 +510,7 @@ def test_has_gguf_support_available():
     """_has_gguf_support returns True when llama_cpp is installed."""
     from wet_mcp.config import _has_gguf_support
 
-    with mock.patch.dict("sys.modules", {"llama_cpp": mock.MagicMock()}):
+    with mock.patch("importlib.util.find_spec", return_value=mock.MagicMock()):
         assert _has_gguf_support() is True
 
 
