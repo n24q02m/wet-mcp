@@ -858,29 +858,46 @@ class DocsDB:
         """Export all docs data as JSONL for sync."""
         lines = []
 
-        # Export libraries
+        # Export libraries (using SQLite native JSON serialization for performance)
         for row in self._conn.execute(
-            "SELECT * FROM libraries ORDER BY name"
+            """
+            SELECT json_insert(json_object(
+                'id', id, 'name', name, 'docs_url', docs_url,
+                'registry', registry, 'description', description,
+                'created_at', created_at, 'updated_at', updated_at
+            ), '$._type', 'library')
+            FROM libraries ORDER BY name
+            """
         ).fetchall():
-            d = dict(row)
-            d["_type"] = "library"
-            lines.append(json.dumps(d, ensure_ascii=False))
+            lines.append(row[0])
 
         # Export versions
         for row in self._conn.execute(
-            "SELECT * FROM versions ORDER BY library_id"
+            """
+            SELECT json_insert(json_object(
+                'id', id, 'library_id', library_id, 'version', version,
+                'docs_url', docs_url, 'indexed_at', indexed_at,
+                'page_count', page_count, 'chunk_count', chunk_count,
+                'status', status
+            ), '$._type', 'version')
+            FROM versions ORDER BY library_id
+            """
         ).fetchall():
-            d = dict(row)
-            d["_type"] = "version"
-            lines.append(json.dumps(d, ensure_ascii=False))
+            lines.append(row[0])
 
         # Export chunks (without embeddings — re-generate on target)
         for row in self._conn.execute(
-            "SELECT * FROM doc_chunks ORDER BY library_id, chunk_index"
+            """
+            SELECT json_insert(json_object(
+                'id', id, 'version_id', version_id, 'library_id', library_id,
+                'url', url, 'title', title, 'chunk_index', chunk_index,
+                'content', content, 'heading_path', heading_path,
+                'created_at', created_at
+            ), '$._type', 'chunk')
+            FROM doc_chunks ORDER BY library_id, chunk_index
+            """
         ).fetchall():
-            d = dict(row)
-            d["_type"] = "chunk"
-            lines.append(json.dumps(d, ensure_ascii=False))
+            lines.append(row[0])
 
         return "\n".join(lines)
 
