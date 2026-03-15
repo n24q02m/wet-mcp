@@ -193,6 +193,7 @@ async def test_extract_invalid_action():
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
 
+
 def test_research_topic():
     from wet_mcp.server import research_topic
 
