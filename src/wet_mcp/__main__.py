@@ -24,75 +24,73 @@ def _clear_model_cache(model_name: str) -> None:
         print(f"  Cleared corrupted cache: {model_cache}")
 
 
-def _warmup() -> None:
-    """Pre-download models and run setup to avoid first-run delays.
-
-    Run this before adding wet-mcp to your MCP config:
-        uvx --python 3.13 wet-mcp warmup
-
-    This installs SearXNG, Playwright/Chromium, and downloads the local
-    embedding + reranking models (~1.1 GB total) so the first real
-    connection does not timeout.
-    """
-    print("WET MCP warmup: running first-time setup...")
-
-    # 1. Run auto-setup (SearXNG + Playwright)
+def _setup_dependencies() -> None:
+    """Install SearXNG and Playwright."""
     print("  Step 1/3: Installing SearXNG and Playwright...")
     from wet_mcp.setup import run_auto_setup
 
     run_auto_setup()
     print("  SearXNG and Playwright setup complete.")
 
-    # 2. Check API keys -- if valid cloud keys exist, skip local download
+
+def _validate_cloud_models() -> bool:
+    """Validate cloud embedding and reranker models. Return True if successful."""
     from wet_mcp.config import settings
 
     mode = settings.setup_litellm()
-    if mode in ("proxy", "sdk"):
-        print(f"  LiteLLM mode: {mode}")
-        print("  Step 2/3: Validating cloud embedding models...")
+    if mode not in ("proxy", "sdk"):
+        return False
 
-        from wet_mcp.embedder import init_backend
-        from wet_mcp.server import _EMBEDDING_CANDIDATES
+    print(f"  LiteLLM mode: {mode}")
+    print("  Step 2/3: Validating cloud embedding models...")
 
-        model = settings.resolve_embedding_model()
-        candidates = [model] if model else _EMBEDDING_CANDIDATES
-        litellm_kwargs = settings.get_embedding_litellm_kwargs()
+    from wet_mcp.embedder import init_backend
+    from wet_mcp.server import _EMBEDDING_CANDIDATES
 
-        cloud_ok = False
-        for candidate in candidates:
+    model = settings.resolve_embedding_model()
+    candidates = [model] if model else _EMBEDDING_CANDIDATES
+    litellm_kwargs = settings.get_embedding_litellm_kwargs()
+
+    cloud_ok = False
+    for candidate in candidates:
+        try:
+            backend = init_backend("litellm", candidate, **litellm_kwargs)
+            dims = backend.check_available()
+            if dims > 0:
+                print(f"  Cloud embedding ready: {candidate} (dims={dims})")
+                cloud_ok = True
+                break
+        except Exception:
+            continue
+
+    if cloud_ok:
+        # Check reranker too
+        print("  Step 3/3: Validating cloud reranker...")
+        rerank_model = settings.resolve_rerank_model()
+        if rerank_model:
+            from wet_mcp.reranker import init_reranker
+
+            rerank_kwargs = settings.get_rerank_litellm_kwargs()
             try:
-                backend = init_backend("litellm", candidate, **litellm_kwargs)
-                dims = backend.check_available()
-                if dims > 0:
-                    print(f"  Cloud embedding ready: {candidate} (dims={dims})")
-                    cloud_ok = True
-                    break
+                reranker = init_reranker("litellm", rerank_model, **rerank_kwargs)
+                if reranker.check_available():
+                    print(f"  Cloud reranker ready: {rerank_model}")
+                    print("Warmup complete! Cloud models will be used.")
+                    return True
             except Exception:
-                continue
+                pass
 
-        if cloud_ok:
-            # Check reranker too
-            print("  Step 3/3: Validating cloud reranker...")
-            rerank_model = settings.resolve_rerank_model()
-            if rerank_model:
-                from wet_mcp.reranker import init_reranker
+        print("Warmup complete! Cloud embedding will be used.")
+        return True
 
-                rerank_kwargs = settings.get_rerank_litellm_kwargs()
-                try:
-                    reranker = init_reranker("litellm", rerank_model, **rerank_kwargs)
-                    if reranker.check_available():
-                        print(f"  Cloud reranker ready: {rerank_model}")
-                        print("Warmup complete! Cloud models will be used.")
-                        return
-                except Exception:
-                    pass
+    print("  Cloud embedding not available, falling back to local models...")
+    return False
 
-            print("Warmup complete! Cloud embedding will be used.")
-            return
 
-        print("  Cloud embedding not available, falling back to local models...")
+def _download_local_embedding() -> None:
+    """Download local embedding model."""
+    from wet_mcp.config import settings
 
-    # 3. Download local embedding model
     print("  Step 2/3: Downloading local embedding model (~570 MB)...")
     print("  This may take a few minutes on first run.")
 
@@ -119,33 +117,64 @@ def _warmup() -> None:
         else:
             raise
 
-    # 4. Download local reranker model
-    if settings.rerank_enabled:
-        print("  Step 3/3: Downloading local reranker model (~570 MB)...")
-        local_rerank_model = settings.resolve_local_rerank_model()
-        from qwen3_embed import TextCrossEncoder
 
-        try:
+def _download_local_reranker() -> None:
+    """Download local reranker model."""
+    from wet_mcp.config import settings
+
+    if not settings.rerank_enabled:
+        print("  Step 3/3: Reranking disabled, skipping.")
+        return
+
+    print("  Step 3/3: Downloading local reranker model (~570 MB)...")
+    local_rerank_model = settings.resolve_local_rerank_model()
+    from qwen3_embed import TextCrossEncoder
+
+    try:
+        reranker = TextCrossEncoder(model_name=local_rerank_model)
+        scores = list(reranker.rerank("test query", ["test document"]))
+        if scores:
+            print("  Local reranker ready")
+        else:
+            print("  WARNING: Local reranker test failed")
+    except Exception as exc:
+        if "NO_SUCHFILE" in str(exc) or "doesn't exist" in str(exc):
+            print("  Corrupted cache detected, clearing and retrying...")
+            _clear_model_cache(local_rerank_model)
             reranker = TextCrossEncoder(model_name=local_rerank_model)
             scores = list(reranker.rerank("test query", ["test document"]))
             if scores:
                 print("  Local reranker ready")
             else:
-                print("  WARNING: Local reranker test failed")
-        except Exception as exc:
-            if "NO_SUCHFILE" in str(exc) or "doesn't exist" in str(exc):
-                print("  Corrupted cache detected, clearing and retrying...")
-                _clear_model_cache(local_rerank_model)
-                reranker = TextCrossEncoder(model_name=local_rerank_model)
-                scores = list(reranker.rerank("test query", ["test document"]))
-                if scores:
-                    print("  Local reranker ready")
-                else:
-                    print("  WARNING: Local reranker test failed after retry")
-            else:
-                raise
-    else:
-        print("  Step 3/3: Reranking disabled, skipping.")
+                print("  WARNING: Local reranker test failed after retry")
+        else:
+            raise
+
+
+def _warmup() -> None:
+    """Pre-download models and run setup to avoid first-run delays.
+
+    Run this before adding wet-mcp to your MCP config:
+        uvx --python 3.13 wet-mcp warmup
+
+    This installs SearXNG, Playwright/Chromium, and downloads the local
+    embedding + reranking models (~1.1 GB total) so the first real
+    connection does not timeout.
+    """
+    print("WET MCP warmup: running first-time setup...")
+
+    # 1. Run auto-setup (SearXNG + Playwright)
+    _setup_dependencies()
+
+    # 2. Check API keys -- if valid cloud keys exist, skip local download
+    if _validate_cloud_models():
+        return
+
+    # 3. Download local embedding model
+    _download_local_embedding()
+
+    # 4. Download local reranker model
+    _download_local_reranker()
 
     print("Warmup complete!")
 
