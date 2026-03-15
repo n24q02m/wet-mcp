@@ -51,6 +51,7 @@ RUN uv run python -m playwright install chromium
 # ========================
 FROM python:3.13-slim-bookworm
 
+LABEL org.opencontainers.image.source="https://github.com/n24q02m/wet-mcp"
 LABEL io.modelcontextprotocol.server.name="io.github.n24q02m/wet-mcp"
 
 WORKDIR /app
