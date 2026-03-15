@@ -215,3 +215,8 @@ def test_pinned_getaddrinfo_ipv6_sockaddr():
     finally:
         with _dns_cache_lock:
             _dns_cache.pop("ipv6-host.example", None)
+
+
+def test_is_safe_url_urlparse_exception():
+    """Test is_safe_url returns False when urlparse raises an Exception (e.g. ValueError for malformed URLs with brackets)."""
+    assert not is_safe_url("http://[example.com]/")
