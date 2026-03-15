@@ -549,8 +549,31 @@ async def test_with_timeout_expired():
 
 
 def test_prompts():
-    assert "Research" in server.research_topic("topic")
     assert "Find documentation" in server.library_docs("lib", "question")
+
+
+def test_research_topic_formatting():
+    """Test that research_topic formats the prompt correctly."""
+    topic = "quantum machine learning"
+    result = server.research_topic(topic)
+
+    assert f"Research the following topic thoroughly: {topic}" in result
+    assert "Use the search tool with action='research'" in result
+    assert "Use the extract tool with action='extract'" in result
+    assert "Synthesize findings into a comprehensive summary" in result
+
+
+def test_research_topic_empty():
+    """Test research_topic with empty string."""
+    result = server.research_topic("")
+    assert "Research the following topic thoroughly: " in result
+
+
+def test_research_topic_special_chars():
+    """Test research_topic with special characters."""
+    topic = "AI & ML (2024)"
+    result = server.research_topic(topic)
+    assert f"Research the following topic thoroughly: {topic}" in result
 
 
 def test_main():
