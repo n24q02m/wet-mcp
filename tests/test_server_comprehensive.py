@@ -550,7 +550,24 @@ async def test_with_timeout_expired():
 
 def test_prompts():
     assert "Research" in server.research_topic("topic")
-    assert "Find documentation" in server.library_docs("lib", "question")
+
+    # Test library_docs happy path
+    prompt1 = server.library_docs("react", "hooks")
+    assert "Find documentation for 'react' to answer: hooks" in prompt1
+    assert "library='{library}'" in prompt1  # Verify literal format brace remains
+    assert "query='hooks'" in prompt1
+
+    # Test library_docs with spaces and special characters
+    prompt2 = server.library_docs("next.js", "Server-side rendering?!")
+    assert (
+        "Find documentation for 'next.js' to answer: Server-side rendering?!" in prompt2
+    )
+    assert "query='Server-side rendering?!'" in prompt2
+
+    # Test library_docs with empty strings
+    prompt3 = server.library_docs("", "")
+    assert "Find documentation for '' to answer: " in prompt3
+    assert "query=''" in prompt3
 
 
 def test_main():
