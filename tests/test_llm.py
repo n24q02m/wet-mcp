@@ -238,3 +238,24 @@ def test_analyze_media_tilde_download_dir(mock_settings, tmp_path, monkeypatch):
     # File exists and is within download_dir, so we should get past the path check
     # (will fail at LLM call since we didn't mock it, but NOT "Access denied")
     assert "Access denied" not in result
+
+
+@patch("wet_mcp.llm.litellm")
+def test_get_model_capabilities(mock_litellm):
+    """Test get_model_capabilities function."""
+    mock_litellm.supports_vision.return_value = True
+    mock_litellm.supports_audio_input.return_value = False
+    mock_litellm.supports_audio_output.return_value = True
+
+    from wet_mcp.llm import get_model_capabilities
+
+    caps = get_model_capabilities("fake-model")
+
+    assert caps == {
+        "vision": True,
+        "audio_input": False,
+        "audio_output": True,
+    }
+    mock_litellm.supports_vision.assert_called_once_with("fake-model")
+    mock_litellm.supports_audio_input.assert_called_once_with("fake-model")
+    mock_litellm.supports_audio_output.assert_called_once_with("fake-model")
