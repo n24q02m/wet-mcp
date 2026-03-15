@@ -5,6 +5,7 @@ remote configuration check, and sync flow. All tests use mocks to avoid
 requiring rclone or network access.
 """
 
+import asyncio
 import base64
 import os
 from pathlib import Path
@@ -12,11 +13,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from wet_mcp import sync
 from wet_mcp.sync import (
     _get_platform_info,
     _prepare_rclone_env,
     _run_rclone,
     check_remote_configured,
+    start_auto_sync,
+    stop_auto_sync,
 )
 
 # -----------------------------------------------------------------------
@@ -217,3 +221,89 @@ class TestRunRclone:
             assert call_args[1]["timeout"] == 10
             assert call_args[1]["capture_output"] is True
             assert call_args[1]["text"] is True
+
+
+@pytest.fixture(autouse=True)
+def clean_sync_task():
+    """Fixture to reset global _sync_task state before and after each test."""
+    initial = sync._sync_task
+    sync._sync_task = None
+    yield
+    if sync._sync_task and not sync._sync_task.done():
+        sync._sync_task.cancel()
+    sync._sync_task = initial
+
+
+class TestAutoSyncLifecycle:
+    @pytest.mark.asyncio
+    async def test_stop_auto_sync_no_task(self):
+        sync._sync_task = None
+        stop_auto_sync()
+        assert sync._sync_task is None
+
+    @pytest.mark.asyncio
+    async def test_stop_auto_sync_already_done(self):
+        future = asyncio.Future()
+        future.set_result(None)
+        sync._sync_task = future
+        stop_auto_sync()
+        assert sync._sync_task is future
+        assert not future.cancelled()
+
+    @pytest.mark.asyncio
+    async def test_stop_auto_sync_running(self):
+        future = asyncio.Future()
+        sync._sync_task = future
+        stop_auto_sync()
+        assert sync._sync_task is None
+        assert future.cancelled()
+
+    @pytest.mark.asyncio
+    async def test_start_auto_sync_disabled(self, clean_sync_task):
+        db_mock = MagicMock()
+        with patch("wet_mcp.sync.settings.sync_enabled", False):
+            start_auto_sync(db_mock)
+            assert sync._sync_task is None
+
+    @pytest.mark.asyncio
+    async def test_start_auto_sync_interval_zero(self, clean_sync_task):
+        db_mock = MagicMock()
+        with (
+            patch("wet_mcp.sync.settings.sync_enabled", True),
+            patch("wet_mcp.sync.settings.sync_interval", 0),
+        ):
+            start_auto_sync(db_mock)
+            assert sync._sync_task is None
+
+    @pytest.mark.asyncio
+    async def test_start_auto_sync_already_running(self, clean_sync_task):
+        db_mock = MagicMock()
+        future = asyncio.Future()
+        sync._sync_task = future
+
+        with (
+            patch("wet_mcp.sync.settings.sync_enabled", True),
+            patch("wet_mcp.sync.settings.sync_interval", 10),
+        ):
+            start_auto_sync(db_mock)
+            assert sync._sync_task is future
+
+    @pytest.mark.asyncio
+    @patch("wet_mcp.sync._auto_sync_loop")
+    async def test_start_auto_sync_creates_task(self, mock_loop, clean_sync_task):
+        db_mock = MagicMock()
+
+        async def dummy_loop(*args):
+            pass
+
+        mock_loop.side_effect = dummy_loop
+
+        with (
+            patch("wet_mcp.sync.settings.sync_enabled", True),
+            patch("wet_mcp.sync.settings.sync_interval", 10),
+        ):
+            start_auto_sync(db_mock)
+            assert sync._sync_task is not None
+            assert not sync._sync_task.done()
+
+            await sync._sync_task
