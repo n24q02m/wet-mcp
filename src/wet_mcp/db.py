@@ -135,7 +135,7 @@ class DocsDB:
             raise ValueError(
                 f"embedding_dims must be an integer 0-65536, got {embedding_dims!r}"
             )
-        self._embedding_dims = embedding_dims
+        self._embedding_dims = int(embedding_dims)
         self._vec_enabled = False
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
