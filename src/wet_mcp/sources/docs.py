@@ -2356,6 +2356,86 @@ _RST_ROLE_RE = re.compile(r":(\w+):`([^`]*)`")
 _RST_SUBST_RE = re.compile(r"\|(\w[\w\s]*)\|")
 
 
+def _process_rst_heading(i: int, line: str, lines: list[str], out: list[str]) -> int:
+    underline_char = lines[i + 1].strip()[0]
+    if underline_char == "=":
+        level = "#"
+    elif underline_char == "-":
+        level = "##"
+    elif underline_char == "~":
+        level = "###"
+    else:
+        level = "####"
+
+    if (
+        i > 0
+        and out
+        and out[-1].strip()
+        and all(c in _RST_HEADING_CHARS for c in out[-1].strip())
+        and len(set(out[-1].strip())) == 1
+    ):
+        out[-1] = ""
+
+    out.append(f"{level} {line.strip()}")
+    return i + 2
+
+
+def _process_rst_directive(
+    i: int,
+    lines: list[str],
+    out: list[str],
+    directive_match: re.Match,
+) -> tuple[int, bool, int]:
+    directive = directive_match.group(1).lower()
+    args = directive_match.group(2).strip()
+    in_code_block = False
+    code_indent = 0
+
+    if directive in ("code-block", "code", "sourcecode", "highlight"):
+        lang = args or ""
+        out.append(f"```{lang}")
+        i += 1
+        while i < len(lines) and (
+            not lines[i].strip() or lines[i].strip().startswith(":")
+        ):
+            i += 1
+        if i < len(lines):
+            code_indent = len(lines[i]) - len(lines[i].lstrip())
+            if code_indent < 2:
+                code_indent = 3
+        in_code_block = True
+    elif directive in (
+        "literalinclude",
+        "image",
+        "figure",
+        "raw",
+        "include",
+        "toctree",
+        "contents",
+        "moduleauthor",
+        "sectionauthor",
+        "meta",
+        "deprecated",
+    ):
+        i += 1
+        while i < len(lines) and (not lines[i].strip() or lines[i].startswith("   ")):
+            i += 1
+    elif directive in ("note", "warning", "tip", "important", "seealso"):
+        out.append(f"> **{directive.title()}:** {args}")
+        i += 1
+        while i < len(lines) and (not lines[i].strip() or lines[i].startswith("   ")):
+            body = lines[i].strip()
+            if body:
+                out.append(f"> {body}")
+            i += 1
+    else:
+        i += 1
+        while i < len(lines) and lines[i].strip().startswith(":"):
+            i += 1
+
+    return i, in_code_block, code_indent
+
+
 def _rst_to_markdown(content: str) -> str:
     """Convert RST content to rough Markdown for indexing.
 
@@ -2401,88 +2481,15 @@ def _rst_to_markdown(content: str) -> str:
             and all(c in _RST_HEADING_CHARS for c in lines[i + 1].strip())
             and len(set(lines[i + 1].strip())) == 1
         ):
-            underline_char = lines[i + 1].strip()[0]
-            # Also check for overline + title + underline
-            if underline_char == "=":
-                level = "#"
-            elif underline_char == "-":
-                level = "##"
-            elif underline_char == "~":
-                level = "###"
-            else:
-                level = "####"
-
-            # Check if there's an overline (line before is same underline char)
-            if (
-                i > 0
-                and out
-                and out[-1].strip()
-                and all(c in _RST_HEADING_CHARS for c in out[-1].strip())
-                and len(set(out[-1].strip())) == 1
-            ):
-                out[-1] = ""  # Remove overline
-
-            out.append(f"{level} {line.strip()}")
-            i += 2  # Skip underline
+            i = _process_rst_heading(i, line, lines, out)
             continue
 
         # Detect code-block directive
         directive_match = _RST_DIRECTIVE_RE.match(line.strip())
         if directive_match:
-            directive = directive_match.group(1).lower()
-            args = directive_match.group(2).strip()
-            if directive in ("code-block", "code", "sourcecode", "highlight"):
-                lang = args or ""
-                out.append(f"```{lang}")
-                # Skip any directive options (indented lines starting with :)
-                i += 1
-                while i < len(lines) and (
-                    not lines[i].strip() or lines[i].strip().startswith(":")
-                ):
-                    i += 1
-                # Remaining indented lines are the code
-                if i < len(lines):
-                    code_indent = len(lines[i]) - len(lines[i].lstrip())
-                    if code_indent < 2:
-                        code_indent = 3
-                in_code_block = True
-                continue
-            elif directive in (
-                "literalinclude",
-                "image",
-                "figure",
-                "raw",
-                "include",
-                "toctree",
-                "contents",
-                "moduleauthor",
-                "sectionauthor",
-                "meta",
-                "deprecated",
-            ):
-                # Skip these directives entirely
-                i += 1
-                while i < len(lines) and (
-                    not lines[i].strip() or lines[i].startswith("   ")
-                ):
-                    i += 1
-                continue
-            elif directive in ("note", "warning", "tip", "important", "seealso"):
-                out.append(f"> **{directive.title()}:** {args}")
-                i += 1
-                # Include indented body
-                while i < len(lines) and (
-                    not lines[i].strip() or lines[i].startswith("   ")
-                ):
-                    body = lines[i].strip()
-                    if body:
-                        out.append(f"> {body}")
-                    i += 1
-                continue
-            # Other directives: skip header, keep body
-            i += 1
-            while i < len(lines) and lines[i].strip().startswith(":"):
-                i += 1  # Skip options
+            i, in_code_block, code_indent = _process_rst_directive(
+                i, lines, out, directive_match
+            )
             continue
 
         # Detect literal block ending with ::
