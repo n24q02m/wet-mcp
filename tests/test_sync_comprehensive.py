@@ -552,6 +552,23 @@ def test_stop_auto_sync():
     assert wet_mcp.sync._sync_task is None
 
 
+def test_stop_auto_sync_no_task():
+    """Test stopping auto-sync when no task is running"""
+    wet_mcp.sync._sync_task = None
+    stop_auto_sync()
+    assert wet_mcp.sync._sync_task is None
+
+
+def test_stop_auto_sync_already_done():
+    """Test stopping auto-sync when task is already done"""
+    mock_task = MagicMock()
+    mock_task.done.return_value = True
+    wet_mcp.sync._sync_task = mock_task
+    stop_auto_sync()
+    mock_task.cancel.assert_not_called()
+    assert wet_mcp.sync._sync_task is mock_task
+
+
 @patch("wet_mcp.sync._get_rclone_path")
 @patch("wet_mcp.sync._download_rclone")
 @patch("wet_mcp.sync.subprocess.run")
