@@ -9,6 +9,7 @@ import asyncio
 import base64
 import os
 from pathlib import Path
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -245,7 +246,7 @@ class TestAutoSyncLifecycle:
     async def test_stop_auto_sync_already_done(self):
         future = asyncio.Future()
         future.set_result(None)
-        sync._sync_task = future
+        sync._sync_task = cast(asyncio.Task, future)
         stop_auto_sync()
         assert sync._sync_task is future
         assert not future.cancelled()
@@ -253,7 +254,7 @@ class TestAutoSyncLifecycle:
     @pytest.mark.asyncio
     async def test_stop_auto_sync_running(self):
         future = asyncio.Future()
-        sync._sync_task = future
+        sync._sync_task = cast(asyncio.Task, future)
         stop_auto_sync()
         assert sync._sync_task is None
         assert future.cancelled()
@@ -279,7 +280,7 @@ class TestAutoSyncLifecycle:
     async def test_start_auto_sync_already_running(self, clean_sync_task):
         db_mock = MagicMock()
         future = asyncio.Future()
-        sync._sync_task = future
+        sync._sync_task = cast(asyncio.Task, future)
 
         with (
             patch("wet_mcp.sync.settings.sync_enabled", True),
