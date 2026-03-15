@@ -128,12 +128,12 @@ class DocsDB:
     def __init__(self, db_path: Path, embedding_dims: int = 0):
         self._db_path = db_path
         if (
-            not isinstance(embedding_dims, int)
+            type(embedding_dims) is not int
             or embedding_dims < 0
-            or embedding_dims > 65536
+            or embedding_dims > 10000
         ):
             raise ValueError(
-                f"embedding_dims must be an integer 0-65536, got {embedding_dims!r}"
+                f"embedding_dims must be an integer 0-10000, got {embedding_dims!r}"
             )
         self._embedding_dims = embedding_dims
         self._vec_enabled = False
@@ -272,6 +272,13 @@ class DocsDB:
 
         # Vector table (optional)
         if self._vec_enabled and self._embedding_dims > 0:
+            if type(self._embedding_dims) is not int or not (
+                0 <= self._embedding_dims <= 10000
+            ):
+                raise ValueError(
+                    f"Invalid embedding dimensions: {self._embedding_dims!r}"
+                )
+
             row = self._conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
             ).fetchone()
