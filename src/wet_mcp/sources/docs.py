@@ -3480,13 +3480,19 @@ async def fetch_docs_pages(
         if not query or not urls:
             return urls
         query_words = set(query.lower().split())
-        scored = []
-        for url in urls:
-            path_words = set(re.split(r"[-_/.]", urlparse(url).path.lower()))
-            overlap = len(query_words & path_words)
-            scored.append((url, overlap))
-        scored.sort(key=lambda x: x[1], reverse=True)
-        return [u for u, _ in scored]
+
+        def _score_url(u: str) -> int:
+            path = urlparse(u).path.lower()
+            path_words = set(
+                path.replace("-", " ")
+                .replace("_", " ")
+                .replace("/", " ")
+                .replace(".", " ")
+                .split()
+            )
+            return len(query_words & path_words)
+
+        return sorted(urls, key=_score_url, reverse=True)
 
     # Process root page results
     blocked_count = 0
