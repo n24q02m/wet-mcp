@@ -8,7 +8,7 @@ requiring rclone or network access.
 import base64
 import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -217,3 +217,134 @@ class TestRunRclone:
             assert call_args[1]["timeout"] == 10
             assert call_args[1]["capture_output"] is True
             assert call_args[1]["text"] is True
+
+
+# -----------------------------------------------------------------------
+# setup_sync — interactive rclone setup
+# -----------------------------------------------------------------------
+
+
+class TestSetupSync:
+    def test_setup_sync_happy_path(self):
+        """Rclone found, authorize runs, token extracted and saved."""
+        from wet_mcp.sync import setup_sync
+
+        with (
+            patch("wet_mcp.sync._get_rclone_path", return_value="/mock/rclone"),
+            patch("subprocess.run") as mock_run,
+            patch(
+                "wet_mcp.sync._extract_token", return_value='{"access_token": "abc"}'
+            ),
+            patch("wet_mcp.token_store.save_token") as mock_save,
+            patch("wet_mcp.token_store.get_token_path", return_value="/mock/path"),
+        ):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_result.stdout = "some output"
+            mock_run.return_value = mock_result
+
+            setup_sync("drive")
+
+            mock_run.assert_called_once_with(
+                ["/mock/rclone", "authorize", "--", "drive"],
+                stdout=-1,
+                text=True,
+                timeout=300,
+            )
+            mock_save.assert_called_once_with("drive", {"access_token": "abc"})
+
+    def test_setup_sync_download_rclone(self):
+        """Rclone downloaded, authorize runs, token extracted and saved."""
+        from wet_mcp.sync import setup_sync
+
+        with (
+            patch("wet_mcp.sync._get_rclone_path", return_value=None),
+            patch("wet_mcp.sync._download_rclone", new_callable=AsyncMock) as mock_dl,
+            patch("subprocess.run") as mock_run,
+            patch(
+                "wet_mcp.sync._extract_token", return_value='{"access_token": "abc"}'
+            ),
+            patch("wet_mcp.token_store.save_token") as mock_save,
+            patch("wet_mcp.token_store.get_token_path", return_value="/mock/path"),
+        ):
+            mock_dl.return_value = "/mock/downloaded/rclone"
+
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_run.return_value = mock_result
+
+            setup_sync("dropbox")
+
+            mock_run.assert_called_once_with(
+                ["/mock/downloaded/rclone", "authorize", "--", "dropbox"],
+                stdout=-1,
+                text=True,
+                timeout=300,
+            )
+            mock_save.assert_called_once_with("dropbox", {"access_token": "abc"})
+
+    def test_setup_sync_download_fails(self):
+        """Failing to download rclone triggers sys.exit(1)."""
+        from wet_mcp.sync import setup_sync
+
+        with (
+            patch("wet_mcp.sync._get_rclone_path", return_value=None),
+            patch("wet_mcp.sync._download_rclone", new_callable=AsyncMock) as mock_dl,
+        ):
+            mock_dl.return_value = None
+
+            with pytest.raises(SystemExit) as exc_info:
+                setup_sync("drive")
+            assert exc_info.value.code == 1
+
+    def test_setup_sync_authorize_fails(self):
+        """Failing to authorize triggers sys.exit(1)."""
+        from wet_mcp.sync import setup_sync
+
+        with (
+            patch("wet_mcp.sync._get_rclone_path", return_value="/mock/rclone"),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_result = MagicMock()
+            mock_result.returncode = 1
+            mock_run.return_value = mock_result
+
+            with pytest.raises(SystemExit) as exc_info:
+                setup_sync("drive")
+            assert exc_info.value.code == 1
+
+    def test_setup_sync_bad_json(self):
+        """Bad JSON token is not saved."""
+        from wet_mcp.sync import setup_sync
+
+        with (
+            patch("wet_mcp.sync._get_rclone_path", return_value="/mock/rclone"),
+            patch("subprocess.run") as mock_run,
+            patch("wet_mcp.sync._extract_token", return_value="not json"),
+            patch("wet_mcp.token_store.save_token") as mock_save,
+        ):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_run.return_value = mock_result
+
+            setup_sync("drive")
+
+            mock_save.assert_not_called()
+
+    def test_setup_sync_no_token_extracted(self):
+        """No token extracted avoids saving."""
+        from wet_mcp.sync import setup_sync
+
+        with (
+            patch("wet_mcp.sync._get_rclone_path", return_value="/mock/rclone"),
+            patch("subprocess.run") as mock_run,
+            patch("wet_mcp.sync._extract_token", return_value=None),
+            patch("wet_mcp.token_store.save_token") as mock_save,
+        ):
+            mock_result = MagicMock()
+            mock_result.returncode = 0
+            mock_run.return_value = mock_result
+
+            setup_sync("drive")
+
+            mock_save.assert_not_called()
