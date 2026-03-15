@@ -1082,7 +1082,10 @@ async def _fetch_and_chunk_docs(
     gh_page_count = 0
     if gh_pages:
         for page in gh_pages:
-            page_chunks = chunk_markdown(
+            # Offload CPU-bound markdown chunking to a background thread to prevent
+            # starving the asyncio event loop during large GitHub docs processing.
+            page_chunks = await asyncio.to_thread(
+                chunk_markdown,
                 content=page["content"],
                 url=page.get("url", ""),
             )
