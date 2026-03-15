@@ -262,14 +262,14 @@ def test_get_settings_path(tmp_path):
         patch("importlib.resources.files") as mock_files,
     ):
         mock_files.return_value.joinpath.return_value.read_text.return_value = (
-            "port: 41592\nsecret_key: 'REPLACE_WITH_REAL_SECRET'"
+            "server:\n  port: 41592\n"
         )
 
         path = _get_settings_path(8080)
         assert path.exists()
         content = path.read_text()
         assert "port: 8080" in content
-        assert "REPLACE_WITH_REAL_SECRET" not in content
+        assert "secret_key: " in content
 
 
 def test_force_kill_process():

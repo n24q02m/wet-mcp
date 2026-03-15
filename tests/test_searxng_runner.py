@@ -53,8 +53,11 @@ def test_get_settings_path():
         mock_bundled_file.read_text.assert_called_once()
 
         # Verify write_text called with correct content
-        expected_content = "server:\n  port: 9090\n"
-        mock_settings_file.write_text.assert_called_once_with(expected_content)
+        # It injects the secret dynamically now
+        args, _ = mock_settings_file.write_text.call_args
+        written_content = args[0]
+        assert "port: 9090" in written_content
+        assert "secret_key:" in written_content
 
 
 # Mock the settings object
