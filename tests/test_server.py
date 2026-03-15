@@ -192,3 +192,15 @@ async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
     assert "Error: Unknown action" in result
+
+
+def test_library_docs():
+    """Test library_docs prompt generation."""
+    from wet_mcp.server import library_docs
+
+    result = library_docs("react", "how to use useEffect")
+
+    assert "Find documentation for 'react' to answer: how to use useEffect" in result
+    assert "action='docs'" in result
+    assert "query='how to use useEffect'" in result
+    assert "library='react'" in result
