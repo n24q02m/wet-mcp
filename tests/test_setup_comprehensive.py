@@ -88,9 +88,9 @@ def test_patch_searxng_version_exception(mock_find_dir):
 # Test patch_searxng_windows
 
 
-@patch("sys.platform", "win32")
+@patch("platform.system", return_value="Windows")
 @patch("wet_mcp.setup._find_searx_package_dir")
-def test_patch_searxng_windows_success(mock_find_dir):
+def test_patch_searxng_windows_success(mock_find_dir, mock_system):
     mock_dir = MagicMock(spec=Path)
     mock_find_dir.return_value = mock_dir
     mock_file = MagicMock(spec=Path)
@@ -115,16 +115,16 @@ def test_patch_searxng_windows_success(mock_find_dir):
     assert "if pwd and hasattr(os, 'getuid'):" in written_content
 
 
-@patch("sys.platform", "linux")
+@patch("platform.system", return_value="Linux")
 @patch("wet_mcp.setup._find_searx_package_dir")
-def test_patch_searxng_windows_not_win32(mock_find_dir):
+def test_patch_searxng_windows_not_win32(mock_find_dir, mock_system):
     patch_searxng_windows()
     mock_find_dir.assert_not_called()
 
 
-@patch("sys.platform", "win32")
+@patch("platform.system", return_value="Windows")
 @patch("wet_mcp.setup._find_searx_package_dir")
-def test_patch_searxng_windows_already_patched(mock_find_dir):
+def test_patch_searxng_windows_already_patched(mock_find_dir, mock_system):
     mock_dir = MagicMock(spec=Path)
     mock_find_dir.return_value = mock_dir
     mock_file = MagicMock(spec=Path)
@@ -138,9 +138,9 @@ def test_patch_searxng_windows_already_patched(mock_find_dir):
     mock_file.write_text.assert_not_called()
 
 
-@patch("sys.platform", "win32")
+@patch("platform.system", return_value="Windows")
 @patch("wet_mcp.setup._find_searx_package_dir")
-def test_patch_searxng_windows_no_pwd_import(mock_find_dir):
+def test_patch_searxng_windows_no_pwd_import(mock_find_dir, mock_system):
     mock_dir = MagicMock(spec=Path)
     mock_find_dir.return_value = mock_dir
     mock_file = MagicMock(spec=Path)
@@ -153,16 +153,16 @@ def test_patch_searxng_windows_no_pwd_import(mock_find_dir):
     mock_file.write_text.assert_not_called()
 
 
-@patch("sys.platform", "win32")
+@patch("platform.system", return_value="Windows")
 @patch("wet_mcp.setup._find_searx_package_dir")
-def test_patch_searxng_windows_no_dir(mock_find_dir):
+def test_patch_searxng_windows_no_dir(mock_find_dir, mock_system):
     mock_find_dir.return_value = None
     patch_searxng_windows()
 
 
-@patch("sys.platform", "win32")
+@patch("platform.system", return_value="Windows")
 @patch("wet_mcp.setup._find_searx_package_dir")
-def test_patch_searxng_windows_no_valkeydb(mock_find_dir):
+def test_patch_searxng_windows_no_valkeydb(mock_find_dir, mock_system):
     mock_dir = MagicMock(spec=Path)
     mock_find_dir.return_value = mock_dir
     mock_file = MagicMock(spec=Path)
@@ -173,9 +173,9 @@ def test_patch_searxng_windows_no_valkeydb(mock_find_dir):
     mock_file.read_text.assert_not_called()
 
 
-@patch("sys.platform", "win32")
+@patch("platform.system", return_value="Windows")
 @patch("wet_mcp.setup._find_searx_package_dir", side_effect=Exception("Test error"))
-def test_patch_searxng_windows_exception(mock_find_dir):
+def test_patch_searxng_windows_exception(mock_find_dir, mock_system):
     patch_searxng_windows()
 
 
