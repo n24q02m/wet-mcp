@@ -762,6 +762,7 @@ async def test_lifespan_startup_backend_init_error():
             new_callable=AsyncMock,
             side_effect=Exception("backend init error"),
         ),
+        patch("wet_mcp.setup.run_auto_setup"),
     ):
         async with server._lifespan(mock_fastmcp):
             # Allow background tasks to run

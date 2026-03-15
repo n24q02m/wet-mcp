@@ -761,9 +761,8 @@ async def _handle_restart_and_start() -> str:
         stderr_output = ""
         if _searxng_process.stderr:
             try:
-                stderr_output = _searxng_process.stderr.read().decode(errors="replace")[
-                    :500
-                ]
+                output_bytes = await asyncio.to_thread(_searxng_process.stderr.read)
+                stderr_output = output_bytes.decode(errors="replace")[:500]
             except Exception:
                 pass
         logger.warning(
