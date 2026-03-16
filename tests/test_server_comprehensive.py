@@ -749,7 +749,9 @@ async def test_lifespan_startup_no_github_token():
 
 
 @pytest.mark.asyncio
-async def test_lifespan_startup_backend_init_error():
+@patch("wet_mcp.setup.run_auto_setup", new_callable=AsyncMock)
+@patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock)
+async def test_lifespan_startup_backend_init_error(mock_warmup, mock_setup):
     """Test lifespan handles backend init failure gracefully (lines 134-136)."""
     mock_fastmcp = MagicMock()
     with (

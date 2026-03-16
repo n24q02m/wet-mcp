@@ -615,7 +615,7 @@ async def search(
     ),
 )
 @_wrap_tool("extract")
-async def extract(
+async def extract(  # noqa: PLR0913
     action: str,
     urls: list[str] | None = None,
     depth: int = 2,
