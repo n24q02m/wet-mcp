@@ -694,18 +694,17 @@ class DocsDB:
                 fts_params.append(candidate_limit)
 
                 rows = self._conn.execute(fts_sql, fts_params).fetchall()
-                if rows:
-                    for row in rows:
-                        chunk = dict(row)
-                        cid = chunk["id"]
-                        score = -chunk.pop("bm25_score", 0)
-                        # Keep the best score across tiers (PHRASE > AND > OR)
-                        if cid not in fts_scores or score > fts_scores[cid]:
-                            fts_scores[cid] = score
-                            fts_chunks[cid] = chunk
-                    # Stop once we have enough candidates across all tiers
-                    if len(fts_scores) >= candidate_limit:
-                        break
+                for row in rows:
+                    chunk = dict(row)
+                    cid = chunk["id"]
+                    score = -chunk.pop("bm25_score", 0)
+                    # Keep the best score across tiers (PHRASE > AND > OR)
+                    if cid not in fts_scores or score > fts_scores[cid]:
+                        fts_scores[cid] = score
+                        fts_chunks[cid] = chunk
+                # Stop once we have enough candidates across all tiers
+                if len(fts_scores) >= candidate_limit:
+                    break
             except Exception as e:
                 logger.debug(f"FTS search error: {e}")
                 continue
