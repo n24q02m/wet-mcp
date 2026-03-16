@@ -1250,27 +1250,24 @@ async def _background_index_and_search(
 
         # Generate embeddings
         embeddings = None
-        if all_chunks:
-            from wet_mcp.embedder import get_backend
+        from wet_mcp.embedder import get_backend
 
-            if get_backend() is not None:
-                embed_texts_list = []
-                for c in all_chunks:
-                    parts = []
-                    if c.get("title"):
-                        parts.append(c["title"])
-                    if c.get("heading_path") and c.get("heading_path") != c.get(
-                        "title"
-                    ):
-                        parts.append(c["heading_path"])
-                    parts.append(c["content"])
-                    embed_texts_list.append(" | ".join(parts)[:2000])
-                try:
-                    embeddings = await asyncio.wait_for(
-                        _embed_batch(embed_texts_list), timeout=_EMBED_TIMEOUT
-                    )
-                except TimeoutError:
-                    embeddings = None
+        if all_chunks and get_backend() is not None:
+            embed_texts_list = []
+            for c in all_chunks:
+                parts = []
+                if c.get("title"):
+                    parts.append(c["title"])
+                if c.get("heading_path") and c.get("heading_path") != c.get("title"):
+                    parts.append(c["heading_path"])
+                parts.append(c["content"])
+                embed_texts_list.append(" | ".join(parts)[:2000])
+            try:
+                embeddings = await asyncio.wait_for(
+                    _embed_batch(embed_texts_list), timeout=_EMBED_TIMEOUT
+                )
+            except TimeoutError:
+                embeddings = None
 
         # Store chunks
         _docs_db.add_chunks(
