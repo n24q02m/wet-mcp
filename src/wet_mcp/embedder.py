@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
-import time
+import threading
 from typing import Protocol
 
 from loguru import logger
@@ -153,7 +153,7 @@ class LiteLLMBackend:
                         f"Embedding retry {attempt + 1}/{MAX_RETRIES} "
                         f"after {delay}s: {e}"
                     )
-                    time.sleep(delay)
+                    threading.Event().wait(delay)
                 else:
                     break
 

@@ -205,7 +205,7 @@ class TestBatchSplitting:
 
 
 class TestRetryLogic:
-    @patch("wet_mcp.embedder.time.sleep")
+    @patch("wet_mcp.embedder.threading.Event.wait")
     def test_retries_on_rate_limit(self, mock_sleep):
         """Retries on rate limit errors with exponential backoff."""
         backend = LiteLLMBackend("test-model")
@@ -225,7 +225,7 @@ class TestRetryLogic:
         assert result == [[0.1]]
         mock_sleep.assert_called_once_with(1.0)
 
-    @patch("wet_mcp.embedder.time.sleep")
+    @patch("wet_mcp.embedder.threading.Event.wait")
     def test_retries_on_server_error(self, mock_sleep):
         """Retries on 5xx server errors."""
         backend = LiteLLMBackend("test-model")
@@ -244,7 +244,7 @@ class TestRetryLogic:
 
         assert result == [[0.2]]
 
-    @patch("wet_mcp.embedder.time.sleep")
+    @patch("wet_mcp.embedder.threading.Event.wait")
     def test_no_retry_on_non_retryable(self, mock_sleep):
         """Non-retryable errors fail immediately without retry."""
         backend = LiteLLMBackend("test-model")
@@ -258,7 +258,7 @@ class TestRetryLogic:
 
         mock_sleep.assert_not_called()
 
-    @patch("wet_mcp.embedder.time.sleep")
+    @patch("wet_mcp.embedder.threading.Event.wait")
     def test_exponential_backoff(self, mock_sleep):
         """Retry delays use exponential backoff."""
         backend = LiteLLMBackend("test-model")
@@ -278,7 +278,7 @@ class TestRetryLogic:
 
         assert mock_sleep.call_args_list == [call(1.0), call(2.0)]
 
-    @patch("wet_mcp.embedder.time.sleep")
+    @patch("wet_mcp.embedder.threading.Event.wait")
     def test_max_retries_exhausted(self, mock_sleep):
         """Raises after all retries are exhausted."""
         backend = LiteLLMBackend("test-model")
