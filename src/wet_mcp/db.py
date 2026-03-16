@@ -676,9 +676,11 @@ class DocsDB:
             try:
                 fts_sql = """
                     SELECT c.*,
+                           l.name AS _library_name,
                            bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
                     FROM doc_chunks_fts f
                     JOIN doc_chunks c ON f.id = c.id
+                    LEFT JOIN libraries l ON c.library_id = l.id
                     WHERE doc_chunks_fts MATCH ?
                 """
                 fts_params: list = [fts_query]
@@ -725,9 +727,10 @@ class DocsDB:
         if self._vec_enabled and query_embedding:
             try:
                 vec_sql = """
-                    SELECT v.id, v.distance, c.*
+                    SELECT v.id, v.distance, c.*, l.name AS _library_name
                     FROM doc_chunks_vec v
                     JOIN doc_chunks c ON v.id = c.id
+                    LEFT JOIN libraries l ON c.library_id = l.id
                     WHERE v.embedding MATCH ?
                 """
                 vec_params: list = [_serialize_f32(query_embedding)]
@@ -764,19 +767,6 @@ class DocsDB:
         max_per_url = 2
         url_counts: dict[str, int] = {}
         results = []
-
-        # Pre-fetch library names for all candidate chunks to avoid N+1 queries.
-        all_library_ids = {
-            c["library_id"] for c in fts_chunks.values() if c.get("library_id")
-        }
-        lib_name_map: dict[str, str] = {}
-        if all_library_ids:
-            placeholders = ",".join("?" for _ in all_library_ids)
-            lib_rows = self._conn.execute(
-                f"SELECT id, name FROM libraries WHERE id IN ({placeholders})",
-                list(all_library_ids),
-            ).fetchall()
-            lib_name_map = {r["id"]: r["name"] for r in lib_rows}
 
         # ---- Prefetch adjacent chunks in one batch query ----
         _adj_keys: list[tuple[str, str, int]] = []
@@ -830,7 +820,7 @@ class DocsDB:
                 "title": chunk.get("title", ""),
                 "url": chunk.get("url", ""),
                 "heading_path": chunk.get("heading_path", ""),
-                "library": lib_name_map.get(chunk.get("library_id", ""), ""),
+                "library": chunk.get("_library_name", ""),
                 "score": round(score, 4),
             }
 
