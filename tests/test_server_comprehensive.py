@@ -757,6 +757,8 @@ async def test_lifespan_startup_backend_init_error():
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
+        patch("wet_mcp.setup.run_auto_setup", new_callable=AsyncMock),
         patch(
             "wet_mcp.server._init_embedding_backend",
             new_callable=AsyncMock,
