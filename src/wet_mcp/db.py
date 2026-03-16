@@ -14,6 +14,7 @@ import sqlite3
 import struct
 import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
@@ -120,6 +121,16 @@ def _chunk_quality_score(content: str) -> float:
 
     # Normalize to 0-1 range (wider range due to more signals)
     return max(0.0, min(score / 12.0, 1.0))
+
+
+@dataclass
+class SearchFilters:
+    """Filters for docs search."""
+
+    library_name: str | None = None
+    version: str | None = None
+    limit: int = 10
+    query_embedding: list[float] | None = None
 
 
 class DocsDB:
@@ -625,10 +636,7 @@ class DocsDB:
     def search(
         self,
         query: str,
-        library_name: str | None = None,
-        version: str | None = None,
-        limit: int = 10,
-        query_embedding: list[float] | None = None,
+        filters: SearchFilters | None = None,
     ) -> list[dict]:
         """Hybrid search: FTS5 + optional vector + quality scoring.
 
@@ -640,28 +648,27 @@ class DocsDB:
 
         Args:
             query: Search query text
-            library_name: Filter by library name
-            version: Filter by version
-            limit: Max results
-            query_embedding: Optional embedding vector for semantic search
+            filters: Optional search filters and parameters
 
         Returns:
             List of chunk dicts sorted by relevance score
         """
+        filters = filters or SearchFilters()
+
         # Resolve library/version filters
         library_id = None
         version_id = None
-        if library_name:
-            lib = self.get_library(library_name)
+        if filters.library_name:
+            lib = self.get_library(filters.library_name)
             if not lib:
                 return []
             library_id = lib["id"]
-            if version:
-                ver = self.get_best_version(library_id, version)
+            if filters.version:
+                ver = self.get_best_version(library_id, filters.version)
                 if ver:
                     version_id = ver["id"]
 
-        candidate_limit = limit * 3
+        candidate_limit = filters.limit * 3
 
         # --- FTS5 search with tiered queries + BM25 column weights ---
         # Weights: id(0), content(2), title(3), heading_path(2)
@@ -722,7 +729,7 @@ class DocsDB:
 
         # --- Vector search ---
         vec_scores: dict[str, float] = {}
-        if self._vec_enabled and query_embedding:
+        if self._vec_enabled and filters.query_embedding:
             try:
                 vec_sql = """
                     SELECT v.id, v.distance, c.*
@@ -730,7 +737,7 @@ class DocsDB:
                     JOIN doc_chunks c ON v.id = c.id
                     WHERE v.embedding MATCH ?
                 """
-                vec_params: list = [_serialize_f32(query_embedding)]
+                vec_params: list = [_serialize_f32(filters.query_embedding)]
 
                 if library_id:
                     vec_sql += " AND c.library_id = ?"
@@ -814,7 +821,7 @@ class DocsDB:
                     ]
 
         for cid, score in scored:
-            if len(results) >= limit:
+            if len(results) >= filters.limit:
                 break
             chunk = fts_chunks.get(cid)
             if not chunk:

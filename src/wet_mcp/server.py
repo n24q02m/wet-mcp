@@ -16,7 +16,7 @@ from mcp.types import ToolAnnotations
 
 from wet_mcp.cache import WebCache
 from wet_mcp.config import settings
-from wet_mcp.db import DocsDB
+from wet_mcp.db import DocsDB, SearchFilters
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 from wet_mcp.security import wrap_external_content
 from wet_mcp.sources.crawler import (
@@ -1328,10 +1328,12 @@ async def _search_cached_index(
 
     results = _docs_db.search(
         query=query,
-        library_name=lib_key,
-        version=version,
-        limit=retrieve_limit,
-        query_embedding=query_embedding,
+        filters=SearchFilters(
+            library_name=lib_key,
+            version=version,
+            limit=retrieve_limit,
+            query_embedding=query_embedding,
+        ),
     )
 
     if not results:

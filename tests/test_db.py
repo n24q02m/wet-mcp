@@ -16,41 +16,29 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Bootstrap: load wet_mcp.db directly from file without triggering the
-# package __init__.py (which imports crawl4ai -> numpy, a flaky dep).
-# We pre-register stub parent packages and the docs module so that
-# ``from wet_mcp.sources.docs import DISCOVERY_VERSION`` resolves cleanly.
-# ---------------------------------------------------------------------------
 _src_root = Path(__file__).resolve().parent.parent / "src"
-
 if "wet_mcp" not in sys.modules:
     _pkg = types.ModuleType("wet_mcp")
     _pkg.__path__ = [str(_src_root / "wet_mcp")]
     sys.modules["wet_mcp"] = _pkg
-
 if "wet_mcp.sources" not in sys.modules:
     _sources_pkg = types.ModuleType("wet_mcp.sources")
     _sources_pkg.__path__ = [str(_src_root / "wet_mcp" / "sources")]
     sys.modules["wet_mcp.sources"] = _sources_pkg
-
-# Load docs module (lightweight — no crawl4ai dependency)
 _docs_file = _src_root / "wet_mcp" / "sources" / "docs.py"
 _docs_spec = importlib.util.spec_from_file_location("wet_mcp.sources.docs", _docs_file)
 assert _docs_spec is not None
 _docs_mod = importlib.util.module_from_spec(_docs_spec)
 sys.modules["wet_mcp.sources.docs"] = _docs_mod
 _docs_spec.loader.exec_module(_docs_mod)
-
-# Now load db module
 _db_file = _src_root / "wet_mcp" / "db.py"
 _db_spec = importlib.util.spec_from_file_location("wet_mcp.db", _db_file)
 assert _db_spec is not None
 _db_mod = importlib.util.module_from_spec(_db_spec)
 sys.modules["wet_mcp.db"] = _db_mod
 _db_spec.loader.exec_module(_db_mod)
-
 DocsDB = _db_mod.DocsDB
+SearchFilters = _db_mod.SearchFilters
 _build_fts_queries = _db_mod._build_fts_queries
 _chunk_quality_score = _db_mod._chunk_quality_score
 _serialize_f32 = _db_mod._serialize_f32
@@ -107,12 +95,7 @@ def db_with_data(db):
     ]
     db.add_chunks(ver_id, lib_id, chunks)
     db.mark_version_indexed(ver_id, page_count=4, chunk_count=4)
-    return db, lib_id, ver_id
-
-
-# -----------------------------------------------------------------------
-# Library CRUD
-# -----------------------------------------------------------------------
+    return (db, lib_id, ver_id)
 
 
 class TestLibraryCRUD:
@@ -125,7 +108,7 @@ class TestLibraryCRUD:
             description="UI library",
         )
         assert lib_id
-        lib = db.get_library("react")  # name is lowercased
+        lib = db.get_library("react")
         assert lib is not None
         assert lib["name"] == "react"
         assert lib["docs_url"] == "https://react.dev"
@@ -169,17 +152,11 @@ class TestLibraryCRUD:
         assert lib["name"] == "pytorch"
 
 
-# -----------------------------------------------------------------------
-# Version management
-# -----------------------------------------------------------------------
-
-
 class TestVersionManagement:
     def test_upsert_version(self, db):
         lib_id = db.upsert_library(name="react")
         ver_id = db.upsert_version(lib_id, version="18.2.0")
         assert ver_id
-        # Same version returns same ID
         ver_id2 = db.upsert_version(lib_id, version="18.2.0")
         assert ver_id == ver_id2
 
@@ -198,7 +175,6 @@ class TestVersionManagement:
     def test_get_best_version_nonexistent(self, db_with_data):
         db, lib_id, _ = db_with_data
         ver = db.get_best_version(lib_id, "99.99.99")
-        # Should fallback to latest indexed
         assert ver is not None
 
     def test_mark_version_indexed(self, db):
@@ -211,24 +187,22 @@ class TestVersionManagement:
         assert ver["chunk_count"] == 20
 
 
-# -----------------------------------------------------------------------
-# Chunks & Search
-# -----------------------------------------------------------------------
-
-
 class TestSearch:
     def test_fts_search_basic(self, db_with_data):
         """FTS5 search returns relevant results."""
         db = db_with_data[0]
-        results = db.search(query="route decorator", library_name="fastapi")
+        results = db.search(
+            query="route decorator", filters=SearchFilters(library_name="fastapi")
+        )
         assert len(results) > 0
-        # The routing chunk should be most relevant
         assert any("route" in r["content"].lower() for r in results)
 
     def test_fts_search_returns_scored(self, db_with_data):
         """All results have a score > 0."""
         db = db_with_data[0]
-        results = db.search(query="dependencies", library_name="fastapi")
+        results = db.search(
+            query="dependencies", filters=SearchFilters(library_name="fastapi")
+        )
         for r in results:
             assert "score" in r
             assert r["score"] > 0
@@ -236,19 +210,25 @@ class TestSearch:
     def test_fts_search_limit(self, db_with_data):
         """Limit parameter is respected."""
         db = db_with_data[0]
-        results = db.search(query="FastAPI", library_name="fastapi", limit=2)
+        results = db.search(
+            query="FastAPI", filters=SearchFilters(library_name="fastapi", limit=2)
+        )
         assert len(results) <= 2
 
     def test_fts_search_no_results(self, db_with_data):
         """Query with no matches returns empty."""
         db = db_with_data[0]
-        results = db.search(query="xyznonexistentterm", library_name="fastapi")
+        results = db.search(
+            query="xyznonexistentterm", filters=SearchFilters(library_name="fastapi")
+        )
         assert results == []
 
     def test_fts_search_unknown_library(self, db_with_data):
         """Search for nonexistent library returns empty."""
         db = db_with_data[0]
-        results = db.search(query="anything", library_name="nonexistent")
+        results = db.search(
+            query="anything", filters=SearchFilters(library_name="nonexistent")
+        )
         assert results == []
 
     def test_fts_search_special_characters(self, db):
@@ -263,8 +243,9 @@ class TestSearch:
                 {"content": "Query: ?skip=0&limit=10 supports pagination."},
             ],
         )
-        # Should not raise even with FTS-hostile characters
-        results = db.search(query="@app.get path params", library_name="test")
+        results = db.search(
+            query="@app.get path params", filters=SearchFilters(library_name="test")
+        )
         assert isinstance(results, list)
 
     def test_fts_search_unicode(self, db):
@@ -279,14 +260,18 @@ class TestSearch:
                 {"content": "Japanese: Sumimasen, arigatou gozaimasu"},
             ],
         )
-        results = db.search(query="Bonjour", library_name="i18n-lib")
+        results = db.search(
+            query="Bonjour", filters=SearchFilters(library_name="i18n-lib")
+        )
         assert len(results) > 0
         assert "Bonjour" in results[0]["content"]
 
     def test_search_result_format(self, db_with_data):
         """Each result has all expected fields."""
         db = db_with_data[0]
-        results = db.search(query="FastAPI", library_name="fastapi")
+        results = db.search(
+            query="FastAPI", filters=SearchFilters(library_name="fastapi")
+        )
         assert len(results) > 0
         r = results[0]
         assert "content" in r
@@ -300,22 +285,16 @@ class TestSearch:
     def test_search_with_version_filter(self, db_with_data):
         """Search filtered to specific version."""
         db, lib_id, _ = db_with_data
-        # Add another version with different content
         ver2_id = db.upsert_version(lib_id, "0.99.0")
         db.add_chunks(
             ver2_id,
             lib_id,
-            [
-                {"content": "Old deprecated routing system uses @app.route()."},
-            ],
+            [{"content": "Old deprecated routing system uses @app.route()."}],
         )
         db.mark_version_indexed(ver2_id, 1, 1)
-
-        # Search v0.99.0 should find "deprecated"
         results = db.search(
             query="deprecated routing",
-            library_name="fastapi",
-            version="0.99.0",
+            filters=SearchFilters(library_name="fastapi", version="0.99.0"),
         )
         assert any("deprecated" in r["content"].lower() for r in results)
 
@@ -336,8 +315,8 @@ class TestRecencyScoring:
     def test_chunk_quality_long_content(self):
         """Longer content gets moderate quality boost."""
         short = "Short text."
-        medium = "x " * 150  # ~300 chars
-        long = "x " * 300  # ~600 chars
+        medium = "x " * 150
+        long = "x " * 300
         assert _chunk_quality_score(long) >= _chunk_quality_score(medium)
         assert _chunk_quality_score(medium) >= _chunk_quality_score(short)
 
@@ -361,11 +340,8 @@ class TestPhraseTierQueries:
         """Multi-word query returns 3 tiers: PHRASE, AND, OR."""
         queries = _build_fts_queries("path parameters")
         assert len(queries) == 3
-        # Tier 0: exact phrase
         assert queries[0] == '"path parameters"'
-        # Tier 1: AND
         assert "AND" in queries[1]
-        # Tier 2: OR
         assert "OR" in queries[2]
 
     def test_empty_query(self):
@@ -376,16 +352,15 @@ class TestPhraseTierQueries:
     def test_quotes_escaped(self):
         """Double quotes in input are escaped."""
         queries = _build_fts_queries('say "hello"')
-        # Should not break FTS syntax
         assert len(queries) == 3
 
     def test_phrase_search_ranks_higher(self, db_with_data):
         """Exact phrase match should rank higher than scattered terms."""
         db = db_with_data[0]
-        # "path parameters" appears together in routing chunk
-        results = db.search(query="path parameters", library_name="fastapi")
+        results = db.search(
+            query="path parameters", filters=SearchFilters(library_name="fastapi")
+        )
         assert len(results) > 0
-        # First result should contain both words
         assert "path" in results[0]["content"].lower()
 
 
@@ -414,15 +389,14 @@ class TestCrossChunkContext:
             },
         ]
         db.add_chunks(ver_id, lib_id, chunks)
-
-        results = db.search(query="routing path", library_name="ctx-test")
+        results = db.search(
+            query="routing path", filters=SearchFilters(library_name="ctx-test")
+        )
         assert len(results) > 0
-        # Chunk 1 should match "routing path"
         routing_result = next(
             (r for r in results if "routing" in r["content"].lower()), None
         )
         assert routing_result is not None
-        # Should have context from adjacent chunks
         assert "context_before" in routing_result
         assert "Introduction" in routing_result["context_before"]
         assert "context_after" in routing_result
@@ -445,8 +419,9 @@ class TestCrossChunkContext:
             },
         ]
         db.add_chunks(ver_id, lib_id, chunks)
-
-        results = db.search(query="routing setup", library_name="first-chunk")
+        results = db.search(
+            query="routing setup", filters=SearchFilters(library_name="first-chunk")
+        )
         assert len(results) > 0
         first = results[0]
         assert "context_before" not in first
@@ -469,8 +444,9 @@ class TestCrossChunkContext:
             },
         ]
         db.add_chunks(ver_id, lib_id, chunks)
-
-        results = db.search(query="deployment routing", library_name="last-chunk")
+        results = db.search(
+            query="deployment routing", filters=SearchFilters(library_name="last-chunk")
+        )
         assert len(results) > 0
         last = next((r for r in results if "deployment" in r["content"].lower()), None)
         assert last is not None
@@ -485,11 +461,7 @@ class TestChunksCRUD:
         count = db.add_chunks(
             ver_id,
             lib_id,
-            [
-                {"content": "chunk 1"},
-                {"content": "chunk 2"},
-                {"content": "chunk 3"},
-            ],
+            [{"content": "chunk 1"}, {"content": "chunk 2"}, {"content": "chunk 3"}],
         )
         assert count == 3
         cleared = db.clear_version_chunks(ver_id)
@@ -501,14 +473,11 @@ class TestChunksCRUD:
         ver_id = db.upsert_version(lib_id)
         count = db.add_chunks(ver_id, lib_id, [{"content": "just content"}])
         assert count == 1
-        results = db.search(query="just content", library_name="minimal")
+        results = db.search(
+            query="just content", filters=SearchFilters(library_name="minimal")
+        )
         assert len(results) == 1
         assert results[0]["content"] == "just content"
-
-
-# -----------------------------------------------------------------------
-# JSONL Export / Import
-# -----------------------------------------------------------------------
 
 
 class TestJSONLSync:
@@ -521,24 +490,20 @@ class TestJSONLSync:
         src_db = db_with_data[0]
         jsonl = src_db.export_jsonl()
         assert jsonl.strip()
-
-        # Parse and verify structure
         lines = [json.loads(line) for line in jsonl.strip().split("\n")]
         types = [item["_type"] for item in lines]
         assert "library" in types
         assert "version" in types
         assert "chunk" in types
-
-        # Import into fresh DB
         dst_db = DocsDB(tmp_path / "dst.db", embedding_dims=0)
         try:
             stats = dst_db.import_jsonl(jsonl, mode="replace")
             assert stats["libraries"] == 1
             assert stats["versions"] == 1
             assert stats["chunks"] == 4
-
-            # Verify data is searchable
-            results = dst_db.search(query="route decorator", library_name="fastapi")
+            results = dst_db.search(
+                query="route decorator", filters=SearchFilters(library_name="fastapi")
+            )
             assert len(results) > 0
         finally:
             dst_db.close()
@@ -547,15 +512,11 @@ class TestJSONLSync:
         """Merge mode skips existing records."""
         src_db = db_with_data[0]
         jsonl = src_db.export_jsonl()
-
         dst_db = DocsDB(tmp_path / "dst.db", embedding_dims=0)
         try:
-            # First import
             stats1 = dst_db.import_jsonl(jsonl, mode="merge")
             assert stats1["libraries"] == 1
             assert stats1["skipped"] == 0
-
-            # Second import — all should be skipped
             stats2 = dst_db.import_jsonl(jsonl, mode="merge")
             assert stats2["libraries"] == 0
             assert stats2["skipped"] > 0
@@ -566,23 +527,14 @@ class TestJSONLSync:
         """Replace mode clears existing data before import."""
         src_db = db_with_data[0]
         jsonl = src_db.export_jsonl()
-
         dst_db = DocsDB(tmp_path / "dst.db", embedding_dims=0)
         try:
-            # First import
             dst_db.import_jsonl(jsonl, mode="replace")
-
-            # Second import with replace — should not fail
             stats = dst_db.import_jsonl(jsonl, mode="replace")
             assert stats["libraries"] == 1
             assert stats["chunks"] == 4
         finally:
             dst_db.close()
-
-
-# -----------------------------------------------------------------------
-# Edge cases
-# -----------------------------------------------------------------------
 
 
 class TestEdgeCases:
@@ -592,7 +544,6 @@ class TestEdgeCases:
         db1 = DocsDB(db_path, embedding_dims=0)
         db1.upsert_library(name="persist-test", docs_url="https://example.com")
         db1.close()
-
         db2 = DocsDB(db_path, embedding_dims=0)
         lib = db2.get_library("persist-test")
         assert lib is not None
@@ -602,41 +553,31 @@ class TestEdgeCases:
     def test_empty_query(self, db_with_data):
         """Empty query should not crash."""
         db = db_with_data[0]
-        results = db.search(query="", library_name="fastapi")
+        results = db.search(query="", filters=SearchFilters(library_name="fastapi"))
         assert isinstance(results, list)
 
     def test_single_word_query(self, db_with_data):
         """Single word queries work."""
         db = db_with_data[0]
-        results = db.search(query="WebSocket", library_name="fastapi")
+        results = db.search(
+            query="WebSocket", filters=SearchFilters(library_name="fastapi")
+        )
         assert len(results) > 0
 
     def test_multiple_libraries(self, db):
         """Search is scoped to specified library."""
-        # Library A
         id_a = db.upsert_library(name="lib-a")
         ver_a = db.upsert_version(id_a)
-        db.add_chunks(
-            ver_a,
-            id_a,
-            [
-                {"content": "Alpha library routing system."},
-            ],
-        )
-        # Library B
+        db.add_chunks(ver_a, id_a, [{"content": "Alpha library routing system."}])
         id_b = db.upsert_library(name="lib-b")
         ver_b = db.upsert_version(id_b)
-        db.add_chunks(
-            ver_b,
-            id_b,
-            [
-                {"content": "Beta library routing system."},
-            ],
+        db.add_chunks(ver_b, id_b, [{"content": "Beta library routing system."}])
+        results_a = db.search(
+            query="routing", filters=SearchFilters(library_name="lib-a")
         )
-
-        results_a = db.search(query="routing", library_name="lib-a")
-        results_b = db.search(query="routing", library_name="lib-b")
-
+        results_b = db.search(
+            query="routing", filters=SearchFilters(library_name="lib-b")
+        )
         assert all(r["library"] == "lib-a" for r in results_a)
         assert all(r["library"] == "lib-b" for r in results_b)
 
@@ -644,25 +585,13 @@ class TestEdgeCases:
         """Removing a library deletes all versions and chunks."""
         lib_id = db.upsert_library(name="cascade")
         ver_id = db.upsert_version(lib_id)
-        db.add_chunks(
-            ver_id,
-            lib_id,
-            [
-                {"content": "cascade test chunk"},
-            ],
-        )
+        db.add_chunks(ver_id, lib_id, [{"content": "cascade test chunk"}])
         db.mark_version_indexed(ver_id, 1, 1)
-
         db.remove_library("cascade")
-
-        # Chunks should be gone
-        results = db.search(query="cascade", library_name="cascade")
+        results = db.search(
+            query="cascade", filters=SearchFilters(library_name="cascade")
+        )
         assert results == []
-
-
-# -----------------------------------------------------------------------
-# sqlite-vec extension loading and vector table creation (lines 141-151, 266-271)
-# -----------------------------------------------------------------------
 
 
 class TestSqliteVecLoading:
@@ -673,7 +602,6 @@ class TestSqliteVecLoading:
         db = DocsDB(tmp_path / "vec_test.db", embedding_dims=4)
         try:
             assert db._vec_enabled is True
-            # Verify the vector table was created
             row = db._conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
             ).fetchone()
@@ -703,17 +631,11 @@ class TestSqliteVecLoading:
         db_path = tmp_path / "vec_reopen.db"
         db1 = DocsDB(db_path, embedding_dims=4)
         db1.close()
-        # Re-open — should not try to CREATE again
         db2 = DocsDB(db_path, embedding_dims=4)
         try:
             assert db2._vec_enabled is True
         finally:
             db2.close()
-
-
-# -----------------------------------------------------------------------
-# _serialize_f32 (line 27)
-# -----------------------------------------------------------------------
 
 
 class TestSerializeF32:
@@ -722,10 +644,10 @@ class TestSerializeF32:
         vec = [1.0, 2.5, -3.0, 0.0]
         data = _serialize_f32(vec)
         assert isinstance(data, bytes)
-        assert len(data) == 4 * 4  # 4 floats * 4 bytes each
+        assert len(data) == 4 * 4
         unpacked = struct.unpack(f"{len(vec)}f", data)
         for a, b in zip(vec, unpacked, strict=True):
-            assert abs(a - b) < 1e-6
+            assert abs(a - b) < 1e-06
 
     def test_serialize_empty_vector(self):
         """Empty vector produces empty bytes."""
@@ -733,16 +655,10 @@ class TestSerializeF32:
         assert data == b""
 
 
-# -----------------------------------------------------------------------
-# upsert_library() update and insert paths (lines 328-332)
-# -----------------------------------------------------------------------
-
-
 class TestUpsertLibraryPaths:
     def test_upsert_update_registry_and_description(self, db):
         """Updating registry and description on existing library."""
         lib_id = db.upsert_library(name="mylib", docs_url="https://a.com")
-        # Update with registry and description
         lib_id2 = db.upsert_library(
             name="mylib", registry="npm", description="A great lib"
         )
@@ -759,7 +675,6 @@ class TestUpsertLibraryPaths:
         db.upsert_library(name="mylib", registry="pypi")
         lib = db.get_library("mylib")
         assert lib["registry"] == "pypi"
-        # description should remain from original insert
         assert lib["description"] == "original"
 
     def test_upsert_update_only_description(self, db):
@@ -785,11 +700,6 @@ class TestUpsertLibraryPaths:
         assert lib["description"] == "A Rust library"
 
 
-# -----------------------------------------------------------------------
-# remove_library() bulk vector deletion (lines 396-403)
-# -----------------------------------------------------------------------
-
-
 class TestRemoveLibraryVec:
     def test_remove_library_with_vec_enabled(self, tmp_path):
         """remove_library deletes vector entries when vec is enabled."""
@@ -804,15 +714,11 @@ class TestRemoveLibraryVec:
                 [{"content": "vec chunk 1"}, {"content": "vec chunk 2"}],
                 embeddings=embeddings,
             )
-            # Verify vec entries exist
             vec_count = db._conn.execute(
                 "SELECT COUNT(*) FROM doc_chunks_vec"
             ).fetchone()[0]
             assert vec_count == 2
-
             db.remove_library("veclib")
-
-            # Vec entries should be gone
             vec_count = db._conn.execute(
                 "SELECT COUNT(*) FROM doc_chunks_vec"
             ).fetchone()[0]
@@ -827,21 +733,12 @@ class TestRemoveLibraryVec:
             lib_id = db.upsert_library(name="veclib2")
             ver_id = db.upsert_version(lib_id)
             db.add_chunks(ver_id, lib_id, [{"content": "test chunk"}])
-
-            # Simulate vec table error by dropping it
             db._conn.execute("DROP TABLE doc_chunks_vec")
             db._conn.commit()
-
-            # Should not raise
             result = db.remove_library("veclib2")
             assert result is True
         finally:
             db.close()
-
-
-# -----------------------------------------------------------------------
-# add_chunks() vector embedding batch insert (lines 526-540)
-# -----------------------------------------------------------------------
 
 
 class TestAddChunksVec:
@@ -859,15 +756,10 @@ class TestAddChunksVec:
             count = db.add_chunks(
                 ver_id,
                 lib_id,
-                [
-                    {"content": "alpha"},
-                    {"content": "beta"},
-                    {"content": "gamma"},
-                ],
+                [{"content": "alpha"}, {"content": "beta"}, {"content": "gamma"}],
                 embeddings=embeddings,
             )
             assert count == 3
-
             vec_count = db._conn.execute(
                 "SELECT COUNT(*) FROM doc_chunks_vec"
             ).fetchone()[0]
@@ -881,25 +773,17 @@ class TestAddChunksVec:
         try:
             lib_id = db.upsert_library(name="emblib2")
             ver_id = db.upsert_version(lib_id)
-            embeddings = [
-                [1.0, 0.0, 0.0, 0.0],
-                [],  # empty — should be skipped
-                [0.0, 0.0, 1.0, 0.0],
-            ]
+            embeddings = [[1.0, 0.0, 0.0, 0.0], [], [0.0, 0.0, 1.0, 0.0]]
             db.add_chunks(
                 ver_id,
                 lib_id,
-                [
-                    {"content": "alpha"},
-                    {"content": "beta"},
-                    {"content": "gamma"},
-                ],
+                [{"content": "alpha"}, {"content": "beta"}, {"content": "gamma"}],
                 embeddings=embeddings,
             )
             vec_count = db._conn.execute(
                 "SELECT COUNT(*) FROM doc_chunks_vec"
             ).fetchone()[0]
-            assert vec_count == 2  # only 2 non-empty embeddings
+            assert vec_count == 2
         finally:
             db.close()
 
@@ -909,20 +793,13 @@ class TestAddChunksVec:
         try:
             lib_id = db.upsert_library(name="emblib3")
             ver_id = db.upsert_version(lib_id)
-
-            # Drop vec table to force insert error
             db._conn.execute("DROP TABLE doc_chunks_vec")
             db._conn.commit()
-
             embeddings = [[1.0, 0.0, 0.0, 0.0]]
-            # Should not raise — error caught in except block
             count = db.add_chunks(
-                ver_id,
-                lib_id,
-                [{"content": "test"}],
-                embeddings=embeddings,
+                ver_id, lib_id, [{"content": "test"}], embeddings=embeddings
             )
-            assert count == 1  # doc chunks still inserted
+            assert count == 1
         finally:
             db.close()
 
@@ -932,11 +809,7 @@ class TestAddChunksVec:
         try:
             lib_id = db.upsert_library(name="noemblib")
             ver_id = db.upsert_version(lib_id)
-            count = db.add_chunks(
-                ver_id,
-                lib_id,
-                [{"content": "no embedding chunk"}],
-            )
+            count = db.add_chunks(ver_id, lib_id, [{"content": "no embedding chunk"}])
             assert count == 1
             vec_count = db._conn.execute(
                 "SELECT COUNT(*) FROM doc_chunks_vec"
@@ -944,11 +817,6 @@ class TestAddChunksVec:
             assert vec_count == 0
         finally:
             db.close()
-
-
-# -----------------------------------------------------------------------
-# clear_version_chunks() vec deletion (lines 550-557)
-# -----------------------------------------------------------------------
 
 
 class TestClearVersionChunksVec:
@@ -968,10 +836,8 @@ class TestClearVersionChunksVec:
                 "SELECT COUNT(*) FROM doc_chunks_vec"
             ).fetchone()[0]
             assert vec_before == 1
-
             cleared = db.clear_version_chunks(ver_id)
             assert cleared == 1
-
             vec_after = db._conn.execute(
                 "SELECT COUNT(*) FROM doc_chunks_vec"
             ).fetchone()[0]
@@ -986,21 +852,12 @@ class TestClearVersionChunksVec:
             lib_id = db.upsert_library(name="clearlib2")
             ver_id = db.upsert_version(lib_id)
             db.add_chunks(ver_id, lib_id, [{"content": "to clear"}])
-
-            # Drop vec table to force error
             db._conn.execute("DROP TABLE doc_chunks_vec")
             db._conn.commit()
-
-            # Should not raise
             cleared = db.clear_version_chunks(ver_id)
             assert cleared == 1
         finally:
             db.close()
-
-
-# -----------------------------------------------------------------------
-# _combine_scores() RRF fusion scoring (lines 581-598)
-# -----------------------------------------------------------------------
 
 
 class TestCombineScores:
@@ -1015,11 +872,9 @@ class TestCombineScores:
         }
         scored = db._combine_scores(fts_scores, vec_scores, fts_chunks)
         assert len(scored) == 3
-        # All tuples have (id, score)
         for cid, score in scored:
             assert isinstance(cid, str)
             assert isinstance(score, float)
-        # Sorted descending
         scores_only = [s for _, s in scored]
         assert scores_only == sorted(scores_only, reverse=True)
 
@@ -1027,13 +882,9 @@ class TestCombineScores:
         """FTS-only scoring when no vec scores provided."""
         fts_scores = {"a": 0.9, "b": 0.3}
         vec_scores = {}
-        fts_chunks = {
-            "a": {"content": "def foo(): pass"},
-            "b": {"content": "short"},
-        }
+        fts_chunks = {"a": {"content": "def foo(): pass"}, "b": {"content": "short"}}
         scored = db._combine_scores(fts_scores, vec_scores, fts_chunks)
         assert len(scored) == 2
-        # "a" should score higher (better FTS + code quality)
         assert scored[0][0] == "a"
 
     def test_rrf_with_missing_chunk_data(self, db):
@@ -1047,14 +898,9 @@ class TestCombineScores:
     def test_fts_only_with_missing_chunk(self, db):
         """FTS-only with missing chunk data uses quality=0."""
         fts_scores = {"a": 0.9, "b": 0.5}
-        fts_chunks = {"a": {"content": "text"}}  # "b" missing
+        fts_chunks = {"a": {"content": "text"}}
         scored = db._combine_scores(fts_scores, {}, fts_chunks)
         assert len(scored) == 2
-
-
-# -----------------------------------------------------------------------
-# search() vector search via sqlite-vec (lines 712-743)
-# -----------------------------------------------------------------------
 
 
 class TestSearchWithVec:
@@ -1076,16 +922,13 @@ class TestSearchWithVec:
             ]
             db.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
             db.mark_version_indexed(ver_id, 3, 3)
-
-            # Search with query embedding — vec search may fail on some
-            # sqlite-vec versions but FTS fallback should still work
             results = db.search(
                 query="vector embeddings",
-                library_name="hybridlib",
-                query_embedding=[0.9, 0.1, 0.0, 0.0],
+                filters=SearchFilters(
+                    library_name="hybridlib", query_embedding=[0.9, 0.1, 0.0, 0.0]
+                ),
             )
             assert len(results) > 0
-            # Results should have scores >= 0
             for r in results:
                 assert r["score"] >= 0
         finally:
@@ -1112,12 +955,13 @@ class TestSearchWithVec:
             )
             db.mark_version_indexed(ver1, 1, 1)
             db.mark_version_indexed(ver2, 1, 1)
-
             results = db.search(
                 query="search",
-                library_name="vecverlib",
-                version="1.0",
-                query_embedding=[1.0, 0.0, 0.0, 0.0],
+                filters=SearchFilters(
+                    library_name="vecverlib",
+                    version="1.0",
+                    query_embedding=[1.0, 0.0, 0.0, 0.0],
+                ),
             )
             assert len(results) > 0
             assert "one" in results[0]["content"].lower()
@@ -1132,25 +976,17 @@ class TestSearchWithVec:
             ver_id = db.upsert_version(lib_id)
             db.add_chunks(ver_id, lib_id, [{"content": "test search content"}])
             db.mark_version_indexed(ver_id, 1, 1)
-
-            # Drop vec table to force search error
             db._conn.execute("DROP TABLE doc_chunks_vec")
             db._conn.commit()
-
-            # Should not raise — falls back to FTS only
             results = db.search(
                 query="test search",
-                library_name="vecerrlib",
-                query_embedding=[1.0, 0.0, 0.0, 0.0],
+                filters=SearchFilters(
+                    library_name="vecerrlib", query_embedding=[1.0, 0.0, 0.0, 0.0]
+                ),
             )
             assert isinstance(results, list)
         finally:
             db.close()
-
-
-# -----------------------------------------------------------------------
-# FTS search tiered fallback: PHRASE -> AND -> OR (lines 694-697)
-# -----------------------------------------------------------------------
 
 
 class TestFTSTieredFallback:
@@ -1166,16 +1002,15 @@ class TestFTSTieredFallback:
                 {"content": "epsilon zeta eta theta"},
             ],
         )
-
-        # Search with a multi-word query exercises all tiers
-        results = db.search(query="alpha gamma", library_name="tiertest")
+        results = db.search(
+            query="alpha gamma", filters=SearchFilters(library_name="tiertest")
+        )
         assert isinstance(results, list)
 
     def test_search_url_diversity_limit(self, db):
         """URL diversity limit caps results per URL (lines 804, 807, 812)."""
         lib_id = db.upsert_library(name="urlcap")
         ver_id = db.upsert_version(lib_id)
-        # Create many chunks from same URL
         chunks = [
             {
                 "content": f"Chunk {i} about routing and parameters in detail.",
@@ -1185,9 +1020,10 @@ class TestFTSTieredFallback:
             for i in range(6)
         ]
         db.add_chunks(ver_id, lib_id, chunks)
-
-        results = db.search(query="routing parameters", library_name="urlcap", limit=10)
-        # max_per_url = 2, so at most 2 results from same URL
+        results = db.search(
+            query="routing parameters",
+            filters=SearchFilters(library_name="urlcap", limit=10),
+        )
         same_url_count = sum(
             1 for r in results if r["url"] == "https://example.com/same-page"
         )
@@ -1197,24 +1033,16 @@ class TestFTSTieredFallback:
         """Search skips entries where chunk data is missing (line 772, 807)."""
         lib_id = db.upsert_library(name="skiptest")
         ver_id = db.upsert_version(lib_id)
-        db.add_chunks(
-            ver_id,
-            lib_id,
-            [{"content": "searchable content here"}],
+        db.add_chunks(ver_id, lib_id, [{"content": "searchable content here"}])
+        results = db.search(
+            query="searchable content", filters=SearchFilters(library_name="skiptest")
         )
-        results = db.search(query="searchable content", library_name="skiptest")
         assert len(results) > 0
-
-
-# -----------------------------------------------------------------------
-# _chunk_quality_score edge cases (lines 112, 117, 119)
-# -----------------------------------------------------------------------
 
 
 class TestChunkQualityEdgeCases:
     def test_moderate_link_ratio_penalty(self):
         """Link ratio between 0.3 and 0.5 gets moderate penalty (line 112)."""
-        # 4 out of 10 lines are links = 0.4 ratio
         lines = []
         for i in range(6):
             lines.append(f"Regular text line {i} about something.")
@@ -1222,8 +1050,6 @@ class TestChunkQualityEdgeCases:
             lines.append(f"- [Link {i}](https://example.com/{i})")
         content = "\n".join(lines)
         score = _chunk_quality_score(content)
-        # Should be penalized but not as much as >0.5 ratio
-        # Compare with no-link version
         no_links = "\n".join(f"Regular text line {i}." for i in range(10))
         assert _chunk_quality_score(no_links) > score
 
@@ -1239,7 +1065,6 @@ class TestChunkQualityEdgeCases:
             ]
         )
         score_heavy = _chunk_quality_score(content)
-        # Compare against same content without directives (same length range)
         content_clean = "\n".join(
             [
                 "First paragraph of real docs.",
@@ -1262,15 +1087,8 @@ class TestChunkQualityEdgeCases:
             ]
         )
         score = _chunk_quality_score(content)
-        # Should be penalized less than 4+ directives
         content_heavy = "\n".join(
-            [
-                "!!! note 1",
-                "!!! note 2",
-                "!!! note 3",
-                "!!! note 4",
-                "Content.",
-            ]
+            ["!!! note 1", "!!! note 2", "!!! note 3", "!!! note 4", "Content."]
         )
         assert score >= _chunk_quality_score(content_heavy)
 
@@ -1289,11 +1107,6 @@ class TestChunkQualityEdgeCases:
         assert _chunk_quality_score(documented) > _chunk_quality_score(plain)
 
 
-# -----------------------------------------------------------------------
-# upsert_version() update path (lines 431-435)
-# -----------------------------------------------------------------------
-
-
 class TestUpsertVersionUpdate:
     def test_upsert_version_updates_docs_url(self, db):
         """Upserting existing version with docs_url updates it."""
@@ -1301,17 +1114,10 @@ class TestUpsertVersionUpdate:
         ver_id1 = db.upsert_version(lib_id, "1.0", docs_url="https://old.com")
         ver_id2 = db.upsert_version(lib_id, "1.0", docs_url="https://new.com")
         assert ver_id1 == ver_id2
-        # Version exists but not indexed, so get_best_version may not return it
-        # Check directly
         row = db._conn.execute(
             "SELECT docs_url FROM versions WHERE id = ?", (ver_id1,)
         ).fetchone()
         assert row["docs_url"] == "https://new.com"
-
-
-# -----------------------------------------------------------------------
-# import_jsonl() replace and merge modes (lines 879-882, 889)
-# -----------------------------------------------------------------------
 
 
 class TestImportJSONLModes:
@@ -1327,11 +1133,7 @@ class TestImportJSONLModes:
                 [{"content": "old vec chunk"}],
                 embeddings=[[1.0, 0.0, 0.0, 0.0]],
             )
-
-            # Export first
             jsonl = db.export_jsonl()
-
-            # Replace mode should clear vec table
             stats = db.import_jsonl(jsonl, mode="replace")
             assert stats["libraries"] == 1
             assert stats["chunks"] == 1
@@ -1346,12 +1148,8 @@ class TestImportJSONLModes:
             ver_id = db.upsert_version(lib_id)
             db.add_chunks(ver_id, lib_id, [{"content": "test chunk"}])
             jsonl = db.export_jsonl()
-
-            # Drop vec table to force error
             db._conn.execute("DROP TABLE doc_chunks_vec")
             db._conn.commit()
-
-            # Should not raise
             stats = db.import_jsonl(jsonl, mode="replace")
             assert stats["libraries"] == 1
         finally:
@@ -1422,14 +1220,10 @@ class TestImportJSONLModes:
             }
         )
         data = "\n".join([lib_data, ver_data, chunk_data])
-
-        # First import
         stats1 = db.import_jsonl(data, mode="merge")
         assert stats1["libraries"] == 1
         assert stats1["versions"] == 1
         assert stats1["chunks"] == 1
-
-        # Second import — all skipped
         stats2 = db.import_jsonl(data, mode="merge")
         assert stats2["skipped"] == 3
         assert stats2["libraries"] == 0
@@ -1437,31 +1231,20 @@ class TestImportJSONLModes:
         assert stats2["chunks"] == 0
 
 
-# -----------------------------------------------------------------------
-# close() error handling (lines 972-973)
-# -----------------------------------------------------------------------
-
-
 class TestCloseErrorHandling:
     def test_close_twice_no_error(self, tmp_path):
         """Calling close() twice does not raise."""
         db = DocsDB(tmp_path / "close_twice.db", embedding_dims=0)
         db.close()
-        db.close()  # Should not raise
+        db.close()
 
     def test_close_with_broken_connection(self, tmp_path):
         """close() handles broken connections gracefully (lines 972-973)."""
         db = DocsDB(tmp_path / "close_broken.db", embedding_dims=0)
-        # Replace _conn with a mock whose close() raises
         mock_conn = MagicMock()
         mock_conn.close.side_effect = Exception("connection error")
         db._conn = mock_conn
-        db.close()  # Should not raise
-
-
-# -----------------------------------------------------------------------
-# stats() (lines 287-291)
-# -----------------------------------------------------------------------
+        db.close()
 
 
 class TestStats:
@@ -1490,11 +1273,6 @@ class TestStats:
             db.close()
 
 
-# -----------------------------------------------------------------------
-# Remaining uncovered lines: targeted tests
-# -----------------------------------------------------------------------
-
-
 class TestSerializeEmbeddingError:
     """Cover lines 531-532: embedding serialization failure."""
 
@@ -1504,8 +1282,6 @@ class TestSerializeEmbeddingError:
         try:
             lib_id = db.upsert_library(name="bademb")
             ver_id = db.upsert_version(lib_id)
-
-            # Patch _serialize_f32 to fail on first call only
             call_count = [0]
             original_serialize = _db_mod._serialize_f32
 
@@ -1522,9 +1298,7 @@ class TestSerializeEmbeddingError:
                     [{"content": "chunk A"}, {"content": "chunk B"}],
                     embeddings=[[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]],
                 )
-            assert count == 2  # Both doc chunks inserted
-
-            # Only second embedding should have been inserted (first failed)
+            assert count == 2
             vec_count = db._conn.execute(
                 "SELECT COUNT(*) FROM doc_chunks_vec"
             ).fetchone()[0]
@@ -1541,8 +1315,6 @@ class TestFTSSearchError:
         lib_id = db.upsert_library(name="ftserr")
         ver_id = db.upsert_version(lib_id)
         db.add_chunks(ver_id, lib_id, [{"content": "hello world test"}])
-
-        # sqlite3.Connection attributes are read-only, so wrap with a proxy
         original_conn = db._conn
         original_execute = original_conn.execute
         call_count = [0]
@@ -1564,10 +1336,11 @@ class TestFTSSearchError:
 
         db._conn = ConnProxy()
         try:
-            results = db.search(query="hello world", library_name="ftserr")
+            results = db.search(
+                query="hello world", filters=SearchFilters(library_name="ftserr")
+            )
         finally:
             db._conn = original_conn
-        # Should still return results from later tiers
         assert isinstance(results, list)
 
 
@@ -1578,7 +1351,6 @@ class TestSearchLimitBreak:
         """Search stops collecting once limit is reached (line 804)."""
         lib_id = db.upsert_library(name="limitlib")
         ver_id = db.upsert_version(lib_id)
-        # Create chunks with distinct URLs to avoid URL diversity filter
         chunks = [
             {
                 "content": f"Documentation about routing features part {i}.",
@@ -1588,8 +1360,10 @@ class TestSearchLimitBreak:
             for i in range(10)
         ]
         db.add_chunks(ver_id, lib_id, chunks)
-
-        results = db.search(query="routing features", library_name="limitlib", limit=3)
+        results = db.search(
+            query="routing features",
+            filters=SearchFilters(library_name="limitlib", limit=3),
+        )
         assert len(results) <= 3
 
     def test_search_skips_chunk_not_in_fts_chunks(self, db):
@@ -1597,19 +1371,17 @@ class TestSearchLimitBreak:
         lib_id = db.upsert_library(name="skiplib")
         ver_id = db.upsert_version(lib_id)
         db.add_chunks(ver_id, lib_id, [{"content": "data for skipping test"}])
-
-        # Monkey-patch _combine_scores to inject a phantom ID
         original_combine = db._combine_scores
 
         def patched_combine(fts_scores, vec_scores, fts_chunks):
             result = original_combine(fts_scores, vec_scores, fts_chunks)
-            # Inject a phantom ID that does not exist in fts_chunks
             result.insert(0, ("phantom_id_not_in_chunks", 99.0))
             return result
 
         with patch.object(db, "_combine_scores", side_effect=patched_combine):
-            results = db.search(query="data skipping", library_name="skiplib")
-        # Phantom ID should be skipped, real results returned
+            results = db.search(
+                query="data skipping", filters=SearchFilters(library_name="skiplib")
+            )
         assert all(r["content"] != "" for r in results)
 
 
@@ -1630,29 +1402,21 @@ class TestVecSearchChunkLoading:
 
     def test_vec_search_loads_non_fts_chunks(self, tmp_path):
         """When vec search returns chunks not found by FTS, they get loaded."""
-
         db = DocsDB(tmp_path / "vec_load.db", embedding_dims=4)
         try:
             lib_id = db.upsert_library(name="vecloadlib")
             ver_id = db.upsert_version(lib_id)
-            # Create chunks — one FTS-findable, one only vec-findable
             chunks = [
                 {"content": "This chunk matches the FTS query about searching."},
                 {
                     "content": "Completely different topic not matching query terms at all xyz."
                 },
             ]
-            embeddings = [
-                [1.0, 0.0, 0.0, 0.0],
-                [0.9, 0.1, 0.0, 0.0],
-            ]
+            embeddings = [[1.0, 0.0, 0.0, 0.0], [0.9, 0.1, 0.0, 0.0]]
             db.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
             db.mark_version_indexed(ver_id, 2, 2)
-
-            # Get the actual chunk IDs from DB
             all_chunks = db._conn.execute(
-                "SELECT id, content FROM doc_chunks WHERE library_id = ?",
-                (lib_id,),
+                "SELECT id, content FROM doc_chunks WHERE library_id = ?", (lib_id,)
             ).fetchall()
             fts_chunk_id = None
             vec_only_chunk_id = None
@@ -1661,9 +1425,6 @@ class TestVecSearchChunkLoading:
                     fts_chunk_id = c["id"]
                 else:
                     vec_only_chunk_id = c["id"]
-
-            # Mock the connection to intercept vec MATCH queries and return
-            # fake results including the chunk not found by FTS
             original_conn = db._conn
             original_execute = original_conn.execute
 
@@ -1673,14 +1434,10 @@ class TestVecSearchChunkLoading:
 
                 def execute(self, sql, params=None):
                     if "embedding MATCH" in str(sql):
-                        # Return fake vec results as sqlite3.Row objects
-                        # by querying a temp table
                         original_execute(
-                            "CREATE TEMP TABLE IF NOT EXISTS _fake_vec "
-                            "(id TEXT, distance REAL, content TEXT, title TEXT, chunk_index INTEGER, url TEXT, heading_path TEXT, version_id TEXT, library_id TEXT, created_at REAL)"
+                            "CREATE TEMP TABLE IF NOT EXISTS _fake_vec (id TEXT, distance REAL, content TEXT, title TEXT, chunk_index INTEGER, url TEXT, heading_path TEXT, version_id TEXT, library_id TEXT, created_at REAL)"
                         )
                         original_execute("DELETE FROM _fake_vec")
-
                         vec_only_row = original_execute(
                             "SELECT * FROM doc_chunks WHERE id = ?",
                             (vec_only_chunk_id,),
@@ -1727,14 +1484,14 @@ class TestVecSearchChunkLoading:
             try:
                 results = db.search(
                     query="searching",
-                    library_name="vecloadlib",
-                    query_embedding=[0.95, 0.05, 0.0, 0.0],
+                    filters=SearchFilters(
+                        library_name="vecloadlib",
+                        query_embedding=[0.95, 0.05, 0.0, 0.0],
+                    ),
                 )
             finally:
                 db._conn = original_conn
-
             assert len(results) > 0
-            # The vec-only chunk should also appear in results via vec search
             all_contents = [r["content"] for r in results]
             assert any("different topic" in c for c in all_contents)
         finally:
