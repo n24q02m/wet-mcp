@@ -901,6 +901,10 @@ class DocsDB:
             self._conn.execute("DELETE FROM versions")
             self._conn.execute("DELETE FROM libraries")
 
+        libraries = []
+        versions = []
+        chunks = []
+
         for line in data.strip().split("\n"):
             if not line.strip():
                 continue
@@ -908,76 +912,104 @@ class DocsDB:
             obj_type = obj.pop("_type", None)
 
             if obj_type == "library":
-                existing = self._conn.execute(
-                    "SELECT id FROM libraries WHERE id = ?", (obj["id"],)
-                ).fetchone()
-                if mode == "merge" and existing:
-                    stats["skipped"] += 1
-                    continue
-                self._conn.execute(
-                    """INSERT OR REPLACE INTO libraries
-                       (id, name, docs_url, registry, description, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        obj["id"],
-                        obj["name"],
-                        obj.get("docs_url"),
-                        obj.get("registry"),
-                        obj.get("description"),
-                        obj["created_at"],
-                        obj["updated_at"],
-                    ),
-                )
-                stats["libraries"] += 1
-
+                libraries.append(obj)
             elif obj_type == "version":
-                existing = self._conn.execute(
-                    "SELECT id FROM versions WHERE id = ?", (obj["id"],)
-                ).fetchone()
-                if mode == "merge" and existing:
-                    stats["skipped"] += 1
-                    continue
-                self._conn.execute(
-                    """INSERT OR REPLACE INTO versions
-                       (id, library_id, version, docs_url, indexed_at, page_count, chunk_count, status)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        obj["id"],
-                        obj["library_id"],
-                        obj["version"],
-                        obj.get("docs_url"),
-                        obj.get("indexed_at"),
-                        obj.get("page_count", 0),
-                        obj.get("chunk_count", 0),
-                        obj.get("status", "indexed"),
-                    ),
-                )
-                stats["versions"] += 1
-
+                versions.append(obj)
             elif obj_type == "chunk":
-                existing = self._conn.execute(
-                    "SELECT id FROM doc_chunks WHERE id = ?", (obj["id"],)
-                ).fetchone()
-                if mode == "merge" and existing:
-                    stats["skipped"] += 1
-                    continue
-                self._conn.execute(
-                    """INSERT OR REPLACE INTO doc_chunks
-                       (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (
-                        obj["id"],
-                        obj["version_id"],
-                        obj["library_id"],
-                        obj.get("url", ""),
-                        obj.get("title", ""),
-                        obj.get("chunk_index", 0),
-                        obj["content"],
-                        obj.get("heading_path", ""),
-                        obj["created_at"],
-                    ),
-                )
-                stats["chunks"] += 1
+                chunks.append(obj)
+
+        def _process_batch(
+            table: str,
+            objects: list[dict],
+            insert_sql: str,
+            param_mapper,
+            stat_key: str,
+        ):
+            if not objects:
+                return
+
+            to_insert = objects
+            if mode == "merge":
+                existing_ids = set()
+                all_ids = [obj["id"] for obj in objects]
+                for i in range(0, len(all_ids), 900):
+                    batch_ids = all_ids[i : i + 900]
+                    placeholders = ",".join(["?"] * len(batch_ids))
+                    rows = self._conn.execute(
+                        f"SELECT id FROM {table} WHERE id IN ({placeholders})",
+                        batch_ids,
+                    ).fetchall()
+                    existing_ids.update(
+                        row["id"]
+                        if isinstance(row, dict) or hasattr(row, "keys")
+                        else row[0]
+                        for row in rows
+                    )
+
+                to_insert = [obj for obj in objects if obj["id"] not in existing_ids]
+                stats["skipped"] += len(objects) - len(to_insert)
+
+            if to_insert:
+                params = [param_mapper(obj) for obj in to_insert]
+                self._conn.executemany(insert_sql, params)
+                stats[stat_key] += len(to_insert)
+
+        _process_batch(
+            "libraries",
+            libraries,
+            """INSERT OR REPLACE INTO libraries
+               (id, name, docs_url, registry, description, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            lambda obj: (
+                obj["id"],
+                obj["name"],
+                obj.get("docs_url"),
+                obj.get("registry"),
+                obj.get("description"),
+                obj["created_at"],
+                obj["updated_at"],
+            ),
+            "libraries",
+        )
+
+        _process_batch(
+            "versions",
+            versions,
+            """INSERT OR REPLACE INTO versions
+               (id, library_id, version, docs_url, indexed_at, page_count, chunk_count, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            lambda obj: (
+                obj["id"],
+                obj["library_id"],
+                obj["version"],
+                obj.get("docs_url"),
+                obj.get("indexed_at"),
+                obj.get("page_count", 0),
+                obj.get("chunk_count", 0),
+                obj.get("status", "indexed"),
+            ),
+            "versions",
+        )
+
+        _process_batch(
+            "doc_chunks",
+            chunks,
+            """INSERT OR REPLACE INTO doc_chunks
+               (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            lambda obj: (
+                obj["id"],
+                obj["version_id"],
+                obj["library_id"],
+                obj.get("url", ""),
+                obj.get("title", ""),
+                obj.get("chunk_index", 0),
+                obj["content"],
+                obj.get("heading_path", ""),
+                obj["created_at"],
+            ),
+            "chunks",
+        )
 
         self._conn.commit()
         return stats
