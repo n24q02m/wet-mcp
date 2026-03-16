@@ -1478,15 +1478,17 @@ async def test_background_index_fetch_timeout():
         ),
     ):
         await server._background_index_and_search(
-            library="testlib",
-            lib_key="testlib",
-            language=None,
-            docs_url="http://docs",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
 
 
@@ -1523,15 +1525,17 @@ async def test_background_index_with_searxng_fallback():
         server._docs_db = MagicMock()
 
         await server._background_index_and_search(
-            library="testlib",
-            lib_key="testlib",
-            language=None,
-            docs_url="http://docs",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
         server._docs_db.add_chunks.assert_called_once()
         server._docs_db.mark_version_indexed.assert_called_once()
@@ -1564,15 +1568,17 @@ async def test_background_index_with_language():
         server._docs_db = MagicMock()
 
         await server._background_index_and_search(
-            library="redis",
-            lib_key="redis:python",
-            language="python",
-            docs_url="http://docs",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="redis",
+                lib_key="redis:python",
+                language="python",
+                docs_url="http://docs",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
 
 
@@ -1600,15 +1606,17 @@ async def test_background_index_embeddings_and_store():
         server._docs_db = MagicMock()
 
         await server._background_index_and_search(
-            library="testlib",
-            lib_key="testlib",
-            language=None,
-            docs_url="http://docs",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
         server._docs_db.add_chunks.assert_called_once()
         call_args = server._docs_db.add_chunks.call_args
@@ -1637,15 +1645,17 @@ async def test_background_index_embed_timeout():
         server._docs_db = MagicMock()
 
         await server._background_index_and_search(
-            library="testlib",
-            lib_key="testlib",
-            language=None,
-            docs_url="http://docs",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
         # Should still store chunks even without embeddings
         server._docs_db.add_chunks.assert_called_once()
@@ -1662,15 +1672,17 @@ async def test_background_index_exception():
     ):
         # Should not raise
         await server._background_index_and_search(
-            library="testlib",
-            lib_key="testlib",
-            language=None,
-            docs_url="http://docs",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
 
 
@@ -1693,15 +1705,17 @@ async def test_background_index_no_chunks():
         server._docs_db = MagicMock()
 
         await server._background_index_and_search(
-            library="testlib",
-            lib_key="testlib",
-            language=None,
-            docs_url="http://docs",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
         server._docs_db.add_chunks.assert_not_called()
 
@@ -1742,15 +1756,17 @@ async def test_background_index_fallback_alt_timeout():
         server._docs_db = MagicMock()
 
         await server._background_index_and_search(
-            library="testlib",
-            lib_key="testlib",
-            language=None,
-            docs_url="http://docs.example.com",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs.example.com",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
         # Should still use original chunks
         server._docs_db.add_chunks.assert_called_once()
@@ -1793,15 +1809,17 @@ async def test_background_index_fallback_same_netloc():
         server._docs_db = MagicMock()
 
         await server._background_index_and_search(
-            library="testlib",
-            lib_key="testlib",
-            language=None,
-            docs_url="http://docs.example.com",
-            repo_url="",
-            query="test",
-            version=None,
-            lib_id="1",
-            ver_id="1",
+            server.DocsIndexTask(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs.example.com",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id="1",
+                ver_id="1",
+            )
         )
 
 
