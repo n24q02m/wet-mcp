@@ -1004,20 +1004,24 @@ async def _do_research(query: str, max_results: int = 10) -> str:
         results = data.get("results", [])
 
         # Enrich with academic metadata hints
+        SOURCE_TYPE_MAPPING = {
+            "arxiv.org": "arxiv",
+            "scholar.google": "google_scholar",
+            "semanticscholar.org": "semantic_scholar",
+            "pubmed": "pubmed",
+            "nih.gov": "pubmed",
+            "doi.org": "doi",
+        }
         for r in results:
             url = r.get("url", "")
-            if "arxiv.org" in url:
-                r["source_type"] = "arxiv"
-            elif "scholar.google" in url:
-                r["source_type"] = "google_scholar"
-            elif "semanticscholar.org" in url:
-                r["source_type"] = "semantic_scholar"
-            elif "pubmed" in url or "nih.gov" in url:
-                r["source_type"] = "pubmed"
-            elif "doi.org" in url:
-                r["source_type"] = "doi"
-            else:
-                r["source_type"] = "academic"
+            r["source_type"] = next(
+                (
+                    source_type
+                    for domain, source_type in SOURCE_TYPE_MAPPING.items()
+                    if domain in url
+                ),
+                "academic",
+            )
 
         data["query"] = query
         data["search_type"] = "academic"
