@@ -17,6 +17,7 @@ from wet_mcp.sync import (
     _prepare_rclone_env,
     _run_rclone,
     check_remote_configured,
+    sync_push,
 )
 
 # -----------------------------------------------------------------------
@@ -217,3 +218,48 @@ class TestRunRclone:
             assert call_args[1]["timeout"] == 10
             assert call_args[1]["capture_output"] is True
             assert call_args[1]["text"] is True
+
+# -----------------------------------------------------------------------
+# sync_push
+# -----------------------------------------------------------------------
+
+
+class TestSyncPush:
+    @pytest.mark.asyncio
+    async def test_sync_push_success(self):
+        """Returns True and logs success when rclone succeeds."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        rclone_path = Path("/usr/bin/rclone")
+        db_path = Path("/data/mydb.sqlite")
+
+        with patch("wet_mcp.sync._run_rclone", return_value=mock_result) as mock_run:
+            result = await sync_push(rclone_path, db_path, "gdrive", "backups")
+
+            assert result is True
+            mock_run.assert_called_once_with(
+                rclone_path,
+                ["copy", "--progress", "--", str(db_path), "gdrive:backups"],
+                300,
+            )
+
+    @pytest.mark.asyncio
+    async def test_sync_push_failure(self):
+        """Returns False and logs error when rclone fails."""
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "Connection reset by peer"
+
+        rclone_path = Path("/usr/bin/rclone")
+        db_path = Path("/data/mydb.sqlite")
+
+        with patch("wet_mcp.sync._run_rclone", return_value=mock_result) as mock_run:
+            result = await sync_push(rclone_path, db_path, "gdrive", "backups")
+
+            assert result is False
+            mock_run.assert_called_once_with(
+                rclone_path,
+                ["copy", "--progress", "--", str(db_path), "gdrive:backups"],
+                300,
+            )
