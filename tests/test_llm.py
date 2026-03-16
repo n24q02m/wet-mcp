@@ -203,6 +203,34 @@ def test_encode_image_not_found(tmp_path):
         encode_image(str(tmp_path / "nonexistent.png"))
 
 
+def test_encode_image_empty(tmp_path):
+    """Test encode_image with an empty file."""
+    from wet_mcp.llm import encode_image
+
+    img_path = tmp_path / "empty.png"
+    img_path.write_bytes(b"")
+    result = encode_image(str(img_path))
+    assert result == ""
+
+
+def test_read_and_truncate(tmp_path):
+    """Test _read_and_truncate reads and truncates properly."""
+    from wet_mcp.llm import _read_and_truncate
+
+    # Test small file
+    txt_path = tmp_path / "small.txt"
+    txt_path.write_text("hello", encoding="utf-8")
+    assert _read_and_truncate(str(txt_path)) == "hello"
+
+    # Test large file
+    txt_path = tmp_path / "large.txt"
+    large_content = "a" * 100005
+    txt_path.write_text(large_content, encoding="utf-8")
+    result = _read_and_truncate(str(txt_path))
+    assert len(result) == 100000 + len("\n...[truncated]")
+    assert result.endswith("\n...[truncated]")
+
+
 def test_analyze_media_path_traversal_dotdot(mock_settings, tmp_path):
     """Test that path traversal via .. is blocked."""
     download_dir = tmp_path / "downloads"
