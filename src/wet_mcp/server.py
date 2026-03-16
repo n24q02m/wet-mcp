@@ -1160,6 +1160,109 @@ async def _fetch_and_chunk_docs(
 # ---------------------------------------------------------------------------
 
 
+async def _fetch_docs_with_fallback(
+    library: str,
+    language: str | None,
+    docs_url: str,
+    repo_url: str,
+    query: str,
+) -> tuple[list[dict], int, str]:
+    """Fetch docs, using SearXNG fallback if initial fetch yields poor results."""
+    from urllib.parse import urlparse
+
+    try:
+        all_chunks, page_count = await asyncio.wait_for(
+            _fetch_and_chunk_docs(
+                docs_url=docs_url,
+                repo_url=repo_url,
+                query=query,
+                library_hint=library,
+            ),
+            timeout=_FETCH_TIMEOUT,
+        )
+    except TimeoutError:
+        logger.warning(f"Docs fetch timed out after {_FETCH_TIMEOUT}s for '{library}'")
+        all_chunks, page_count = [], 0
+
+    # Fallback SearXNG
+    if page_count <= 2 and len(all_chunks) < 100:
+        fallback_query = (
+            f"{library} {language} documentation"
+            if language
+            else f"{library} documentation"
+        )
+        try:
+            searxng_url = await asyncio.wait_for(
+                ensure_searxng(), timeout=_SEARXNG_TIMEOUT
+            )
+            fallback_result = await asyncio.wait_for(
+                searxng_search(
+                    searxng_url=searxng_url,
+                    query=fallback_query,
+                    categories="general",
+                    max_results=3,
+                ),
+                timeout=15,
+            )
+            import json
+
+            fallback_data = json.loads(fallback_result)
+            for fr in fallback_data.get("results", []):
+                alt_url = fr.get("url", "")
+                if not alt_url or not alt_url.startswith("http"):
+                    continue
+                alt_parsed = urlparse(alt_url)
+                orig_parsed = urlparse(docs_url)
+                if alt_parsed.netloc == orig_parsed.netloc:
+                    continue
+                try:
+                    alt_chunks, alt_pages = await asyncio.wait_for(
+                        _fetch_and_chunk_docs(alt_url, "", query),
+                        timeout=_FALLBACK_TIMEOUT,
+                    )
+                except TimeoutError:
+                    continue
+                if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
+                    docs_url = alt_url
+                    all_chunks = alt_chunks
+                    page_count = alt_pages
+                    break
+        except Exception as e:
+            logger.debug(f"SearXNG fallback failed: {e}")
+
+    return all_chunks, page_count, docs_url
+
+
+async def _generate_embeddings_for_chunks(
+    all_chunks: list[dict],
+) -> list[list[float]] | None:
+    """Generate embeddings for extracted doc chunks."""
+    if not all_chunks:
+        return None
+
+    from wet_mcp.embedder import get_backend
+
+    if get_backend() is None:
+        return None
+
+    embed_texts_list = []
+    for c in all_chunks:
+        parts = []
+        if c.get("title"):
+            parts.append(c["title"])
+        if c.get("heading_path") and c.get("heading_path") != c.get("title"):
+            parts.append(c["heading_path"])
+        parts.append(c["content"])
+        embed_texts_list.append(" | ".join(parts)[:2000])
+
+    try:
+        return await asyncio.wait_for(
+            _embed_batch(embed_texts_list), timeout=_EMBED_TIMEOUT
+        )
+    except TimeoutError:
+        return None
+
+
 async def _background_index_and_search(
     library: str,
     lib_key: str,
@@ -1173,104 +1276,26 @@ async def _background_index_and_search(
 ):
     """Background task to fetch, chunk, embed, and store docs."""
     try:
-        from urllib.parse import urlparse
-
         from wet_mcp.sources.docs import _normalize_docs_url
 
         docs_url = _normalize_docs_url(docs_url)
         logger.info(f"Background indexing started for '{library}' from {docs_url}...")
 
-        try:
-            all_chunks, page_count = await asyncio.wait_for(
-                _fetch_and_chunk_docs(
-                    docs_url=docs_url,
-                    repo_url=repo_url,
-                    query=query,
-                    library_hint=library,
-                ),
-                timeout=_FETCH_TIMEOUT,
-            )
-        except TimeoutError:
-            logger.warning(
-                f"Docs fetch timed out after {_FETCH_TIMEOUT}s for '{library}'"
-            )
-            all_chunks, page_count = [], 0
-
-        # Fallback SearXNG
-        if page_count <= 2 and len(all_chunks) < 100:
-            fallback_query = (
-                f"{library} {language} documentation"
-                if language
-                else f"{library} documentation"
-            )
-            try:
-                searxng_url = await asyncio.wait_for(
-                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                )
-                fallback_result = await asyncio.wait_for(
-                    searxng_search(
-                        searxng_url=searxng_url,
-                        query=fallback_query,
-                        categories="general",
-                        max_results=3,
-                    ),
-                    timeout=15,
-                )
-                import json
-
-                fallback_data = json.loads(fallback_result)
-                for fr in fallback_data.get("results", []):
-                    alt_url = fr.get("url", "")
-                    if not alt_url or not alt_url.startswith("http"):
-                        continue
-                    alt_parsed = urlparse(alt_url)
-                    orig_parsed = urlparse(docs_url)
-                    if alt_parsed.netloc == orig_parsed.netloc:
-                        continue
-                    try:
-                        alt_chunks, alt_pages = await asyncio.wait_for(
-                            _fetch_and_chunk_docs(alt_url, "", query),
-                            timeout=_FALLBACK_TIMEOUT,
-                        )
-                    except TimeoutError:
-                        continue
-                    if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
-                        docs_url = alt_url
-                        all_chunks = alt_chunks
-                        page_count = alt_pages
-                        break
-            except Exception as e:
-                logger.debug(f"SearXNG fallback failed: {e}")
+        all_chunks, page_count, final_docs_url = await _fetch_docs_with_fallback(
+            library=library,
+            language=language,
+            docs_url=docs_url,
+            repo_url=repo_url,
+            query=query,
+        )
 
         if not all_chunks:
             logger.error(
-                f"Background indexing failed: Could not extract content from {docs_url}"
+                f"Background indexing failed: Could not extract content from {final_docs_url}"
             )
             return
 
-        # Generate embeddings
-        embeddings = None
-        if all_chunks:
-            from wet_mcp.embedder import get_backend
-
-            if get_backend() is not None:
-                embed_texts_list = []
-                for c in all_chunks:
-                    parts = []
-                    if c.get("title"):
-                        parts.append(c["title"])
-                    if c.get("heading_path") and c.get("heading_path") != c.get(
-                        "title"
-                    ):
-                        parts.append(c["heading_path"])
-                    parts.append(c["content"])
-                    embed_texts_list.append(" | ".join(parts)[:2000])
-                try:
-                    embeddings = await asyncio.wait_for(
-                        _embed_batch(embed_texts_list), timeout=_EMBED_TIMEOUT
-                    )
-                except TimeoutError:
-                    embeddings = None
+        embeddings = await _generate_embeddings_for_chunks(all_chunks)
 
         # Store chunks
         _docs_db.add_chunks(
