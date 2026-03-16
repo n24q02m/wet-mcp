@@ -219,6 +219,7 @@ class TestRunRclone:
             assert call_args[1]["capture_output"] is True
             assert call_args[1]["text"] is True
 
+
 # -----------------------------------------------------------------------
 # sync_push
 # -----------------------------------------------------------------------
