@@ -1501,7 +1501,35 @@ async def _do_docs_search(
         )
     )
 
-    # Do immediate fallback web search
+    fallback_data = await _do_immediate_fallback_search(
+        docs_url=docs_url,
+        library=library,
+        language=language,
+        query=query,
+        limit=limit,
+    )
+
+    return json.dumps(
+        {
+            "status": "indexing_in_progress",
+            "message": f"Library '{library}' is currently being downloaded and indexed in the background (this may take 3-5 minutes). In the meantime, here are temporary web search results.",
+            "temporary_results": fallback_data.get("results", []),
+            "library": library,
+            "docs_url": docs_url,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+async def _do_immediate_fallback_search(
+    docs_url: str,
+    library: str,
+    language: str | None,
+    query: str,
+    limit: int,
+) -> dict:
+    """Perform an immediate fallback web search while docs are indexing."""
     fallback_search_query = (
         f"site:{urlparse(docs_url).netloc} {query}"
         if docs_url
@@ -1526,18 +1554,7 @@ async def _do_docs_search(
             )
     except Exception as e:
         logger.debug(f"Immediate fallback search failed: {e}")
-
-    return json.dumps(
-        {
-            "status": "indexing_in_progress",
-            "message": f"Library '{library}' is currently being downloaded and indexed in the background (this may take 3-5 minutes). In the meantime, here are temporary web search results.",
-            "temporary_results": fallback_data.get("results", []),
-            "library": library,
-            "docs_url": docs_url,
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
+    return fallback_data
 
 
 # ---------------------------------------------------------------------------
