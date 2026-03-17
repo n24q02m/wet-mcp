@@ -268,3 +268,11 @@ async def test_ensure_searxng_start_fail(mock_settings, mock_lock, mock_time):
         url = await ensure_searxng()
 
         assert url == "http://external:8080"
+
+
+@patch("wet_mcp.searxng_runner._cleanup_process")
+def test_stop_searxng(mock_cleanup):
+    from wet_mcp.searxng_runner import stop_searxng
+
+    stop_searxng()
+    mock_cleanup.assert_called_once()
