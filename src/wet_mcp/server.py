@@ -540,7 +540,7 @@ async def search(
                 "max_results": max_results,
             }
             if _web_cache:
-                cached = _web_cache.get("search", cache_params)
+                cached = await asyncio.to_thread(_web_cache.get, "search", cache_params)
                 if cached:
                     return cached
             try:
@@ -561,7 +561,7 @@ async def search(
                 "search",
             )
             if _web_cache and not result.startswith("Error"):
-                _web_cache.set("search", cache_params, result)
+                await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
             return result
 
         case "research":
@@ -569,7 +569,9 @@ async def search(
                 return "Error: query is required for research action"
             cache_params = {"query": query, "max_results": max_results}
             if _web_cache:
-                cached = _web_cache.get("research", cache_params)
+                cached = await asyncio.to_thread(
+                    _web_cache.get, "research", cache_params
+                )
                 if cached:
                     return cached
             result = await _with_timeout(
@@ -577,7 +579,9 @@ async def search(
                 "research",
             )
             if _web_cache and not result.startswith("Error"):
-                _web_cache.set("research", cache_params, result)
+                await asyncio.to_thread(
+                    _web_cache.set, "research", cache_params, result
+                )
             return result
 
         case "docs":
@@ -644,7 +648,9 @@ async def extract(
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
             if _web_cache:
-                cached = _web_cache.get("extract", cache_params)
+                cached = await asyncio.to_thread(
+                    _web_cache.get, "extract", cache_params
+                )
                 if cached:
                     return cached
             result = await _with_timeout(
@@ -652,7 +658,7 @@ async def extract(
                 "extract",
             )
             if _web_cache and not result.startswith("Error"):
-                _web_cache.set("extract", cache_params, result)
+                await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
             return result
 
         case "crawl":
@@ -665,7 +671,7 @@ async def extract(
                 "max_pages": max_pages,
             }
             if _web_cache:
-                cached = _web_cache.get("crawl", cache_params)
+                cached = await asyncio.to_thread(_web_cache.get, "crawl", cache_params)
                 if cached:
                     return cached
             result = await _with_timeout(
@@ -679,7 +685,7 @@ async def extract(
                 "crawl",
             )
             if _web_cache and not result.startswith("Error"):
-                _web_cache.set("crawl", cache_params, result)
+                await asyncio.to_thread(_web_cache.set, "crawl", cache_params, result)
             return result
 
         case "map":
@@ -692,7 +698,7 @@ async def extract(
                 "max_pages": max_pages,
             }
             if _web_cache:
-                cached = _web_cache.get("map", cache_params)
+                cached = await asyncio.to_thread(_web_cache.get, "map", cache_params)
                 if cached:
                     return cached
             result = await _with_timeout(
@@ -700,7 +706,7 @@ async def extract(
                 "map",
             )
             if _web_cache and not result.startswith("Error"):
-                _web_cache.set("map", cache_params, result)
+                await asyncio.to_thread(_web_cache.set, "map", cache_params, result)
             return result
 
         case _:
@@ -931,7 +937,7 @@ async def config(
 
         case "cache_clear":
             if _web_cache:
-                _web_cache.clear()
+                await asyncio.to_thread(_web_cache.clear)
                 return json.dumps({"status": "cache cleared"})
             return json.dumps({"error": "Cache is not enabled"})
 
