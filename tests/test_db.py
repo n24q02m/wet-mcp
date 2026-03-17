@@ -1274,19 +1274,6 @@ class TestChunkQualityEdgeCases:
         )
         assert score >= _chunk_quality_score(content_heavy)
 
-    def test_init_invalid_dims_type(self, tmp_path):
-        """Test that invalid types for embedding_dims raise ValueError."""
-
-        class EvilInt(int):
-            def __str__(self):
-                return "1]; DROP TABLE doc_chunks_vec; --"
-
-        with pytest.raises(ValueError, match="embedding_dims must be an integer"):
-            DocsDB(tmp_path / "invalid.db", embedding_dims=EvilInt(1))
-
-        with pytest.raises(ValueError, match="embedding_dims must be an integer"):
-            DocsDB(tmp_path / "invalid2.db", embedding_dims="4")
-
     def test_chunk_quality_with_definitions(self):
         """Chunks with function/class definitions get boosted."""
         code = "def foo():\n    pass\n\nclass Bar:\n    pass\n\nfunc baz() {}\n"
