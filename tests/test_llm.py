@@ -238,3 +238,42 @@ def test_analyze_media_tilde_download_dir(mock_settings, tmp_path, monkeypatch):
     # File exists and is within download_dir, so we should get past the path check
     # (will fail at LLM call since we didn't mock it, but NOT "Access denied")
     assert "Access denied" not in result
+
+
+@patch("litellm.supports_vision")
+@patch("litellm.supports_audio_input")
+@patch("litellm.supports_audio_output")
+def test_get_model_capabilities(mock_audio_out, mock_audio_in, mock_vision):
+    from wet_mcp.llm import get_model_capabilities
+
+    mock_vision.return_value = True
+    mock_audio_in.return_value = False
+    mock_audio_out.return_value = True
+
+    caps = get_model_capabilities("test-model")
+
+    mock_vision.assert_called_once_with("test-model")
+    mock_audio_in.assert_called_once_with("test-model")
+    mock_audio_out.assert_called_once_with("test-model")
+
+    assert caps == {
+        "vision": True,
+        "audio_input": False,
+        "audio_output": True,
+    }
+
+
+@patch("litellm.supports_vision")
+@patch("litellm.supports_audio_input")
+@patch("litellm.supports_audio_output")
+def test_get_model_capabilities_exception(mock_audio_out, mock_audio_in, mock_vision):
+    from wet_mcp.llm import get_model_capabilities
+
+    mock_vision.side_effect = Exception("LiteLLM Error")
+
+    with pytest.raises(Exception, match="LiteLLM Error"):
+        get_model_capabilities("test-model")
+
+    mock_vision.assert_called_once_with("test-model")
+    mock_audio_in.assert_not_called()
+    mock_audio_out.assert_not_called()
