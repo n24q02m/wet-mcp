@@ -972,8 +972,8 @@ async def test_init_embedding_backend_all_candidates_fail():
         mock_init.side_effect = init_side_effect
 
         await server._init_embedding_backend("sdk")
-        # 3 candidates + 1 local = 4 calls
-        assert call_count == 4
+        # 4 candidates (jina, gemini, openai, cohere) + 1 local = 5 calls
+        assert call_count == 5
 
 
 @pytest.mark.asyncio

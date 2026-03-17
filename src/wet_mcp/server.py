@@ -41,6 +41,7 @@ logger.add(sys.stderr, level=settings.log_level)
 # Embedding models to try during LiteLLM auto-detection (in priority order).
 # Validated against API keys -- first success wins.
 _EMBEDDING_CANDIDATES = [
+    "jina_ai/jina-embeddings-v5-text-small",
     "gemini/gemini-embedding-001",
     "text-embedding-3-large",
     "embed-multilingual-v3.0",
