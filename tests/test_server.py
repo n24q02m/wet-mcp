@@ -28,6 +28,10 @@ async def test_search_success():
             query="test query",
             categories="general",
             max_results=10,
+            time_range=None,
+            language=None,
+            include_domains=None,
+            exclude_domains=None,
         )
 
 

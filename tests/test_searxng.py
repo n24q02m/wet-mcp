@@ -5,7 +5,12 @@ import unittest.mock
 
 import pytest
 
-from wet_mcp.sources.searxng import _apply_domain_cap, _normalize_url, search
+from wet_mcp.sources.searxng import (
+    _apply_domain_cap,
+    _build_filtered_query,
+    _normalize_url,
+    search,
+)
 
 # --- _normalize_url tests ---
 
@@ -298,3 +303,180 @@ async def test_search_domain_cap_preserves_diversity(mock_httpx_client):
     b_count = sum(1 for u in urls if "b.com" in u)
     assert a_count == 3
     assert b_count == 2
+
+
+# --- _build_filtered_query tests ---
+
+
+class TestBuildFilteredQuery:
+    def test_no_filters(self):
+        assert _build_filtered_query("python tutorial") == "python tutorial"
+
+    def test_include_domains(self):
+        result = _build_filtered_query(
+            "python", include_domains=["docs.python.org", "realpython.com"]
+        )
+        assert "site:docs.python.org" in result
+        assert "site:realpython.com" in result
+        assert "python" in result
+        assert " OR " in result
+
+    def test_exclude_domains(self):
+        result = _build_filtered_query(
+            "python", exclude_domains=["pinterest.com", "quora.com"]
+        )
+        assert "-site:pinterest.com" in result
+        assert "-site:quora.com" in result
+        assert result.startswith("python")
+
+    def test_combined_include_exclude(self):
+        result = _build_filtered_query(
+            "python",
+            include_domains=["docs.python.org"],
+            exclude_domains=["pinterest.com"],
+        )
+        assert "site:docs.python.org" in result
+        assert "-site:pinterest.com" in result
+
+    def test_include_domains_capped_at_5(self):
+        domains = [f"d{i}.com" for i in range(8)]
+        result = _build_filtered_query("test", include_domains=domains)
+        assert "site:d4.com" in result
+        assert "site:d5.com" not in result
+
+    def test_exclude_domains_capped_at_10(self):
+        domains = [f"d{i}.com" for i in range(15)]
+        result = _build_filtered_query("test", exclude_domains=domains)
+        assert "-site:d9.com" in result
+        assert "-site:d10.com" not in result
+
+    def test_empty_lists_same_as_none(self):
+        assert (
+            _build_filtered_query("test", include_domains=[], exclude_domains=[])
+            == "test"
+        )
+
+
+# --- search() with time_range and language ---
+
+
+async def test_search_with_time_range(mock_httpx_client):
+    """time_range param should be passed to SearXNG."""
+    results = [
+        {
+            "url": "https://example.com/recent",
+            "title": "Recent",
+            "content": "Recent content",
+            "engine": "google",
+        },
+    ]
+    mock_response = _make_mock_response(results)
+    mock_client = _make_mock_client(mock_httpx_client, mock_response)
+
+    await search(
+        searxng_url="http://localhost:8080",
+        query="recent news",
+        time_range="week",
+    )
+
+    # Verify the params passed to httpx include time_range
+    call_kwargs = mock_client.get.call_args
+    params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+    assert params["time_range"] == "week"
+
+
+async def test_search_with_language(mock_httpx_client):
+    """language param should be passed to SearXNG."""
+    results = [
+        {
+            "url": "https://example.com/vi",
+            "title": "Vietnamese",
+            "content": "Noi dung",
+            "engine": "google",
+        },
+    ]
+    mock_response = _make_mock_response(results)
+    mock_client = _make_mock_client(mock_httpx_client, mock_response)
+
+    await search(
+        searxng_url="http://localhost:8080",
+        query="tin tuc",
+        language="vi",
+    )
+
+    call_kwargs = mock_client.get.call_args
+    params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+    assert params["language"] == "vi"
+
+
+async def test_search_invalid_time_range_ignored(mock_httpx_client):
+    """Invalid time_range should not be passed to SearXNG."""
+    results = [
+        {
+            "url": "https://example.com/page",
+            "title": "Page",
+            "content": "Content",
+            "engine": "google",
+        },
+    ]
+    mock_response = _make_mock_response(results)
+    mock_client = _make_mock_client(mock_httpx_client, mock_response)
+
+    await search(
+        searxng_url="http://localhost:8080",
+        query="test",
+        time_range="invalid",
+    )
+
+    call_kwargs = mock_client.get.call_args
+    params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+    assert "time_range" not in params
+
+
+async def test_search_with_domain_filters(mock_httpx_client):
+    """include/exclude domains should modify the query sent to SearXNG."""
+    results = [
+        {
+            "url": "https://docs.python.org/page",
+            "title": "Docs",
+            "content": "Python docs",
+            "engine": "google",
+        },
+    ]
+    mock_response = _make_mock_response(results)
+    mock_client = _make_mock_client(mock_httpx_client, mock_response)
+
+    await search(
+        searxng_url="http://localhost:8080",
+        query="python tutorial",
+        include_domains=["docs.python.org"],
+        exclude_domains=["pinterest.com"],
+    )
+
+    call_kwargs = mock_client.get.call_args
+    params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
+    assert "site:docs.python.org" in params["q"]
+    assert "-site:pinterest.com" in params["q"]
+
+
+async def test_search_preserves_original_query_in_output(mock_httpx_client):
+    """Output JSON should contain the original query, not the filtered one."""
+    results = [
+        {
+            "url": "https://example.com/page",
+            "title": "Page",
+            "content": "Content",
+            "engine": "google",
+        },
+    ]
+    mock_response = _make_mock_response(results)
+    _make_mock_client(mock_httpx_client, mock_response)
+
+    result = await search(
+        searxng_url="http://localhost:8080",
+        query="python tutorial",
+        include_domains=["docs.python.org"],
+    )
+
+    data = json.loads(result)
+    assert data["query"] == "python tutorial"
