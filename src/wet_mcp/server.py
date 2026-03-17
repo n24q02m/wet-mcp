@@ -1588,7 +1588,7 @@ def library_docs(library: str, question: str) -> str:
     """Generate a prompt to find library documentation."""
     return (
         f"Find documentation for '{library}' to answer: {question}\n\n"
-        "Use the search tool with action='docs', library='{library}', "
+        f"Use the search tool with action='docs', library='{library}', "
         f"query='{question}'. If results are insufficient, use extract tool "
         "to get more content from the documentation URLs."
     )
