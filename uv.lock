@@ -2332,7 +2332,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", specifier = ">=1.2.0" },
+    { name = "qwen3-embed", specifier = ">=1.4.3" },
     { name = "sqlite-vec" },
 ]
 
