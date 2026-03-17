@@ -66,6 +66,46 @@ Convert local files to Markdown. Supports: PDF, DOCX, PPTX, XLSX, CSV, JSON, XML
 
 ---
 
+### extract_structured
+Extract structured data from web pages using LLM + JSON Schema. Provide a schema defining the data structure you want, and the LLM extracts matching data from the page content.
+
+**Parameters:**
+- `urls` (required): List of URLs to extract from
+- `schema` (required): JSON Schema dict defining the expected output structure
+- `prompt`: Additional instructions for the LLM (optional)
+- `stealth`: Enable stealth mode (default: false)
+
+**Example:**
+```json
+{
+  "action": "extract_structured",
+  "urls": ["https://example.com/pricing"],
+  "schema": {
+    "type": "object",
+    "properties": {
+      "plans": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {"type": "string"},
+            "price": {"type": "string"},
+            "features": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    }
+  },
+  "prompt": "Extract all pricing plans with their features"
+}
+```
+
+**Returns:** `{data: <extracted>, urls: [...]}` or `{data: <extracted>, validation_warning: "...", urls: [...]}` if schema validation fails partially.
+
+**Requires:** LLM (proxy or SDK mode). Returns error in local-only mode.
+
+---
+
 ## Anti-Bot Features
 
 The `stealth` parameter enables:
