@@ -41,6 +41,7 @@ def _resolve_local_model(onnx_name: str, gguf_name: str) -> str:
 
 # Known providers that support reranking via LiteLLM
 _RERANK_PROVIDERS: dict[str, str] = {
+    "JINA_AI_API_KEY": "jina_ai/jina-reranker-v3",
     "COHERE_API_KEY": "cohere/rerank-multilingual-v3.0",
 }
 
@@ -54,8 +55,8 @@ class Settings(BaseSettings):
         Format: "ENV_VAR:key,ENV_VAR:key,..."
         Or file path: "@path/to/keys"
         Example: "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:..."
-        Embedding providers: Google, OpenAI, Cohere
-        Reranking providers: Cohere (auto-detected)
+        Embedding providers: Jina, Google, OpenAI, Cohere
+        Reranking providers: Jina, Cohere (auto-detected)
     - LITELLM_PROXY_URL: LiteLLM Proxy base URL (e.g. http://10.0.0.20:4000)
     - LITELLM_PROXY_KEY: API key for the LiteLLM Proxy
     - EMBEDDING_API_BASE: Custom embedding endpoint URL
