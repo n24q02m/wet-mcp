@@ -526,11 +526,14 @@ async def search(  # noqa: PLR0913
     time_range: str | None = None,
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
+    expand: bool = False,
+    enrich: bool = False,
 ) -> str:
     """Search the web, academic papers, or library documentation.
-    - search: Web search via SearXNG (requires query)
+    - search: Web search via SearXNG (requires query, expand=True for query expansion, enrich=True for snippet enrichment)
     - research: Academic/scientific search (requires query)
     - docs: Search library documentation with auto-indexing (requires library + query, specify language for disambiguation)
+    - similar: Find pages similar to a URL (pass URL as query)
     Use `help` tool for full documentation.
     """
     match action:
@@ -558,10 +561,19 @@ async def search(  # noqa: PLR0913
                 return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
             except (SystemExit, Exception) as exc:
                 return f"Error: SearXNG startup failed: {exc}"
+            # Optional query expansion
+            search_query = query
+            if expand:
+                from wet_mcp.sources.search_strategies import expand_query
+
+                expanded = await expand_query(query)
+                if len(expanded) > 1:
+                    search_query = " OR ".join(expanded)
+
             result = await _with_timeout(
                 searxng_search(
                     searxng_url=searxng_url,
-                    query=query,
+                    query=search_query,
                     categories=categories,
                     max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
                     time_range=time_range,
@@ -592,6 +604,19 @@ async def search(  # noqa: PLR0913
                             result = json.dumps(data, ensure_ascii=False, indent=2)
                 except Exception as e:
                     logger.debug(f"Search reranking failed, using original: {e}")
+            # Optional snippet enrichment
+            if enrich and not result.startswith("Error"):
+                try:
+                    data = json.loads(result)
+                    results_list = data.get("results", [])
+                    if results_list:
+                        from wet_mcp.sources.search_strategies import enrich_snippets
+
+                        enriched = await enrich_snippets(results_list, query, top_n=5)
+                        data["results"] = enriched
+                        result = json.dumps(data, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    logger.debug(f"Snippet enrichment failed: {e}")
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
             return result
@@ -646,10 +671,30 @@ async def search(  # noqa: PLR0913
                 "docs",
             )
 
+        case "similar":
+            if not query:
+                return "Error: query (URL) is required for similar action"
+            if not query.startswith(("http://", "https://")):
+                return "Error: query must be a URL (http:// or https://) for similar action"
+            try:
+                searxng_url = await asyncio.wait_for(
+                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
+                )
+            except (TimeoutError, SystemExit, Exception) as exc:
+                return f"Error: SearXNG startup failed: {exc}"
+            from wet_mcp.sources.search_strategies import find_similar
+
+            return await _with_timeout(
+                find_similar(
+                    url=query, max_results=max_results, searxng_url=searxng_url
+                ),
+                "similar",
+            )
+
         case _:
             return (
                 f"Error: Unknown action '{action}'. "
-                "Valid actions: search, research, docs"
+                "Valid actions: search, research, docs, similar"
             )
 
 
@@ -673,12 +718,15 @@ async def extract(
     max_pages: int = 20,
     format: str = "markdown",
     stealth: bool = False,
+    schema: dict | None = None,
+    prompt: str | None = None,
 ) -> str:
     """Extract content from web pages, crawl sites, map structure, or convert local files.
     - extract: Get clean content from URLs (requires urls)
     - crawl: Deep crawl from root URLs (requires urls)
     - map: Discover site structure without content (requires urls)
     - convert: Convert local files to Markdown (requires paths, max 10)
+    - extract_structured: Extract structured data from URLs using a JSON Schema (requires urls + schema, optional prompt)
     Use `help` tool for full documentation.
     """
     # Security: enforce hard limits to prevent resource exhaustion
@@ -767,8 +815,25 @@ async def extract(
                 "convert",
             )
 
+        case "extract_structured":
+            if not urls:
+                return "Error: urls is required for extract_structured action"
+            if not schema:
+                return "Error: schema (JSON Schema dict) is required for extract_structured action"
+            from wet_mcp.sources.structured import extract_structured
+
+            return await _with_timeout(
+                extract_structured(
+                    urls=urls, schema=schema, prompt=prompt, stealth=stealth
+                ),
+                "extract_structured",
+            )
+
         case _:
-            return f"Error: Unknown action '{action}'. Valid actions: extract, crawl, map, convert"
+            return (
+                f"Error: Unknown action '{action}'. "
+                "Valid actions: extract, crawl, map, convert, extract_structured"
+            )
 
 
 @mcp.tool(
