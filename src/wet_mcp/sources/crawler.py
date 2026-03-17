@@ -205,7 +205,9 @@ async def _extract_with_markitdown(url: str) -> dict:
 
         ext = Path(urlparse(url).path).suffix.lower() or ".pdf"
         md = MarkItDown()
-        result = md.convert_stream(io.BytesIO(resp.content), file_extension=ext)
+        result = await asyncio.to_thread(
+            md.convert_stream, io.BytesIO(resp.content), file_extension=ext
+        )
 
         return {
             "url": url,
