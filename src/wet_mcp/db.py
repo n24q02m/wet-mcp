@@ -170,6 +170,14 @@ class DocsDB:
         logger.debug(f"DocsDB initialized at {db_path} (vec={self._vec_enabled})")
 
     def _create_tables(self) -> None:
+        self._create_libraries_table()
+        self._create_versions_table()
+        self._create_doc_chunks_table()
+        self._create_fts_table()
+        self._create_vector_table()
+        self._conn.commit()
+
+    def _create_libraries_table(self) -> None:
         # Libraries metadata
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS libraries (
@@ -197,6 +205,7 @@ class DocsDB:
         except sqlite3.OperationalError:
             pass  # Column already exists
 
+    def _create_versions_table(self) -> None:
         # Versions
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS versions (
@@ -213,6 +222,7 @@ class DocsDB:
             )
         """)
 
+    def _create_doc_chunks_table(self) -> None:
         # Document chunks
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS doc_chunks (
@@ -242,6 +252,7 @@ class DocsDB:
             ON doc_chunks(url, version_id, chunk_index)
         """)
 
+    def _create_fts_table(self) -> None:
         # FTS5 (content-sync mode)
         self._conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks_fts
@@ -278,6 +289,7 @@ class DocsDB:
             END
         """)
 
+    def _create_vector_table(self) -> None:
         # Vector table (optional)
         if self._vec_enabled and self._embedding_dims > 0:
             row = self._conn.execute(
@@ -291,8 +303,6 @@ class DocsDB:
                         embedding float[{self._embedding_dims}]
                     )
                 """)
-
-        self._conn.commit()
 
     # -----------------------------------------------------------------------
     # Stats
