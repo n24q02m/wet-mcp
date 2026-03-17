@@ -169,8 +169,6 @@ class TestWarmup:
         mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
-        mock_settings.get_embedding_litellm_kwargs.return_value = {}
-        mock_settings.get_rerank_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 768
@@ -271,7 +269,6 @@ class TestWarmup:
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_local_embedding_model.return_value = "local/m"
         mock_settings.rerank_enabled = False
-        mock_settings.get_embedding_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 0
@@ -298,8 +295,6 @@ class TestWarmup:
         mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
-        mock_settings.get_embedding_litellm_kwargs.return_value = {}
-        mock_settings.get_rerank_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 768
@@ -324,7 +319,6 @@ class TestWarmup:
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_local_embedding_model.return_value = "local/m"
         mock_settings.rerank_enabled = False
-        mock_settings.get_embedding_litellm_kwargs.return_value = {}
 
         mock_init.side_effect = Exception("init failed")
 
@@ -348,7 +342,6 @@ class TestWarmup:
         mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = "explicit/model"
         mock_settings.resolve_rerank_model.return_value = None
-        mock_settings.get_embedding_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 512
@@ -371,7 +364,6 @@ class TestWarmup:
         mock_settings.setup_litellm.return_value = "sdk"
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = None
-        mock_settings.get_embedding_litellm_kwargs.return_value = {}
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 768

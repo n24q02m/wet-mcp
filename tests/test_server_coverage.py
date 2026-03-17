@@ -38,9 +38,6 @@ def _mock_settings():
         mock.resolve_local_rerank_model.return_value = "local-rerank"
         mock.wet_auto_searxng = False
         mock.setup_litellm.return_value = "sdk"
-        mock.get_embedding_litellm_kwargs.return_value = {}
-        mock.get_rerank_litellm_kwargs.return_value = {}
-        mock.get_llm_litellm_kwargs.return_value = {}
         mock.download_dir = "/tmp/downloads"
         mock.sync_remote = ""
         mock.sync_folder = ""
@@ -305,7 +302,6 @@ async def test_init_embedding_local_zero_dims():
             ms.resolve_embedding_backend.return_value = "local"
             ms.resolve_local_embedding_model.return_value = "test"
             ms.resolve_embedding_dims.return_value = 768
-            ms.get_embedding_litellm_kwargs.return_value = {}
 
             await server._init_embedding_backend("sdk")
 

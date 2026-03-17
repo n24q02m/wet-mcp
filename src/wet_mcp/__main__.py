@@ -43,12 +43,11 @@ def _validate_cloud_models(settings) -> bool:
     print("  Step 2/3: Validating cloud embedding models...")
     model = settings.resolve_embedding_model()
     candidates = [model] if model else _EMBEDDING_CANDIDATES
-    litellm_kwargs = settings.get_embedding_litellm_kwargs()
 
     cloud_ok = False
     for candidate in candidates:
         try:
-            backend = init_backend("litellm", candidate, **litellm_kwargs)
+            backend = init_backend("litellm", candidate)
             dims = backend.check_available()
             if dims > 0:
                 print(f"  Cloud embedding ready: {candidate} (dims={dims})")
@@ -63,9 +62,8 @@ def _validate_cloud_models(settings) -> bool:
         if rerank_model:
             from wet_mcp.reranker import init_reranker
 
-            rerank_kwargs = settings.get_rerank_litellm_kwargs()
             try:
-                reranker = init_reranker("litellm", rerank_model, **rerank_kwargs)
+                reranker = init_reranker("litellm", rerank_model)
                 if reranker.check_available():
                     print(f"  Cloud reranker ready: {rerank_model}")
                     print("Warmup complete! Cloud models will be used.")
