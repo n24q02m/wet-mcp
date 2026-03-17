@@ -11,10 +11,18 @@ Web search via SearXNG metasearch engine.
 - `query` (required): Search query string
 - `categories`: Search category - general, images, videos, files (default: general)
 - `max_results`: Maximum results to return (default: 10)
+- `time_range`: Filter by recency - day, week, month, year
+- `language`: Search language code - en, vi, ja, etc. (auto-detected by default)
+- `include_domains`: Only include results from these domains (max 5) - ["github.com", "stackoverflow.com"]
+- `exclude_domains`: Exclude results from these domains (max 10) - ["pinterest.com"]
+
+Results are semantically reranked for better relevance. Duplicate URLs are normalized (tracking params stripped) and limited to 3 per domain.
 
 **Example:**
 ```json
 {"action": "search", "query": "python web scraping tutorial", "max_results": 5}
+{"action": "search", "query": "react hooks", "include_domains": ["react.dev"], "time_range": "month"}
+{"action": "search", "query": "async python", "exclude_domains": ["w3schools.com"], "language": "en"}
 ```
 
 ---
@@ -25,6 +33,10 @@ Academic and scientific search using SearXNG science engines (Google Scholar, Se
 **Parameters:**
 - `query` (required): Research query string
 - `max_results`: Maximum results to return (default: 10)
+- `time_range`: Filter by recency - day, week, month, year
+- `language`: Search language code
+- `include_domains`: Only include results from these domains
+- `exclude_domains`: Exclude results from these domains
 
 **Example:**
 ```json

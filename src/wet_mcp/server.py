@@ -523,6 +523,9 @@ async def search(  # noqa: PLR0913
     categories: str = "general",
     max_results: int = 10,
     limit: int = 10,
+    time_range: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
 ) -> str:
     """Search the web, academic papers, or library documentation.
     - search: Web search via SearXNG (requires query)
@@ -538,6 +541,10 @@ async def search(  # noqa: PLR0913
                 "query": query,
                 "categories": categories,
                 "max_results": max_results,
+                "time_range": time_range,
+                "language": language,
+                "include_domains": include_domains,
+                "exclude_domains": exclude_domains,
             }
             if _web_cache:
                 cached = await asyncio.to_thread(_web_cache.get, "search", cache_params)
@@ -556,10 +563,35 @@ async def search(  # noqa: PLR0913
                     searxng_url=searxng_url,
                     query=query,
                     categories=categories,
-                    max_results=max_results,
+                    max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
+                    time_range=time_range,
+                    language=language,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
                 ),
                 "search",
             )
+            # Rerank by semantic relevance (same as research/docs)
+            if not result.startswith("Error"):
+                try:
+                    data = json.loads(result)
+                    results_list = data.get("results", [])
+                    if results_list:
+                        # Map snippet -> content for reranker (fallback to title)
+                        for r in results_list:
+                            if "content" not in r:
+                                r["content"] = r.get("snippet", r.get("title", ""))
+                        reranked = await _rerank_results(
+                            query, results_list, top_n=max_results
+                        )
+                        if reranked:
+                            data["results"] = [
+                                r for r in reranked if r.get("score", 1.0) > 0.2
+                            ]
+                            data["total"] = len(data["results"])
+                            result = json.dumps(data, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    logger.debug(f"Search reranking failed, using original: {e}")
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
             return result
@@ -567,7 +599,14 @@ async def search(  # noqa: PLR0913
         case "research":
             if not query:
                 return "Error: query is required for research action"
-            cache_params = {"query": query, "max_results": max_results}
+            cache_params = {
+                "query": query,
+                "max_results": max_results,
+                "time_range": time_range,
+                "language": language,
+                "include_domains": include_domains,
+                "exclude_domains": exclude_domains,
+            }
             if _web_cache:
                 cached = await asyncio.to_thread(
                     _web_cache.get, "research", cache_params
@@ -575,7 +614,14 @@ async def search(  # noqa: PLR0913
                 if cached:
                     return cached
             result = await _with_timeout(
-                _do_research(query=query, max_results=max_results),
+                _do_research(
+                    query=query,
+                    max_results=max_results,
+                    time_range=time_range,
+                    language=language,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
+                ),
                 "research",
             )
             if _web_cache and not result.startswith("Error"):
@@ -622,15 +668,17 @@ async def search(  # noqa: PLR0913
 async def extract(
     action: str,
     urls: list[str] | None = None,
+    paths: list[str] | None = None,
     depth: int = 2,
     max_pages: int = 20,
     format: str = "markdown",
     stealth: bool = False,
 ) -> str:
-    """Extract content from web pages, crawl sites, or map site structure.
+    """Extract content from web pages, crawl sites, map structure, or convert local files.
     - extract: Get clean content from URLs (requires urls)
     - crawl: Deep crawl from root URLs (requires urls)
     - map: Discover site structure without content (requires urls)
+    - convert: Convert local files to Markdown (requires paths, max 10)
     Use `help` tool for full documentation.
     """
     # Security: enforce hard limits to prevent resource exhaustion
@@ -709,10 +757,18 @@ async def extract(
                 await asyncio.to_thread(_web_cache.set, "map", cache_params, result)
             return result
 
-        case _:
-            return (
-                f"Error: Unknown action '{action}'. Valid actions: extract, crawl, map"
+        case "convert":
+            if not paths:
+                return "Error: paths is required for convert action"
+            from wet_mcp.sources.crawler import convert_local_files
+
+            return await _with_timeout(
+                convert_local_files(paths=paths),
+                "convert",
             )
+
+        case _:
+            return f"Error: Unknown action '{action}'. Valid actions: extract, crawl, map, convert"
 
 
 @mcp.tool(
@@ -967,7 +1023,14 @@ async def config(
 # ---------------------------------------------------------------------------
 
 
-async def _do_research(query: str, max_results: int = 10) -> str:
+async def _do_research(
+    query: str,
+    max_results: int = 10,
+    time_range: str | None = None,
+    language: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+) -> str:
     """Academic/scientific search using SearXNG science engines."""
     try:
         searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
@@ -981,6 +1044,10 @@ async def _do_research(query: str, max_results: int = 10) -> str:
         query=query,
         categories="science",
         max_results=max_results * 3,
+        time_range=time_range,
+        language=language,
+        include_domains=include_domains,
+        exclude_domains=exclude_domains,
     )
     try:
         data = json.loads(result_str)
