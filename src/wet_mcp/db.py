@@ -136,7 +136,7 @@ class DocsDB:
     def __init__(self, db_path: Path, embedding_dims: int = 0):
         self._db_path = db_path
         if (
-            not isinstance(embedding_dims, int)
+            type(embedding_dims) is not int
             or embedding_dims < 0
             or embedding_dims > 65536
         ):
