@@ -475,3 +475,53 @@ class TestRerankerDictResult:
             results = reranker.rerank("query", ["doc1", "doc2"], top_n=2)
 
         assert results == [(1, 0.95), (0, 0.8)]
+
+
+class TestSetupPatchSearxngVersion:
+    """Cover setup.py patch_searxng_version() gaps."""
+
+    @patch("wet_mcp.setup._find_searx_package_dir")
+    def test_patch_searxng_version_success(self, mock_find_dir):
+        from wet_mcp.setup import patch_searxng_version
+
+        mock_dir = MagicMock(spec=Path)
+        mock_find_dir.return_value = mock_dir
+        mock_file = MagicMock(spec=Path)
+        mock_dir.__truediv__.return_value = mock_file
+        mock_file.exists.return_value = False
+
+        patch_searxng_version()
+
+        mock_file.write_text.assert_called_once()
+        args = mock_file.write_text.call_args[0][0]
+        assert "VERSION_STRING =" in args
+
+    @patch("wet_mcp.setup._find_searx_package_dir")
+    def test_patch_searxng_version_already_exists(self, mock_find_dir):
+        from wet_mcp.setup import patch_searxng_version
+
+        mock_dir = MagicMock(spec=Path)
+        mock_find_dir.return_value = mock_dir
+        mock_file = MagicMock(spec=Path)
+        mock_dir.__truediv__.return_value = mock_file
+        mock_file.exists.return_value = True
+
+        patch_searxng_version()
+
+        mock_file.write_text.assert_not_called()
+
+    @patch("wet_mcp.setup._find_searx_package_dir")
+    def test_patch_searxng_version_no_dir(self, mock_find_dir):
+        from wet_mcp.setup import patch_searxng_version
+
+        mock_find_dir.return_value = None
+        patch_searxng_version()
+        # No error should be raised
+
+    @patch("wet_mcp.setup._find_searx_package_dir", side_effect=Exception("Test error"))
+    @patch("wet_mcp.setup.logger.warning")
+    def test_patch_searxng_version_exception(self, mock_warning, mock_find_dir):
+        from wet_mcp.setup import patch_searxng_version
+
+        patch_searxng_version()
+        mock_warning.assert_called_once()
