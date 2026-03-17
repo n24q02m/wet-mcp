@@ -27,6 +27,27 @@ from wet_mcp.security import safe_httpx_client as _safe_httpx_client
 # Document extensions that markitdown handles better than Crawl4AI
 _DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls"}
 
+_MAX_CONVERT_FILES = 10
+
+_LOCAL_CONVERT_EXTENSIONS = _DOCUMENT_EXTENSIONS | {
+    ".csv",
+    ".json",
+    ".xml",
+    ".html",
+    ".htm",
+    ".epub",
+    ".txt",
+    ".md",
+    ".rst",
+    ".log",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".tiff",
+}
+
 # ---------------------------------------------------------------------------
 # Browser pool (singleton)
 # ---------------------------------------------------------------------------
@@ -646,3 +667,66 @@ async def download_media(
 
     logger.info(f"Downloaded {len([r for r in results if 'path' in r])} files")
     return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Local file conversion
+# ---------------------------------------------------------------------------
+
+
+async def convert_local_files(paths: list[str]) -> str:
+    """Convert local files to Markdown via markitdown.
+
+    Args:
+        paths: List of absolute file paths (max 10).
+
+    Returns:
+        JSON array of {path, content, title} or {path, error}.
+    """
+    if len(paths) > _MAX_CONVERT_FILES:
+        return f"Error: Maximum {_MAX_CONVERT_FILES} files per call (got {len(paths)})"
+
+    from wet_mcp.config import settings as _settings
+    from wet_mcp.security import is_safe_local_path
+
+    allowed_dirs = None
+    if _settings.convert_allowed_dirs:
+        allowed_dirs = [
+            Path(d.strip())
+            for d in _settings.convert_allowed_dirs.split(",")
+            if d.strip()
+        ]
+
+    results = []
+    for path_str in paths:
+        safe_path = is_safe_local_path(
+            path_str,
+            allowed_dirs=allowed_dirs,
+            max_size=_settings.convert_max_file_size,
+        )
+        if safe_path is None:
+            results.append({"path": path_str, "error": f"Path rejected: {path_str}"})
+            continue
+
+        try:
+            content = await asyncio.to_thread(_convert_file, safe_path)
+            results.append(
+                {
+                    "path": str(safe_path),
+                    "content": content,
+                    "title": safe_path.name,
+                }
+            )
+        except Exception as e:
+            results.append({"path": path_str, "error": str(e)})
+
+    return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+def _convert_file(path: Path) -> str:
+    """Synchronous file conversion via markitdown."""
+    from markitdown import MarkItDown
+
+    md = MarkItDown()
+    result = md.convert(str(path))
+    return result.text_content

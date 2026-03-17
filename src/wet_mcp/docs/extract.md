@@ -51,6 +51,21 @@ Discover site structure without extracting content.
 
 ---
 
+### convert
+Convert local files to Markdown. Supports: PDF, DOCX, PPTX, XLSX, CSV, JSON, XML, HTML, EPUB, TXT, images (EXIF metadata).
+
+**Parameters:**
+- `paths` (required): List of absolute file paths (max 10)
+
+**Example:**
+```json
+{"action": "convert", "paths": ["/home/user/report.pdf", "/home/user/data.xlsx"]}
+```
+
+**Security:** Paths are validated against traversal attacks, symlink escapes, and optional directory allowlist (`CONVERT_ALLOWED_DIRS` env var). Max file size: 100MB (configurable via `CONVERT_MAX_FILE_SIZE`).
+
+---
+
 ## Anti-Bot Features
 
 The `stealth` parameter enables:

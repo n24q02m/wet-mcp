@@ -156,6 +156,10 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Local file conversion
+    convert_max_file_size: int = 104857600  # 100MB
+    convert_allowed_dirs: str = ""  # comma-separated absolute paths, empty = allow all
+
     model_config = {"env_prefix": "", "case_sensitive": False}
 
     # --- Path helpers (aligned with mnemo-mcp) ---
