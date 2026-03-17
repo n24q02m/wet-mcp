@@ -44,6 +44,8 @@ dependencies = [
     "markitdown[pdf,docx,pptx,xlsx]",
     # Schema validation for structured extraction
     "jsonschema>=4.23",
+    # Per-domain rate limiting for batch operations
+    "aiolimiter>=1.2.1",
 ]
 
 [dependency-groups]

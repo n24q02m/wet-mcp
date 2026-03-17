@@ -13,6 +13,7 @@ import collections
 import json
 import os
 import tempfile
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -667,6 +668,105 @@ async def download_media(
 
     logger.info(f"Downloaded {len([r for r in results if 'path' in r])} files")
     return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+# ---------------------------------------------------------------------------
+# Batch extraction with per-domain rate limiting
+# ---------------------------------------------------------------------------
+
+
+class DomainRateLimiter:
+    """Per-domain concurrency + rate limiting for batch operations."""
+
+    def __init__(
+        self,
+        max_per_domain: int = 2,
+        requests_per_second: float = 1.0,
+        global_max: int = 10,
+    ):
+        from collections import defaultdict
+
+        from aiolimiter import AsyncLimiter
+
+        self._domain_sems: dict[str, asyncio.Semaphore] = defaultdict(
+            lambda: asyncio.Semaphore(max_per_domain)
+        )
+        self._domain_limiters: dict[str, AsyncLimiter] = defaultdict(
+            lambda: AsyncLimiter(requests_per_second, 1)
+        )
+        self._global_sem = asyncio.Semaphore(global_max)
+
+    @asynccontextmanager
+    async def acquire(self, url: str):
+        domain = urlparse(url).netloc
+        async with self._global_sem:
+            async with self._domain_sems[domain]:
+                await self._domain_limiters[domain].acquire()
+                yield
+
+
+_MAX_BATCH_URLS = 50
+
+
+async def batch_extract(
+    urls: list[str],
+    format: str = "markdown",
+    stealth: bool = False,
+) -> str:
+    """Batch extract content from URLs with per-domain rate limiting.
+
+    Uses DomainRateLimiter for polite crawling: max 2 concurrent per domain,
+    1 req/s per domain, 10 global concurrent. Partial results on failure.
+
+    Args:
+        urls: List of URLs (max 50)
+        format: Output format
+        stealth: Enable stealth mode
+
+    Returns:
+        JSON with {results, errors, summary: {total, success, failed}}
+    """
+    if len(urls) > _MAX_BATCH_URLS:
+        return f"Error: Maximum {_MAX_BATCH_URLS} URLs per batch (got {len(urls)})"
+
+    limiter = DomainRateLimiter()
+    results: list[dict] = []
+    errors: list[dict] = []
+
+    async def process_url(url: str) -> dict:
+        async with limiter.acquire(url):
+            try:
+                raw = await extract(urls=[url], format=format, stealth=stealth)
+                pages = json.loads(raw)
+                if pages and isinstance(pages, list):
+                    return pages[0]
+                return {"url": url, "error": "Empty result"}
+            except Exception as e:
+                return {"url": url, "error": str(e)}
+
+    # Process with as_completed for partial results
+    tasks = {asyncio.create_task(process_url(url)): url for url in urls}
+
+    for coro in asyncio.as_completed(tasks):
+        result = await coro
+        if isinstance(result, dict) and "error" in result:
+            errors.append(result)
+        else:
+            results.append(result)
+
+    return json.dumps(
+        {
+            "results": results,
+            "errors": errors,
+            "summary": {
+                "total": len(urls),
+                "success": len(results),
+                "failed": len(errors),
+            },
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
 
 
 # ---------------------------------------------------------------------------
