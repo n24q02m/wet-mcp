@@ -16,6 +16,9 @@ Web search via SearXNG metasearch engine.
 - `include_domains`: Only include results from these domains (max 5) - ["github.com", "stackoverflow.com"]
 - `exclude_domains`: Exclude results from these domains (max 10) - ["pinterest.com"]
 
+- `expand`: Enable LLM query expansion for broader coverage (default: false, requires LLM)
+- `enrich`: Fetch actual page content for better snippets (default: false, adds 2-5s latency)
+
 Results are semantically reranked for better relevance. Duplicate URLs are normalized (tracking params stripped) and limited to 3 per domain.
 
 **Example:**
@@ -23,6 +26,7 @@ Results are semantically reranked for better relevance. Duplicate URLs are norma
 {"action": "search", "query": "python web scraping tutorial", "max_results": 5}
 {"action": "search", "query": "react hooks", "include_domains": ["react.dev"], "time_range": "month"}
 {"action": "search", "query": "async python", "exclude_domains": ["w3schools.com"], "language": "en"}
+{"action": "search", "query": "machine learning optimization", "expand": true, "enrich": true}
 ```
 
 ---
@@ -72,6 +76,22 @@ Search library/framework documentation with auto-indexing. First call indexes do
 ```
 
 **Returns:** Relevant documentation chunks with title, content, URL, and relevance score.
+
+---
+
+### similar
+Find pages similar to a given URL. Extracts content from the source page, generates search keywords, and finds related pages via SearXNG.
+
+**Parameters:**
+- `query` (required): URL of the source page (must start with http:// or https://)
+- `max_results`: Maximum results to return (default: 10)
+
+**Example:**
+```json
+{"action": "similar", "query": "https://example.com/interesting-article"}
+```
+
+**Note:** Requires LLM for keyword extraction. Falls back to page title if no LLM available.
 
 ---
 
