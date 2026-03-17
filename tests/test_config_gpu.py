@@ -79,24 +79,14 @@ def test_detect_gpu_import_error():
 
 def test_has_gguf_support_installed():
     """Test _has_gguf_support returns True if llama_cpp is importable."""
-    with mock.patch.dict(sys.modules, {"llama_cpp": mock.MagicMock()}):
+    with mock.patch("importlib.util.find_spec", return_value=mock.MagicMock()):
         assert _has_gguf_support() is True
 
 
 def test_has_gguf_support_not_installed():
     """Test _has_gguf_support returns False if llama_cpp is not importable."""
-    orig_import = __import__
-
-    def side_effect(name, *args, **kwargs):
-        if name == "llama_cpp":
-            raise ImportError("No module named 'llama_cpp'")
-        return orig_import(name, *args, **kwargs)
-
-    with mock.patch("builtins.__import__", side_effect=side_effect):
-        with mock.patch.dict(sys.modules):
-            if "llama_cpp" in sys.modules:
-                del sys.modules["llama_cpp"]
-            assert _has_gguf_support() is False
+    with mock.patch("importlib.util.find_spec", return_value=None):
+        assert _has_gguf_support() is False
 
 
 def test_resolve_local_model_gpu_gguf():
