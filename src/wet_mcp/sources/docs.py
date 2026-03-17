@@ -18,6 +18,7 @@ import json
 import os
 import re
 import zlib
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -2184,6 +2185,13 @@ _HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$", re.MULTILINE)
 _CODE_FENCE_RE = re.compile(r"^```")
 
 
+@dataclass
+class ChunkContext:
+    title: str
+    heading_path: str
+    url: str
+
+
 def chunk_markdown(
     content: str,
     url: str = "",
@@ -2215,12 +2223,13 @@ def chunk_markdown(
         if len(text) >= min_chunk_size:
             # Split oversized chunks by double newline, preserving code blocks
             if len(text) > max_chunk_size:
+                ctx = ChunkContext(
+                    title=current_title, heading_path=heading_path, url=url
+                )
                 _split_preserving_code(
                     text,
                     chunks,
-                    current_title,
-                    heading_path,
-                    url,
+                    ctx,
                     max_chunk_size,
                     min_chunk_size,
                 )
@@ -2273,9 +2282,7 @@ def chunk_markdown(
 def _split_preserving_code(
     text: str,
     chunks: list[dict],
-    title: str,
-    heading_path: str,
-    url: str,
+    context: ChunkContext,
     max_chunk_size: int,
     min_chunk_size: int,
 ) -> None:
@@ -2311,9 +2318,9 @@ def _split_preserving_code(
                 chunks.append(
                     {
                         "content": buffer.strip(),
-                        "title": title,
-                        "heading_path": heading_path,
-                        "url": url,
+                        "title": context.title,
+                        "heading_path": context.heading_path,
+                        "url": context.url,
                         "chunk_index": len(chunks),
                     }
                 )
@@ -2325,9 +2332,9 @@ def _split_preserving_code(
         chunks.append(
             {
                 "content": buffer.strip(),
-                "title": title,
-                "heading_path": heading_path,
-                "url": url,
+                "title": context.title,
+                "heading_path": context.heading_path,
+                "url": context.url,
                 "chunk_index": len(chunks),
             }
         )
