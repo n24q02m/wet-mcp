@@ -1082,7 +1082,8 @@ async def _fetch_and_chunk_docs(
     gh_page_count = 0
     if gh_pages:
         for page in gh_pages:
-            page_chunks = chunk_markdown(
+            page_chunks = await asyncio.to_thread(
+                chunk_markdown,
                 content=page["content"],
                 url=page.get("url", ""),
             )
@@ -1116,7 +1117,8 @@ async def _fetch_and_chunk_docs(
     )
     chunks: list[dict] = []
     for page in pages:
-        page_chunks = chunk_markdown(
+        page_chunks = await asyncio.to_thread(
+            chunk_markdown,
             content=page["content"],
             url=page.get("url", ""),
         )
