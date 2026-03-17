@@ -553,6 +553,20 @@ def test_prompts():
     assert "Find documentation" in server.library_docs("lib", "question")
 
 
+def test_library_docs_prompt():
+    """Test library_docs prompt formatting."""
+    result = server.library_docs("react", "how to use hooks")
+    assert "Find documentation for 'react' to answer: how to use hooks" in result
+    assert "library='react'" in result
+    assert "query='how to use hooks'" in result
+
+
+def test_research_topic_prompt():
+    """Test research_topic prompt formatting."""
+    result = server.research_topic("quantum computing")
+    assert "Research the following topic thoroughly: quantum computing" in result
+
+
 def test_main():
     with patch("wet_mcp.server.mcp.run") as mock_run:
         server.main()
