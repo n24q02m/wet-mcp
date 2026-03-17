@@ -59,12 +59,6 @@ class Settings(BaseSettings):
         Reranking providers: Jina, Cohere (auto-detected)
     - LITELLM_PROXY_URL: LiteLLM Proxy base URL (e.g. http://10.0.0.20:4000)
     - LITELLM_PROXY_KEY: API key for the LiteLLM Proxy
-    - EMBEDDING_API_BASE: Custom embedding endpoint URL
-    - EMBEDDING_API_KEY: API key for custom embedding endpoint
-    - RERANK_API_BASE: Custom rerank endpoint URL
-    - RERANK_API_KEY: API key for custom rerank endpoint
-    - LLM_API_BASE: Custom LLM chat completion endpoint URL
-    - LLM_API_KEY: API key for custom LLM endpoint
     - EMBEDDING_MODEL: LiteLLM embedding model (auto-detected if not set)
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
     - EMBEDDING_BACKEND: "litellm" | "local" (auto: API_KEYS -> litellm, else local)
@@ -81,7 +75,7 @@ class Settings(BaseSettings):
 
     LiteLLM Mode Detection (resolve_litellm_mode):
     - "proxy": LITELLM_PROXY_URL is set → all calls routed through proxy
-    - "sdk": API_KEYS or custom endpoints set → direct LiteLLM SDK calls
+    - "sdk": API_KEYS set → direct LiteLLM SDK calls
     - "local": no keys/proxy → local ONNX models only
     """
 
@@ -109,14 +103,6 @@ class Settings(BaseSettings):
     # LiteLLM Proxy (selfhosted gateway)
     litellm_proxy_url: str = ""  # e.g. http://10.0.0.20:4000
     litellm_proxy_key: SecretStr | None = None
-
-    # Custom endpoints (e.g. modalcom-ai-workers on Modal.com)
-    embedding_api_base: str = ""
-    embedding_api_key: SecretStr | None = None
-    rerank_api_base: str = ""
-    rerank_api_key: SecretStr | None = None
-    llm_api_base: str = ""
-    llm_api_key: SecretStr | None = None
 
     llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
     llm_temperature: float | None = None
@@ -353,12 +339,7 @@ class Settings(BaseSettings):
         """Detect LiteLLM mode: 'proxy', 'sdk', or 'local'."""
         if self.litellm_proxy_url:
             return "proxy"
-        if (
-            self.api_keys
-            or self.embedding_api_base
-            or self.rerank_api_base
-            or self.llm_api_base
-        ):
+        if self.api_keys:
             return "sdk"
         return "local"
 
@@ -387,33 +368,6 @@ class Settings(BaseSettings):
             logger.info("Local mode (no LiteLLM)")
 
         return mode
-
-    def get_embedding_litellm_kwargs(self) -> dict:
-        """Get extra kwargs for litellm embedding calls (api_base, api_key for Mode 2b)."""
-        kwargs = {}
-        if self.embedding_api_base:
-            kwargs["api_base"] = self.embedding_api_base
-        if self.embedding_api_key:
-            kwargs["api_key"] = self.embedding_api_key.get_secret_value()
-        return kwargs
-
-    def get_rerank_litellm_kwargs(self) -> dict:
-        """Get extra kwargs for litellm rerank calls."""
-        kwargs = {}
-        if self.rerank_api_base:
-            kwargs["api_base"] = self.rerank_api_base
-        if self.rerank_api_key:
-            kwargs["api_key"] = self.rerank_api_key.get_secret_value()
-        return kwargs
-
-    def get_llm_litellm_kwargs(self) -> dict:
-        """Get extra kwargs for litellm chat completion calls."""
-        kwargs = {}
-        if self.llm_api_base:
-            kwargs["api_base"] = self.llm_api_base
-        if self.llm_api_key:
-            kwargs["api_key"] = self.llm_api_key.get_secret_value()
-        return kwargs
 
 
 settings = Settings()

@@ -39,7 +39,6 @@ def get_llm_config() -> dict:
         "model": primary,
         "fallbacks": fallbacks,
         "temperature": settings.llm_temperature,
-        **settings.get_llm_litellm_kwargs(),
     }
 
 
@@ -113,8 +112,6 @@ async def analyze_media(
                 messages=messages,
                 fallbacks=config["fallbacks"],
                 temperature=config["temperature"],
-                api_base=config.get("api_base"),
-                api_key=config.get("api_key"),
             )
             return str(response.choices[0].message.content)
         except Exception as e:

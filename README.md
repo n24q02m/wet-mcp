@@ -78,11 +78,6 @@ uvx --python 3.13 wet-mcp@latest
         // "API_KEYS": "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:co-...",
         // -- without API_KEYS, uses built-in local Qwen3-Embedding-0.6B + Qwen3-Reranker-0.6B (ONNX, CPU)
         // -- first run downloads ~570MB model, cached for subsequent runs
-        // -- optional: custom endpoints (e.g. modalcom-ai-workers on Modal.com)
-        // "EMBEDDING_API_BASE": "https://your-worker.modal.run",
-        // "EMBEDDING_API_KEY": "your-key",
-        // "RERANK_API_BASE": "https://your-worker.modal.run",
-        // "RERANK_API_KEY": "your-key",
         // -- optional: restrict local file conversion to specific directories
         // "CONVERT_ALLOWED_DIRS": "/home/user/docs,/tmp/uploads",
         // -- optional: higher rate limits for docs discovery (60 -> 5000 req/hr)
@@ -113,10 +108,6 @@ uvx --python 3.13 wet-mcp@latest
         "-e", "LITELLM_PROXY_URL",                 // optional: pass-through from env below
         "-e", "LITELLM_PROXY_KEY",                 // optional: pass-through from env below
         "-e", "API_KEYS",                          // optional: pass-through from env below
-        "-e", "EMBEDDING_API_BASE",                // optional: pass-through from env below
-        "-e", "EMBEDDING_API_KEY",                 // optional: pass-through from env below
-        "-e", "RERANK_API_BASE",                   // optional: pass-through from env below
-        "-e", "RERANK_API_KEY",                    // optional: pass-through from env below
         "-e", "GITHUB_TOKEN",                      // optional: pass-through from env below
         "-e", "SYNC_ENABLED",                      // optional: pass-through from env below
         "-e", "SYNC_INTERVAL",                     // optional: pass-through from env below
@@ -130,11 +121,6 @@ uvx --python 3.13 wet-mcp@latest
         // -- Jina AI (recommended): single key for both embedding and reranking
         "API_KEYS": "JINA_AI_API_KEY:jina_...",
         // -- or: "API_KEYS": "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:co-...",
-        // -- optional: custom endpoints (e.g. modalcom-ai-workers on Modal.com)
-        // "EMBEDDING_API_BASE": "https://your-worker.modal.run",
-        // "EMBEDDING_API_KEY": "your-key",
-        // "RERANK_API_BASE": "https://your-worker.modal.run",
-        // "RERANK_API_KEY": "your-key",
         // -- optional: higher rate limits for docs discovery (60 -> 5000 req/hr)
         // -- auto-detected from `gh auth token` if GitHub CLI is installed
         // "GITHUB_TOKEN": "ghp_...",
@@ -231,12 +217,6 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 | `LITELLM_PROXY_KEY` | - | LiteLLM Proxy virtual key (e.g. `sk-...`) |
 | `API_KEYS` | - | LLM API keys for SDK mode (format: `ENV_VAR:key,...`) |
 | `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
-| `LLM_API_BASE` | - | Custom LLM endpoint URL (optional, for SDK mode) |
-| `LLM_API_KEY` | - | Custom LLM endpoint key (optional) |
-| `EMBEDDING_API_BASE` | - | Custom embedding endpoint URL (optional, for SDK mode) |
-| `EMBEDDING_API_KEY` | - | Custom embedding endpoint key (optional) |
-| `RERANK_API_BASE` | - | Custom rerank endpoint URL (optional, for SDK mode) |
-| `RERANK_API_KEY` | - | Custom rerank endpoint key (optional) |
 | `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3). Auto: API_KEYS -> litellm, else local (always available) |
 | `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model (optional) |
 | `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
@@ -282,7 +262,7 @@ LLM access (for media analysis) supports 3 modes, resolved by priority:
 | Priority | Mode | Config | Use case |
 |:---------|:-----|:-------|:---------|
 | 1 | **Proxy** | `LITELLM_PROXY_URL` + `LITELLM_PROXY_KEY` | Production (OCI VM, selfhosted gateway) |
-| 2 | **SDK** | `API_KEYS` or custom `*_API_BASE` | Dev/local with direct API access |
+| 2 | **SDK** | `API_KEYS` | Dev/local with direct API access |
 | 3 | **Local** | Nothing needed | Offline, embedding/rerank only (no LLM) |
 
 No cross-mode fallback — if proxy is configured but unreachable, calls fail (no silent fallback to direct API).

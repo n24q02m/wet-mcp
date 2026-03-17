@@ -236,16 +236,13 @@ async def _init_embedding_backend(mode: str) -> None:
     from wet_mcp.embedder import init_backend
 
     backend_type = settings.resolve_embedding_backend()
-    litellm_kwargs = settings.get_embedding_litellm_kwargs()
 
     if backend_type == "litellm":
         model = settings.resolve_embedding_model()
         if model:
             # Explicit model -- validate it
             try:
-                backend = await asyncio.to_thread(
-                    init_backend, "litellm", model, **litellm_kwargs
-                )
+                backend = await asyncio.to_thread(init_backend, "litellm", model)
                 native_dims = await asyncio.to_thread(backend.check_available)
                 if native_dims > 0:
                     if _embedding_dims == 0:
@@ -262,7 +259,7 @@ async def _init_embedding_backend(mode: str) -> None:
             for candidate in _EMBEDDING_CANDIDATES:
                 try:
                     backend = await asyncio.to_thread(
-                        init_backend, "litellm", candidate, **litellm_kwargs
+                        init_backend, "litellm", candidate
                     )
                     native_dims = await asyncio.to_thread(backend.check_available)
                     if native_dims > 0:
@@ -311,15 +308,11 @@ async def _init_reranker_backend(mode: str) -> None:
 
     from wet_mcp.reranker import init_reranker
 
-    rerank_kwargs = settings.get_rerank_litellm_kwargs()
-
     if rerank_backend_type == "litellm":
         model = settings.resolve_rerank_model()
         if model:
             try:
-                reranker = await asyncio.to_thread(
-                    init_reranker, "litellm", model, **rerank_kwargs
-                )
+                reranker = await asyncio.to_thread(init_reranker, "litellm", model)
                 available = await asyncio.to_thread(reranker.check_available)
                 if available:
                     logger.info(f"Reranker: {model} (cloud)")

@@ -401,59 +401,6 @@ def test_setup_litellm_sdk_mode():
 
 
 # -----------------------------------------------------------------------
-# get_*_litellm_kwargs with custom endpoints
-# -----------------------------------------------------------------------
-
-
-def test_get_embedding_litellm_kwargs_empty():
-    """Returns empty dict when no custom embedding endpoint."""
-    settings = Settings()
-    assert settings.get_embedding_litellm_kwargs() == {}
-
-
-def test_get_embedding_litellm_kwargs_custom():
-    """Returns api_base and api_key when custom embedding endpoint is set."""
-    settings = Settings(
-        embedding_api_base="http://embed:8000",
-        embedding_api_key=SecretStr("embed-key"),
-    )
-    kwargs = settings.get_embedding_litellm_kwargs()
-    assert kwargs == {"api_base": "http://embed:8000", "api_key": "embed-key"}
-
-
-def test_get_rerank_litellm_kwargs_empty():
-    """Returns empty dict when no custom rerank endpoint."""
-    settings = Settings()
-    assert settings.get_rerank_litellm_kwargs() == {}
-
-
-def test_get_rerank_litellm_kwargs_custom():
-    """Returns api_base and api_key when custom rerank endpoint is set."""
-    settings = Settings(
-        rerank_api_base="http://rerank:8000",
-        rerank_api_key=SecretStr("rerank-key"),
-    )
-    kwargs = settings.get_rerank_litellm_kwargs()
-    assert kwargs == {"api_base": "http://rerank:8000", "api_key": "rerank-key"}
-
-
-def test_get_llm_litellm_kwargs_empty():
-    """Returns empty dict when no custom LLM endpoint."""
-    settings = Settings()
-    assert settings.get_llm_litellm_kwargs() == {}
-
-
-def test_get_llm_litellm_kwargs_custom():
-    """Returns api_base and api_key when custom LLM endpoint is set."""
-    settings = Settings(
-        llm_api_base="http://llm:8000",
-        llm_api_key=SecretStr("llm-key"),
-    )
-    kwargs = settings.get_llm_litellm_kwargs()
-    assert kwargs == {"api_base": "http://llm:8000", "api_key": "llm-key"}
-
-
-# -----------------------------------------------------------------------
 # Additional coverage: helper functions, cache path, local models, local mode
 # -----------------------------------------------------------------------
 
@@ -560,9 +507,6 @@ def test_setup_litellm_local_mode():
     settings = Settings(
         litellm_proxy_url="",
         api_keys=None,
-        embedding_api_base="",
-        rerank_api_base="",
-        llm_api_base="",
     )
     mode = settings.setup_litellm()
     assert mode == "local"

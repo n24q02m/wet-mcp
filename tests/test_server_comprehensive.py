@@ -23,9 +23,6 @@ def mock_settings():
         mock.resolve_rerank_model.return_value = "gemini-rerank"
         mock.wet_auto_searxng = False
         mock.setup_litellm.return_value = "sdk"
-        mock.get_embedding_litellm_kwargs.return_value = {}
-        mock.get_rerank_litellm_kwargs.return_value = {}
-        mock.get_llm_litellm_kwargs.return_value = {}
         # For tests, pretend we don't have timeout so tasks run synchronously
         mock.tool_timeout = 0
         yield mock
@@ -873,7 +870,6 @@ async def test_init_embedding_backend_litellm_explicit_model():
     ):
         ms.resolve_embedding_backend.return_value = "litellm"
         ms.resolve_embedding_model.return_value = "text-embedding-3-large"
-        ms.get_embedding_litellm_kwargs.return_value = {}
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -894,7 +890,6 @@ async def test_init_embedding_backend_litellm_explicit_model_fail():
     ):
         ms.resolve_embedding_backend.return_value = "litellm"
         ms.resolve_embedding_model.return_value = "bad-model"
-        ms.get_embedding_litellm_kwargs.return_value = {}
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -924,7 +919,6 @@ async def test_init_embedding_backend_autodetect_candidates():
     ):
         ms.resolve_embedding_backend.return_value = "litellm"
         ms.resolve_embedding_model.return_value = None
-        ms.get_embedding_litellm_kwargs.return_value = {}
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -954,7 +948,6 @@ async def test_init_embedding_backend_all_candidates_fail():
     ):
         ms.resolve_embedding_backend.return_value = "litellm"
         ms.resolve_embedding_model.return_value = None
-        ms.get_embedding_litellm_kwargs.return_value = {}
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -985,7 +978,6 @@ async def test_init_embedding_backend_local_fail():
     ):
         ms.resolve_embedding_backend.return_value = "local"
         ms.resolve_embedding_model.return_value = None
-        ms.get_embedding_litellm_kwargs.return_value = {}
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -1003,7 +995,6 @@ async def test_init_embedding_backend_local_not_available():
     ):
         ms.resolve_embedding_backend.return_value = "local"
         ms.resolve_embedding_model.return_value = None
-        ms.get_embedding_litellm_kwargs.return_value = {}
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -1037,7 +1028,7 @@ async def test_init_reranker_backend_litellm_cloud_fail_local_fallback():
     ):
         ms.resolve_rerank_backend.return_value = "litellm"
         ms.resolve_rerank_model.return_value = "rerank-model"
-        ms.get_rerank_litellm_kwargs.return_value = {}
+
         ms.resolve_local_rerank_model.return_value = "local-rerank"
 
         call_count = 0
@@ -1066,7 +1057,7 @@ async def test_init_reranker_backend_local_fail():
     ):
         ms.resolve_rerank_backend.return_value = "local"
         ms.resolve_rerank_model.return_value = None
-        ms.get_rerank_litellm_kwargs.return_value = {}
+
         ms.resolve_local_rerank_model.return_value = "local-rerank"
 
         mock_init.side_effect = Exception("local rerank init failed")
@@ -1083,7 +1074,7 @@ async def test_init_reranker_backend_local_not_available():
     ):
         ms.resolve_rerank_backend.return_value = "local"
         ms.resolve_rerank_model.return_value = None
-        ms.get_rerank_litellm_kwargs.return_value = {}
+
         ms.resolve_local_rerank_model.return_value = "local-rerank"
 
         mock_reranker = MagicMock()
