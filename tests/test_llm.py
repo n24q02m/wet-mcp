@@ -45,6 +45,31 @@ def test_get_llm_config_with_temperature(mock_settings):
     assert config["temperature"] == 0.7
 
 
+def test_get_llm_config_fallbacks(mock_settings):
+    """Test LLM config with fallbacks."""
+    settings.llm_models = "gemini/fake-model, openai/gpt-4"
+    config = get_llm_config()
+    assert config["model"] == "gemini/fake-model"
+    assert config["fallbacks"] == ["openai/gpt-4"]
+
+
+def test_get_llm_config_empty_models(mock_settings):
+    """Test LLM config with empty or whitespace models string."""
+    settings.llm_models = "   ,  "
+    config = get_llm_config()
+    assert config["model"] == "gemini/gemini-3-flash-preview"
+    assert config["fallbacks"] is None
+
+
+def test_get_llm_config_extra_kwargs(mock_settings):
+    """Test LLM config extra litellm kwargs are included."""
+    settings.llm_api_base = "http://localhost:11434"
+    settings.llm_api_key = SecretStr("fake-key")
+    config = get_llm_config()
+    assert config["api_base"] == "http://localhost:11434"
+    assert config["api_key"] == "fake-key"
+
+
 @patch("wet_mcp.llm.acompletion")
 def test_analyze_media(mock_completion, mock_settings, tmp_path):
     """Test analyze_media function using real temp file."""
@@ -83,15 +108,22 @@ def test_analyze_media(mock_completion, mock_settings, tmp_path):
     assert "ZmFrZS1pbWFnZS1kYXRh" in str(call_args["messages"][0]["content"])
 
 
-def test_analyze_media_no_keys():
+def test_analyze_media_no_keys(tmp_path):
     """Test analyze_media without keys."""
     # Temporarily clear keys
     original_keys = settings.api_keys
+    original_api_base = settings.llm_api_base
     settings.api_keys = None
+    settings.llm_api_base = ""
+    settings.download_dir = str(tmp_path)
 
-    result = asyncio.run(analyze_media("test.jpg"))
+    img_path = tmp_path / "test.jpg"
+    img_path.touch()
+
+    result = asyncio.run(analyze_media(str(img_path)))
 
     settings.api_keys = original_keys
+    settings.llm_api_base = original_api_base
     assert "Error: LLM analysis requires LITELLM_PROXY_URL or API_KEYS" in result
 
 
