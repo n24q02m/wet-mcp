@@ -908,22 +908,10 @@ async def config(
                 settings.log_level = value.upper()
                 logger.remove()
                 logger.add(sys.stderr, level=settings.log_level)
-            elif key == "tool_timeout":
-                settings.tool_timeout = int(value)
-            elif key == "wet_cache":
-                settings.wet_cache = value.lower() in (
-                    "true",
-                    "1",
-                    "yes",
-                )
-            elif key == "sync_enabled":
-                settings.sync_enabled = value.lower() in (
-                    "true",
-                    "1",
-                    "yes",
-                )
-            elif key == "sync_interval":
-                settings.sync_interval = int(value)
+            elif key in ("tool_timeout", "sync_interval"):
+                setattr(settings, key, int(value))
+            elif key in ("wet_cache", "sync_enabled"):
+                setattr(settings, key, value.lower() in ("true", "1", "yes"))
             else:
                 setattr(settings, key, value)
             return json.dumps(
