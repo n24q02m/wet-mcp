@@ -366,6 +366,12 @@ async def test_extract_structured_requires_schema():
     assert "schema" in result
 
 
+async def test_extract_batch_requires_urls():
+    """Test batch action requires urls."""
+    result = await extract(action="batch", urls=None)
+    assert "Error: urls is required for batch action" in result
+
+
 # ---------------------------------------------------------------------------
 # Phase 2: similar action
 # ---------------------------------------------------------------------------

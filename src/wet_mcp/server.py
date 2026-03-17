@@ -724,6 +724,7 @@ async def extract(
 ) -> str:
     """Extract content from web pages, crawl sites, map structure, or convert local files.
     - extract: Get clean content from URLs (requires urls)
+    - batch: Batch extract with per-domain rate limiting (requires urls, max 50)
     - crawl: Deep crawl from root URLs (requires urls)
     - map: Discover site structure without content (requires urls)
     - convert: Convert local files to Markdown (requires paths, max 10)
@@ -757,6 +758,16 @@ async def extract(
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
             return result
+
+        case "batch":
+            if not urls:
+                return "Error: urls is required for batch action"
+            from wet_mcp.sources.crawler import batch_extract
+
+            return await _with_timeout(
+                batch_extract(urls=urls, format=format, stealth=stealth),
+                "batch",
+            )
 
         case "crawl":
             if not urls:
@@ -833,7 +844,7 @@ async def extract(
         case _:
             return (
                 f"Error: Unknown action '{action}'. "
-                "Valid actions: extract, crawl, map, convert, extract_structured"
+                "Valid actions: extract, batch, crawl, map, convert, extract_structured"
             )
 
 
