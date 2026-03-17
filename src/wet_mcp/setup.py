@@ -8,6 +8,7 @@ This module handles automatic first-run setup:
 Setup runs automatically on first server start.
 """
 
+import platform
 import subprocess
 import sys
 from pathlib import Path
@@ -69,7 +70,7 @@ def patch_searxng_windows() -> None:
     but only uses it to log the username on Valkey connection errors.
     This patches it to gracefully handle the missing module on Windows.
     """
-    if sys.platform != "win32":
+    if platform.system() != "Windows":
         return
 
     try:
@@ -123,7 +124,6 @@ def needs_setup() -> bool:
 def _get_pip_command() -> list[str]:
     """Get cross-platform pip install command."""
     import shutil
-    import sys
 
     uv_path = shutil.which("uv")
     if uv_path:
