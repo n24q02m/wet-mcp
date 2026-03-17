@@ -415,10 +415,9 @@ class DocsDB:
                     "(SELECT id FROM doc_chunks WHERE library_id = ?)",
                     (lib_id,),
                 )
-            except Exception:
+            except Exception as e:
                 logger.warning(
-                    f"Failed to delete vector entries for library {lib_id}",
-                    exc_info=True,
+                    f"Failed to delete vector chunks: {e}",
                 )
 
         # Cascade deletes chunks and versions
@@ -572,10 +571,9 @@ class DocsDB:
                     "(SELECT id FROM doc_chunks WHERE version_id = ?)",
                     (version_id,),
                 )
-            except Exception:
+            except Exception as e:
                 logger.warning(
-                    f"Failed to delete vector entries for version {version_id}",
-                    exc_info=True,
+                    f"Failed to delete vector chunks: {e}",
                 )
 
         cursor = self._conn.execute(
