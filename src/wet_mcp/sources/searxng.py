@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 from loguru import logger
@@ -12,6 +13,80 @@ from wet_mcp.config import settings
 _MAX_RETRIES = 3
 _BASE_DELAY = 1.0  # seconds
 _HEALTH_CHECK_TIMEOUT = 5.0
+_MAX_PER_DOMAIN = 3
+
+# Tracking parameters to strip during URL normalization
+_TRACKING_PARAMS = frozenset(
+    {
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "fbclid",
+        "gclid",
+        "msclkid",
+        "yclid",
+        "ref",
+        "_ga",
+        "_gl",
+        "mc_cid",
+        "mc_eid",
+    }
+)
+
+
+def _normalize_url(url: str) -> str:
+    """Normalize a URL for deduplication.
+
+    Strips www. prefix, trailing slashes, and known tracking parameters.
+    """
+    if not url:
+        return ""
+
+    parsed = urlparse(url)
+
+    # Strip www. from netloc
+    netloc = parsed.netloc
+    if netloc.startswith("www."):
+        netloc = netloc[4:]
+
+    # Strip trailing slash from path
+    path = parsed.path.rstrip("/")
+
+    # Remove tracking params
+    if parsed.query:
+        params = parse_qs(parsed.query, keep_blank_values=True)
+        cleaned = {k: v for k, v in params.items() if k not in _TRACKING_PARAMS}
+        query = urlencode(cleaned, doseq=True)
+    else:
+        query = ""
+
+    # Reconstruct URL
+    result = (
+        f"{parsed.scheme}://{netloc}{path}"
+        if parsed.scheme and netloc
+        else f"{netloc}{path}"
+    )
+    if query:
+        result += f"?{query}"
+    return result
+
+
+def _apply_domain_cap(items: list[dict]) -> list[dict]:
+    """Limit results to _MAX_PER_DOMAIN per domain, preserving order."""
+    domain_counts: dict[str, int] = {}
+    result: list[dict] = []
+    for item in items:
+        parsed = urlparse(item.get("url", ""))
+        domain = parsed.netloc
+        if domain.startswith("www."):
+            domain = domain[4:]
+        count = domain_counts.get(domain, 0)
+        if count < _MAX_PER_DOMAIN:
+            result.append(item)
+            domain_counts[domain] = count + 1
+    return result
 
 
 async def _check_health(searxng_url: str) -> bool:
@@ -122,16 +197,16 @@ async def search(
                         }
                     )
 
-                # Deduplicate by URL: with multiple engines, the same page
-                # may appear several times.  Keep the entry with the longest
+                # Deduplicate by normalized URL: with multiple engines, the same
+                # page may appear several times.  Keep the entry with the longest
                 # snippet (most informative) and merge engine sources.
                 # Python 3.7+ preserves dictionary insertion order, eliminating the need
                 # for a separate 'deduped' list mapping to track the first-seen order.
                 seen: dict[str, dict] = {}
                 for item in formatted:
-                    url = item["url"]
-                    if url in seen:
-                        existing = seen[url]
+                    norm_url = _normalize_url(item["url"])
+                    if norm_url in seen:
+                        existing = seen[norm_url]
                         # Merge engine sources
                         if item["source"] and item["source"] not in existing["source"]:
                             existing["source"] += f", {item['source']}"
@@ -142,10 +217,10 @@ async def search(
                             existing["snippet"] = item["snippet"]
                             existing["title"] = item["title"] or existing["title"]
                     else:
-                        seen[url] = item
+                        seen[norm_url] = item
 
-                # Convert dict values to list and trim to requested limit after dedup
-                deduped = list(seen.values())[:max_results]
+                # Apply per-domain cap, then trim to requested limit
+                deduped = _apply_domain_cap(list(seen.values()))[:max_results]
 
                 output = {
                     "results": deduped,
