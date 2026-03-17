@@ -563,7 +563,7 @@ async def search(  # noqa: PLR0913
                     searxng_url=searxng_url,
                     query=query,
                     categories=categories,
-                    max_results=max_results,
+                    max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
                     time_range=time_range,
                     language=language,
                     include_domains=include_domains,
@@ -571,6 +571,27 @@ async def search(  # noqa: PLR0913
                 ),
                 "search",
             )
+            # Rerank by semantic relevance (same as research/docs)
+            if not result.startswith("Error"):
+                try:
+                    data = json.loads(result)
+                    results_list = data.get("results", [])
+                    if results_list:
+                        # Map snippet -> content for reranker (fallback to title)
+                        for r in results_list:
+                            if "content" not in r:
+                                r["content"] = r.get("snippet", r.get("title", ""))
+                        reranked = await _rerank_results(
+                            query, results_list, top_n=max_results
+                        )
+                        if reranked:
+                            data["results"] = [
+                                r for r in reranked if r.get("score", 1.0) > 0.2
+                            ]
+                            data["total"] = len(data["results"])
+                            result = json.dumps(data, ensure_ascii=False, indent=2)
+                except Exception as e:
+                    logger.debug(f"Search reranking failed, using original: {e}")
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
             return result
