@@ -164,8 +164,8 @@ def test_check_ip_safe_ipv6_scope_id():
     # IPv6 link-local with scope ID should be blocked (link-local)
     assert not _check_ip_safe("fe80::1%eth0", "test-host")
 
-    # Invalid IP string that causes ValueError should return True (skip)
-    assert _check_ip_safe("not-an-ip-at-all", "test-host")
+    # Invalid IP string that causes ValueError should return False (fail-closed)
+    assert not _check_ip_safe("not-an-ip-at-all", "test-host")
 
 
 def test_is_safe_url_non_http_scheme():
