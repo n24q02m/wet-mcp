@@ -41,6 +41,23 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
+def _apply_version_to_url(url: str, version: str | None) -> str:
+    """Apply version to docs URL if applicable.
+
+    Handles ReadTheDocs (/en/latest/ -> /en/{version}/) and
+    docs.rs (/latest/ -> /{version}/) patterns.
+    """
+    if not version:
+        return url
+    # ReadTheDocs
+    if "readthedocs" in url:
+        url = re.sub(r"/en/(latest|stable)/", f"/en/{version}/", url)
+    # docs.rs
+    elif "docs.rs" in url:
+        url = re.sub(r"/latest/", f"/{version}/", url)
+    return url
+
+
 # ---------------------------------------------------------------------------
 # Registry discovery — find docs URL from library name
 # ---------------------------------------------------------------------------
