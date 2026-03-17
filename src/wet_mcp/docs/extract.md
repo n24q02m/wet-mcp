@@ -66,6 +66,23 @@ Convert local files to Markdown. Supports: PDF, DOCX, PPTX, XLSX, CSV, JSON, XML
 
 ---
 
+### batch
+Batch extract content from multiple URLs with per-domain rate limiting. Polite crawling: max 2 concurrent per domain, 1 req/s per domain, 10 global concurrent. Returns partial results on failure.
+
+**Parameters:**
+- `urls` (required): List of URLs (max 50)
+- `format`: Output format (default: markdown)
+- `stealth`: Enable stealth mode (default: false)
+
+**Example:**
+```json
+{"action": "batch", "urls": ["https://a.com/1", "https://a.com/2", "https://b.com/1", ...]}
+```
+
+**Returns:** `{results: [...], errors: [...], summary: {total, success, failed}}`
+
+---
+
 ### extract_structured
 Extract structured data from web pages using LLM + JSON Schema. Provide a schema defining the data structure you want, and the LLM extracts matching data from the page content.
 
