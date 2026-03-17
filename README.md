@@ -22,10 +22,16 @@ mcp-name: io.github.n24q02m/wet-mcp
 
 ## Features
 
-- **Web Search** - Search via embedded SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave)
+- **Web Search** - Search via embedded SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave) with search filters (time range, language, include/exclude domains)
+- **Search Reranking** - Semantic reranking for better relevance (Jina AI, Cohere, or local Qwen3)
+- **Query Expansion** - LLM-powered query expansion for broader coverage
+- **Find Similar** - Discover pages similar to a given URL
+- **Snippet Enrichment** - LLM-powered enrichment of search result snippets
 - **Academic Research** - Search Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
-- **Library Docs** - Auto-discover and index documentation with FTS5 hybrid search
-- **Content Extract** - Extract clean content (Markdown/Text)
+- **Library Docs** - Auto-discover and index documentation with FTS5 hybrid search, HyDE-enhanced retrieval, and version-specific docs discovery
+- **Content Extract** - Extract clean content (Markdown/Text) with structured data extraction (LLM + JSON Schema)
+- **Batch Processing** - Extract up to 50 URLs in one call with per-domain rate limiting
+- **Local File Conversion** - Convert local files (PDF, DOCX, XLSX, CSV, HTML, EPUB, PPTX, etc.) to Markdown
 - **Deep Crawl** - Crawl multiple pages from a root URL with depth control
 - **Site Map** - Discover website URL structure
 - **Media** - List and download images, videos, audio files
@@ -65,15 +71,20 @@ uvx --python 3.13 wet-mcp@latest
         // -- optional: LiteLLM Proxy (production, selfhosted gateway)
         // "LITELLM_PROXY_URL": "http://10.0.0.20:4000",
         // "LITELLM_PROXY_KEY": "sk-your-virtual-key",
-        // -- optional: cloud embedding (Gemini > OpenAI > Cohere) + media analysis
-        // -- without this, uses built-in local Qwen3-Embedding-0.6B + Qwen3-Reranker-0.6B (ONNX, CPU)
+        // -- optional: cloud embedding + reranking + media analysis
+        // -- Jina AI (recommended): single key for both embedding and reranking
+        "API_KEYS": "JINA_AI_API_KEY:jina_...",
+        // -- or use other providers (Gemini, OpenAI, Cohere):
+        // "API_KEYS": "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:co-...",
+        // -- without API_KEYS, uses built-in local Qwen3-Embedding-0.6B + Qwen3-Reranker-0.6B (ONNX, CPU)
         // -- first run downloads ~570MB model, cached for subsequent runs
-        "API_KEYS": "GOOGLE_API_KEY:AIza...",
         // -- optional: custom endpoints (e.g. modalcom-ai-workers on Modal.com)
         // "EMBEDDING_API_BASE": "https://your-worker.modal.run",
         // "EMBEDDING_API_KEY": "your-key",
         // "RERANK_API_BASE": "https://your-worker.modal.run",
         // "RERANK_API_KEY": "your-key",
+        // -- optional: restrict local file conversion to specific directories
+        // "CONVERT_ALLOWED_DIRS": "/home/user/docs,/tmp/uploads",
         // -- optional: higher rate limits for docs discovery (60 -> 5000 req/hr)
         "GITHUB_TOKEN": "ghp_...",
         // -- optional: sync indexed docs across machines via rclone
@@ -115,9 +126,10 @@ uvx --python 3.13 wet-mcp@latest
         // -- optional: LiteLLM Proxy (production, selfhosted gateway)
         // "LITELLM_PROXY_URL": "http://10.0.0.20:4000",
         // "LITELLM_PROXY_KEY": "sk-your-virtual-key",
-        // -- optional: cloud embedding (Gemini > OpenAI > Cohere) + media analysis
-        // -- without this, uses built-in local Qwen3-Embedding-0.6B + Qwen3-Reranker-0.6B (ONNX, CPU)
-        "API_KEYS": "GOOGLE_API_KEY:AIza...",
+        // -- optional: cloud embedding + reranking + media analysis
+        // -- Jina AI (recommended): single key for both embedding and reranking
+        "API_KEYS": "JINA_AI_API_KEY:jina_...",
+        // -- or: "API_KEYS": "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:co-...",
         // -- optional: custom endpoints (e.g. modalcom-ai-workers on Modal.com)
         // "EMBEDDING_API_BASE": "https://your-worker.modal.run",
         // "EMBEDDING_API_KEY": "your-key",
@@ -173,8 +185,8 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 
 | Tool | Actions | Description |
 |:-----|:--------|:------------|
-| `search` | search, research, docs | Web search, academic research, library documentation |
-| `extract` | extract, crawl, map | Content extraction, deep crawling, site mapping |
+| `search` | search, research, docs, similar, expand, enrich | Web search (with filters & reranking), academic research, library docs (HyDE), find similar, query expansion, snippet enrichment |
+| `extract` | extract, crawl, map, convert, structured, batch | Content extraction, deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema), batch processing (up to 50 URLs) |
 | `media` | list, download, analyze | Media discovery & download |
 | `config` | status, set, cache_clear, docs_reindex | Server configuration and cache management |
 | `help` | - | Full documentation for any tool |
@@ -184,12 +196,19 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 ```json
 // search tool
 {"action": "search", "query": "python web scraping", "max_results": 10}
+{"action": "search", "query": "rust async", "time_range": "month", "language": "en", "include_domains": ["docs.rs"]}
 {"action": "research", "query": "transformer attention mechanism"}
 {"action": "docs", "query": "how to create routes", "library": "fastapi"}
 {"action": "docs", "query": "dependency injection", "library": "spring-boot", "language": "java"}
+{"action": "similar", "url": "https://fastapi.tiangolo.com/tutorial/first-steps/"}
+{"action": "expand", "query": "python async patterns"}
+{"action": "enrich", "query": "kubernetes networking", "snippets": ["..."]}
 
 // extract tool
 {"action": "extract", "urls": ["https://example.com"]}
+{"action": "batch", "urls": ["https://a.com", "https://b.com", "https://c.com"]}
+{"action": "structured", "urls": ["https://example.com/product"], "schema": {"type": "object", "properties": {"name": {"type": "string"}, "price": {"type": "number"}}}}
+{"action": "convert", "file_path": "/path/to/document.pdf"}
 {"action": "crawl", "urls": ["https://docs.python.org"], "depth": 2}
 {"action": "map", "urls": ["https://example.com"]}
 
@@ -225,6 +244,8 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 | `RERANK_BACKEND` | (auto-detect) | `litellm` or `local`. Auto: Cohere key in API_KEYS -> litellm, else local |
 | `RERANK_MODEL` | (auto-detect) | LiteLLM rerank model (auto: `cohere/rerank-multilingual-v3.0` if Cohere key in API_KEYS) |
 | `RERANK_TOP_N` | `10` | Return top N results after reranking |
+| `CONVERT_MAX_FILE_SIZE` | `104857600` | Max file size for local file conversion in bytes (default 100MB) |
+| `CONVERT_ALLOWED_DIRS` | `` | Comma-separated absolute paths to restrict local file conversion (empty = allow all) |
 | `CACHE_DIR` | `~/.wet-mcp` | Data directory for cache DB, docs DB, downloads (optional) |
 | `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location (optional) |
 | `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory (optional) |
@@ -242,15 +263,16 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 
 Both embedding and reranking are **always available** — local models are built-in and require no configuration.
 
-- **Embedding**: Default local Qwen3-Embedding-0.6B. Set `API_KEYS` to upgrade to cloud (Gemini > OpenAI > Cohere), with automatic local fallback if cloud fails.
-- **Reranking**: Default local Qwen3-Reranker-0.6B. If `COHERE_API_KEY` is present in `API_KEYS`, auto-upgrades to cloud `cohere/rerank-multilingual-v3.0`.
+- **Jina AI (recommended)**: A single `JINA_AI_API_KEY` enables both embedding (`jina-embeddings-v5-text-small`) and reranking (`jina-reranker-v3`). This is the highest-priority cloud provider.
+- **Embedding priority**: Jina AI > Gemini > OpenAI > Cohere. Default local Qwen3-Embedding-0.6B when no API keys are set. Automatic local fallback if cloud fails.
+- **Reranking priority**: Jina AI > Cohere. Default local Qwen3-Reranker-0.6B when no API keys are set.
 - **GPU auto-detection**: If GPU is available (CUDA/DirectML) and `llama-cpp-python` is installed, automatically uses GGUF models (~480MB) instead of ONNX (~570MB) for better performance.
 - All embeddings stored at **768 dims** (default). Switching providers never breaks the vector table.
 - Override with `EMBEDDING_BACKEND=local` to force local even with API keys.
 
 `API_KEYS` supports multiple providers in a single string:
 ```
-API_KEYS=GOOGLE_API_KEY:AIza...,OPENAI_API_KEY:sk-...,COHERE_API_KEY:co-...
+API_KEYS=JINA_AI_API_KEY:jina_...,GOOGLE_API_KEY:AIza...,OPENAI_API_KEY:sk-...,COHERE_API_KEY:co-...
 ```
 
 ### LLM Configuration (3-Mode Architecture)
