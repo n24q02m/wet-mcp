@@ -134,11 +134,31 @@ async def _ensure_searxng_healthy(searxng_url: str) -> str:
     return new_url
 
 
+def _build_filtered_query(
+    query: str,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+) -> str:
+    """Build query string with domain include/exclude filters."""
+    parts = [query]
+    if include_domains:
+        site_filter = " OR ".join(f"site:{d}" for d in include_domains[:5])
+        parts = [f"({site_filter}) {query}"]
+    if exclude_domains:
+        for domain in exclude_domains[:10]:
+            parts.append(f"-site:{domain}")
+    return " ".join(parts)
+
+
 async def search(
     searxng_url: str,
     query: str,
     categories: str = "general",
     max_results: int = 10,
+    time_range: str | None = None,
+    language: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
 ) -> str:
     """Search via SearXNG API with retry logic and health verification.
 
@@ -151,6 +171,10 @@ async def search(
         query: Search query
         categories: Search category (general, images, videos, files)
         max_results: Maximum number of results
+        time_range: Time filter (day, week, month, year)
+        language: Language filter (e.g. en, vi, zh)
+        include_domains: Only search these domains (max 5)
+        exclude_domains: Exclude these domains (max 10)
 
     Returns:
         JSON string with search results
@@ -160,11 +184,17 @@ async def search(
     # Pre-search health check + auto-restart if needed
     active_url = await _ensure_searxng_healthy(searxng_url)
 
+    effective_query = _build_filtered_query(query, include_domains, exclude_domains)
+
     params = {
-        "q": query,
+        "q": effective_query,
         "format": "json",
         "categories": categories,
     }
+    if time_range and time_range in ("day", "week", "month", "year"):
+        params["time_range"] = time_range
+    if language:
+        params["language"] = language
 
     last_error: str | None = None
 

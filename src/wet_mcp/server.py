@@ -523,6 +523,9 @@ async def search(  # noqa: PLR0913
     categories: str = "general",
     max_results: int = 10,
     limit: int = 10,
+    time_range: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
 ) -> str:
     """Search the web, academic papers, or library documentation.
     - search: Web search via SearXNG (requires query)
@@ -538,6 +541,10 @@ async def search(  # noqa: PLR0913
                 "query": query,
                 "categories": categories,
                 "max_results": max_results,
+                "time_range": time_range,
+                "language": language,
+                "include_domains": include_domains,
+                "exclude_domains": exclude_domains,
             }
             if _web_cache:
                 cached = await asyncio.to_thread(_web_cache.get, "search", cache_params)
@@ -557,6 +564,10 @@ async def search(  # noqa: PLR0913
                     query=query,
                     categories=categories,
                     max_results=max_results,
+                    time_range=time_range,
+                    language=language,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
                 ),
                 "search",
             )
@@ -567,7 +578,14 @@ async def search(  # noqa: PLR0913
         case "research":
             if not query:
                 return "Error: query is required for research action"
-            cache_params = {"query": query, "max_results": max_results}
+            cache_params = {
+                "query": query,
+                "max_results": max_results,
+                "time_range": time_range,
+                "language": language,
+                "include_domains": include_domains,
+                "exclude_domains": exclude_domains,
+            }
             if _web_cache:
                 cached = await asyncio.to_thread(
                     _web_cache.get, "research", cache_params
@@ -575,7 +593,14 @@ async def search(  # noqa: PLR0913
                 if cached:
                     return cached
             result = await _with_timeout(
-                _do_research(query=query, max_results=max_results),
+                _do_research(
+                    query=query,
+                    max_results=max_results,
+                    time_range=time_range,
+                    language=language,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
+                ),
                 "research",
             )
             if _web_cache and not result.startswith("Error"):
@@ -967,7 +992,14 @@ async def config(
 # ---------------------------------------------------------------------------
 
 
-async def _do_research(query: str, max_results: int = 10) -> str:
+async def _do_research(
+    query: str,
+    max_results: int = 10,
+    time_range: str | None = None,
+    language: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+) -> str:
     """Academic/scientific search using SearXNG science engines."""
     try:
         searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
@@ -981,6 +1013,10 @@ async def _do_research(query: str, max_results: int = 10) -> str:
         query=query,
         categories="science",
         max_results=max_results * 3,
+        time_range=time_range,
+        language=language,
+        include_domains=include_domains,
+        exclude_domains=exclude_domains,
     )
     try:
         data = json.loads(result_str)
