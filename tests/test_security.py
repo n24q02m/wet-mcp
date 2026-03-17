@@ -1,7 +1,7 @@
 import socket
 from unittest.mock import patch
 
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_local_path, is_safe_url
 
 # Tests mock ``wet_mcp.security._original_getaddrinfo`` because
 # ``is_safe_url`` calls the saved reference (not ``socket.getaddrinfo``
@@ -242,3 +242,66 @@ def test_wrap_external_content_error():
 
     result = wrap_external_content("test_tool", "Error: something went wrong")
     assert result == "Error: something went wrong"
+
+
+def test_safe_local_path_valid_file(tmp_path):
+    f = tmp_path / "test.pdf"
+    f.write_text("hello")
+    result = is_safe_local_path(str(f))
+    assert result == f.resolve()
+
+
+def test_safe_local_path_rejects_nonexistent():
+    assert is_safe_local_path("/nonexistent/file.pdf") is None
+
+
+def test_safe_local_path_rejects_directory(tmp_path):
+    assert is_safe_local_path(str(tmp_path)) is None
+
+
+def test_safe_local_path_rejects_dotdot(tmp_path):
+    f = tmp_path / "test.txt"
+    f.write_text("hello")
+    evil_path = str(tmp_path / "subdir" / ".." / "test.txt")
+    assert is_safe_local_path(evil_path) is None
+
+
+def test_safe_local_path_allows_dots_in_filename(tmp_path):
+    """Filenames like 'report..v2.pdf' should NOT be rejected."""
+    f = tmp_path / "report..v2.txt"
+    f.write_text("hello")
+    assert is_safe_local_path(str(f)) is not None
+
+
+def test_safe_local_path_rejects_too_large(tmp_path):
+    f = tmp_path / "big.pdf"
+    f.write_bytes(b"x" * 100)
+    assert is_safe_local_path(str(f), max_size=50) is None
+
+
+def test_safe_local_path_allowed_dirs(tmp_path):
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    f = allowed / "test.txt"
+    f.write_text("hello")
+    assert is_safe_local_path(str(f), allowed_dirs=[allowed]) is not None
+
+
+def test_safe_local_path_rejects_outside_allowed_dirs(tmp_path):
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    f = outside / "test.txt"
+    f.write_text("hello")
+    assert is_safe_local_path(str(f), allowed_dirs=[allowed]) is None
+
+
+def test_safe_local_path_symlink_escape(tmp_path):
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    secret = tmp_path / "secret.txt"
+    secret.write_text("sensitive")
+    link = allowed / "link.txt"
+    link.symlink_to(secret)
+    assert is_safe_local_path(str(link), allowed_dirs=[allowed]) is None
