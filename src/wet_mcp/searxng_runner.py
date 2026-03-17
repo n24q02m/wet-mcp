@@ -520,10 +520,12 @@ def _kill_stale_port_process(port: int) -> None:
                         pid = int(pid_str)
                         if pid > 0:
                             _sigterm_then_kill(pid, f"stale port {port}")
-                    except (ValueError, ProcessLookupError, PermissionError):
-                        pass
-        except Exception:
-            pass
+                    except (ValueError, ProcessLookupError, PermissionError) as e:
+                        logger.debug(
+                            f"Could not kill process {pid_str} on port {port}: {e}"
+                        )
+        except Exception as e:
+            logger.debug(f"Error finding processes on port {port} using netstat: {e}")
     else:
         # On Unix, use lsof or fuser
         try:
@@ -540,8 +542,10 @@ def _kill_stale_port_process(port: int) -> None:
                         pid = int(pid_str.strip())
                         if pid > 0 and pid != os.getpid():
                             _sigterm_then_kill(pid, f"stale port {port}")
-                    except (ValueError, ProcessLookupError, PermissionError):
-                        pass
+                    except (ValueError, ProcessLookupError, PermissionError) as e:
+                        logger.debug(
+                            f"Could not kill process {pid_str} on port {port}: {e}"
+                        )
         except FileNotFoundError:
             # lsof not available, try fuser
             try:
@@ -551,10 +555,10 @@ def _kill_stale_port_process(port: int) -> None:
                     capture_output=True,
                     timeout=5,
                 )
-            except (FileNotFoundError, subprocess.TimeoutExpired):
-                pass
-        except Exception:
-            pass
+            except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+                logger.debug(f"Could not free port {port} using fuser: {e}")
+        except Exception as e:
+            logger.debug(f"Error finding processes on port {port} using lsof: {e}")
 
 
 def _cleanup_process() -> None:
