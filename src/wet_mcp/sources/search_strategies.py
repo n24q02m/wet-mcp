@@ -132,6 +132,49 @@ async def _extract_keywords(content: str, title: str) -> str:
         return title if title else content[:200]
 
 
+_HYDE_SCORE_THRESHOLD = 0.3
+
+
+async def generate_hyde_query(query: str, library: str) -> str | None:
+    """Generate a hypothetical document for better embedding-based search.
+
+    Returns the hypothetical text to be used as the search query instead of
+    the original query. The embedding of this text will be closer to relevant
+    documents in vector space.
+
+    Returns None if LLM unavailable or generation fails.
+    """
+    mode = settings.resolve_litellm_mode()
+    if mode == "local":
+        return None
+
+    try:
+        config = get_llm_config()
+        response = await acompletion(
+            model=config["model"],
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"Write a short, factual documentation paragraph that would "
+                        f"perfectly answer this question about the {library} library: '{query}'"
+                    ),
+                }
+            ],
+            temperature=0,
+            max_tokens=200,
+            **{
+                k: v
+                for k, v in config.items()
+                if k not in ("model", "fallbacks", "temperature")
+            },
+        )
+        return response.choices[0].message.content or None
+    except Exception as e:
+        logger.debug(f"HyDE generation failed: {e}")
+        return None
+
+
 async def enrich_snippets(
     results: list[dict],
     query: str,

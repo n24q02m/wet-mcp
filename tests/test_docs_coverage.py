@@ -14,6 +14,7 @@ import pytest
 
 from wet_mcp.security import _ssrf_event_hook
 from wet_mcp.sources.docs import (
+    _apply_version_to_url,
     _clean_doc_content,
     _discover_from_crates,
     _discover_from_github_search,
@@ -3302,3 +3303,43 @@ class TestFetchDocsPagesLinks:
                     result = await fetch_docs_pages("https://docs.test/", max_pages=10)
         # Only the root page should be in results (blocked page filtered)
         assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
+# _apply_version_to_url
+# ---------------------------------------------------------------------------
+
+
+def test_apply_version_to_url_readthedocs():
+    """ReadTheDocs URLs get /en/latest/ replaced with /en/{version}/."""
+    url = "https://docs.readthedocs.io/en/latest/guide.html"
+    result = _apply_version_to_url(url, "3.2.1")
+    assert result == "https://docs.readthedocs.io/en/3.2.1/guide.html"
+
+
+def test_apply_version_to_url_readthedocs_stable():
+    """ReadTheDocs /en/stable/ is also replaced."""
+    url = "https://mylib.readthedocs.io/en/stable/api.html"
+    result = _apply_version_to_url(url, "v2.0")
+    assert result == "https://mylib.readthedocs.io/en/v2.0/api.html"
+
+
+def test_apply_version_to_url_docs_rs():
+    """docs.rs URLs get /latest/ replaced with /{version}/."""
+    url = "https://docs.rs/serde/latest/serde/"
+    result = _apply_version_to_url(url, "1.0.200")
+    assert result == "https://docs.rs/serde/1.0.200/serde/"
+
+
+def test_apply_version_to_url_no_version():
+    """No version returns URL unchanged."""
+    url = "https://docs.readthedocs.io/en/latest/guide.html"
+    result = _apply_version_to_url(url, None)
+    assert result == url
+
+
+def test_apply_version_to_url_other_site():
+    """Non-matching sites return URL unchanged."""
+    url = "https://docs.python.org/3/library/json.html"
+    result = _apply_version_to_url(url, "3.12")
+    assert result == url

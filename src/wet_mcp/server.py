@@ -1481,6 +1481,31 @@ async def _search_cached_index(
     if not results:
         return None
 
+    # HyDE augmentation: if initial results are poor, try hypothetical doc
+    from wet_mcp.sources.search_strategies import (
+        _HYDE_SCORE_THRESHOLD,
+        generate_hyde_query,
+    )
+
+    scores = [r.get("score", 0) for r in results]
+    if len(results) < 3 or (scores and max(scores) < _HYDE_SCORE_THRESHOLD):
+        library_name = lib_key.split(":")[0]
+        hyde_text = await generate_hyde_query(query, library_name)
+        if hyde_text:
+            hyde_embedding = await _embed(hyde_text, is_query=False)
+            hyde_results = _docs_db.search(
+                query=query,
+                library_name=lib_key,
+                version=version,
+                limit=retrieve_limit,
+                query_embedding=hyde_embedding,
+            )
+            if hyde_results:
+                hyde_scores = [r.get("score", 0) for r in hyde_results]
+                # Use HyDE results if they have better top score
+                if max(hyde_scores, default=0) > max(scores, default=0):
+                    results = hyde_results
+
     # Extract original library name (strip language suffix for display)
     library = lib_key.split(":")[0]
 
@@ -1613,6 +1638,11 @@ async def _do_docs_search(
                 },
                 ensure_ascii=False,
             )
+
+    # Apply version to docs URL if applicable (e.g. ReadTheDocs, docs.rs)
+    from wet_mcp.sources.docs import _apply_version_to_url
+
+    docs_url = _apply_version_to_url(docs_url, version)
 
     # Create/update library record
     lib_id = _docs_db.upsert_library(

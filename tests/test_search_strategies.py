@@ -8,6 +8,7 @@ from wet_mcp.sources.search_strategies import (
     enrich_snippets,
     expand_query,
     find_similar,
+    generate_hyde_query,
 )
 
 
@@ -490,3 +491,91 @@ def test_extract_passage_mid_content_cleans_start():
 
     # Should not start with a partial word
     assert not result[0].isspace() if result else True
+
+
+# ---------------------------------------------------------------------------
+# generate_hyde_query
+# ---------------------------------------------------------------------------
+
+
+async def test_generate_hyde_query_success():
+    """LLM returns hypothetical document text -- happy path."""
+    with (
+        patch(
+            "wet_mcp.sources.search_strategies.settings",
+        ) as mock_settings,
+        patch(
+            "wet_mcp.sources.search_strategies.get_llm_config",
+            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+        ),
+        patch(
+            "wet_mcp.sources.search_strategies.acompletion",
+            new_callable=AsyncMock,
+            return_value=_mock_llm_response(
+                "The requests library provides a simple HTTP client for Python. "
+                "Use requests.get(url) to make GET requests."
+            ),
+        ),
+    ):
+        mock_settings.resolve_litellm_mode.return_value = "proxy"
+
+        result = await generate_hyde_query("how to make HTTP requests", "requests")
+
+        assert result is not None
+        assert "requests" in result.lower()
+
+
+async def test_generate_hyde_query_local_mode():
+    """Local mode (no LLM) returns None."""
+    with patch("wet_mcp.sources.search_strategies.settings") as mock_settings:
+        mock_settings.resolve_litellm_mode.return_value = "local"
+
+        result = await generate_hyde_query("some query", "some-lib")
+
+        assert result is None
+
+
+async def test_generate_hyde_query_llm_failure():
+    """LLM call fails -- returns None gracefully."""
+    with (
+        patch(
+            "wet_mcp.sources.search_strategies.settings",
+        ) as mock_settings,
+        patch(
+            "wet_mcp.sources.search_strategies.get_llm_config",
+            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+        ),
+        patch(
+            "wet_mcp.sources.search_strategies.acompletion",
+            new_callable=AsyncMock,
+            side_effect=Exception("API error"),
+        ),
+    ):
+        mock_settings.resolve_litellm_mode.return_value = "sdk"
+
+        result = await generate_hyde_query("some query", "some-lib")
+
+        assert result is None
+
+
+async def test_generate_hyde_query_empty_response():
+    """LLM returns empty content -- returns None."""
+    with (
+        patch(
+            "wet_mcp.sources.search_strategies.settings",
+        ) as mock_settings,
+        patch(
+            "wet_mcp.sources.search_strategies.get_llm_config",
+            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+        ),
+        patch(
+            "wet_mcp.sources.search_strategies.acompletion",
+            new_callable=AsyncMock,
+            return_value=_mock_llm_response(""),
+        ),
+    ):
+        mock_settings.resolve_litellm_mode.return_value = "proxy"
+
+        result = await generate_hyde_query("some query", "some-lib")
+
+        assert result is None
