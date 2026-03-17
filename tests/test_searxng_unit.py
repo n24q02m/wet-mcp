@@ -330,7 +330,7 @@ async def test_search_max_results_respected(mock_httpx_client):
     mock_response.json.return_value = {
         "results": [
             {
-                "url": f"https://example.com/{i}",
+                "url": f"https://site{i}.com/page",
                 "title": f"Result {i}",
                 "content": f"Content {i}",
                 "engine": "google",
