@@ -514,7 +514,7 @@ async def _with_timeout(coro, action: str) -> str:
     ),
 )
 @_wrap_tool("search")
-async def search(
+async def search(  # noqa: PLR0913
     action: str,
     query: str | None = None,
     library: str | None = None,
