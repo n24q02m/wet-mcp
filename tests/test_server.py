@@ -309,3 +309,9 @@ async def test_search_reranking_failure_falls_back():
         end = result.index("\n</untrusted_search_content>")
         data = json.loads(result[start:end])
         assert data["total"] == 1  # original result preserved
+
+
+async def test_extract_convert_requires_paths():
+    result = await extract(action="convert")
+    assert "Error" in result
+    assert "paths" in result

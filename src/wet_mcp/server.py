@@ -668,15 +668,17 @@ async def search(  # noqa: PLR0913
 async def extract(
     action: str,
     urls: list[str] | None = None,
+    paths: list[str] | None = None,
     depth: int = 2,
     max_pages: int = 20,
     format: str = "markdown",
     stealth: bool = False,
 ) -> str:
-    """Extract content from web pages, crawl sites, or map site structure.
+    """Extract content from web pages, crawl sites, map structure, or convert local files.
     - extract: Get clean content from URLs (requires urls)
     - crawl: Deep crawl from root URLs (requires urls)
     - map: Discover site structure without content (requires urls)
+    - convert: Convert local files to Markdown (requires paths, max 10)
     Use `help` tool for full documentation.
     """
     # Security: enforce hard limits to prevent resource exhaustion
@@ -755,10 +757,18 @@ async def extract(
                 await asyncio.to_thread(_web_cache.set, "map", cache_params, result)
             return result
 
-        case _:
-            return (
-                f"Error: Unknown action '{action}'. Valid actions: extract, crawl, map"
+        case "convert":
+            if not paths:
+                return "Error: paths is required for convert action"
+            from wet_mcp.sources.crawler import convert_local_files
+
+            return await _with_timeout(
+                convert_local_files(paths=paths),
+                "convert",
             )
+
+        case _:
+            return f"Error: Unknown action '{action}'. Valid actions: extract, crawl, map, convert"
 
 
 @mcp.tool(
