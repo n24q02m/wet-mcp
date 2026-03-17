@@ -315,3 +315,192 @@ async def test_extract_convert_requires_paths():
     result = await extract(action="convert")
     assert "Error" in result
     assert "paths" in result
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: extract_structured
+# ---------------------------------------------------------------------------
+
+
+async def test_extract_structured_action():
+    """Test extract_structured delegates to structured.extract_structured."""
+    with patch(
+        "wet_mcp.sources.structured.extract_structured",
+        new_callable=AsyncMock,
+        return_value='{"name": "Test"}',
+    ) as mock_fn:
+        result = await extract(
+            action="extract_structured",
+            urls=["https://example.com"],
+            schema={"type": "object", "properties": {"name": {"type": "string"}}},
+            prompt="Extract the name",
+        )
+
+        assert '{"name": "Test"}' in result
+        assert "<untrusted_extract_content>" in result
+        mock_fn.assert_called_once_with(
+            urls=["https://example.com"],
+            schema={"type": "object", "properties": {"name": {"type": "string"}}},
+            prompt="Extract the name",
+            stealth=False,
+        )
+
+
+async def test_extract_structured_requires_urls():
+    """Test extract_structured requires urls."""
+    result = await extract(
+        action="extract_structured",
+        schema={"type": "object"},
+    )
+    assert "Error" in result
+    assert "urls" in result
+
+
+async def test_extract_structured_requires_schema():
+    """Test extract_structured requires schema."""
+    result = await extract(
+        action="extract_structured",
+        urls=["https://example.com"],
+    )
+    assert "Error" in result
+    assert "schema" in result
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: similar action
+# ---------------------------------------------------------------------------
+
+
+async def test_search_similar_action():
+    """Test similar action delegates to find_similar."""
+    with (
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://localhost:8080",
+        ),
+        patch(
+            "wet_mcp.sources.search_strategies.find_similar",
+            new_callable=AsyncMock,
+            return_value='{"results": []}',
+        ) as mock_fn,
+    ):
+        result = await search(action="similar", query="https://example.com")
+
+        assert '{"results": []}' in result
+        assert "<untrusted_search_content>" in result
+        mock_fn.assert_called_once_with(
+            url="https://example.com",
+            max_results=10,
+            searxng_url="http://localhost:8080",
+        )
+
+
+async def test_search_similar_requires_url():
+    """Test similar action requires query to be a URL."""
+    result = await search(action="similar", query="not a url")
+    assert "Error" in result
+    assert "URL" in result
+
+
+async def test_search_similar_requires_query():
+    """Test similar action requires query."""
+    result = await search(action="similar", query=None)
+    assert "Error" in result
+    assert "query" in result
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: expand flag
+# ---------------------------------------------------------------------------
+
+
+async def test_search_expand_flag():
+    """Test expand=True calls expand_query and uses expanded query."""
+    with (
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://localhost:8080",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+            return_value="Search Results",
+        ) as mock_search,
+        patch(
+            "wet_mcp.sources.search_strategies.expand_query",
+            new_callable=AsyncMock,
+            return_value=[
+                "python web scraping",
+                "python html parsing",
+                "python data extraction",
+            ],
+        ),
+    ):
+        result = await search(action="search", query="python web scraping", expand=True)
+
+        assert "Search Results" in result
+        # Verify expanded query was passed to searxng_search
+        call_args = mock_search.call_args
+        assert "OR" in call_args.kwargs.get("query", call_args[1].get("query", ""))
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: enrich flag
+# ---------------------------------------------------------------------------
+
+
+async def test_search_enrich_flag():
+    """Test enrich=True calls enrich_snippets after search."""
+    mock_results = json.dumps(
+        {
+            "results": [
+                {
+                    "url": "https://a.com",
+                    "title": "A",
+                    "snippet": "Short",
+                    "source": "g",
+                }
+            ],
+            "total": 1,
+            "query": "test",
+        }
+    )
+    enriched_results = [
+        {
+            "url": "https://a.com",
+            "title": "A",
+            "snippet": "Enriched content",
+            "source": "g",
+        }
+    ]
+
+    with (
+        patch(
+            "wet_mcp.server.ensure_searxng",
+            new_callable=AsyncMock,
+            return_value="http://localhost:8080",
+        ),
+        patch(
+            "wet_mcp.server.searxng_search",
+            new_callable=AsyncMock,
+            return_value=mock_results,
+        ),
+        patch(
+            "wet_mcp.server._rerank_results",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch("wet_mcp.server._web_cache", None),
+        patch(
+            "wet_mcp.sources.search_strategies.enrich_snippets",
+            new_callable=AsyncMock,
+            return_value=enriched_results,
+        ) as mock_enrich,
+    ):
+        result = await search(action="search", query="test", enrich=True)
+
+        mock_enrich.assert_called_once()
+        # Verify enriched content is in output
+        assert "Enriched content" in result
