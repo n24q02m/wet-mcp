@@ -4,9 +4,6 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
-  pull_request_target:
-    branches: [main]
-    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
   issue_comment:
@@ -24,7 +21,7 @@ jobs:
   pr-title-check:
     name: PR Title Check
     if: >-
-      github.event_name == 'pull_request_target'
+      github.event_name == 'pull_request'
       && github.event.sender.type != 'Bot'
     runs-on: ubuntu-latest
     permissions:
@@ -54,7 +51,7 @@ jobs:
           echo "Auto-fixed: $title -> $new_title"
   lint-and-test:
     name: Lint & Test
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name != 'issues'
     runs-on: ubuntu-latest
 
     steps:
@@ -67,7 +64,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098 # v7
 
       - name: Setup Python 3.13
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
@@ -129,7 +126,7 @@ jobs:
         github.event_name == 'issue_comment'
         && github.event.sender.type != 'Bot'
       ) || (
-        github.event_name == 'pull_request_target'
+        github.event_name == 'pull_request'
         && github.event.sender.type != 'Bot'
         && github.event.pull_request.user.login != 'n24q02m'
       )
@@ -171,7 +168,7 @@ jobs:
   email-notify:
     name: Email Notification
     if: >-
-      (github.event_name == 'issues' || github.event_name == 'pull_request_target')
+      (github.event_name == 'issues' || github.event_name == 'pull_request')
       && github.actor != 'n24q02m'
       && github.event.sender.type != 'Bot'
     runs-on: ubuntu-latest
@@ -182,7 +179,7 @@ jobs:
           egress-policy: audit
 
       - name: Send email notification
-        uses: dawidd6/action-send-mail@4758fd2f0eab31f80897dc291e43c3867cce37bf # v15
+        uses: dawidd6/action-send-mail@ba302ba66e88942841281c984a6b31ca6d6289e6 # v11
         with:
           server_address: smtp.gmail.com
           server_port: 587
