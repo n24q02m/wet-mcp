@@ -183,6 +183,12 @@ def test_is_safe_url_empty_hostname():
     assert not is_safe_url("https:///path")
 
 
+def test_is_safe_url_malformed_urlparse_exception():
+    """Test is_safe_url returns False when urlparse raises an exception."""
+    # In Python 3.12+, urlparse raises ValueError for invalid IPv6 URLs
+    assert not is_safe_url("http://[invalid_ipv6_format]")
+
+
 def test_is_safe_url_general_exception():
     """Test is_safe_url returns False when _original_getaddrinfo raises unexpected exception."""
     with patch(
