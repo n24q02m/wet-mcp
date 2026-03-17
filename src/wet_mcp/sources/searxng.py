@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
@@ -134,6 +135,14 @@ async def _ensure_searxng_healthy(searxng_url: str) -> str:
     return new_url
 
 
+_DOMAIN_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*\.[a-zA-Z]{2,}$")
+
+
+def _is_valid_domain(domain: str) -> bool:
+    """Validate domain name to prevent search operator injection."""
+    return bool(_DOMAIN_RE.match(domain)) and ".." not in domain
+
+
 def _build_filtered_query(
     query: str,
     include_domains: list[str] | None = None,
@@ -142,11 +151,14 @@ def _build_filtered_query(
     """Build query string with domain include/exclude filters."""
     parts = [query]
     if include_domains:
-        site_filter = " OR ".join(f"site:{d}" for d in include_domains[:5])
-        parts = [f"({site_filter}) {query}"]
+        safe = [d for d in include_domains[:5] if _is_valid_domain(d)]
+        if safe:
+            site_filter = " OR ".join(f"site:{d}" for d in safe)
+            parts = [f"({site_filter}) {query}"]
     if exclude_domains:
         for domain in exclude_domains[:10]:
-            parts.append(f"-site:{domain}")
+            if _is_valid_domain(domain):
+                parts.append(f"-site:{domain}")
     return " ".join(parts)
 
 

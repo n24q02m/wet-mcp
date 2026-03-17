@@ -74,7 +74,8 @@ def _check_ip_safe(ip_str: str, hostname: str) -> bool:
             logger.warning(f"Blocked private/unsafe IP: {ip} for host {hostname}")
             return False
     except ValueError:
-        pass  # Unparseable — skip this record, check others
+        logger.warning(f"Unparseable IP '{ip_str}' for host {hostname}, blocking")
+        return False
     return True
 
 
