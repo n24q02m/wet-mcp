@@ -1,5 +1,6 @@
 """Configuration settings for WET MCP Server."""
 
+import importlib.util
 import os
 from pathlib import Path
 
@@ -28,12 +29,7 @@ def _detect_gpu() -> bool:
 
 def _has_gguf_support() -> bool:
     """Check if llama-cpp-python is installed for GGUF models."""
-    try:
-        import llama_cpp  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
+    return importlib.util.find_spec("llama_cpp") is not None
 
 
 def _resolve_local_model(onnx_name: str, gguf_name: str) -> str:
