@@ -661,11 +661,11 @@ async def _start_searxng_subprocess() -> str | None:
         # Health check timed out — process may be stuck or crashed
         logger.warning(f"SearXNG started but not healthy at {url}")
         if _searxng_process.poll() is not None:
-            stderr = (
-                _searxng_process.stderr.read().decode()
-                if _searxng_process.stderr
-                else ""
-            )
+            if _searxng_process.stderr:
+                stderr_raw = await asyncio.to_thread(_searxng_process.stderr.read)
+                stderr = stderr_raw.decode()
+            else:
+                stderr = ""
             logger.error(f"SearXNG process exited during startup: {stderr[:500]}")
         else:
             # Process alive but not listening — kill the stuck process
@@ -761,9 +761,8 @@ async def _handle_restart_and_start() -> str:
         stderr_output = ""
         if _searxng_process.stderr:
             try:
-                stderr_output = _searxng_process.stderr.read().decode(errors="replace")[
-                    :500
-                ]
+                stderr_raw = await asyncio.to_thread(_searxng_process.stderr.read)
+                stderr_output = stderr_raw.decode(errors="replace")[:500]
             except Exception:
                 pass
         logger.warning(
