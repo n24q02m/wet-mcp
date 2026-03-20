@@ -25,9 +25,7 @@ def test_secret_key_replacement():
     mock_files.joinpath.return_value = mock_bundled_file
 
     # Mock the template content
-    template_content = (
-        "server:\n  port: 41592\n"
-    )
+    template_content = "server:\n  port: 41592\n"
     mock_bundled_file.read_text.return_value = template_content
 
     with (
