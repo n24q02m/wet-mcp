@@ -1356,6 +1356,8 @@ async def _background_index_and_search(
                 import json
 
                 fallback_data = json.loads(fallback_result)
+                tasks = []
+                alt_urls = []
                 for fr in fallback_data.get("results", []):
                     alt_url = fr.get("url", "")
                     if not alt_url or not alt_url.startswith("http"):
@@ -1364,18 +1366,26 @@ async def _background_index_and_search(
                     orig_parsed = urlparse(docs_url)
                     if alt_parsed.netloc == orig_parsed.netloc:
                         continue
-                    try:
-                        alt_chunks, alt_pages = await asyncio.wait_for(
-                            _fetch_and_chunk_docs(alt_url, "", query),
-                            timeout=_FALLBACK_TIMEOUT,
-                        )
-                    except TimeoutError:
-                        continue
-                    if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
-                        docs_url = alt_url
-                        all_chunks = alt_chunks
-                        page_count = alt_pages
-                        break
+                    alt_urls.append(alt_url)
+                    tasks.append(_fetch_and_chunk_docs(alt_url, "", query))
+
+                if tasks:
+                    results = await asyncio.gather(
+                        *[
+                            asyncio.wait_for(task, timeout=_FALLBACK_TIMEOUT)
+                            for task in tasks
+                        ],
+                        return_exceptions=True,
+                    )
+                    for alt_url, result in zip(alt_urls, results, strict=False):
+                        if isinstance(result, Exception):
+                            continue
+                        alt_chunks, alt_pages = result
+                        if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
+                            docs_url = alt_url
+                            all_chunks = alt_chunks
+                            page_count = alt_pages
+                            break
             except Exception as e:
                 logger.debug(f"SearXNG fallback failed: {e}")
 
