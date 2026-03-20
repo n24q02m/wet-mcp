@@ -848,7 +848,7 @@ async def extract(
     ),
 )
 @_wrap_tool("media")
-async def media(
+async def media(  # noqa: PLR0913
     action: str,
     url: str | None = None,
     media_type: str = "all",
