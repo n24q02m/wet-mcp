@@ -406,11 +406,6 @@ def _get_settings_path(port: int) -> Path:
         f"port: {port}",
     )
 
-    # Generate random secret key for this session
-    # This prevents using the hardcoded secret from the template
-    secret = secrets.token_hex(32)
-    content = content.replace("REPLACE_WITH_REAL_SECRET", secret)
-
     settings_file.write_text(content)
     logger.debug(f"SearXNG settings written to: {settings_file}")
 
@@ -633,6 +628,7 @@ async def _start_searxng_subprocess() -> str | None:
         # Build environment for SearXNG
         env = os.environ.copy()
         env["SEARXNG_SETTINGS_PATH"] = str(settings_path)
+        env["SEARXNG_SECRET"] = secrets.token_hex(32)
 
         # Start SearXNG subprocess
         logger.info(f"Starting SearXNG on port {port}...")

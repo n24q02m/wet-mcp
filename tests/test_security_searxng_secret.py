@@ -24,9 +24,9 @@ def test_secret_key_replacement():
     mock_bundled_file = MagicMock()
     mock_files.joinpath.return_value = mock_bundled_file
 
-    # Mock the template content with the placeholder
+    # Mock the template content
     template_content = (
-        "server:\n  port: 41592\n  secret_key: REPLACE_WITH_REAL_SECRET\n"
+        "server:\n  port: 41592\n"
     )
     mock_bundled_file.read_text.return_value = template_content
 
@@ -49,17 +49,3 @@ def test_secret_key_replacement():
 
         # Verify port replacement
         assert "port: 9090" in written_content
-
-        # Verify secret key replacement
-        assert "REPLACE_WITH_REAL_SECRET" not in written_content
-        assert "secret_key: " in written_content
-
-        # Extract the secret key to verify length/format
-        # "  secret_key: <secret>\n"
-        for line in written_content.splitlines():
-            if "secret_key:" in line:
-                secret = line.split(":", 1)[1].strip()
-                # 32 bytes hex = 64 chars
-                assert len(secret) == 64
-                # Verify it is hex
-                int(secret, 16)
