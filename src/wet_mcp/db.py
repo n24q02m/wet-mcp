@@ -943,7 +943,7 @@ class DocsDB:
                 chunks.append(obj)
 
         def _get_existing(table: str, items: list) -> set:
-            if not items:
+            if not items or mode != "merge":
                 return set()
             ids = [obj["id"] for obj in items]
             existing = set()
@@ -956,27 +956,31 @@ class DocsDB:
                 existing.update(r[0] for r in res)
             return existing
 
-        existing_libs = (
-            _get_existing("libraries", libraries) if mode == "merge" else set()
+        def _prepare_inserts(items: list, existing: set, extract_fn) -> list:
+            to_insert = []
+            for obj in items:
+                if mode == "merge":
+                    if obj["id"] in existing:
+                        stats["skipped"] += 1
+                        continue
+                    existing.add(obj["id"])
+                to_insert.append(extract_fn(obj))
+            return to_insert
+
+        existing_libs = _get_existing("libraries", libraries)
+        to_insert_libs = _prepare_inserts(
+            libraries,
+            existing_libs,
+            lambda obj: (
+                obj["id"],
+                obj["name"],
+                obj.get("docs_url"),
+                obj.get("registry"),
+                obj.get("description"),
+                obj["created_at"],
+                obj["updated_at"],
+            ),
         )
-        to_insert_libs = []
-        for obj in libraries:
-            if mode == "merge" and obj["id"] in existing_libs:
-                stats["skipped"] += 1
-                continue
-            if mode == "merge":
-                existing_libs.add(obj["id"])
-            to_insert_libs.append(
-                (
-                    obj["id"],
-                    obj["name"],
-                    obj.get("docs_url"),
-                    obj.get("registry"),
-                    obj.get("description"),
-                    obj["created_at"],
-                    obj["updated_at"],
-                )
-            )
         if to_insert_libs:
             self._conn.executemany(
                 """INSERT OR REPLACE INTO libraries
@@ -986,28 +990,21 @@ class DocsDB:
             )
             stats["libraries"] += len(to_insert_libs)
 
-        existing_vers = (
-            _get_existing("versions", versions) if mode == "merge" else set()
+        existing_vers = _get_existing("versions", versions)
+        to_insert_vers = _prepare_inserts(
+            versions,
+            existing_vers,
+            lambda obj: (
+                obj["id"],
+                obj["library_id"],
+                obj["version"],
+                obj.get("docs_url"),
+                obj.get("indexed_at"),
+                obj.get("page_count", 0),
+                obj.get("chunk_count", 0),
+                obj.get("status", "indexed"),
+            ),
         )
-        to_insert_vers = []
-        for obj in versions:
-            if mode == "merge" and obj["id"] in existing_vers:
-                stats["skipped"] += 1
-                continue
-            if mode == "merge":
-                existing_vers.add(obj["id"])
-            to_insert_vers.append(
-                (
-                    obj["id"],
-                    obj["library_id"],
-                    obj["version"],
-                    obj.get("docs_url"),
-                    obj.get("indexed_at"),
-                    obj.get("page_count", 0),
-                    obj.get("chunk_count", 0),
-                    obj.get("status", "indexed"),
-                )
-            )
         if to_insert_vers:
             self._conn.executemany(
                 """INSERT OR REPLACE INTO versions
@@ -1017,29 +1014,22 @@ class DocsDB:
             )
             stats["versions"] += len(to_insert_vers)
 
-        existing_chunks = (
-            _get_existing("doc_chunks", chunks) if mode == "merge" else set()
+        existing_chunks = _get_existing("doc_chunks", chunks)
+        to_insert_chunks = _prepare_inserts(
+            chunks,
+            existing_chunks,
+            lambda obj: (
+                obj["id"],
+                obj["version_id"],
+                obj["library_id"],
+                obj.get("url", ""),
+                obj.get("title", ""),
+                obj.get("chunk_index", 0),
+                obj["content"],
+                obj.get("heading_path", ""),
+                obj["created_at"],
+            ),
         )
-        to_insert_chunks = []
-        for obj in chunks:
-            if mode == "merge" and obj["id"] in existing_chunks:
-                stats["skipped"] += 1
-                continue
-            if mode == "merge":
-                existing_chunks.add(obj["id"])
-            to_insert_chunks.append(
-                (
-                    obj["id"],
-                    obj["version_id"],
-                    obj["library_id"],
-                    obj.get("url", ""),
-                    obj.get("title", ""),
-                    obj.get("chunk_index", 0),
-                    obj["content"],
-                    obj.get("heading_path", ""),
-                    obj["created_at"],
-                )
-            )
         if to_insert_chunks:
             self._conn.executemany(
                 """INSERT OR REPLACE INTO doc_chunks
