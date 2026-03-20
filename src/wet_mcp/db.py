@@ -712,6 +712,9 @@ class DocsDB:
                 fts_params.append(candidate_limit)
 
                 rows = self._conn.execute(fts_sql, fts_params).fetchall()
+                if not rows:
+                    continue
+
                 for row in rows:
                     chunk = dict(row)
                     cid = chunk["id"]
@@ -720,6 +723,7 @@ class DocsDB:
                     if cid not in fts_scores or score > fts_scores[cid]:
                         fts_scores[cid] = score
                         fts_chunks[cid] = chunk
+
                 # Stop once we have enough candidates across all tiers
                 if len(fts_scores) >= candidate_limit:
                     break
