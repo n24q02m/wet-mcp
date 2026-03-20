@@ -22,6 +22,7 @@ from wet_mcp.sync import (
     check_remote_configured,
     start_auto_sync,
     stop_auto_sync,
+    sync_push,
 )
 
 # -----------------------------------------------------------------------
@@ -308,3 +309,48 @@ class TestAutoSyncLifecycle:
             assert not sync._sync_task.done()
 
             await sync._sync_task
+
+
+# -----------------------------------------------------------------------
+# sync_push
+# -----------------------------------------------------------------------
+
+
+class TestSyncPush:
+    @pytest.mark.asyncio
+    async def test_sync_push_success(self):
+        """Returns True when rclone copy succeeds."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+
+        with patch("wet_mcp.sync._run_rclone", return_value=mock_result) as mock_run:
+            res = await sync_push(
+                Path("/usr/bin/rclone"), Path("/data/db.sqlite"), "gdrive", "mcp_backup"
+            )
+
+            assert res is True
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args[0]
+            assert call_args[0] == Path("/usr/bin/rclone")
+            assert call_args[1] == [
+                "copy",
+                "--progress",
+                "--",
+                "/data/db.sqlite",
+                "gdrive:mcp_backup",
+            ]
+
+    @pytest.mark.asyncio
+    async def test_sync_push_failure(self):
+        """Returns False when rclone copy fails."""
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "Fatal error: failed to copy"
+
+        with patch("wet_mcp.sync._run_rclone", return_value=mock_result) as mock_run:
+            res = await sync_push(
+                Path("/usr/bin/rclone"), Path("/data/db.sqlite"), "gdrive", "mcp_backup"
+            )
+
+            assert res is False
+            mock_run.assert_called_once()
