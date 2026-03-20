@@ -353,6 +353,86 @@ class TestTryLlmsTxt:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_fallback_to_llms_txt(self):
+        """Falls back to llms.txt if llms-full.txt returns 404."""
+        mock_404 = MagicMock()
+        mock_404.status_code = 404
+
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        mock_200.text = "# Library\n\n" + ("Good content. " * 20)
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[mock_404, mock_200])
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch("wet_mcp.sources.docs.httpx.AsyncClient", return_value=mock_client):
+            result = await try_llms_txt("https://example.com")
+
+        assert result == mock_200.text
+
+    @pytest.mark.asyncio
+    async def test_exception_handled_during_request(self):
+        """Catches exceptions on the first request and tries the second."""
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        mock_200.text = "# Library\n\n" + ("Good content. " * 20)
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[Exception("Timeout"), mock_200])
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch("wet_mcp.sources.docs.httpx.AsyncClient", return_value=mock_client):
+            result = await try_llms_txt("https://example.com")
+
+        assert result == mock_200.text
+
+    @pytest.mark.asyncio
+    async def test_rejects_toc_only_llms_txt(self):
+        """Rejects llms.txt if it is just a TOC."""
+        mock_404 = MagicMock()
+        mock_404.status_code = 404
+
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        toc_content = "# TOC\n" + "\n".join(
+            f"- [Link {i}](http://link{i}.com)" for i in range(20)
+        )
+        mock_200.text = toc_content
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[mock_404, mock_200])
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch("wet_mcp.sources.docs.httpx.AsyncClient", return_value=mock_client):
+            result = await try_llms_txt("https://example.com")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_accepts_toc_only_llms_full_txt(self):
+        """Accepts llms-full.txt even if it looks like a TOC."""
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        toc_content = "# TOC\n" + "\n".join(
+            f"- [Link {i}](http://link{i}.com)" for i in range(20)
+        )
+        mock_200.text = toc_content
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_200)
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch("wet_mcp.sources.docs.httpx.AsyncClient", return_value=mock_client):
+            result = await try_llms_txt("https://example.com")
+
+        assert result == toc_content
+
+    @pytest.mark.asyncio
     async def test_rejects_short_content(self):
         """Rejects content shorter than 200 chars (likely error page)."""
         mock_response = MagicMock()
