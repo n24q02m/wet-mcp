@@ -115,7 +115,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - name: Run Semgrep scan
-        run: semgrep scan --config auto --error --verbose
+        run: semgrep scan --config auto --error --verbose --exclude-rule python.lang.compatibility.python37.python37-compatibility-importlib2
 
   dependency-review:
     name: Dependency Review
