@@ -1,4 +1,3 @@
-
 """Tests for src/wet_mcp/db.py — DocsDB with FTS5 hybrid search.
 
 Covers library/version CRUD, FTS5 search scoring (phrase/AND/OR tiers),

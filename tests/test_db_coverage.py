@@ -1,4 +1,3 @@
-
 """Additional unit tests for db.py to increase coverage from 78% to 95%+.
 
 Targets uncovered lines: 27, 112, 117, 119, 142-151, 267-271, 287-291,
