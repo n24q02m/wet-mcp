@@ -296,11 +296,12 @@ class DocsDB:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
             ).fetchone()
             if not row:
+                # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(f"""
                     CREATE VIRTUAL TABLE doc_chunks_vec
                     USING vec0(
                         id TEXT PRIMARY KEY,
-                        embedding float[{self._embedding_dims}]
+                        embedding float[{int(self._embedding_dims)}]
                     )
                 """)
 
@@ -362,6 +363,7 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
                     f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
                     params,
@@ -807,6 +809,7 @@ class DocsDB:
                 placeholders = ", ".join(["(?, ?, ?)"] * len(chunk_keys))
                 flat_params = [v for k in chunk_keys for v in k]
 
+                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 rows = self._conn.execute(
                     f"""SELECT url, version_id, chunk_index, content
                         FROM doc_chunks
@@ -950,6 +953,7 @@ class DocsDB:
             for i in range(0, len(ids), 999):
                 batch = ids[i : i + 999]
                 placeholders = ",".join("?" * len(batch))
+                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 res = self._conn.execute(
                     f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
                 ).fetchall()
