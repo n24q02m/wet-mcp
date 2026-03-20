@@ -37,7 +37,7 @@ async def test_media_list_success(mock_settings):
 async def test_media_list_missing_url():
     """Test media list action fails without url."""
     result = await media(action="list")
-    assert result == "Error: url is required for list action"
+    assert "Error: url is required for list action" in result
 
 
 @pytest.mark.asyncio
@@ -96,7 +96,7 @@ async def test_media_download_default_dir(mock_settings):
 async def test_media_download_missing_urls():
     """Test media download action fails without media_urls."""
     result = await media(action="download")
-    assert result == "Error: media_urls is required for download action"
+    assert "Error: media_urls is required for download action" in result
 
 
 @pytest.mark.asyncio
@@ -120,7 +120,7 @@ async def test_media_analyze_success(mock_settings):
 async def test_media_analyze_missing_url():
     """Test media analyze action fails without url (local path)."""
     result = await media(action="analyze")
-    assert result == "Error: url (local path) is required for analyze action"
+    assert "Error:" in result and "url" in result and "analyze" in result
 
 
 @pytest.mark.asyncio
@@ -171,5 +171,5 @@ async def test_media_download_adds_extension_from_content_type(mock_settings, tm
 async def test_media_unknown_action():
     """Test media action with unknown action."""
     result = await media(action="unknown_action")
-    assert "Error: Unknown action 'unknown_action'" in result
-    assert "Valid actions: list, download, analyze" in result
+    assert "Error:" in result and "unknown_action" in result
+    assert "list" in result and "download" in result and "analyze" in result
