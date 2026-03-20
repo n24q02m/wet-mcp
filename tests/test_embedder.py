@@ -76,7 +76,6 @@ class TestLiteLLMBackend:
             mock_embed.assert_called_once_with(
                 model="text-embedding-3-small",
                 input=["test"],
-                encoding_format="float",
                 dimensions=256,
             )
 
@@ -91,6 +90,36 @@ class TestLiteLLMBackend:
             backend.embed_texts(["test"])
             call_kwargs = mock_embed.call_args[1]
             assert "dimensions" not in call_kwargs
+
+    def test_embed_texts_dimensions_fallback(self):
+        """Falls back to local truncation when provider rejects dimensions param."""
+        backend = LiteLLMBackend("embed-multilingual-v3.0")
+
+        mock_response = MagicMock()
+        # Cohere returns 1024 dims when dimensions param is not passed
+        mock_response.data = [{"index": 0, "embedding": [0.1] * 1024}]
+
+        # First call with dimensions fails, second without dimensions succeeds
+        unsupported_err = Exception("output_dimension is not supported for this model")
+        with patch(
+            "litellm.embedding",
+            side_effect=[unsupported_err, mock_response],
+        ):
+            result = backend.embed_texts(["test"], dimensions=768)
+            # Should truncate locally to 768
+            assert len(result[0]) == 768
+
+    def test_embed_texts_local_truncation(self):
+        """Truncates locally when server returns more dims than requested."""
+        backend = LiteLLMBackend("gemini/gemini-embedding-001")
+
+        mock_response = MagicMock()
+        # Gemini returns 3072 dims even when 768 requested (no server-side MRL)
+        mock_response.data = [{"index": 0, "embedding": [0.1] * 3072}]
+
+        with patch("litellm.embedding", return_value=mock_response):
+            result = backend.embed_texts(["test"], dimensions=768)
+            assert len(result[0]) == 768
 
     def test_embed_texts_api_error(self):
         """Non-retryable API errors are raised to caller."""

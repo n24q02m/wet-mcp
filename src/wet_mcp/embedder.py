@@ -56,6 +56,21 @@ def _is_retryable(exc: Exception) -> bool:
     return any(p in msg for p in retryable_patterns)
 
 
+def _is_unsupported_param(exc: Exception, param: str) -> bool:
+    """Check if an exception indicates an unsupported parameter.
+
+    Detects errors like "does not support parameters: {'dimensions': ...}"
+    or "output_dimension is not supported for this model".
+    Uses stem matching (e.g. "dimension" matches "dimensions", "output_dimension").
+    """
+    msg = str(exc).lower()
+    # Use the stem (without trailing 's') for broader matching
+    stem = param.lower().rstrip("s")
+    return (
+        "not support" in msg or "unsupported" in msg or "not a valid" in msg
+    ) and stem in msg
+
+
 # ---------------------------------------------------------------------------
 # Backend Protocol
 # ---------------------------------------------------------------------------
@@ -124,13 +139,18 @@ class LiteLLMBackend:
         texts: list[str],
         dimensions: int | None = None,
     ) -> list[list[float]]:
-        """Embed a single batch with retry logic for transient errors."""
+        """Embed a single batch with retry logic for transient errors.
+
+        Tries server-side MRL truncation first (``dimensions`` param).
+        If the provider rejects ``dimensions``, retries without it and
+        truncates locally. This ensures Gemini, Cohere, and other
+        providers that don't support ``dimensions`` still work.
+        """
         from litellm import embedding as litellm_embedding
 
         kwargs: dict = {
             "model": self.model,
             "input": texts,
-            "encoding_format": "float",
         }
         if dimensions:
             kwargs["dimensions"] = dimensions
@@ -144,8 +164,26 @@ class LiteLLMBackend:
             try:
                 response = litellm_embedding(**kwargs)
                 data = sorted(response.data, key=lambda x: x["index"])
-                return [d["embedding"] for d in data]
+                embeddings = [d["embedding"] for d in data]
+                # Truncate locally if server returned more dims than requested
+                if dimensions and embeddings and len(embeddings[0]) > dimensions:
+                    embeddings = [e[:dimensions] for e in embeddings]
+                return embeddings
             except Exception as e:
+                # If the provider rejects `dimensions`, retry without it
+                # and truncate locally instead.
+                if (
+                    "dimensions" in kwargs
+                    and not _is_retryable(e)
+                    and _is_unsupported_param(e, "dimensions")
+                ):
+                    logger.debug(
+                        f"Provider does not support dimensions param, "
+                        f"will truncate locally: {e}"
+                    )
+                    kwargs.pop("dimensions")
+                    continue
+
                 last_exc = e
                 if attempt < MAX_RETRIES - 1 and _is_retryable(e):
                     delay = RETRY_BASE_DELAY * (2**attempt)
@@ -209,10 +247,9 @@ class LiteLLMBackend:
         try:
             from litellm import embedding as litellm_embedding
 
-            kwargs = {
+            kwargs: dict = {
                 "model": self.model,
                 "input": ["test"],
-                "encoding_format": "float",
             }
             if self.api_base:
                 kwargs["api_base"] = self.api_base
