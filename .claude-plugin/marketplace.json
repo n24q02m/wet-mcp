@@ -1,0 +1,21 @@
+{
+  "name": "wet-mcp",
+  "owner": {
+    "name": "n24q02m",
+    "url": "https://github.com/n24q02m"
+  },
+  "metadata": {
+    "description": "MCP server for web search, content extraction, and media download",
+    "version": "2.14.1"
+  },
+  "plugins": [
+    {
+      "name": "wet-mcp",
+      "source": "./",
+      "description": "MCP server for web search, content extraction, and media download",
+      "version": "2.14.1",
+      "category": "research",
+      "keywords": ["web-search", "content-extraction", "documentation", "mcp"]
+    }
+  ]
+}
