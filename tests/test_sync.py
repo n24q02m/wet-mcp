@@ -308,3 +308,85 @@ class TestAutoSyncLifecycle:
             assert not sync._sync_task.done()
 
             await sync._sync_task
+
+
+# -----------------------------------------------------------------------
+# sync.sync_pull
+# -----------------------------------------------------------------------
+
+
+class TestSyncPull:
+    @pytest.mark.asyncio
+    async def test_sync_pull_success(self):
+        """Returns downloaded file path on success."""
+        rclone_path = Path("/mock/rclone")
+        db_path = Path("/mock/db/local.sqlite")
+        remote = "gdrive"
+        folder = "backup"
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+
+        with (
+            patch(
+                "wet_mcp.sync.asyncio.to_thread", return_value=mock_result
+            ) as mock_thread,
+            patch("pathlib.Path.mkdir"),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            result = await sync.sync_pull(rclone_path, db_path, remote, folder)
+
+            assert result is not None
+            assert result.name == "remote_local.sqlite"
+            assert str(result.parent).endswith("sync_temp")
+
+            mock_thread.assert_called_once()
+            args = mock_thread.call_args[0]
+            assert args[1] == rclone_path
+            assert "copyto" in args[2]
+
+    @pytest.mark.asyncio
+    async def test_sync_pull_failure_return_code(self):
+        """Returns None and cleans up when command fails."""
+        rclone_path = Path("/mock/rclone")
+        db_path = Path("/mock/db/local.sqlite")
+        remote = "gdrive"
+        folder = "backup"
+
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stderr = "Command failed"
+
+        with (
+            patch("wet_mcp.sync.asyncio.to_thread", return_value=mock_result),
+            patch("pathlib.Path.mkdir"),
+            patch("pathlib.Path.unlink") as mock_unlink,
+        ):
+            result = await sync.sync_pull(rclone_path, db_path, remote, folder)
+
+            assert result is None
+            mock_unlink.assert_called_once_with(missing_ok=True)
+
+    @pytest.mark.asyncio
+    async def test_sync_pull_failure_file_missing(self):
+        """Returns None and cleans up when downloaded file is missing despite success exit code."""
+        rclone_path = Path("/mock/rclone")
+        db_path = Path("/mock/db/local.sqlite")
+        remote = "gdrive"
+        folder = "backup"
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+
+        with (
+            patch("wet_mcp.sync.asyncio.to_thread", return_value=mock_result),
+            patch("pathlib.Path.mkdir"),
+            patch("pathlib.Path.exists", return_value=False),
+            patch("pathlib.Path.unlink") as mock_unlink,
+        ):
+            result = await sync.sync_pull(rclone_path, db_path, remote, folder)
+
+            assert result is None
+            mock_unlink.assert_called_once_with(missing_ok=True)
