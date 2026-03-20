@@ -14,13 +14,27 @@ import sqlite3
 import struct
 import time
 import uuid
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 from loguru import logger
 
-# Bump this when discovery scoring changes to invalidate stale caches.
 from wet_mcp.sources.docs import DISCOVERY_VERSION
+
+
+@dataclass
+class SearchOptions:
+    """Options for hybrid search in DocsDB."""
+
+    query: str
+    library_name: str | None = None
+    version: str | None = None
+    limit: int = 10
+    query_embedding: list[float] | None = None
+
+
+# Bump this when discovery scoring changes to invalidate stale caches.
 
 
 def _serialize_f32(vec: list[float]) -> bytes:
@@ -640,11 +654,7 @@ class DocsDB:
 
     def search(
         self,
-        query: str,
-        library_name: str | None = None,
-        version: str | None = None,
-        limit: int = 10,
-        query_embedding: list[float] | None = None,
+        options: SearchOptions,
     ) -> list[dict]:
         """Hybrid search: FTS5 + optional vector + quality scoring.
 
@@ -655,11 +665,7 @@ class DocsDB:
         indexing timestamp, making recency meaningless for static docs.
 
         Args:
-            query: Search query text
-            library_name: Filter by library name
-            version: Filter by version
-            limit: Max results
-            query_embedding: Optional embedding vector for semantic search
+            options: SearchOptions instance containing query parameters
 
         Returns:
             List of chunk dicts sorted by relevance score
@@ -667,24 +673,24 @@ class DocsDB:
         # Resolve library/version filters
         library_id = None
         version_id = None
-        if library_name:
-            lib = self.get_library(library_name)
+        if options.library_name:
+            lib = self.get_library(options.library_name)
             if not lib:
                 return []
             library_id = lib["id"]
-            if version:
-                ver = self.get_best_version(library_id, version)
+            if options.version:
+                ver = self.get_best_version(library_id, options.version)
                 if ver:
                     version_id = ver["id"]
 
-        candidate_limit = limit * 3
+        candidate_limit = options.limit * 3
 
         # --- FTS5 search with tiered queries + BM25 column weights ---
         # Weights: id(0), content(2), title(3), heading_path(2)
         # Flattened: content is the primary signal, title gets a moderate
         # boost, heading_path gets minimal boost (BM25 already naturally
         # up-weights matches in short fields via tf-idf).
-        fts_queries = _build_fts_queries(query)
+        fts_queries = _build_fts_queries(options.query)
         fts_scores: dict[str, float] = {}
         fts_chunks: dict[str, dict] = {}
 
@@ -739,7 +745,7 @@ class DocsDB:
 
         # --- Vector search ---
         vec_scores: dict[str, float] = {}
-        if self._vec_enabled and query_embedding:
+        if self._vec_enabled and options.query_embedding:
             try:
                 vec_sql = """
                     SELECT v.id, v.distance, c.*, l.name AS _library_name
@@ -748,7 +754,7 @@ class DocsDB:
                     LEFT JOIN libraries l ON c.library_id = l.id
                     WHERE v.embedding MATCH ?
                 """
-                vec_params: list = [_serialize_f32(query_embedding)]
+                vec_params: list = [_serialize_f32(options.query_embedding)]
 
                 if library_id:
                     vec_sql += " AND c.library_id = ?"
@@ -819,7 +825,7 @@ class DocsDB:
                     ]
 
         for cid, score in scored:
-            if len(results) >= limit:
+            if len(results) >= options.limit:
                 break
             chunk = fts_chunks.get(cid)
             if not chunk:

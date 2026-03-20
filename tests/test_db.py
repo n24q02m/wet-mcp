@@ -5,7 +5,6 @@ JSONL export/import, edge cases (Unicode, empty queries, special characters),
 chunk quality scoring, cross-chunk context retrieval, sqlite-vec vector search,
 RRF fusion scoring, and tiered FTS fallback.
 """
-
 import importlib.util
 import json
 import struct
@@ -15,6 +14,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from wet_mcp.db import SearchOptions
 
 # ---------------------------------------------------------------------------
 # Bootstrap: load wet_mcp.db directly from file without triggering the
@@ -220,7 +221,7 @@ class TestSearch:
     def test_fts_search_basic(self, db_with_data):
         """FTS5 search returns relevant results."""
         db = db_with_data[0]
-        results = db.search(query="route decorator", library_name="fastapi")
+        results = db.search(SearchOptions(query="route decorator", library_name="fastapi"))
         assert len(results) > 0
         # The routing chunk should be most relevant
         assert any("route" in r["content"].lower() for r in results)
@@ -228,7 +229,7 @@ class TestSearch:
     def test_fts_search_returns_scored(self, db_with_data):
         """All results have a score > 0."""
         db = db_with_data[0]
-        results = db.search(query="dependencies", library_name="fastapi")
+        results = db.search(SearchOptions(query="dependencies", library_name="fastapi"))
         for r in results:
             assert "score" in r
             assert r["score"] > 0
@@ -236,19 +237,19 @@ class TestSearch:
     def test_fts_search_limit(self, db_with_data):
         """Limit parameter is respected."""
         db = db_with_data[0]
-        results = db.search(query="FastAPI", library_name="fastapi", limit=2)
+        results = db.search(SearchOptions(query="FastAPI", library_name="fastapi", limit=2))
         assert len(results) <= 2
 
     def test_fts_search_no_results(self, db_with_data):
         """Query with no matches returns empty."""
         db = db_with_data[0]
-        results = db.search(query="xyznonexistentterm", library_name="fastapi")
+        results = db.search(SearchOptions(query="xyznonexistentterm", library_name="fastapi"))
         assert results == []
 
     def test_fts_search_unknown_library(self, db_with_data):
         """Search for nonexistent library returns empty."""
         db = db_with_data[0]
-        results = db.search(query="anything", library_name="nonexistent")
+        results = db.search(SearchOptions(query="anything", library_name="nonexistent"))
         assert results == []
 
     def test_fts_search_special_characters(self, db):
@@ -264,7 +265,7 @@ class TestSearch:
             ],
         )
         # Should not raise even with FTS-hostile characters
-        results = db.search(query="@app.get path params", library_name="test")
+        results = db.search(SearchOptions(query="@app.get path params", library_name="test"))
         assert isinstance(results, list)
 
     def test_fts_search_unicode(self, db):
@@ -279,14 +280,14 @@ class TestSearch:
                 {"content": "Japanese: Sumimasen, arigatou gozaimasu"},
             ],
         )
-        results = db.search(query="Bonjour", library_name="i18n-lib")
+        results = db.search(SearchOptions(query="Bonjour", library_name="i18n-lib"))
         assert len(results) > 0
         assert "Bonjour" in results[0]["content"]
 
     def test_search_result_format(self, db_with_data):
         """Each result has all expected fields."""
         db = db_with_data[0]
-        results = db.search(query="FastAPI", library_name="fastapi")
+        results = db.search(SearchOptions(query="FastAPI", library_name="fastapi"))
         assert len(results) > 0
         r = results[0]
         assert "content" in r
@@ -313,10 +314,10 @@ class TestSearch:
 
         # Search v0.99.0 should find "deprecated"
         results = db.search(
-            query="deprecated routing",
+            SearchOptions(query="deprecated routing",
             library_name="fastapi",
             version="0.99.0",
-        )
+        ))
         assert any("deprecated" in r["content"].lower() for r in results)
 
 
@@ -383,7 +384,7 @@ class TestPhraseTierQueries:
         """Exact phrase match should rank higher than scattered terms."""
         db = db_with_data[0]
         # "path parameters" appears together in routing chunk
-        results = db.search(query="path parameters", library_name="fastapi")
+        results = db.search(SearchOptions(query="path parameters", library_name="fastapi"))
         assert len(results) > 0
         # First result should contain both words
         assert "path" in results[0]["content"].lower()
@@ -415,7 +416,7 @@ class TestCrossChunkContext:
         ]
         db.add_chunks(ver_id, lib_id, chunks)
 
-        results = db.search(query="routing path", library_name="ctx-test")
+        results = db.search(SearchOptions(query="routing path", library_name="ctx-test"))
         assert len(results) > 0
         # Chunk 1 should match "routing path"
         routing_result = next(
@@ -446,7 +447,7 @@ class TestCrossChunkContext:
         ]
         db.add_chunks(ver_id, lib_id, chunks)
 
-        results = db.search(query="routing setup", library_name="first-chunk")
+        results = db.search(SearchOptions(query="routing setup", library_name="first-chunk"))
         assert len(results) > 0
         first = results[0]
         assert "context_before" not in first
@@ -470,7 +471,7 @@ class TestCrossChunkContext:
         ]
         db.add_chunks(ver_id, lib_id, chunks)
 
-        results = db.search(query="deployment routing", library_name="last-chunk")
+        results = db.search(SearchOptions(query="deployment routing", library_name="last-chunk"))
         assert len(results) > 0
         last = next((r for r in results if "deployment" in r["content"].lower()), None)
         assert last is not None
@@ -501,7 +502,7 @@ class TestChunksCRUD:
         ver_id = db.upsert_version(lib_id)
         count = db.add_chunks(ver_id, lib_id, [{"content": "just content"}])
         assert count == 1
-        results = db.search(query="just content", library_name="minimal")
+        results = db.search(SearchOptions(query="just content", library_name="minimal"))
         assert len(results) == 1
         assert results[0]["content"] == "just content"
 
@@ -538,7 +539,7 @@ class TestJSONLSync:
             assert stats["chunks"] == 4
 
             # Verify data is searchable
-            results = dst_db.search(query="route decorator", library_name="fastapi")
+            results = dst_db.search(SearchOptions(query="route decorator", library_name="fastapi"))
             assert len(results) > 0
         finally:
             dst_db.close()
@@ -602,13 +603,13 @@ class TestEdgeCases:
     def test_empty_query(self, db_with_data):
         """Empty query should not crash."""
         db = db_with_data[0]
-        results = db.search(query="", library_name="fastapi")
+        results = db.search(SearchOptions(query="", library_name="fastapi"))
         assert isinstance(results, list)
 
     def test_single_word_query(self, db_with_data):
         """Single word queries work."""
         db = db_with_data[0]
-        results = db.search(query="WebSocket", library_name="fastapi")
+        results = db.search(SearchOptions(query="WebSocket", library_name="fastapi"))
         assert len(results) > 0
 
     def test_multiple_libraries(self, db):
@@ -634,8 +635,8 @@ class TestEdgeCases:
             ],
         )
 
-        results_a = db.search(query="routing", library_name="lib-a")
-        results_b = db.search(query="routing", library_name="lib-b")
+        results_a = db.search(SearchOptions(query="routing", library_name="lib-a"))
+        results_b = db.search(SearchOptions(query="routing", library_name="lib-b"))
 
         assert all(r["library"] == "lib-a" for r in results_a)
         assert all(r["library"] == "lib-b" for r in results_b)
@@ -656,7 +657,7 @@ class TestEdgeCases:
         db.remove_library("cascade")
 
         # Chunks should be gone
-        results = db.search(query="cascade", library_name="cascade")
+        results = db.search(SearchOptions(query="cascade", library_name="cascade"))
         assert results == []
 
 
@@ -1080,10 +1081,10 @@ class TestSearchWithVec:
             # Search with query embedding — vec search may fail on some
             # sqlite-vec versions but FTS fallback should still work
             results = db.search(
-                query="vector embeddings",
+                SearchOptions(query="vector embeddings",
                 library_name="hybridlib",
                 query_embedding=[0.9, 0.1, 0.0, 0.0],
-            )
+            ))
             assert len(results) > 0
             # Results should have scores >= 0
             for r in results:
@@ -1114,11 +1115,11 @@ class TestSearchWithVec:
             db.mark_version_indexed(ver2, 1, 1)
 
             results = db.search(
-                query="search",
+                SearchOptions(query="search",
                 library_name="vecverlib",
                 version="1.0",
                 query_embedding=[1.0, 0.0, 0.0, 0.0],
-            )
+            ))
             assert len(results) > 0
             assert "one" in results[0]["content"].lower()
         finally:
@@ -1139,10 +1140,10 @@ class TestSearchWithVec:
 
             # Should not raise — falls back to FTS only
             results = db.search(
-                query="test search",
+                SearchOptions(query="test search",
                 library_name="vecerrlib",
                 query_embedding=[1.0, 0.0, 0.0, 0.0],
-            )
+            ))
             assert isinstance(results, list)
         finally:
             db.close()
@@ -1168,7 +1169,7 @@ class TestFTSTieredFallback:
         )
 
         # Search with a multi-word query exercises all tiers
-        results = db.search(query="alpha gamma", library_name="tiertest")
+        results = db.search(SearchOptions(query="alpha gamma", library_name="tiertest"))
         assert isinstance(results, list)
 
     def test_search_url_diversity_limit(self, db):
@@ -1186,7 +1187,7 @@ class TestFTSTieredFallback:
         ]
         db.add_chunks(ver_id, lib_id, chunks)
 
-        results = db.search(query="routing parameters", library_name="urlcap", limit=10)
+        results = db.search(SearchOptions(query="routing parameters", library_name="urlcap", limit=10))
         # max_per_url = 2, so at most 2 results from same URL
         same_url_count = sum(
             1 for r in results if r["url"] == "https://example.com/same-page"
@@ -1202,7 +1203,7 @@ class TestFTSTieredFallback:
             lib_id,
             [{"content": "searchable content here"}],
         )
-        results = db.search(query="searchable content", library_name="skiptest")
+        results = db.search(SearchOptions(query="searchable content", library_name="skiptest"))
         assert len(results) > 0
 
 
@@ -1577,7 +1578,7 @@ class TestFTSSearchError:
 
         db._conn = ConnProxy()
         try:
-            results = db.search(query="hello world", library_name="ftserr")
+            results = db.search(SearchOptions(query="hello world", library_name="ftserr"))
         finally:
             db._conn = original_conn
         # Should still return results from later tiers
@@ -1602,7 +1603,7 @@ class TestSearchLimitBreak:
         ]
         db.add_chunks(ver_id, lib_id, chunks)
 
-        results = db.search(query="routing features", library_name="limitlib", limit=3)
+        results = db.search(SearchOptions(query="routing features", library_name="limitlib", limit=3))
         assert len(results) <= 3
 
     def test_search_skips_chunk_not_in_fts_chunks(self, db):
@@ -1621,7 +1622,7 @@ class TestSearchLimitBreak:
             return result
 
         with patch.object(db, "_combine_scores", side_effect=patched_combine):
-            results = db.search(query="data skipping", library_name="skiplib")
+            results = db.search(SearchOptions(query="data skipping", library_name="skiplib"))
         # Phantom ID should be skipped, real results returned
         assert all(r["content"] != "" for r in results)
 
@@ -1739,10 +1740,10 @@ class TestVecSearchChunkLoading:
             db._conn = VecConnProxy()
             try:
                 results = db.search(
-                    query="searching",
+                    SearchOptions(query="searching",
                     library_name="vecloadlib",
                     query_embedding=[0.95, 0.05, 0.0, 0.0],
-                )
+                ))
             finally:
                 db._conn = original_conn
 
