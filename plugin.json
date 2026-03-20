@@ -15,6 +15,5 @@
       "command": "uvx",
       "args": ["--python", "3.13", "wet-mcp"]
     }
-  },
-  "skills": "../.agents/skills/"
+  }
 }
