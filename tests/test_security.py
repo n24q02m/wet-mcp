@@ -1,6 +1,8 @@
 import socket
 from unittest.mock import patch
 
+import pytest
+
 from wet_mcp.security import is_safe_local_path, is_safe_url
 
 # Tests mock ``wet_mcp.security._original_getaddrinfo`` because
@@ -183,10 +185,21 @@ def test_is_safe_url_empty_hostname():
     assert not is_safe_url("https:///path")
 
 
-def test_is_safe_url_malformed_urlparse_exception():
+@pytest.mark.parametrize(
+    "invalid_url",
+    [
+        "http://[invalid_ipv6_format]",  # Python 3.12+ urlparse raises ValueError
+        "http://[::1",  # Unclosed IPv6
+        "http://]",  # Unopened IPv6
+        "http://example.com:abc",  # Invalid port
+        "http://a b.com",  # Spaces in hostname
+        123,  # Wrong type (int instead of str)
+        None,  # Wrong type (None instead of str)
+    ],
+)
+def test_is_safe_url_malformed_urlparse_exception(invalid_url):
     """Test is_safe_url returns False when urlparse raises an exception."""
-    # In Python 3.12+, urlparse raises ValueError for invalid IPv6 URLs
-    assert not is_safe_url("http://[invalid_ipv6_format]")
+    assert not is_safe_url(invalid_url)
 
 
 def test_is_safe_url_general_exception():
