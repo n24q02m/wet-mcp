@@ -1228,16 +1228,17 @@ async def _fetch_and_chunk_docs(
             gh_chunks.extend(page_chunks)
         gh_page_count = len(gh_pages)
 
-        # Quality gate: if GitHub raw produced too few meaningful chunks,
-        # fall through to Tier 2 (crawl docs site). This handles repos
-        # where docs use template macros (Polars), RST, or other formats
-        # that produce poor raw markdown.
+    # Quality gate: if GitHub raw produced too few meaningful chunks,
+    # fall through to Tier 2 (crawl docs site). This handles repos
+    # where docs use template macros (Polars), RST, or other formats
+    # that produce poor raw markdown.
+    if gh_page_count > 0:
         if len(gh_chunks) >= _MIN_GH_CHUNKS:
             logger.info(
-                f"Indexed {len(gh_chunks)} chunks from {len(gh_pages)} "
+                f"Indexed {len(gh_chunks)} chunks from {gh_page_count} "
                 "GitHub raw markdown files"
             )
-            return gh_chunks, len(gh_pages)
+            return gh_chunks, gh_page_count
         else:
             logger.info(
                 f"GitHub raw produced only {len(gh_chunks)} chunks "
