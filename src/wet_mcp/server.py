@@ -1589,6 +1589,60 @@ async def _discover_docs_url(
     return docs_url, repo_url, registry, description
 
 
+async def _resolve_docs_source(
+    library: str, language: str | None, version: str | None
+) -> tuple[str, str, str, str] | str:
+    """Discover docs URL and apply versioning or return an error JSON string."""
+    docs_url, repo_url, registry, description = await _discover_docs_url(
+        library, language
+    )
+
+    if not docs_url:
+        if repo_url and "github.com" in repo_url:
+            docs_url = repo_url
+            logger.info(f"No docs URL for '{library}', using GitHub repo: {repo_url}")
+        else:
+            return json.dumps(
+                {
+                    "error": f"Could not find documentation URL for '{library}'",
+                    "hint": "Try providing the docs URL directly via extract action",
+                },
+                ensure_ascii=False,
+            )
+
+    from wet_mcp.sources.docs import _apply_version_to_url
+
+    docs_url = _apply_version_to_url(docs_url, version)
+    return docs_url, repo_url, registry, description
+
+
+def _prepare_library_for_indexing(
+    lib_key: str,
+    docs_url: str,
+    registry: str,
+    description: str,
+    version: str | None,
+) -> tuple[str, str]:
+    """Upsert library/version in the database and clear old chunks for re-indexing."""
+    if not _docs_db:
+        raise RuntimeError("Docs database not initialized")
+
+    lib_id = _docs_db.upsert_library(
+        name=lib_key,
+        docs_url=docs_url,
+        registry=registry,
+        description=description,
+    )
+    ver_id = _docs_db.upsert_version(
+        library_id=lib_id,
+        version=version or "latest",
+        docs_url=docs_url,
+    )
+
+    _docs_db.clear_version_chunks(ver_id)
+    return lib_id, ver_id
+
+
 async def _do_docs_search(
     library: str,
     query: str,
@@ -1612,46 +1666,21 @@ async def _do_docs_search(
     # Step 2: Auto-discover and index
     logger.info(f"Library '{lib_key}' not indexed, discovering docs...")
 
-    docs_url, repo_url, registry, description = await _discover_docs_url(
-        library, language
-    )
+    docs_info = await _resolve_docs_source(library, language, version)
+    if isinstance(docs_info, str):
+        # Returned an error JSON string
+        return docs_info
 
-    if not docs_url:
-        # When no docs URL found but we have a GitHub repo URL,
-        # use it as the docs source — _fetch_and_chunk_docs will
-        # try GitHub raw docs (Tier 1) which often has good docs/.
-        if repo_url and "github.com" in repo_url:
-            docs_url = repo_url
-            logger.info(f"No docs URL for '{library}', using GitHub repo: {repo_url}")
-        else:
-            return json.dumps(
-                {
-                    "error": f"Could not find documentation URL for '{library}'",
-                    "hint": "Try providing the docs URL directly via extract action",
-                },
-                ensure_ascii=False,
-            )
+    docs_url, repo_url, registry, description = docs_info
 
-    # Apply version to docs URL if applicable (e.g. ReadTheDocs, docs.rs)
-    from wet_mcp.sources.docs import _apply_version_to_url
-
-    docs_url = _apply_version_to_url(docs_url, version)
-
-    # Create/update library record
-    lib_id = _docs_db.upsert_library(
-        name=lib_key,
+    # Create/update library record and prepare for indexing
+    lib_id, ver_id = _prepare_library_for_indexing(
+        lib_key=lib_key,
         docs_url=docs_url,
         registry=registry,
         description=description,
+        version=version,
     )
-    ver_id = _docs_db.upsert_version(
-        library_id=lib_id,
-        version=version or "latest",
-        docs_url=docs_url,
-    )
-
-    # Clear old chunks for re-indexing
-    _docs_db.clear_version_chunks(ver_id)
 
     # Step 3: Launch background indexer
     asyncio.create_task(
