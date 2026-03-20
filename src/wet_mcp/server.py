@@ -413,9 +413,11 @@ mcp = FastMCP(
     name="wet",
     instructions=(
         "Web Extended Toolkit MCP Server. "
-        "Use `search` for web/academic/docs search. "
-        "Use `extract` for content extraction, crawling, site mapping. "
-        "Use `media` for media discovery and download. "
+        "IMPORTANT: `search` and `extract` serve different purposes. "
+        "`search` FINDS information (returns result listings with titles, URLs, snippets). "
+        "`extract` READS content from a specific URL (returns full page text). "
+        "Typical workflow: search first to find URLs, then extract to read them. "
+        "`media` discovers and downloads images/videos/audio from pages. "
         "All web operations are cached for performance."
     ),
     lifespan=_lifespan,
@@ -523,17 +525,30 @@ async def search(  # noqa: PLR0913
     expand: bool = False,
     enrich: bool = False,
 ) -> str:
-    """Search the web, academic papers, or library documentation.
-    - search: Web search via SearXNG (requires query, expand=True for query expansion, enrich=True for snippet enrichment)
-    - research: Academic/scientific search (requires query)
-    - docs: Search library documentation with auto-indexing (requires library + query, specify language for disambiguation)
-    - similar: Find pages similar to a URL (pass URL as query)
-    Use `help` tool for full documentation.
+    """Find information across web, academic sources, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
+
+    Actions:
+    - search: Web search via SearXNG. Example: search(action="search", query="python async patterns")
+    - research: Academic/scientific search (Google Scholar, arXiv, PubMed). Example: search(action="research", query="transformer attention mechanism")
+    - docs: Search library documentation with auto-indexing. Example: search(action="docs", query="how to create routes", library="fastapi")
+    - similar: Find pages similar to a URL (pass URL as query). Example: search(action="similar", query="https://example.com/article")
+
+    Key parameters:
+    - query (required for all actions): Search terms or URL (for similar)
+    - library (required for docs): Library name, e.g. "react", "fastapi"
+    - language: Programming language for disambiguation in docs, e.g. "python", "java"
+    - expand: Enable LLM query expansion for broader coverage (default: false)
+    - enrich: Fetch actual page content for richer snippets (default: false, adds latency)
+    - max_results: Number of results (default: 10)
+    - time_range: Recency filter -- day, week, month, year
+    - include_domains / exclude_domains: Domain filters
+
+    Use `help` tool with tool_name="search" for full parameter documentation.
     """
     match action:
         case "search":
             if not query:
-                return "Error: query is required for search action"
+                return "Error: query is required for search action. Example: search(action=\"search\", query=\"python async patterns\")"
             cache_params = {
                 "query": query,
                 "categories": categories,
@@ -617,7 +632,7 @@ async def search(  # noqa: PLR0913
 
         case "research":
             if not query:
-                return "Error: query is required for research action"
+                return "Error: query is required for research action. Example: search(action=\"research\", query=\"transformer attention mechanism\")"
             cache_params = {
                 "query": query,
                 "max_results": max_results,
@@ -651,9 +666,9 @@ async def search(  # noqa: PLR0913
 
         case "docs":
             if not library:
-                return "Error: library is required for docs action"
+                return "Error: library is required for docs action. Example: search(action=\"docs\", query=\"routing\", library=\"fastapi\")"
             if not query:
-                return "Error: query is required for docs action"
+                return "Error: query is required for docs action. Example: search(action=\"docs\", query=\"how to create routes\", library=\"fastapi\")"
             return await _with_timeout(
                 _do_docs_search(
                     library=library,
@@ -667,9 +682,9 @@ async def search(  # noqa: PLR0913
 
         case "similar":
             if not query:
-                return "Error: query (URL) is required for similar action"
+                return "Error: query (URL) is required for similar action. Example: search(action=\"similar\", query=\"https://example.com/article\")"
             if not query.startswith(("http://", "https://")):
-                return "Error: query must be a URL (http:// or https://) for similar action"
+                return "Error: query must be a full URL starting with http:// or https://. Example: search(action=\"similar\", query=\"https://example.com/article\"). If you want to search by keywords instead, use action=\"search\"."
             try:
                 searxng_url = await asyncio.wait_for(
                     ensure_searxng(), timeout=_SEARXNG_TIMEOUT
@@ -687,8 +702,9 @@ async def search(  # noqa: PLR0913
 
         case _:
             return (
-                f"Error: Unknown action '{action}'. "
-                "Valid actions: search, research, docs, similar"
+                f"Error: Unknown action '{action}' for search tool. "
+                "Valid actions: search (web search), research (academic), docs (library documentation), similar (find related pages). "
+                "If you want to read content from a URL, use the `extract` tool instead."
             )
 
 
@@ -715,14 +731,26 @@ async def extract(
     schema: dict | None = None,
     prompt: str | None = None,
 ) -> str:
-    """Extract content from web pages, crawl sites, map structure, or convert local files.
-    - extract: Get clean content from URLs (requires urls)
-    - batch: Batch extract with per-domain rate limiting (requires urls, max 50)
-    - crawl: Deep crawl from root URLs (requires urls)
-    - map: Discover site structure without content (requires urls)
-    - convert: Convert local files to Markdown (requires paths, max 10)
-    - extract_structured: Extract structured data from URLs using a JSON Schema (requires urls + schema, optional prompt)
-    Use `help` tool for full documentation.
+    """Read and return full page content from URLs or local files. Use this when you have a specific URL and need its content. For finding URLs first, use the `search` tool instead.
+
+    Actions:
+    - extract: Get clean content from URLs. Example: extract(action="extract", urls=["https://example.com/article"])
+    - batch: Batch extract with per-domain rate limiting (max 50 URLs). Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])
+    - crawl: Deep crawl following links from root URLs. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)
+    - map: Discover site URL structure without extracting content. Example: extract(action="map", urls=["https://example.com"])
+    - convert: Convert local files (PDF, DOCX, PPTX, XLSX) to Markdown. Example: extract(action="convert", paths=["/home/user/report.pdf"])
+    - extract_structured: Extract structured data using JSON Schema + LLM. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})
+
+    Key parameters:
+    - urls (required for extract/batch/crawl/map/extract_structured): List of URLs
+    - paths (required for convert): List of local file paths
+    - format: Output format -- "markdown" (default), "text", "html"
+    - depth: Crawl depth (default: 2, max: 5)
+    - max_pages: Max pages for crawl/map (default: 20, max: 100)
+    - stealth: Enable anti-bot bypass for protected sites (default: false)
+    - schema: JSON Schema dict for extract_structured
+
+    Use `help` tool with tool_name="extract" for full parameter documentation.
     """
     # Security: enforce hard limits to prevent resource exhaustion
     _MAX_EXTRACT_URLS = 20
@@ -735,7 +763,7 @@ async def extract(
     match action:
         case "extract":
             if not urls:
-                return "Error: urls is required for extract action"
+                return "Error: urls is required for extract action. Example: extract(action=\"extract\", urls=[\"https://example.com/page\"])"
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
             if _web_cache:
@@ -754,7 +782,7 @@ async def extract(
 
         case "batch":
             if not urls:
-                return "Error: urls is required for batch action"
+                return "Error: urls is required for batch action. Example: extract(action=\"batch\", urls=[\"https://a.com/1\", \"https://b.com/2\"])"
             from wet_mcp.sources.crawler import batch_extract
 
             return await _with_timeout(
@@ -764,7 +792,7 @@ async def extract(
 
         case "crawl":
             if not urls:
-                return "Error: urls is required for crawl action"
+                return "Error: urls is required for crawl action. Example: extract(action=\"crawl\", urls=[\"https://docs.example.com\"], depth=2)"
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -791,7 +819,7 @@ async def extract(
 
         case "map":
             if not urls:
-                return "Error: urls is required for map action"
+                return "Error: urls is required for map action. Example: extract(action=\"map\", urls=[\"https://example.com\"])"
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -812,7 +840,7 @@ async def extract(
 
         case "convert":
             if not paths:
-                return "Error: paths is required for convert action"
+                return "Error: paths is required for convert action. Example: extract(action=\"convert\", paths=[\"/home/user/report.pdf\"])"
             from wet_mcp.sources.crawler import convert_local_files
 
             return await _with_timeout(
@@ -822,9 +850,9 @@ async def extract(
 
         case "extract_structured":
             if not urls:
-                return "Error: urls is required for extract_structured action"
+                return "Error: urls is required for extract_structured action. Example: extract(action=\"extract_structured\", urls=[\"https://example.com/pricing\"], schema={\"type\": \"object\", \"properties\": {\"price\": {\"type\": \"string\"}}})"
             if not schema:
-                return "Error: schema (JSON Schema dict) is required for extract_structured action"
+                return "Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={\"type\": \"object\", \"properties\": {\"title\": {\"type\": \"string\"}, \"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\"}}}}"
             from wet_mcp.sources.structured import extract_structured
 
             return await _with_timeout(
@@ -836,8 +864,10 @@ async def extract(
 
         case _:
             return (
-                f"Error: Unknown action '{action}'. "
-                "Valid actions: extract, batch, crawl, map, convert, extract_structured"
+                f"Error: Unknown action '{action}' for extract tool. "
+                "Valid actions: extract (read URL content), batch (bulk extract), crawl (follow links), "
+                "map (site structure), convert (local files to markdown), extract_structured (schema-based). "
+                "If you want to search for information, use the `search` tool instead."
             )
 
 
@@ -857,23 +887,29 @@ async def media(  # noqa: PLR0913
     max_items: int = 10,
     prompt: str = "Describe this image in detail.",
 ) -> str:
-    """Media discovery and download.
-    - list: Scan page, return URLs + metadata
-    - download: Download specific files to local
-    - analyze: Analyze a local media file using configured LLM (requires API_KEYS)
+    """Discover, download, and analyze media files (images, videos, audio) from web pages.
 
-    Note: Downloading is intended for downstream analysis (e.g., passing to an LLM
-    or vision model). The MCP server provides the raw files; the MCP client
-    orchestrates the analysis.
+    Actions:
+    - list: Scan a page and return media URLs with metadata. Example: media(action="list", url="https://example.com/gallery", media_type="images")
+    - download: Download media files to local storage. Example: media(action="download", media_urls=["https://example.com/photo.jpg"])
+    - analyze: Analyze a local file using LLM vision (requires API_KEYS). Example: media(action="analyze", url="/path/to/image.jpg", prompt="What objects are in this image?")
 
-    Use `help` tool for full documentation.
+    Key parameters:
+    - url (required for list/analyze): Page URL to scan, or local file path for analyze
+    - media_urls (required for download): List of media URLs to download
+    - media_type: Filter for list -- "images", "videos", "audio", "files", "all" (default: "all")
+    - output_dir: Download directory (default: ~/.wet-mcp/downloads)
+    - prompt: Analysis prompt for analyze action
+
+    Typical workflow: list (discover) -> download (save locally) -> analyze (LLM insights).
+    Use `help` tool with tool_name="media" for full documentation.
     """
     from wet_mcp.sources.crawler import download_media
 
     match action:
         case "list":
             if not url:
-                return "Error: url is required for list action"
+                return "Error: url is required for list action. Example: media(action=\"list\", url=\"https://example.com/gallery\", media_type=\"images\")"
             return await _with_timeout(
                 list_media(url=url, media_type=media_type, max_items=max_items),
                 "media.list",
@@ -881,7 +917,7 @@ async def media(  # noqa: PLR0913
 
         case "download":
             if not media_urls:
-                return "Error: media_urls is required for download action"
+                return "Error: media_urls is required for download action. Example: media(action=\"download\", media_urls=[\"https://example.com/image.jpg\"]). Use media(action=\"list\", url=\"...\") first to discover media URLs."
 
             # Security: validate output_dir is within the configured
             # download directory to prevent arbitrary file writes.
@@ -905,7 +941,7 @@ async def media(  # noqa: PLR0913
 
         case "analyze":
             if not url:
-                return "Error: url (local path) is required for analyze action"
+                return "Error: url (local file path) is required for analyze action. Example: media(action=\"analyze\", url=\"/path/to/image.jpg\", prompt=\"Describe this image\"). Download a file first with media(action=\"download\", ...)."
 
             from wet_mcp.llm import analyze_media
 
@@ -915,7 +951,7 @@ async def media(  # noqa: PLR0913
             )
 
         case _:
-            return f"Error: Unknown action '{action}'. Valid actions: list, download, analyze"
+            return f"Error: Unknown action '{action}' for media tool. Valid actions: list (discover media on page), download (save to local), analyze (LLM vision analysis)."
 
 
 @mcp.tool(
@@ -926,9 +962,15 @@ async def media(  # noqa: PLR0913
     ),
 )
 async def help(tool_name: str = "search") -> str:
-    """Get full documentation for a tool.
-    Use when compressed descriptions are insufficient.
-    Valid tool names: search, extract, media, config, help.
+    """Get detailed documentation for any tool. Call this when you need full parameter reference or usage examples.
+
+    Valid tool_name values: search, extract, media, config, help.
+
+    Quick guide -- which tool to use:
+    - Need to FIND information? Use `search` (returns result listings with URLs)
+    - Need to READ a page? Use `extract` (returns full page content from a URL)
+    - Need media files? Use `media` (discover, download, analyze images/videos/audio)
+    - Need server settings? Use `config` (status, cache, settings)
     """
     try:
         doc_file = files("wet_mcp.docs").joinpath(f"{tool_name}.md")
