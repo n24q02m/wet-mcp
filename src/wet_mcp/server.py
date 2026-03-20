@@ -1,4 +1,5 @@
 """WET MCP Server - Main server definition."""
+
 import asyncio
 import functools
 import json
@@ -1463,12 +1464,14 @@ async def _search_cached_index(
     retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
     results = _docs_db.search(
-        SearchOptions(query=query,
-        library_name=lib_key,
-        version=version,
-        limit=retrieve_limit,
-        query_embedding=query_embedding,
-    ))
+        SearchOptions(
+            query=query,
+            library_name=lib_key,
+            version=version,
+            limit=retrieve_limit,
+            query_embedding=query_embedding,
+        )
+    )
 
     if not results:
         return None
@@ -1486,12 +1489,14 @@ async def _search_cached_index(
         if hyde_text:
             hyde_embedding = await _embed(hyde_text, is_query=False)
             hyde_results = _docs_db.search(
-                SearchOptions(query=query,
-                library_name=lib_key,
-                version=version,
-                limit=retrieve_limit,
-                query_embedding=hyde_embedding,
-            ))
+                SearchOptions(
+                    query=query,
+                    library_name=lib_key,
+                    version=version,
+                    limit=retrieve_limit,
+                    query_embedding=hyde_embedding,
+                )
+            )
             if hyde_results:
                 hyde_scores = [r.get("score", 0) for r in hyde_results]
                 # Use HyDE results if they have better top score

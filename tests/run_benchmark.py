@@ -7,6 +7,7 @@ Usage:
 Outputs a compact summary per library and a final table.
 Results are saved incrementally (after each library) to avoid data loss.
 """
+
 import asyncio
 import json
 import os
@@ -62,11 +63,13 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
         if ver and ver.get("chunk_count", 0) > 0:
             query_embedding = await embed_fn(query, is_query=True) if embed_fn else None
             results = docs_db.search(
-                SearchOptions(query=query,
-                library_name=lib_key,
-                limit=limit * 3,
-                query_embedding=query_embedding,
-            ))
+                SearchOptions(
+                    query=query,
+                    library_name=lib_key,
+                    limit=limit * 3,
+                    query_embedding=query_embedding,
+                )
+            )
             if rerank_fn and len(results) > limit:
                 results = await rerank_fn(query, results, limit)
             else:
@@ -193,11 +196,13 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
     # Search
     query_embedding = await embed_fn(query, is_query=True) if embed_fn else None
     results = docs_db.search(
-        SearchOptions(query=query,
-        library_name=lib_key,
-        limit=limit * 3,
-        query_embedding=query_embedding,
-    ))
+        SearchOptions(
+            query=query,
+            library_name=lib_key,
+            limit=limit * 3,
+            query_embedding=query_embedding,
+        )
+    )
     if rerank_fn and len(results) > limit:
         results = await rerank_fn(query, results, limit)
     else:

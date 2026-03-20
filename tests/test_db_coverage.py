@@ -4,6 +4,7 @@ Targets uncovered lines: 27, 112, 117, 119, 142-151, 267-271, 287-291,
 328-332, 396-403, 431-435, 526-540, 550-557, 581-598, 694-697, 712-743,
 772, 804, 807, 812, 879-882, 889, 972-973.
 """
+
 import importlib.util
 import json
 import sqlite3
@@ -570,7 +571,9 @@ class TestSearchWithVersionFilter:
     def test_search_with_version(self, populated_db):
         """Search filtered by version."""
         db, lib_id, ver_id = populated_db
-        results = db.search(SearchOptions(query="hello", library_name="testlib", version="1.0.0"))
+        results = db.search(
+            SearchOptions(query="hello", library_name="testlib", version="1.0.0")
+        )
         assert isinstance(results, list)
 
 
