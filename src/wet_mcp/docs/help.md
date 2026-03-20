@@ -2,14 +2,27 @@
 
 Welcome to **WET** (Web Extended Toolkit) MCP Server.
 
+## Which Tool Should I Use?
+
+| I want to... | Use this tool | Example |
+|:-------------|:-------------|:--------|
+| **Find** information on a topic | `search` | `search(action="search", query="python async patterns")` |
+| **Read** full content from a URL | `extract` | `extract(action="extract", urls=["https://example.com/article"])` |
+| **Look up** library documentation | `search` (docs) | `search(action="docs", query="routing", library="fastapi")` |
+| **Download** images/videos/audio | `media` | `media(action="list", url="https://example.com/gallery")` |
+| **Convert** a local file to text | `extract` (convert) | `extract(action="convert", paths=["/home/user/report.pdf"])` |
+| **Check** server status/settings | `config` | `config(action="status")` |
+
+**Key distinction**: `search` returns result listings (titles, URLs, snippets). `extract` returns full page content. Use `search` to find URLs, then `extract` to read them.
+
 ## Available Tools
 
-| Tool | Description |
-|:-----|:------------|
-| `search` | Web search, academic research, library documentation search |
-| `extract` | Content extraction, deep crawling, site mapping |
-| `media` | Media discovery (images, videos, audio) and download |
-| `config` | Server configuration and cache management |
+| Tool | Purpose |
+|:-----|:--------|
+| `search` | Find information: web search, academic research, library docs search |
+| `extract` | Read content: extract from URLs, crawl sites, map structure, convert local files |
+| `media` | Media files: discover, download, and analyze images/videos/audio |
+| `config` | Server management: status, settings, cache, re-indexing |
 | `help` | Get full documentation for any tool |
 
 ## Quick Reference
@@ -17,34 +30,43 @@ Welcome to **WET** (Web Extended Toolkit) MCP Server.
 ### search tool
 
 ```json
-// Search the web
+// Web search -- returns result listings (titles, URLs, snippets)
 {"action": "search", "query": "your search query"}
 
-// Academic/scientific search
+// Academic/scientific search (Google Scholar, arXiv, PubMed)
 {"action": "research", "query": "transformer attention mechanism"}
 
 // Search library documentation (auto-indexes on first call)
 {"action": "docs", "query": "how to create routes", "library": "fastapi"}
+
+// Find pages similar to a URL
+{"action": "similar", "query": "https://example.com/interesting-article"}
 ```
 
 ### extract tool
 
 ```json
-// Extract content from URLs
-{"action": "extract", "urls": ["https://example.com"]}
+// Read full content from a URL -- returns page text in markdown
+{"action": "extract", "urls": ["https://example.com/article"]}
 
-// Crawl multiple pages
+// Read as plain text
+{"action": "extract", "urls": ["https://example.com"], "format": "text"}
+
+// Deep crawl following links
 {"action": "crawl", "urls": ["https://docs.example.com"], "depth": 2}
 
-// Map site structure
+// Map site structure (URLs only, no content)
 {"action": "map", "urls": ["https://example.com"]}
+
+// Convert local files to markdown
+{"action": "convert", "paths": ["/home/user/report.pdf"]}
 ```
 
 ### media tool
 
 ```json
-// List media on a page
-{"action": "list", "url": "https://example.com"}
+// Discover media on a page
+{"action": "list", "url": "https://example.com/gallery", "media_type": "images"}
 
 // Download specific files
 {"action": "download", "media_urls": ["https://example.com/image.png"]}
