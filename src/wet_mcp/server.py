@@ -1589,27 +1589,15 @@ async def _discover_docs_url(
     return docs_url, repo_url, registry, description
 
 
-async def _do_docs_search(
+async def _discover_and_index_docs(
     library: str,
+    lib_key: str,
     query: str,
-    language: str | None = None,
-    version: str | None = None,
-    limit: int = 10,
+    language: str | None,
+    version: str | None,
+    limit: int,
 ) -> str:
-    """Search library documentation. Auto-discovers and indexes if needed."""
-    if not _docs_db:
-        return "Error: Docs database not initialized"
-
-    # Build library identity — include language for DB disambiguation
-    # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
-    lib_key = f"{library}:{language.lower()}" if language else library
-
-    # Step 1: Check if library is already indexed
-    cached = await _search_cached_index(lib_key, query, version, limit)
-    if cached:
-        return cached
-
-    # Step 2: Auto-discover and index
+    """Auto-discover, index, and return fallback web search results."""
     logger.info(f"Library '{lib_key}' not indexed, discovering docs...")
 
     docs_url, repo_url, registry, description = await _discover_docs_url(
@@ -1638,20 +1626,21 @@ async def _do_docs_search(
     docs_url = _apply_version_to_url(docs_url, version)
 
     # Create/update library record
-    lib_id = _docs_db.upsert_library(
+    # Note: _docs_db is a global initialized during server setup
+    lib_id = _docs_db.upsert_library(  # type: ignore
         name=lib_key,
         docs_url=docs_url,
         registry=registry,
         description=description,
     )
-    ver_id = _docs_db.upsert_version(
+    ver_id = _docs_db.upsert_version(  # type: ignore
         library_id=lib_id,
         version=version or "latest",
         docs_url=docs_url,
     )
 
     # Clear old chunks for re-indexing
-    _docs_db.clear_version_chunks(ver_id)
+    _docs_db.clear_version_chunks(ver_id)  # type: ignore
 
     # Step 3: Launch background indexer
     asyncio.create_task(
@@ -1686,6 +1675,37 @@ async def _do_docs_search(
         },
         ensure_ascii=False,
         indent=2,
+    )
+
+
+async def _do_docs_search(
+    library: str,
+    query: str,
+    language: str | None = None,
+    version: str | None = None,
+    limit: int = 10,
+) -> str:
+    """Search library documentation. Auto-discovers and indexes if needed."""
+    if not _docs_db:
+        return "Error: Docs database not initialized"
+
+    # Build library identity — include language for DB disambiguation
+    # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
+    lib_key = f"{library}:{language.lower()}" if language else library
+
+    # Step 1: Check if library is already indexed
+    cached = await _search_cached_index(lib_key, query, version, limit)
+    if cached:
+        return cached
+
+    # Step 2 & 3: Auto-discover, index, and return fallback
+    return await _discover_and_index_docs(
+        library=library,
+        lib_key=lib_key,
+        query=query,
+        language=language,
+        version=version,
+        limit=limit,
     )
 
 
