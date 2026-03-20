@@ -335,3 +335,19 @@ def test_get_model_capabilities_exception(mock_audio_out, mock_audio_in, mock_vi
     mock_vision.assert_called_once_with("test-model")
     mock_audio_in.assert_not_called()
     mock_audio_out.assert_not_called()
+
+
+def test_get_llm_config_mixed_empty_models(mock_settings):
+    """Test LLM config with interspersed empty models."""
+    settings.llm_models = "modelA, , modelB,  ,modelC"
+    config = get_llm_config()
+    assert config["model"] == "modelA"
+    assert config["fallbacks"] == ["modelB", "modelC"]
+
+
+def test_get_llm_config_only_commas(mock_settings):
+    """Test LLM config with only commas."""
+    settings.llm_models = ",,,"
+    config = get_llm_config()
+    assert config["model"] == "gemini/gemini-3-flash-preview"
+    assert config["fallbacks"] is None
