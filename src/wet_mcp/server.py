@@ -500,6 +500,96 @@ async def _with_timeout(coro, action: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+async def _handle_search(
+    query: str | None,
+    categories: str,
+    max_results: int,
+    time_range: str | None,
+    language: str | None,
+    include_domains: list[str] | None,
+    exclude_domains: list[str] | None,
+    expand: bool,
+    enrich: bool,
+) -> str:
+    """Helper to handle web search action."""
+    if not query:
+        return "Error: query is required for search action"
+    cache_params = {
+        "query": query,
+        "categories": categories,
+        "max_results": max_results,
+        "time_range": time_range,
+        "language": language,
+        "include_domains": include_domains,
+        "exclude_domains": exclude_domains,
+    }
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "search", cache_params)
+        if cached:
+            return cached
+    try:
+        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
+    except TimeoutError:
+        return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
+    except (SystemExit, Exception) as exc:
+        return f"Error: SearXNG startup failed: {exc}"
+    # Optional query expansion
+    search_query = query
+    if expand:
+        from wet_mcp.sources.search_strategies import expand_query
+
+        expanded = await expand_query(query)
+        if len(expanded) > 1:
+            search_query = " OR ".join(expanded)
+
+    result = await _with_timeout(
+        searxng_search(
+            searxng_url=searxng_url,
+            query=search_query,
+            categories=categories,
+            max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
+            time_range=time_range,
+            language=language,
+            include_domains=include_domains,
+            exclude_domains=exclude_domains,
+        ),
+        "search",
+    )
+    # Rerank by semantic relevance (same as research/docs)
+    if not result.startswith("Error"):
+        try:
+            data = json.loads(result)
+            results_list = data.get("results", [])
+            if results_list:
+                # Map snippet -> content for reranker (fallback to title)
+                for r in results_list:
+                    if "content" not in r:
+                        r["content"] = r.get("snippet", r.get("title", ""))
+                reranked = await _rerank_results(query, results_list, top_n=max_results)
+                if reranked:
+                    data["results"] = [r for r in reranked if r.get("score", 1.0) > 0.2]
+                    data["total"] = len(data["results"])
+                    result = json.dumps(data, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.debug(f"Search reranking failed, using original: {e}")
+    # Optional snippet enrichment
+    if enrich and not result.startswith("Error"):
+        try:
+            data = json.loads(result)
+            results_list = data.get("results", [])
+            if results_list:
+                from wet_mcp.sources.search_strategies import enrich_snippets
+
+                enriched = await enrich_snippets(results_list, query, top_n=5)
+                data["results"] = enriched
+                result = json.dumps(data, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.debug(f"Snippet enrichment failed: {e}")
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
+    return result
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -532,88 +622,17 @@ async def search(  # noqa: PLR0913
     """
     match action:
         case "search":
-            if not query:
-                return "Error: query is required for search action"
-            cache_params = {
-                "query": query,
-                "categories": categories,
-                "max_results": max_results,
-                "time_range": time_range,
-                "language": language,
-                "include_domains": include_domains,
-                "exclude_domains": exclude_domains,
-            }
-            if _web_cache:
-                cached = await asyncio.to_thread(_web_cache.get, "search", cache_params)
-                if cached:
-                    return cached
-            try:
-                searxng_url = await asyncio.wait_for(
-                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                )
-            except TimeoutError:
-                return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
-            except (SystemExit, Exception) as exc:
-                return f"Error: SearXNG startup failed: {exc}"
-            # Optional query expansion
-            search_query = query
-            if expand:
-                from wet_mcp.sources.search_strategies import expand_query
-
-                expanded = await expand_query(query)
-                if len(expanded) > 1:
-                    search_query = " OR ".join(expanded)
-
-            result = await _with_timeout(
-                searxng_search(
-                    searxng_url=searxng_url,
-                    query=search_query,
-                    categories=categories,
-                    max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
-                    time_range=time_range,
-                    language=language,
-                    include_domains=include_domains,
-                    exclude_domains=exclude_domains,
-                ),
-                "search",
+            return await _handle_search(
+                query=query,
+                categories=categories,
+                max_results=max_results,
+                time_range=time_range,
+                language=language,
+                include_domains=include_domains,
+                exclude_domains=exclude_domains,
+                expand=expand,
+                enrich=enrich,
             )
-            # Rerank by semantic relevance (same as research/docs)
-            if not result.startswith("Error"):
-                try:
-                    data = json.loads(result)
-                    results_list = data.get("results", [])
-                    if results_list:
-                        # Map snippet -> content for reranker (fallback to title)
-                        for r in results_list:
-                            if "content" not in r:
-                                r["content"] = r.get("snippet", r.get("title", ""))
-                        reranked = await _rerank_results(
-                            query, results_list, top_n=max_results
-                        )
-                        if reranked:
-                            data["results"] = [
-                                r for r in reranked if r.get("score", 1.0) > 0.2
-                            ]
-                            data["total"] = len(data["results"])
-                            result = json.dumps(data, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    logger.debug(f"Search reranking failed, using original: {e}")
-            # Optional snippet enrichment
-            if enrich and not result.startswith("Error"):
-                try:
-                    data = json.loads(result)
-                    results_list = data.get("results", [])
-                    if results_list:
-                        from wet_mcp.sources.search_strategies import enrich_snippets
-
-                        enriched = await enrich_snippets(results_list, query, top_n=5)
-                        data["results"] = enriched
-                        result = json.dumps(data, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    logger.debug(f"Snippet enrichment failed: {e}")
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
-            return result
 
         case "research":
             if not query:
