@@ -26,7 +26,7 @@ import socket
 import subprocess
 import sys
 import time
-from importlib.resources import files  # nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2
+from importlib.resources import files
 from pathlib import Path
 
 import httpx
