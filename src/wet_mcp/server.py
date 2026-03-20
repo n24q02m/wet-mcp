@@ -237,41 +237,37 @@ async def _init_embedding_backend(mode: str) -> None:
 
     backend_type = settings.resolve_embedding_backend()
 
+    async def try_cloud_model(
+        candidate_model: str, warn_on_error: bool = False
+    ) -> bool:
+        global _embedding_dims
+        try:
+            backend = await asyncio.to_thread(init_backend, "litellm", candidate_model)
+            native_dims = await asyncio.to_thread(backend.check_available)
+            if native_dims > 0:
+                if _embedding_dims == 0:
+                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+                logger.info(
+                    f"Embedding: {candidate_model} "
+                    f"(native={native_dims}, stored={_embedding_dims})"
+                )
+                return True
+        except Exception as e:
+            if warn_on_error:
+                logger.warning(f"Embedding model {candidate_model} not available: {e}")
+        return False
+
     if backend_type == "litellm":
         model = settings.resolve_embedding_model()
         if model:
             # Explicit model -- validate it
-            try:
-                backend = await asyncio.to_thread(init_backend, "litellm", model)
-                native_dims = await asyncio.to_thread(backend.check_available)
-                if native_dims > 0:
-                    if _embedding_dims == 0:
-                        _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                    logger.info(
-                        f"Embedding: {model} "
-                        f"(native={native_dims}, stored={_embedding_dims})"
-                    )
-                    return
-            except Exception as e:
-                logger.warning(f"Embedding model {model} not available: {e}")
+            if await try_cloud_model(model, warn_on_error=True):
+                return
         elif mode in ("proxy", "sdk"):
             # Auto-detect: try candidate models
             for candidate in _EMBEDDING_CANDIDATES:
-                try:
-                    backend = await asyncio.to_thread(
-                        init_backend, "litellm", candidate
-                    )
-                    native_dims = await asyncio.to_thread(backend.check_available)
-                    if native_dims > 0:
-                        if _embedding_dims == 0:
-                            _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                        logger.info(
-                            f"Embedding: {candidate} "
-                            f"(native={native_dims}, stored={_embedding_dims})"
-                        )
-                        return
-                except Exception:
-                    continue
+                if await try_cloud_model(candidate):
+                    return
         # Cloud not available -- fallback to local
         logger.warning("Cloud embedding not available, using local fallback")
 
