@@ -1439,7 +1439,7 @@ async def _search_cached_index(
     """
     from wet_mcp.sources.docs import DISCOVERY_VERSION
 
-    lib = _docs_db.get_library(lib_key)
+    lib = await asyncio.to_thread(_docs_db.get_library, lib_key)
 
     if lib:
         # Invalidate cache if discovery scoring has been updated
@@ -1455,7 +1455,7 @@ async def _search_cached_index(
         return None
 
     # Check if we have indexed chunks
-    ver = _docs_db.get_best_version(lib["id"], version)
+    ver = await asyncio.to_thread(_docs_db.get_best_version, lib["id"], version)
     if not ver or ver.get("chunk_count", 0) <= 0:
         return None
 
@@ -1463,7 +1463,8 @@ async def _search_cached_index(
     query_embedding = await _embed(query, is_query=True)
     retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
-    results = _docs_db.search(
+    results = await asyncio.to_thread(
+        _docs_db.search,
         query=query,
         library_name=lib_key,
         version=version,
@@ -1486,7 +1487,8 @@ async def _search_cached_index(
         hyde_text = await generate_hyde_query(query, library_name)
         if hyde_text:
             hyde_embedding = await _embed(hyde_text, is_query=False)
-            hyde_results = _docs_db.search(
+            hyde_results = await asyncio.to_thread(
+                _docs_db.search,
                 query=query,
                 library_name=lib_key,
                 version=version,
