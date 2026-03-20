@@ -672,3 +672,9 @@ def test_get_process_kwargs():
             subprocess.CREATE_NEW_PROCESS_GROUP = 512
         kwargs = _get_process_kwargs()
         assert "creationflags" in kwargs
+
+
+def test_stop_searxng():
+    with patch("wet_mcp.searxng_runner._cleanup_process") as mock_cleanup:
+        stop_searxng()
+        mock_cleanup.assert_called_once()
