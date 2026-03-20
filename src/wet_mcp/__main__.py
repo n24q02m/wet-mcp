@@ -56,25 +56,28 @@ def _validate_cloud_models(settings) -> bool:
         except Exception:
             continue
 
-    if cloud_ok:
-        print("  Step 3/3: Validating cloud reranker...")
-        rerank_model = settings.resolve_rerank_model()
-        if rerank_model:
-            from wet_mcp.reranker import init_reranker
+    if not cloud_ok:
+        return False
 
-            try:
-                reranker = init_reranker("litellm", rerank_model)
-                if reranker.check_available():
-                    print(f"  Cloud reranker ready: {rerank_model}")
-                    print("Warmup complete! Cloud models will be used.")
-                    return True
-            except Exception:
-                pass
-
+    print("  Step 3/3: Validating cloud reranker...")
+    rerank_model = settings.resolve_rerank_model()
+    if not rerank_model:
         print("Warmup complete! Cloud embedding will be used.")
         return True
 
-    return False
+    from wet_mcp.reranker import init_reranker
+
+    try:
+        reranker = init_reranker("litellm", rerank_model)
+        if reranker.check_available():
+            print(f"  Cloud reranker ready: {rerank_model}")
+            print("Warmup complete! Cloud models will be used.")
+            return True
+    except Exception:
+        pass
+
+    print("Warmup complete! Cloud embedding will be used.")
+    return True
 
 
 def _download_local_embedding_model(settings) -> None:
