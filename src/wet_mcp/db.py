@@ -609,18 +609,18 @@ class DocsDB:
         if vec_scores:
             # RRF fusion when both FTS and vector signals available
             k = 60
-            fts_ranked = sorted(
-                all_ids, key=lambda x: fts_scores.get(x, 0.0), reverse=True
-            )
-            vec_ranked = sorted(
-                all_ids, key=lambda x: vec_scores.get(x, 0.0), reverse=True
-            )
+            # ⚡ Bolt Optimization: Sort only the specific score dictionaries directly
+            # instead of sorting all_ids with a lambda.
+            fts_ranked = sorted(fts_scores, key=lambda x: fts_scores[x], reverse=True)
+            vec_ranked = sorted(vec_scores, key=lambda x: vec_scores[x], reverse=True)
             fts_rank = {cid: i + 1 for i, cid in enumerate(fts_ranked)}
             vec_rank = {cid: i + 1 for i, cid in enumerate(vec_ranked)}
 
+            default_rank = len(all_ids)
+
             for cid in all_ids:
-                fr = fts_rank.get(cid, len(all_ids))
-                vr = vec_rank.get(cid, len(all_ids))
+                fr = fts_rank.get(cid, default_rank)
+                vr = vec_rank.get(cid, default_rank)
                 rrf = 1.0 / (k + fr) + 1.0 / (k + vr)
                 # Small quality boost
                 chunk = fts_chunks.get(cid)
