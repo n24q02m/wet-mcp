@@ -374,6 +374,9 @@ class TestTryLlmsTxt:
         """Returns None for empty base URL."""
         result = await try_llms_txt("")
         assert result is None
+        # test None as well (suppress type checking for edge case)
+        result_none = await try_llms_txt(None)  # type: ignore
+        assert result_none is None
 
     @pytest.mark.asyncio
     async def test_404_response(self):
@@ -388,6 +391,42 @@ class TestTryLlmsTxt:
 
         with patch("wet_mcp.sources.docs.httpx.AsyncClient", return_value=mock_client):
             result = await try_llms_txt("https://example.com")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_network_exception(self):
+        """Returns None when client raises an exception."""
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=Exception("Connection Error"))
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        # try_llms_txt uses _safe_httpx_client in docs.py, which we can mock directly
+        with patch("wet_mcp.sources.docs._safe_httpx_client", return_value=mock_client):
+            result = await try_llms_txt("https://example.com")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_toc_only_rejection(self):
+        """Rejects llms.txt when it contains only TOC links."""
+        # First request (llms-full.txt) 404s
+        mock_404 = MagicMock(status_code=404)
+
+        # Second request (llms.txt) succeeds but is TOC-only
+        mock_200 = MagicMock()
+        mock_200.status_code = 200
+        mock_200.text = "[Link](https://example.com)\n" * 200
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[mock_404, mock_200])
+        mock_client.__aenter__.return_value = mock_client
+        mock_client.__aexit__.return_value = None
+
+        with patch("wet_mcp.sources.docs._safe_httpx_client", return_value=mock_client):
+            with patch("wet_mcp.sources.docs._is_toc_only", return_value=True):
+                result = await try_llms_txt("https://example.com")
 
         assert result is None
 
