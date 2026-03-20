@@ -1170,81 +1170,69 @@ async def _do_research(
 _MIN_GH_CHUNKS = 20
 
 
-async def _fetch_and_chunk_docs(
-    docs_url: str,
-    repo_url: str = "",
-    query: str = "",
-    library_hint: str = "",
-) -> tuple[list[dict], int]:
-    """Fetch library documentation and split into searchable chunks.
+async def _try_tier0_llms_txt(docs_url: str) -> tuple[list[dict], int] | None:
+    from wet_mcp.sources.docs import chunk_llms_txt, try_llms_txt
 
-    Tries content sources in priority order:
-    1. llms.txt / llms-full.txt (fastest, AI-optimized)
-    2. GitHub raw markdown (clean, no JS rendering needed)
-    3. Crawl4AI page crawling (rendered HTML -> markdown)
-
-    Returns:
-        Tuple of (chunks, page_count).
-    """
-    from wet_mcp.sources.docs import (
-        _try_github_raw_docs,
-        chunk_llms_txt,
-        chunk_markdown,
-        fetch_docs_pages,
-        try_llms_txt,
-    )
-
-    # Tier 0: Try llms.txt (fastest, best quality)
     llms_content = await try_llms_txt(docs_url)
-    if llms_content:
-        chunks = chunk_llms_txt(llms_content, base_url=docs_url)
-        # Quality gate: skip llms.txt if it's too small (likely a TOC/meta file)
-        if len(chunks) >= _MIN_GH_CHUNKS:
-            logger.info(f"Indexed {len(chunks)} chunks from llms.txt")
-            return chunks, 1
-        else:
-            logger.info(
-                f"llms.txt produced only {len(chunks)} chunks "
-                f"(min {_MIN_GH_CHUNKS}), falling through"
-            )
+    if not llms_content:
+        return None
 
-    # Tier 1: Try GitHub raw markdown (clean content, no JS rendering)
+    chunks = chunk_llms_txt(llms_content, base_url=docs_url)
+    if len(chunks) >= _MIN_GH_CHUNKS:
+        logger.info(f"Indexed {len(chunks)} chunks from llms.txt")
+        return chunks, 1
+
+    logger.info(
+        f"llms.txt produced only {len(chunks)} chunks "
+        f"(min {_MIN_GH_CHUNKS}), falling through"
+    )
+    return None
+
+
+async def _try_tier1_github_raw(
+    docs_url: str, repo_url: str, library_hint: str
+) -> tuple[list[dict], int] | None:
+    from wet_mcp.sources.docs import _try_github_raw_docs, chunk_markdown
+
     gh_target = repo_url or docs_url
     gh_pages = await _try_github_raw_docs(
         gh_target, max_files=50, library_hint=library_hint
     )
+
+    if not gh_pages:
+        return None
+
     gh_chunks: list[dict] = []
-    gh_page_count = 0
-    if gh_pages:
-        for page in gh_pages:
-            page_chunks = await asyncio.to_thread(
-                chunk_markdown,
-                content=page["content"],
-                url=page.get("url", ""),
-            )
-            for chunk in page_chunks:
-                if not chunk.get("title") and page.get("title"):
-                    chunk["title"] = page["title"]
-            gh_chunks.extend(page_chunks)
-        gh_page_count = len(gh_pages)
+    for page in gh_pages:
+        page_chunks = await asyncio.to_thread(
+            chunk_markdown,
+            content=page["content"],
+            url=page.get("url", ""),
+        )
+        for chunk in page_chunks:
+            if not chunk.get("title") and page.get("title"):
+                chunk["title"] = page["title"]
+        gh_chunks.extend(page_chunks)
 
-        # Quality gate: if GitHub raw produced too few meaningful chunks,
-        # fall through to Tier 2 (crawl docs site). This handles repos
-        # where docs use template macros (Polars), RST, or other formats
-        # that produce poor raw markdown.
-        if len(gh_chunks) >= _MIN_GH_CHUNKS:
-            logger.info(
-                f"Indexed {len(gh_chunks)} chunks from {len(gh_pages)} "
-                "GitHub raw markdown files"
-            )
-            return gh_chunks, len(gh_pages)
-        else:
-            logger.info(
-                f"GitHub raw produced only {len(gh_chunks)} chunks "
-                f"(min {_MIN_GH_CHUNKS}), falling through to crawl"
-            )
+    gh_page_count = len(gh_pages)
+    if len(gh_chunks) >= _MIN_GH_CHUNKS:
+        logger.info(
+            f"Indexed {len(gh_chunks)} chunks from {gh_page_count} "
+            "GitHub raw markdown files"
+        )
+        return gh_chunks, gh_page_count
 
-    # Tier 2: Crawl docs pages (rendered HTML -> markdown)
+    logger.info(
+        f"GitHub raw produced only {len(gh_chunks)} chunks "
+        f"(min {_MIN_GH_CHUNKS}), falling through to crawl"
+    )
+    # We return the small chunks so they can be used as fallback if crawling fails
+    return gh_chunks, gh_page_count
+
+
+async def _try_tier2_crawl(docs_url: str, query: str) -> tuple[list[dict], int]:
+    from wet_mcp.sources.docs import chunk_markdown, fetch_docs_pages
+
     pages = await fetch_docs_pages(
         docs_url=docs_url,
         query=query,
@@ -1262,22 +1250,62 @@ async def _fetch_and_chunk_docs(
                 chunk["title"] = page["title"]
         chunks.extend(page_chunks)
 
+    return chunks, len(pages)
+
+
+async def _fetch_and_chunk_docs(
+    docs_url: str,
+    repo_url: str = "",
+    query: str = "",
+    library_hint: str = "",
+) -> tuple[list[dict], int]:
+    """Fetch library documentation and split into searchable chunks.
+
+    Tries content sources in priority order:
+    1. llms.txt / llms-full.txt (fastest, AI-optimized)
+    2. GitHub raw markdown (clean, no JS rendering needed)
+    3. Crawl4AI page crawling (rendered HTML -> markdown)
+
+    Returns:
+        Tuple of (chunks, page_count).
+    """
+    # Tier 0: Try llms.txt (fastest, best quality)
+    tier0_result = await _try_tier0_llms_txt(docs_url)
+    if tier0_result:
+        return tier0_result
+
+    # Tier 1: Try GitHub raw markdown (clean content, no JS rendering)
+    tier1_fallback_chunks = []
+    tier1_fallback_pages = 0
+    tier1_result = await _try_tier1_github_raw(docs_url, repo_url, library_hint)
+
+    if tier1_result:
+        chunks, pages = tier1_result
+        if len(chunks) >= _MIN_GH_CHUNKS:
+            return chunks, pages
+        # Save as fallback if Tier 2 fails
+        tier1_fallback_chunks = chunks
+        tier1_fallback_pages = pages
+
+    # Tier 2: Crawl docs pages (rendered HTML -> markdown)
+    crawl_chunks, crawl_pages = await _try_tier2_crawl(docs_url, query)
+
     # If Tier 2 crawl produced no results (e.g. Cloudflare blocked) but
     # Tier 1 GitHub raw had some content (below threshold), use it instead
     # of returning nothing.  Some docs are better than no docs.
-    if not chunks and gh_chunks:
+    if not crawl_chunks and tier1_fallback_chunks:
         logger.info(
-            f"Crawl produced 0 chunks, using {len(gh_chunks)} GitHub raw "
-            f"chunks from {gh_page_count} files (below threshold but "
+            f"Crawl produced 0 chunks, using {len(tier1_fallback_chunks)} GitHub raw "
+            f"chunks from {tier1_fallback_pages} files (below threshold but "
             "better than nothing)"
         )
-        return gh_chunks, gh_page_count
+        return tier1_fallback_chunks, tier1_fallback_pages
 
     # Tier 3: Last-resort README fallback.
     # When all tiers fail AND we have a GitHub repo, fetch just the
     # README.md.  This handles repos without a docs/ directory whose
     # docs site is also uncrawlable (Cloudflare, JS-rendered, etc.).
-    if not chunks:
+    if not crawl_chunks:
         from wet_mcp.sources.docs import _fetch_github_readme
 
         readme_chunks = await _fetch_github_readme(repo_url or docs_url)
@@ -1288,8 +1316,8 @@ async def _fetch_and_chunk_docs(
             )
             return readme_chunks, 1
 
-    logger.info(f"Indexed {len(chunks)} chunks from {len(pages)} pages")
-    return chunks, len(pages)
+    logger.info(f"Indexed {len(crawl_chunks)} chunks from {crawl_pages} pages")
+    return crawl_chunks, crawl_pages
 
 
 # ---------------------------------------------------------------------------
