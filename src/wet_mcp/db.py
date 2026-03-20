@@ -679,14 +679,43 @@ class DocsDB:
 
         candidate_limit = limit * 3
 
+        fts_scores: dict[str, float] = {}
+        fts_chunks: dict[str, dict] = {}
+        self._perform_fts_search(
+            query, library_id, version_id, candidate_limit, fts_scores, fts_chunks
+        )
+
+        vec_scores: dict[str, float] = {}
+        if self._vec_enabled and query_embedding:
+            self._perform_vector_search(
+                query_embedding,
+                library_id,
+                version_id,
+                candidate_limit,
+                vec_scores,
+                fts_chunks,
+            )
+
+        # --- Combine scores ---
+        scored = self._combine_scores(fts_scores, vec_scores, fts_chunks)
+
+        return self._build_search_results(scored, fts_chunks, limit)
+
+    def _perform_fts_search(
+        self,
+        query: str,
+        library_id: str | None,
+        version_id: str | None,
+        candidate_limit: int,
+        fts_scores: dict[str, float],
+        fts_chunks: dict[str, dict],
+    ) -> None:
         # --- FTS5 search with tiered queries + BM25 column weights ---
         # Weights: id(0), content(2), title(3), heading_path(2)
         # Flattened: content is the primary signal, title gets a moderate
         # boost, heading_path gets minimal boost (BM25 already naturally
         # up-weights matches in short fields via tf-idf).
         fts_queries = _build_fts_queries(query)
-        fts_scores: dict[str, float] = {}
-        fts_chunks: dict[str, dict] = {}
 
         for fts_query in fts_queries:
             try:
@@ -733,52 +762,61 @@ class DocsDB:
             max_f = max(fts_scores.values())
             rng = max_f - min_f
             if rng > 0:
-                fts_scores = {k: (v - min_f) / rng for k, v in fts_scores.items()}
+                for k, v in fts_scores.items():
+                    fts_scores[k] = (v - min_f) / rng
             else:
-                fts_scores = dict.fromkeys(fts_scores, 1.0)
+                for k in fts_scores.keys():
+                    fts_scores[k] = 1.0
 
-        # --- Vector search ---
-        vec_scores: dict[str, float] = {}
-        if self._vec_enabled and query_embedding:
-            try:
-                vec_sql = """
-                    SELECT v.id, v.distance, c.*, l.name AS _library_name
-                    FROM doc_chunks_vec v
-                    JOIN doc_chunks c ON v.id = c.id
-                    LEFT JOIN libraries l ON c.library_id = l.id
-                    WHERE v.embedding MATCH ?
-                """
-                vec_params: list = [_serialize_f32(query_embedding)]
+    def _perform_vector_search(
+        self,
+        query_embedding: list[float],
+        library_id: str | None,
+        version_id: str | None,
+        candidate_limit: int,
+        vec_scores: dict[str, float],
+        fts_chunks: dict[str, dict],
+    ) -> None:
+        try:
+            vec_sql = """
+                SELECT v.id, v.distance, c.*, l.name AS _library_name
+                FROM doc_chunks_vec v
+                JOIN doc_chunks c ON v.id = c.id
+                LEFT JOIN libraries l ON c.library_id = l.id
+                WHERE v.embedding MATCH ?
+            """
+            vec_params: list = [_serialize_f32(query_embedding)]
 
-                if library_id:
-                    vec_sql += " AND c.library_id = ?"
-                    vec_params.append(library_id)
-                if version_id:
-                    vec_sql += " AND c.version_id = ?"
-                    vec_params.append(version_id)
+            if library_id:
+                vec_sql += " AND c.library_id = ?"
+                vec_params.append(library_id)
+            if version_id:
+                vec_sql += " AND c.version_id = ?"
+                vec_params.append(version_id)
 
-                vec_sql += " ORDER BY v.distance LIMIT ?"
-                vec_params.append(candidate_limit)
+            vec_sql += " ORDER BY v.distance LIMIT ?"
+            vec_params.append(candidate_limit)
 
-                vec_rows = self._conn.execute(vec_sql, vec_params).fetchall()
-                for vr in vec_rows:
-                    chunk_id = vr["id"]
-                    vec_scores[chunk_id] = max(0.0, 1.0 - vr["distance"])
+            vec_rows = self._conn.execute(vec_sql, vec_params).fetchall()
+            for vr in vec_rows:
+                chunk_id = vr["id"]
+                vec_scores[chunk_id] = max(0.0, 1.0 - vr["distance"])
 
-                    # ⚡ Bolt Optimization: Use pre-fetched chunk data from the JOIN
-                    # instead of executing a SELECT query per row (fixes N+1 query problem).
-                    if chunk_id not in fts_chunks:
-                        chunk_data = dict(vr)
-                        chunk_data.pop("distance", None)
-                        fts_chunks[chunk_id] = chunk_data
-            except Exception as e:
-                logger.debug(f"Vector search error: {e}")
+                # ⚡ Bolt Optimization: Use pre-fetched chunk data from the JOIN
+                # instead of executing a SELECT query per row (fixes N+1 query problem).
+                if chunk_id not in fts_chunks:
+                    chunk_data = dict(vr)
+                    chunk_data.pop("distance", None)
+                    fts_chunks[chunk_id] = chunk_data
+        except Exception as e:
+            logger.debug(f"Vector search error: {e}")
 
-        # --- Combine scores ---
-        scored = self._combine_scores(fts_scores, vec_scores, fts_chunks)
-
-        # Build results with cross-chunk context + URL diversity limit
-        # Cap results per URL to avoid returning 4-5 chunks from the same page
+    def _build_search_results(
+        self,
+        scored: list[tuple[str, float]],
+        fts_chunks: dict[str, dict],
+        limit: int,
+    ) -> list[dict]:
         max_per_url = 2
         url_counts: dict[str, int] = {}
         results = []
