@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "wet-mcp",
+  "version": "2.14.1",
+  "description": "MCP server for web search, content extraction, and media download",
+  "owner": {
+    "name": "n24q02m",
+    "url": "https://github.com/n24q02m"
+  },
+  "plugins": [
+    {
+      "name": "wet-mcp",
+      "description": "MCP server for web search, content extraction, and media download",
+      "source": "./",
+      "category": "research"
+    }
+  ]
+}
