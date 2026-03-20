@@ -704,7 +704,7 @@ async def search(  # noqa: PLR0913
     ),
 )
 @_wrap_tool("extract")
-async def extract(
+async def extract(  # noqa: PLR0913
     action: str,
     urls: list[str] | None = None,
     paths: list[str] | None = None,
