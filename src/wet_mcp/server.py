@@ -939,6 +939,111 @@ async def help(tool_name: str = "search") -> str:
         return f"Error loading documentation: {e}"
 
 
+def _config_status() -> str:
+    from wet_mcp.embedder import get_backend
+    from wet_mcp.reranker import get_reranker
+
+    embed_backend = get_backend()
+    reranker = get_reranker()
+
+    status = {
+        "database": {
+            "path": str(settings.get_db_path()),
+            "docs_indexed": (_docs_db.stats() if _docs_db else {}),
+        },
+        "embedding": {
+            "backend": (type(embed_backend).__name__ if embed_backend else None),
+            "dims": _embedding_dims,
+            "available": embed_backend is not None,
+        },
+        "reranker": {
+            "available": reranker is not None,
+            "backend": (type(reranker).__name__ if reranker else None),
+        },
+        "cache": {
+            "enabled": settings.wet_cache,
+            "path": (str(settings.get_cache_db_path()) if settings.wet_cache else None),
+        },
+        "sync": {
+            "enabled": settings.sync_enabled,
+            "remote": settings.sync_remote,
+            "folder": settings.sync_folder,
+            "interval": settings.sync_interval,
+        },
+        "settings": {
+            "log_level": settings.log_level,
+            "tool_timeout": settings.tool_timeout,
+        },
+    }
+    return json.dumps(status, indent=2, default=str)
+
+
+def _config_set(key: str | None, value: str | None) -> str:
+    if not key or value is None:
+        return json.dumps({"error": "key and value are required for set"})
+    valid_keys = {
+        "log_level",
+        "tool_timeout",
+        "wet_cache",
+        "sync_enabled",
+        "sync_remote",
+        "sync_folder",
+        "sync_interval",
+    }
+    if key not in valid_keys:
+        return json.dumps(
+            {
+                "error": f"Invalid key: {key}",
+                "valid_keys": sorted(valid_keys),
+            }
+        )
+    if key == "log_level":
+        settings.log_level = value.upper()
+        logger.remove()
+        logger.add(sys.stderr, level=settings.log_level)
+    elif key in ("tool_timeout", "sync_interval"):
+        setattr(settings, key, int(value))
+    elif key in ("wet_cache", "sync_enabled"):
+        setattr(settings, key, value.lower() in ("true", "1", "yes"))
+    else:
+        setattr(settings, key, value)
+    return json.dumps(
+        {
+            "status": "updated",
+            "key": key,
+            "value": getattr(settings, key),
+        },
+        default=str,
+    )
+
+
+async def _config_cache_clear() -> str:
+    if _web_cache:
+        await asyncio.to_thread(_web_cache.clear)
+        return json.dumps({"status": "cache cleared"})
+    return json.dumps({"error": "Cache is not enabled"})
+
+
+def _config_docs_reindex(key: str | None) -> str:
+    if not key:
+        return json.dumps({"error": "key (library name) is required"})
+    if not _docs_db:
+        return json.dumps({"error": "Docs database not initialized"})
+    lib = _docs_db.get_library(key)
+    if lib:
+        ver = _docs_db.get_best_version(lib["id"])
+        if ver:
+            _docs_db.clear_version_chunks(ver["id"])
+        return json.dumps(
+            {
+                "status": "cleared",
+                "library": key,
+                "hint": ("Next docs search will re-index"),
+            }
+        )
+    return json.dumps({"error": f"Library '{key}' not found in index"})
+
+
 @mcp.tool(
     description=(
         "Server config and management. Actions: "
@@ -968,112 +1073,13 @@ async def config(
     """
     match action:
         case "status":
-            from wet_mcp.embedder import get_backend
-            from wet_mcp.reranker import get_reranker
-
-            embed_backend = get_backend()
-            reranker = get_reranker()
-
-            status = {
-                "database": {
-                    "path": str(settings.get_db_path()),
-                    "docs_indexed": (_docs_db.stats() if _docs_db else {}),
-                },
-                "embedding": {
-                    "backend": (
-                        type(embed_backend).__name__ if embed_backend else None
-                    ),
-                    "dims": _embedding_dims,
-                    "available": embed_backend is not None,
-                },
-                "reranker": {
-                    "available": reranker is not None,
-                    "backend": (type(reranker).__name__ if reranker else None),
-                },
-                "cache": {
-                    "enabled": settings.wet_cache,
-                    "path": (
-                        str(settings.get_cache_db_path())
-                        if settings.wet_cache
-                        else None
-                    ),
-                },
-                "sync": {
-                    "enabled": settings.sync_enabled,
-                    "remote": settings.sync_remote,
-                    "folder": settings.sync_folder,
-                    "interval": settings.sync_interval,
-                },
-                "settings": {
-                    "log_level": settings.log_level,
-                    "tool_timeout": settings.tool_timeout,
-                },
-            }
-            return json.dumps(status, indent=2, default=str)
-
+            return _config_status()
         case "set":
-            if not key or value is None:
-                return json.dumps({"error": "key and value are required for set"})
-            valid_keys = {
-                "log_level",
-                "tool_timeout",
-                "wet_cache",
-                "sync_enabled",
-                "sync_remote",
-                "sync_folder",
-                "sync_interval",
-            }
-            if key not in valid_keys:
-                return json.dumps(
-                    {
-                        "error": f"Invalid key: {key}",
-                        "valid_keys": sorted(valid_keys),
-                    }
-                )
-            if key == "log_level":
-                settings.log_level = value.upper()
-                logger.remove()
-                logger.add(sys.stderr, level=settings.log_level)
-            elif key in ("tool_timeout", "sync_interval"):
-                setattr(settings, key, int(value))
-            elif key in ("wet_cache", "sync_enabled"):
-                setattr(settings, key, value.lower() in ("true", "1", "yes"))
-            else:
-                setattr(settings, key, value)
-            return json.dumps(
-                {
-                    "status": "updated",
-                    "key": key,
-                    "value": getattr(settings, key),
-                },
-                default=str,
-            )
-
+            return _config_set(key, value)
         case "cache_clear":
-            if _web_cache:
-                await asyncio.to_thread(_web_cache.clear)
-                return json.dumps({"status": "cache cleared"})
-            return json.dumps({"error": "Cache is not enabled"})
-
+            return await _config_cache_clear()
         case "docs_reindex":
-            if not key:
-                return json.dumps({"error": "key (library name) is required"})
-            if not _docs_db:
-                return json.dumps({"error": "Docs database not initialized"})
-            lib = _docs_db.get_library(key)
-            if lib:
-                ver = _docs_db.get_best_version(lib["id"])
-                if ver:
-                    _docs_db.clear_version_chunks(ver["id"])
-                return json.dumps(
-                    {
-                        "status": "cleared",
-                        "library": key,
-                        "hint": ("Next docs search will re-index"),
-                    }
-                )
-            return json.dumps({"error": f"Library '{key}' not found in index"})
-
+            return _config_docs_reindex(key)
         case _:
             return json.dumps(
                 {
