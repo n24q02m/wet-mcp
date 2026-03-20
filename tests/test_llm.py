@@ -243,6 +243,45 @@ def test_encode_image_empty(tmp_path):
     assert result == ""
 
 
+def test_encode_image_jpeg(tmp_path):
+    """Test encode_image with a JPEG image file."""
+    from wet_mcp.llm import encode_image
+
+    img_path = tmp_path / "test.jpeg"
+    img_path.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01")
+    result = encode_image(str(img_path))
+
+    import base64
+
+    expected = base64.b64encode(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01").decode("utf-8")
+    assert result == expected
+
+
+def test_encode_image_permission_error(tmp_path, monkeypatch):
+    """Test encode_image when open raises PermissionError."""
+    import builtins
+
+    import pytest
+
+    from wet_mcp.llm import encode_image
+
+    img_path = tmp_path / "noperm.png"
+    img_path.write_bytes(b"data")
+
+    # Mock open to raise PermissionError
+    original_open = builtins.open
+
+    def mock_open(*args, **kwargs):
+        if args[0] == str(img_path):
+            raise PermissionError("Permission denied")
+        return original_open(*args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", mock_open)
+
+    with pytest.raises(PermissionError):
+        encode_image(str(img_path))
+
+
 def test_read_and_truncate(tmp_path):
     """Test _read_and_truncate reads and truncates properly."""
     from wet_mcp.llm import _read_and_truncate
