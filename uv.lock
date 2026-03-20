@@ -1821,7 +1821,7 @@ wheels = [
 
 [[package]]
 name = "qwen3-embed"
-version = "1.4.3"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -1832,9 +1832,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/43/3c/9730f02bfae7704a0dd23313188dbcd51e67470d70c1bed636fc065572a6/qwen3_embed-1.4.3.tar.gz", hash = "sha256:6eedd35410f37b6d2173edd60bb9f076928054d92fb6a39fde652e40618f7b13", size = 169130, upload-time = "2026-03-13T12:47:33.893Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/63/cb/c640ff8ff192c7b7d7d4e5b21cfc16d7243bc25519843e7e2da2a6ba0aa1/qwen3_embed-1.5.0.tar.gz", hash = "sha256:f786ad6b552348b64bd0936531cc219fe31717c29d7f055bf25a2cd92b6a6e0b", size = 174601, upload-time = "2026-03-18T04:38:28.378Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2e/4b/1ce39c29d4903c633e6d4e813bdef03b3cfcd133ce789909e1822e83c899/qwen3_embed-1.4.3-py3-none-any.whl", hash = "sha256:88bce92809c9a41b4e80efd68d9d9f111b2aea8fc978d43d82fa4f62f9c46a9b", size = 54643, upload-time = "2026-03-13T12:47:35.066Z" },
+    { url = "https://files.pythonhosted.org/packages/13/ae/ace30e743be5a101925b605cae75e5117042b1719d578e1f4da08d790ba2/qwen3_embed-1.5.0-py3-none-any.whl", hash = "sha256:7ead96ca50098596eca02f494eed9756840e1ff0839345546f53102064c4c374", size = 55172, upload-time = "2026-03-18T04:38:27.271Z" },
 ]
 
 [[package]]
@@ -2409,7 +2409,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=46.0.5" },
     { name = "diskcache", specifier = ">=5.6.3" },
     { name = "httpx" },
-    { name = "jsonschema", specifier = ">=4.23" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "litellm" },
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
@@ -2417,7 +2417,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", specifier = ">=1.4.3" },
+    { name = "qwen3-embed", specifier = ">=1.5.0" },
     { name = "sqlite-vec" },
 ]
 
