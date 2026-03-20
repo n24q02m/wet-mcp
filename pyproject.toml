@@ -36,7 +36,7 @@ dependencies = [
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
     "qwen3-embed>=1.4.3",
-    "nltk>=3.9.3",
+
     "pillow>=12.1.1",
     "diskcache>=5.6.3",
     "cryptography>=46.0.5",
