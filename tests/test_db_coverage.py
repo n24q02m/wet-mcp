@@ -1,3 +1,4 @@
+
 """Additional unit tests for db.py to increase coverage from 78% to 95%+.
 
 Targets uncovered lines: 27, 112, 117, 119, 142-151, 267-271, 287-291,
@@ -15,6 +16,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from wet_mcp.db import SearchOptions
 
 # ---------------------------------------------------------------------------
 # Bootstrap (same as test_db.py — avoids crawl4ai import chain)
@@ -410,7 +413,7 @@ class TestSearchFTSError:
                 return getattr(self._conn, name)
 
         d._conn = WrappedConn(real_conn)
-        results = d.search("hello")
+        results = d.search(SearchOptions(query="hello"))
         assert isinstance(results, list)
         d._conn = real_conn
         d.close()
@@ -425,14 +428,14 @@ class TestSearchResultLimits:
     def test_search_limit_caps_results(self, populated_db):
         """Search respects limit parameter (line 804)."""
         db, lib_id, ver_id = populated_db
-        results = db.search("function class", limit=1)
+        results = db.search(SearchOptions(query="function class", limit=1))
         assert len(results) <= 1
 
     def test_url_diversity_limit(self, populated_db):
         """Max 2 results per URL, then skip (line 812)."""
         db, lib_id, ver_id = populated_db
         # page1 has 3 chunks; at most 2 should appear from it
-        results = db.search("def class", limit=10)
+        results = db.search(SearchOptions(query="def class", limit=10))
         url_counts = {}
         for r in results:
             url = r.get("url", "")
@@ -444,7 +447,7 @@ class TestSearchResultLimits:
     def test_search_nonexistent_library(self, populated_db):
         """Search with nonexistent library returns empty (line 643)."""
         db, _, _ = populated_db
-        results = db.search("hello", library_name="nonexistent")
+        results = db.search(SearchOptions(query="hello", library_name="nonexistent"))
         assert results == []
 
 
@@ -569,7 +572,9 @@ class TestSearchWithVersionFilter:
     def test_search_with_version(self, populated_db):
         """Search filtered by version."""
         db, lib_id, ver_id = populated_db
-        results = db.search("hello", library_name="testlib", version="1.0.0")
+        results = db.search(
+            SearchOptions(query="hello", library_name="testlib", version="1.0.0")
+        )
         assert isinstance(results, list)
 
 

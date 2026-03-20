@@ -14,6 +14,7 @@ import sqlite3
 import struct
 import time
 import uuid
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -21,6 +22,17 @@ from loguru import logger
 
 # Bump this when discovery scoring changes to invalidate stale caches.
 from wet_mcp.sources.docs import DISCOVERY_VERSION
+
+
+@dataclass
+class SearchOptions:
+    """Options for document search."""
+
+    query: str
+    library_name: str | None = None
+    version: str | None = None
+    limit: int = 10
+    query_embedding: list[float] | None = None
 
 
 def _serialize_f32(vec: list[float]) -> bytes:
@@ -640,11 +652,7 @@ class DocsDB:
 
     def search(
         self,
-        query: str,
-        library_name: str | None = None,
-        version: str | None = None,
-        limit: int = 10,
-        query_embedding: list[float] | None = None,
+        options: SearchOptions,
     ) -> list[dict]:
         """Hybrid search: FTS5 + optional vector + quality scoring.
 
@@ -655,15 +663,17 @@ class DocsDB:
         indexing timestamp, making recency meaningless for static docs.
 
         Args:
-            query: Search query text
-            library_name: Filter by library name
-            version: Filter by version
-            limit: Max results
-            query_embedding: Optional embedding vector for semantic search
+            options: Search options including query and filters
 
         Returns:
             List of chunk dicts sorted by relevance score
         """
+        query = options.query
+        library_name = options.library_name
+        version = options.version
+        limit = options.limit
+        query_embedding = options.query_embedding
+
         # Resolve library/version filters
         library_id = None
         version_id = None

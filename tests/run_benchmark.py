@@ -31,6 +31,7 @@ from benchmark_docs_search import BENCHMARK_CASES  # noqa: E402
 
 async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
     """Run a single benchmark case and return results dict."""
+    from wet_mcp.db import SearchOptions
     from wet_mcp.server import _fetch_and_chunk_docs
     from wet_mcp.sources.docs import (
         DISCOVERY_VERSION,
@@ -61,10 +62,12 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
         if ver and ver.get("chunk_count", 0) > 0:
             query_embedding = await embed_fn(query, is_query=True) if embed_fn else None
             results = docs_db.search(
-                query=query,
-                library_name=lib_key,
-                limit=limit * 3,
-                query_embedding=query_embedding,
+                SearchOptions(
+                    query=query,
+                    library_name=lib_key,
+                    limit=limit * 3,
+                    query_embedding=query_embedding,
+                )
             )
             if rerank_fn and len(results) > limit:
                 results = await rerank_fn(query, results, limit)
@@ -192,10 +195,12 @@ async def run_single(case: dict, docs_db, embed_fn, embed_batch_fn, rerank_fn):
     # Search
     query_embedding = await embed_fn(query, is_query=True) if embed_fn else None
     results = docs_db.search(
-        query=query,
-        library_name=lib_key,
-        limit=limit * 3,
-        query_embedding=query_embedding,
+        SearchOptions(
+            query=query,
+            library_name=lib_key,
+            limit=limit * 3,
+            query_embedding=query_embedding,
+        )
     )
     if rerank_fn and len(results) > limit:
         results = await rerank_fn(query, results, limit)
