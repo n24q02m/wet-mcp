@@ -89,6 +89,7 @@ def is_safe_url(url: str) -> bool:
     """
     try:
         parsed = urlparse(url)
+        _ = parsed.port
     except Exception:
         return False
 

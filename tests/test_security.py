@@ -1,3 +1,4 @@
+import pytest
 import socket
 from unittest.mock import patch
 
@@ -305,3 +306,14 @@ def test_safe_local_path_symlink_escape(tmp_path):
     link = allowed / "link.txt"
     link.symlink_to(secret)
     assert is_safe_local_path(str(link), allowed_dirs=[allowed]) is None
+
+@pytest.mark.parametrize("invalid_url", [
+    "http://[invalid_ipv6_format]",  # Python 3.12+ ValueError on parse
+    "http://example.com:abc",        # ValueError on port access (non-int)
+    "http://example.com:65536",      # ValueError on port access (out of bounds)
+    "http://example.com:-1",         # ValueError on port access (negative)
+    "http://[1:2:3",                 # Invalid IPv6 brackets
+])
+def test_is_safe_url_malformed_urls(invalid_url):
+    """Test that malformed URLs causing urlparse exceptions are safely rejected."""
+    assert not is_safe_url(invalid_url)
