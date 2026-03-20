@@ -253,7 +253,9 @@ def test_encode_image_jpeg(tmp_path):
 
     import base64
 
-    expected = base64.b64encode(b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01").decode("utf-8")
+    expected = base64.b64encode(
+        b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01"
+    ).decode("utf-8")
     assert result == expected
 
 
