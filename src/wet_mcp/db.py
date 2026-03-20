@@ -798,25 +798,32 @@ class DocsDB:
 
         _adj_map: dict[tuple[str, str, int], str] = {}
         if _adj_keys:
-            # Chunk the keys into batches of 300 to stay safely below the
-            # older SQLite maximum of 999 parameters (300 * 3 = 900 variables).
-            # Optimize by using IN (VALUES ...) which is faster than UNION ALL
-            # for batch lookups and avoids creating temporary tables.
-            for i in range(0, len(_adj_keys), 300):
-                chunk_keys = _adj_keys[i : i + 300]
-                placeholders = ", ".join(["(?, ?, ?)"] * len(chunk_keys))
-                flat_params = [v for k in chunk_keys for v in k]
+            # ⚡ Bolt Optimization: Group queries by (url, version_id) to avoid
+            # table scans. SQLite's IN (VALUES ...) on compound indexes without
+            # row values can be slow. Grouping reduces parameters and fully
+            # utilizes idx_chunks_url_order.
+            grouped_keys: dict[tuple[str, str], set[int]] = {}
+            for url, ver, idx in _adj_keys:
+                if (url, ver) not in grouped_keys:
+                    grouped_keys[(url, ver)] = set()
+                grouped_keys[(url, ver)].add(idx)
 
-                rows = self._conn.execute(
-                    f"""SELECT url, version_id, chunk_index, content
-                        FROM doc_chunks
-                        WHERE (url, version_id, chunk_index) IN (VALUES {placeholders})""",
-                    flat_params,
-                ).fetchall()
-                for r in rows:
-                    _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
-                        "content"
-                    ]
+            for (url, ver), idxs in grouped_keys.items():
+                idx_list = list(idxs)
+                # chunk by 990 to stay below 999 max variables
+                for i in range(0, len(idx_list), 990):
+                    chunk_idxs = idx_list[i : i + 990]
+                    placeholders = ", ".join(["?"] * len(chunk_idxs))
+                    rows = self._conn.execute(
+                        f"""SELECT url, version_id, chunk_index, content
+                            FROM doc_chunks
+                            WHERE url = ? AND version_id = ? AND chunk_index IN ({placeholders})""",
+                        [url, ver] + chunk_idxs,
+                    ).fetchall()
+                    for r in rows:
+                        _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
+                            "content"
+                        ]
 
         for cid, score in scored:
             if len(results) >= limit:
