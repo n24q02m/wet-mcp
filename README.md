@@ -171,8 +171,8 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 
 | Tool | Actions | Description |
 |:-----|:--------|:------------|
-| `search` | search, research, docs, similar, expand, enrich | Web search (with filters & reranking), academic research, library docs (HyDE), find similar, query expansion, snippet enrichment |
-| `extract` | extract, crawl, map, convert, structured, batch | Content extraction, deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema), batch processing (up to 50 URLs) |
+| `search` | search, research, docs, similar | Web search (with filters, reranking, expand/enrich flags), academic research, library docs (HyDE), find similar |
+| `extract` | extract, batch, crawl, map, convert, extract_structured | Content extraction, batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema) |
 | `media` | list, download, analyze | Media discovery & download |
 | `config` | status, set, cache_clear, docs_reindex | Server configuration and cache management |
 | `help` | - | Full documentation for any tool |
@@ -186,15 +186,15 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 {"action": "research", "query": "transformer attention mechanism"}
 {"action": "docs", "query": "how to create routes", "library": "fastapi"}
 {"action": "docs", "query": "dependency injection", "library": "spring-boot", "language": "java"}
-{"action": "similar", "url": "https://fastapi.tiangolo.com/tutorial/first-steps/"}
-{"action": "expand", "query": "python async patterns"}
-{"action": "enrich", "query": "kubernetes networking", "snippets": ["..."]}
+{"action": "similar", "query": "https://fastapi.tiangolo.com/tutorial/first-steps/"}
+{"action": "search", "query": "python async patterns", "expand": true}
+{"action": "search", "query": "kubernetes networking", "enrich": true}
 
 // extract tool
 {"action": "extract", "urls": ["https://example.com"]}
 {"action": "batch", "urls": ["https://a.com", "https://b.com", "https://c.com"]}
-{"action": "structured", "urls": ["https://example.com/product"], "schema": {"type": "object", "properties": {"name": {"type": "string"}, "price": {"type": "number"}}}}
-{"action": "convert", "file_path": "/path/to/document.pdf"}
+{"action": "extract_structured", "urls": ["https://example.com/product"], "schema": {"type": "object", "properties": {"name": {"type": "string"}, "price": {"type": "number"}}}}
+{"action": "convert", "paths": ["/path/to/document.pdf"]}
 {"action": "crawl", "urls": ["https://docs.python.org"], "depth": 2}
 {"action": "map", "urls": ["https://example.com"]}
 
