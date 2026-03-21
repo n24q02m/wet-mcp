@@ -548,7 +548,7 @@ async def search(  # noqa: PLR0913
     match action:
         case "search":
             if not query:
-                return "Error: query is required for search action. Example: search(action=\"search\", query=\"python async patterns\")"
+                return 'Error: query is required for search action. Example: search(action="search", query="python async patterns")'
             cache_params = {
                 "query": query,
                 "categories": categories,
@@ -632,7 +632,7 @@ async def search(  # noqa: PLR0913
 
         case "research":
             if not query:
-                return "Error: query is required for research action. Example: search(action=\"research\", query=\"transformer attention mechanism\")"
+                return 'Error: query is required for research action. Example: search(action="research", query="transformer attention mechanism")'
             cache_params = {
                 "query": query,
                 "max_results": max_results,
@@ -666,9 +666,9 @@ async def search(  # noqa: PLR0913
 
         case "docs":
             if not library:
-                return "Error: library is required for docs action. Example: search(action=\"docs\", query=\"routing\", library=\"fastapi\")"
+                return 'Error: library is required for docs action. Example: search(action="docs", query="routing", library="fastapi")'
             if not query:
-                return "Error: query is required for docs action. Example: search(action=\"docs\", query=\"how to create routes\", library=\"fastapi\")"
+                return 'Error: query is required for docs action. Example: search(action="docs", query="how to create routes", library="fastapi")'
             return await _with_timeout(
                 _do_docs_search(
                     library=library,
@@ -682,9 +682,9 @@ async def search(  # noqa: PLR0913
 
         case "similar":
             if not query:
-                return "Error: query (URL) is required for similar action. Example: search(action=\"similar\", query=\"https://example.com/article\")"
+                return 'Error: query (URL) is required for similar action. Example: search(action="similar", query="https://example.com/article")'
             if not query.startswith(("http://", "https://")):
-                return "Error: query must be a full URL starting with http:// or https://. Example: search(action=\"similar\", query=\"https://example.com/article\"). If you want to search by keywords instead, use action=\"search\"."
+                return 'Error: query must be a full URL starting with http:// or https://. Example: search(action="similar", query="https://example.com/article"). If you want to search by keywords instead, use action="search".'
             try:
                 searxng_url = await asyncio.wait_for(
                     ensure_searxng(), timeout=_SEARXNG_TIMEOUT
@@ -763,7 +763,7 @@ async def extract(
     match action:
         case "extract":
             if not urls:
-                return "Error: urls is required for extract action. Example: extract(action=\"extract\", urls=[\"https://example.com/page\"])"
+                return 'Error: urls is required for extract action. Example: extract(action="extract", urls=["https://example.com/page"])'
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
             if _web_cache:
@@ -782,7 +782,7 @@ async def extract(
 
         case "batch":
             if not urls:
-                return "Error: urls is required for batch action. Example: extract(action=\"batch\", urls=[\"https://a.com/1\", \"https://b.com/2\"])"
+                return 'Error: urls is required for batch action. Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])'
             from wet_mcp.sources.crawler import batch_extract
 
             return await _with_timeout(
@@ -792,7 +792,7 @@ async def extract(
 
         case "crawl":
             if not urls:
-                return "Error: urls is required for crawl action. Example: extract(action=\"crawl\", urls=[\"https://docs.example.com\"], depth=2)"
+                return 'Error: urls is required for crawl action. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)'
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -819,7 +819,7 @@ async def extract(
 
         case "map":
             if not urls:
-                return "Error: urls is required for map action. Example: extract(action=\"map\", urls=[\"https://example.com\"])"
+                return 'Error: urls is required for map action. Example: extract(action="map", urls=["https://example.com"])'
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -840,7 +840,7 @@ async def extract(
 
         case "convert":
             if not paths:
-                return "Error: paths is required for convert action. Example: extract(action=\"convert\", paths=[\"/home/user/report.pdf\"])"
+                return 'Error: paths is required for convert action. Example: extract(action="convert", paths=["/home/user/report.pdf"])'
             from wet_mcp.sources.crawler import convert_local_files
 
             return await _with_timeout(
@@ -850,9 +850,9 @@ async def extract(
 
         case "extract_structured":
             if not urls:
-                return "Error: urls is required for extract_structured action. Example: extract(action=\"extract_structured\", urls=[\"https://example.com/pricing\"], schema={\"type\": \"object\", \"properties\": {\"price\": {\"type\": \"string\"}}})"
+                return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
             if not schema:
-                return "Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={\"type\": \"object\", \"properties\": {\"title\": {\"type\": \"string\"}, \"items\": {\"type\": \"array\", \"items\": {\"type\": \"object\"}}}}"
+                return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
             from wet_mcp.sources.structured import extract_structured
 
             return await _with_timeout(
@@ -909,7 +909,7 @@ async def media(  # noqa: PLR0913
     match action:
         case "list":
             if not url:
-                return "Error: url is required for list action. Example: media(action=\"list\", url=\"https://example.com/gallery\", media_type=\"images\")"
+                return 'Error: url is required for list action. Example: media(action="list", url="https://example.com/gallery", media_type="images")'
             return await _with_timeout(
                 list_media(url=url, media_type=media_type, max_items=max_items),
                 "media.list",
@@ -917,7 +917,7 @@ async def media(  # noqa: PLR0913
 
         case "download":
             if not media_urls:
-                return "Error: media_urls is required for download action. Example: media(action=\"download\", media_urls=[\"https://example.com/image.jpg\"]). Use media(action=\"list\", url=\"...\") first to discover media URLs."
+                return 'Error: media_urls is required for download action. Example: media(action="download", media_urls=["https://example.com/image.jpg"]). Use media(action="list", url="...") first to discover media URLs.'
 
             # Security: validate output_dir is within the configured
             # download directory to prevent arbitrary file writes.
@@ -941,7 +941,7 @@ async def media(  # noqa: PLR0913
 
         case "analyze":
             if not url:
-                return "Error: url (local file path) is required for analyze action. Example: media(action=\"analyze\", url=\"/path/to/image.jpg\", prompt=\"Describe this image\"). Download a file first with media(action=\"download\", ...)."
+                return 'Error: url (local file path) is required for analyze action. Example: media(action="analyze", url="/path/to/image.jpg", prompt="Describe this image"). Download a file first with media(action="download", ...).'
 
             from wet_mcp.llm import analyze_media
 
