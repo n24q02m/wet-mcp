@@ -6,14 +6,17 @@
     "url": "https://github.com/n24q02m/wet-mcp.git",
     "source": "github"
   },
-  "version": "2.10.4",
+  "version": "2.14.2",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "wet-mcp",
       "version": "2.10.4",
       "runtimeHint": "uvx",
-      "runtimeArgs": ["--python", "3.13"],
+      "runtimeArgs": [
+        "--python",
+        "3.13"
+      ],
       "transport": {
         "type": "stdio"
       },
