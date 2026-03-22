@@ -1,7 +1,7 @@
 {
   "name": "wet-mcp",
   "description": "MCP server for web search, content extraction, and media download",
-  "version": "2.14.1",
+  "version": "2.14.2",
   "author": {
     "name": "n24q02m",
     "url": "https://github.com/n24q02m"
@@ -9,11 +9,21 @@
   "homepage": "https://github.com/n24q02m/wet-mcp",
   "repository": "https://github.com/n24q02m/wet-mcp",
   "license": "MIT",
-  "keywords": ["web-search", "content-extraction", "documentation", "mcp", "claude-code"],
+  "keywords": [
+    "web-search",
+    "content-extraction",
+    "documentation",
+    "mcp",
+    "claude-code"
+  ],
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp"]
+      "args": [
+        "--python",
+        "3.13",
+        "wet-mcp"
+      ]
     }
   }
 }
