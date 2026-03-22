@@ -1998,7 +1998,9 @@ _NAV_LINE_PAT = (
     r"|^[ \t]*\d+\.[ \t]+\[[^\]]*\]\(https?://[^\)]*\)[ \t]*(?:\n|$)"
 )
 _NAV_BLOCK_MIN_LINES = 8
-_NAV_BLOCK_RE = re.compile(f"(?:{_NAV_LINE_PAT}){{{_NAV_BLOCK_MIN_LINES},}}", re.MULTILINE)
+_NAV_BLOCK_RE = re.compile(
+    f"(?:{_NAV_LINE_PAT}){{{_NAV_BLOCK_MIN_LINES},}}", re.MULTILINE
+)
 
 # MkDocs UI artifacts that leak into crawled markdown
 _MKDOCS_UI_RE = re.compile(
@@ -2026,7 +2028,7 @@ _COMBINED_NOISE_MULTILINE_RE = re.compile(
     r"(?:Initializing search|Toggle (?:navigation|search)|Search|"
     r"Back to top|Share\b|Go to repository)[ \t]*"
     r")(?:\n|$)",
-    re.IGNORECASE | re.MULTILINE
+    re.IGNORECASE | re.MULTILINE,
 )
 
 
