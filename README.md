@@ -4,12 +4,14 @@ mcp-name: io.github.n24q02m/wet-mcp
 
 **Open-source MCP Server for web search, content extraction, library docs & multimodal analysis.**
 
+<!-- Badge Row 1: Status -->
 [![CI](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/n24q02m/wet-mcp/graph/badge.svg?token=JK19TRLPEX)](https://codecov.io/gh/n24q02m/wet-mcp)
 [![PyPI](https://img.shields.io/pypi/v/wet-mcp?logo=pypi&logoColor=white)](https://pypi.org/project/wet-mcp/)
 [![Docker](https://img.shields.io/docker/v/n24q02m/wet-mcp?label=docker&logo=docker&logoColor=white&sort=semver)](https://hub.docker.com/r/n24q02m/wet-mcp)
 [![License: MIT](https://img.shields.io/github/license/n24q02m/wet-mcp)](LICENSE)
 
+<!-- Badge Row 2: Tech -->
 [![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](#)
 [![SearXNG](https://img.shields.io/badge/SearXNG-3050FF?logo=searxng&logoColor=white)](#)
 [![MCP](https://img.shields.io/badge/MCP-000000?logo=anthropic&logoColor=white)](#)
@@ -22,44 +24,31 @@ mcp-name: io.github.n24q02m/wet-mcp
 
 ## Features
 
-- **Web Search** - Search via embedded SearXNG (metasearch: Google, Bing, DuckDuckGo, Brave) with search filters (time range, language, include/exclude domains)
-- **Search Reranking** - Semantic reranking for better relevance (Jina AI, Cohere, or local Qwen3)
-- **Query Expansion** - LLM-powered query expansion for broader coverage
-- **Find Similar** - Discover pages similar to a given URL
-- **Snippet Enrichment** - LLM-powered enrichment of search result snippets
-- **Academic Research** - Search Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
-- **Library Docs** - Auto-discover and index documentation with FTS5 hybrid search, HyDE-enhanced retrieval, and version-specific docs discovery
-- **Content Extract** - Extract clean content (Markdown/Text) with structured data extraction (LLM + JSON Schema)
-- **Batch Processing** - Extract up to 50 URLs in one call with per-domain rate limiting
-- **Local File Conversion** - Convert local files (PDF, DOCX, XLSX, CSV, HTML, EPUB, PPTX, etc.) to Markdown
-- **Deep Crawl** - Crawl multiple pages from a root URL with depth control
-- **Site Map** - Discover website URL structure
-- **Media** - List and download images, videos, audio files
-- **Anti-bot** - Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter
-- **Local Cache** - TTL-based caching for all web operations
-- **Docs Sync** - Sync indexed docs across machines via rclone
-
----
+- **Web Search** -- Embedded SearXNG metasearch (Google, Bing, DuckDuckGo, Brave) with filters, semantic reranking, query expansion, and snippet enrichment
+- **Academic Research** -- Search Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
+- **Library Docs** -- Auto-discover and index documentation with FTS5 hybrid search, HyDE-enhanced retrieval, and version-specific docs
+- **Content Extract** -- Clean content extraction (Markdown/Text), structured data extraction (LLM + JSON Schema), batch processing (up to 50 URLs), deep crawling, site mapping
+- **Local File Conversion** -- Convert PDF, DOCX, XLSX, CSV, HTML, EPUB, PPTX to Markdown
+- **Media** -- List, download, and analyze images, videos, audio files
+- **Anti-bot** -- Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter
+- **Zero Config** -- Built-in local Qwen3 embedding + reranking, no API keys needed. Optional cloud providers (Jina AI, Gemini, OpenAI, Cohere)
+- **Sync** -- Cross-machine sync of indexed docs via rclone (Google Drive, S3, Dropbox)
 
 ## Quick Start
 
-### Prerequisites
+### Claude Code Plugin (Recommended)
 
-- **Python 3.13** (required -- Python 3.14+ is **not** supported due to SearXNG incompatibility)
+```bash
+claude plugin add n24q02m/wet-mcp
+```
 
-> **Warning:** You **must** specify `--python 3.13` when using `uvx`. Without it, `uvx` may pick Python 3.14+ which causes SearXNG search to fail silently.
+### MCP Server
+
+> **Python 3.13 required** -- Python 3.14+ is **not** supported due to SearXNG incompatibility. You **must** specify `--python 3.13` when using `uvx`.
 
 **On first run**, the server automatically installs SearXNG, Playwright chromium, and starts the embedded search engine.
 
-The recommended way to run this server is via `uvx`:
-
-```bash
-uvx --python 3.13 wet-mcp@latest
-```
-
-> Alternatively, you can use `pipx run --python python3.13 wet-mcp`.
-
-### Option 1: uvx (Recommended)
+#### Option 1: uvx
 
 ```jsonc
 {
@@ -68,33 +57,27 @@ uvx --python 3.13 wet-mcp@latest
       "command": "uvx",
       "args": ["--python", "3.13", "wet-mcp@latest"],
       "env": {
+        // -- optional: cloud embedding + reranking (Jina AI recommended)
+        "API_KEYS": "JINA_AI_API_KEY:jina_...",
+        // -- or: "API_KEYS": "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:co-...",
+        // -- without API_KEYS, uses built-in local Qwen3 ONNX models (CPU, ~570MB first download)
         // -- optional: LiteLLM Proxy (production, selfhosted gateway)
         // "LITELLM_PROXY_URL": "http://10.0.0.20:4000",
         // "LITELLM_PROXY_KEY": "sk-your-virtual-key",
-        // -- optional: cloud embedding + reranking + media analysis
-        // -- Jina AI (recommended): single key for both embedding and reranking
-        "API_KEYS": "JINA_AI_API_KEY:jina_...",
-        // -- or use other providers (Gemini, OpenAI, Cohere):
-        // "API_KEYS": "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:co-...",
-        // -- without API_KEYS, uses built-in local Qwen3-Embedding-0.6B + Qwen3-Reranker-0.6B (ONNX, CPU)
-        // -- first run downloads ~570MB model, cached for subsequent runs
-        // -- optional: restrict local file conversion to specific directories
-        // "CONVERT_ALLOWED_DIRS": "/home/user/docs,/tmp/uploads",
         // -- optional: higher rate limits for docs discovery (60 -> 5000 req/hr)
         "GITHUB_TOKEN": "ghp_...",
+        // -- optional: restrict local file conversion to specific directories
+        // "CONVERT_ALLOWED_DIRS": "/home/user/docs,/tmp/uploads",
         // -- optional: sync indexed docs across machines via rclone
-        // -- on first sync, a browser opens for OAuth (auto, no manual setup)
-        "SYNC_ENABLED": "true",                    // optional, default: false
-        "SYNC_INTERVAL": "300"                     // optional, auto-sync every 5min (0 = manual only)
-        // "SYNC_REMOTE": "gdrive",                 // optional, default: gdrive
-        // "SYNC_PROVIDER": "drive",                // optional, default: drive (Google Drive)
+        "SYNC_ENABLED": "true",                    // default: false
+        "SYNC_INTERVAL": "300"                     // auto-sync every 5min (0 = manual only)
       }
     }
   }
 }
 ```
 
-### Option 2: Docker
+#### Option 2: Docker
 
 ```jsonc
 {
@@ -104,29 +87,18 @@ uvx --python 3.13 wet-mcp@latest
       "args": [
         "run", "-i", "--rm",
         "--name", "mcp-wet",
-        "-v", "wet-data:/data",                    // persists cached web pages, indexed docs, and downloads
-        "-e", "LITELLM_PROXY_URL",                 // optional: pass-through from env below
-        "-e", "LITELLM_PROXY_KEY",                 // optional: pass-through from env below
-        "-e", "API_KEYS",                          // optional: pass-through from env below
-        "-e", "GITHUB_TOKEN",                      // optional: pass-through from env below
-        "-e", "SYNC_ENABLED",                      // optional: pass-through from env below
-        "-e", "SYNC_INTERVAL",                     // optional: pass-through from env below
+        "-v", "wet-data:/data",
+        "-e", "API_KEYS",
+        "-e", "GITHUB_TOKEN",
+        "-e", "SYNC_ENABLED",
+        "-e", "SYNC_INTERVAL",
         "n24q02m/wet-mcp:latest"
       ],
       "env": {
-        // -- optional: LiteLLM Proxy (production, selfhosted gateway)
-        // "LITELLM_PROXY_URL": "http://10.0.0.20:4000",
-        // "LITELLM_PROXY_KEY": "sk-your-virtual-key",
-        // -- optional: cloud embedding + reranking + media analysis
-        // -- Jina AI (recommended): single key for both embedding and reranking
         "API_KEYS": "JINA_AI_API_KEY:jina_...",
-        // -- or: "API_KEYS": "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:co-...",
-        // -- optional: higher rate limits for docs discovery (60 -> 5000 req/hr)
-        // -- auto-detected from `gh auth token` if GitHub CLI is installed
-        // "GITHUB_TOKEN": "ghp_...",
-        // -- optional: sync indexed docs across machines via rclone
-        "SYNC_ENABLED": "true",                    // optional, default: false
-        "SYNC_INTERVAL": "300"                     // optional, auto-sync every 5min (0 = manual only)
+        "GITHUB_TOKEN": "ghp_...",
+        "SYNC_ENABLED": "true",
+        "SYNC_INTERVAL": "300"
       }
     }
   }
@@ -134,8 +106,6 @@ uvx --python 3.13 wet-mcp@latest
 ```
 
 ### Pre-install (optional)
-
-Pre-download all dependencies before adding to your MCP client config. This avoids slow first-run startup:
 
 ```bash
 # Pre-download SearXNG, Playwright, embedding model (~570MB), and reranker model (~570MB)
@@ -151,201 +121,100 @@ Sync is fully automatic. Just set `SYNC_ENABLED=true` and the server handles eve
 
 1. **First sync**: rclone is auto-downloaded, a browser opens for OAuth authentication
 2. **Token saved**: OAuth token is stored locally at `~/.wet-mcp/tokens/` (600 permissions)
-3. **Subsequent runs**: Token is loaded automatically — no manual steps needed
+3. **Subsequent runs**: Token is loaded automatically -- no manual steps needed
 
 For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 
 ```jsonc
 {
   "SYNC_ENABLED": "true",
-  "SYNC_PROVIDER": "dropbox",        // rclone provider type
-  "SYNC_REMOTE": "dropbox"           // rclone remote name
+  "SYNC_PROVIDER": "dropbox",
+  "SYNC_REMOTE": "dropbox"
 }
 ```
-
-> **Advanced**: You can also run `uvx --python 3.13 wet-mcp setup-sync drive` to pre-authenticate before first use, but this is optional.
-
----
 
 ## Tools
 
 | Tool | Actions | Description |
 |:-----|:--------|:------------|
-| `search` | search, research, docs, similar | Web search (with filters, reranking, expand/enrich flags), academic research, library docs (HyDE), find similar |
-| `extract` | extract, batch, crawl, map, convert, extract_structured | Content extraction, batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema) |
-| `media` | list, download, analyze | Media discovery & download |
-| `config` | status, set, cache_clear, docs_reindex | Server configuration and cache management |
-| `help` | - | Full documentation for any tool |
-
-### Usage Examples
-
-```json
-// search tool
-{"action": "search", "query": "python web scraping", "max_results": 10}
-{"action": "search", "query": "rust async", "time_range": "month", "language": "en", "include_domains": ["docs.rs"]}
-{"action": "research", "query": "transformer attention mechanism"}
-{"action": "docs", "query": "how to create routes", "library": "fastapi"}
-{"action": "docs", "query": "dependency injection", "library": "spring-boot", "language": "java"}
-{"action": "similar", "query": "https://fastapi.tiangolo.com/tutorial/first-steps/"}
-{"action": "search", "query": "python async patterns", "expand": true}
-{"action": "search", "query": "kubernetes networking", "enrich": true}
-
-// extract tool
-{"action": "extract", "urls": ["https://example.com"]}
-{"action": "batch", "urls": ["https://a.com", "https://b.com", "https://c.com"]}
-{"action": "extract_structured", "urls": ["https://example.com/product"], "schema": {"type": "object", "properties": {"name": {"type": "string"}, "price": {"type": "number"}}}}
-{"action": "convert", "paths": ["/path/to/document.pdf"]}
-{"action": "crawl", "urls": ["https://docs.python.org"], "depth": 2}
-{"action": "map", "urls": ["https://example.com"]}
-
-// media tool
-{"action": "list", "url": "https://github.com/python/cpython"}
-{"action": "download", "media_urls": ["https://example.com/image.png"]}
-```
-
----
+| `search` | `search`, `research`, `docs`, `similar` | Web search (with filters, reranking, expand/enrich), academic research, library docs (HyDE), find similar |
+| `extract` | `extract`, `batch`, `crawl`, `map`, `convert`, `extract_structured` | Content extraction, batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema) |
+| `media` | `list`, `download`, `analyze` | Media discovery, download, and analysis |
+| `config` | `status`, `set`, `cache_clear`, `docs_reindex` | Server configuration and cache management |
+| `help` | -- | Full documentation for any tool |
 
 ## Configuration
 
-| Variable | Default | Description |
-|:---------|:--------|:------------|
-| `WET_AUTO_SEARXNG` | `true` | Auto-start embedded SearXNG subprocess |
-| `WET_SEARXNG_PORT` | `41592` | SearXNG port (optional) |
-| `SEARXNG_URL` | `http://localhost:41592` | External SearXNG URL (optional, when auto disabled) |
-| `SEARXNG_TIMEOUT` | `30` | SearXNG request timeout in seconds (optional) |
-| `LITELLM_PROXY_URL` | - | LiteLLM Proxy URL (e.g. `http://10.0.0.20:4000`). Enables proxy mode |
-| `LITELLM_PROXY_KEY` | - | LiteLLM Proxy virtual key (e.g. `sk-...`) |
-| `API_KEYS` | - | LLM API keys for SDK mode (format: `ENV_VAR:key,...`) |
-| `LLM_MODELS` | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis (optional) |
-| `EMBEDDING_BACKEND` | (auto-detect) | `litellm` (cloud API) or `local` (Qwen3). Auto: API_KEYS -> litellm, else local (always available) |
-| `EMBEDDING_MODEL` | (auto-detect) | LiteLLM embedding model (optional) |
-| `EMBEDDING_DIMS` | `0` (auto=768) | Embedding dimensions (optional) |
-| `RERANK_ENABLED` | `true` | Enable reranking after search |
-| `RERANK_BACKEND` | (auto-detect) | `litellm` or `local`. Auto: Cohere key in API_KEYS -> litellm, else local |
-| `RERANK_MODEL` | (auto-detect) | LiteLLM rerank model (auto: `cohere/rerank-multilingual-v3.0` if Cohere key in API_KEYS) |
-| `RERANK_TOP_N` | `10` | Return top N results after reranking |
-| `CONVERT_MAX_FILE_SIZE` | `104857600` | Max file size for local file conversion in bytes (default 100MB) |
-| `CONVERT_ALLOWED_DIRS` | `` | Comma-separated absolute paths to restrict local file conversion (empty = allow all) |
-| `CACHE_DIR` | `~/.wet-mcp` | Data directory for cache DB, docs DB, downloads (optional) |
-| `DOCS_DB_PATH` | `~/.wet-mcp/docs.db` | Docs database location (optional) |
-| `DOWNLOAD_DIR` | `~/.wet-mcp/downloads` | Media download directory (optional) |
-| `TOOL_TIMEOUT` | `120` | Tool execution timeout in seconds, 0=no timeout (optional) |
-| `WET_CACHE` | `true` | Enable/disable web cache (optional) |
-| `GITHUB_TOKEN` | - | GitHub personal access token for library discovery (optional, increases rate limit from 60 to 5000 req/hr). **Auto-detected** from `gh auth token` if GitHub CLI is installed and authenticated — no need to set manually. |
-| `SYNC_ENABLED` | `false` | Enable rclone sync |
-| `SYNC_PROVIDER` | `drive` | rclone provider type (drive, dropbox, s3, etc.) |
-| `SYNC_REMOTE` | `gdrive` | rclone remote name |
-| `SYNC_FOLDER` | `wet-mcp` | Remote folder name |
-| `SYNC_INTERVAL` | `300` | Auto-sync interval in seconds (0=manual) |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| Variable | Required | Default | Description |
+|:---------|:---------|:--------|:------------|
+| `API_KEYS` | No | -- | LLM API keys for SDK mode (format: `ENV_VAR:key,...`). Enables cloud embedding + reranking |
+| `LITELLM_PROXY_URL` | No | -- | LiteLLM Proxy URL. Enables proxy mode |
+| `LITELLM_PROXY_KEY` | No | -- | LiteLLM Proxy virtual key |
+| `GITHUB_TOKEN` | No | auto-detect | GitHub token for docs discovery (60 -> 5000 req/hr). Auto-detected from `gh auth token` |
+| `EMBEDDING_BACKEND` | No | auto-detect | `litellm` (cloud) or `local` (Qwen3). Auto: API_KEYS -> litellm, else local |
+| `EMBEDDING_MODEL` | No | auto-detect | LiteLLM embedding model name |
+| `EMBEDDING_DIMS` | No | `0` (auto=768) | Embedding dimensions |
+| `RERANK_ENABLED` | No | `true` | Enable reranking after search |
+| `RERANK_BACKEND` | No | auto-detect | `litellm` or `local`. Auto: Cohere/Jina key -> litellm, else local |
+| `RERANK_MODEL` | No | auto-detect | LiteLLM rerank model name |
+| `RERANK_TOP_N` | No | `10` | Return top N results after reranking |
+| `LLM_MODELS` | No | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis |
+| `WET_AUTO_SEARXNG` | No | `true` | Auto-start embedded SearXNG subprocess |
+| `WET_SEARXNG_PORT` | No | `41592` | SearXNG port |
+| `SEARXNG_URL` | No | `http://localhost:41592` | External SearXNG URL (when auto disabled) |
+| `SEARXNG_TIMEOUT` | No | `30` | SearXNG request timeout in seconds |
+| `CONVERT_MAX_FILE_SIZE` | No | `104857600` | Max file size for local conversion in bytes (100MB) |
+| `CONVERT_ALLOWED_DIRS` | No | -- | Comma-separated paths to restrict local file conversion |
+| `CACHE_DIR` | No | `~/.wet-mcp` | Data directory for cache, docs, downloads |
+| `DOCS_DB_PATH` | No | `~/.wet-mcp/docs.db` | Docs database location |
+| `DOWNLOAD_DIR` | No | `~/.wet-mcp/downloads` | Media download directory |
+| `TOOL_TIMEOUT` | No | `120` | Tool execution timeout in seconds (0=no timeout) |
+| `WET_CACHE` | No | `true` | Enable/disable web cache |
+| `SYNC_ENABLED` | No | `false` | Enable rclone sync |
+| `SYNC_PROVIDER` | No | `drive` | rclone provider type (drive, dropbox, s3, etc.) |
+| `SYNC_REMOTE` | No | `gdrive` | rclone remote name |
+| `SYNC_FOLDER` | No | `wet-mcp` | Remote folder name |
+| `SYNC_INTERVAL` | No | `300` | Auto-sync interval in seconds (0=manual) |
+| `LOG_LEVEL` | No | `INFO` | Logging level |
 
 ### Embedding & Reranking
 
-Both embedding and reranking are **always available** — local models are built-in and require no configuration.
+Both embedding and reranking are **always available** -- local models are built-in and require no configuration.
 
-- **Jina AI (recommended)**: A single `JINA_AI_API_KEY` enables both embedding (`jina-embeddings-v5-text-small`) and reranking (`jina-reranker-v3`). This is the highest-priority cloud provider.
-- **Embedding priority**: Jina AI > Gemini > OpenAI > Cohere. Default local Qwen3-Embedding-0.6B when no API keys are set. Automatic local fallback if cloud fails.
-- **Reranking priority**: Jina AI > Cohere. Default local Qwen3-Reranker-0.6B when no API keys are set.
-- **GPU auto-detection**: If GPU is available (CUDA/DirectML) and `llama-cpp-python` is installed, automatically uses GGUF models (~480MB) instead of ONNX (~570MB) for better performance.
-- All embeddings stored at **768 dims** (default). Switching providers never breaks the vector table.
-- Override with `EMBEDDING_BACKEND=local` to force local even with API keys.
-
-`API_KEYS` supports multiple providers in a single string:
-```
-API_KEYS=JINA_AI_API_KEY:jina_...,GOOGLE_API_KEY:AIza...,OPENAI_API_KEY:sk-...,COHERE_API_KEY:co-...
-```
+- **Jina AI (recommended)**: A single `JINA_AI_API_KEY` enables both embedding and reranking
+- **Embedding priority**: Jina AI > Gemini > OpenAI > Cohere. Local Qwen3 fallback always available
+- **Reranking priority**: Jina AI > Cohere. Local Qwen3 fallback always available
+- **GPU auto-detection**: CUDA/DirectML auto-detected, uses GGUF models for better performance
+- All embeddings stored at **768 dims**. Switching providers never breaks the vector table
 
 ### LLM Configuration (3-Mode Architecture)
 
-LLM access (for media analysis) supports 3 modes, resolved by priority:
-
 | Priority | Mode | Config | Use case |
 |:---------|:-----|:-------|:---------|
-| 1 | **Proxy** | `LITELLM_PROXY_URL` + `LITELLM_PROXY_KEY` | Production (OCI VM, selfhosted gateway) |
+| 1 | **Proxy** | `LITELLM_PROXY_URL` + `LITELLM_PROXY_KEY` | Production (selfhosted gateway) |
 | 2 | **SDK** | `API_KEYS` | Dev/local with direct API access |
 | 3 | **Local** | Nothing needed | Offline, embedding/rerank only (no LLM) |
 
-No cross-mode fallback — if proxy is configured but unreachable, calls fail (no silent fallback to direct API).
-
 ### SearXNG Configuration (2-Mode)
-
-Web search is powered by [SearXNG](https://github.com/searxng/searxng), a privacy-respecting metasearch engine.
 
 | Mode | Config | Description |
 |:-----|:-------|:------------|
-| **Embedded** (default) | `WET_AUTO_SEARXNG=true` | Auto-installs and manages SearXNG as subprocess. Zero config needed. |
-| **External** | `WET_AUTO_SEARXNG=false` + `SEARXNG_URL=http://host:port` | Connects to pre-existing SearXNG instance (e.g. Docker container, shared server). |
-
-**Embedded mode** is best for local development and single-user deployments. On first run, wet-mcp automatically downloads and configures SearXNG.
-
-**External mode** is recommended when:
-- Running in Docker (use a separate SearXNG container)
-- Sharing a SearXNG instance across multiple services
-- SearXNG is already deployed on your infrastructure
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    MCP Client                           │
-│            (Claude, Cursor, Windsurf)                   │
-└─────────────────────┬───────────────────────────────────┘
-                      │ MCP Protocol
-                      v
-┌─────────────────────────────────────────────────────────┐
-│                   WET MCP Server                        │
-│  ┌──────────┐  ┌──────────┐  ┌───────┐  ┌────────┐      │
-│  │  search  │  │ extract  │  │ media │  │ config │      │
-│  │ (search, │  │(extract, │  │(list, │  │(status,│      │
-│  │ research,│  │ crawl,   │  │downld,│  │ set,   │      │
-│  │ docs)    │  │ map)     │  │analyz)│  │ cache) │      │
-│  └──┬───┬───┘  └────┬─────┘  └──┬────┘  └────────┘      │
-│     │   │           │           │        + help tool     │
-│     v   v           v           v                       │
-│  ┌──────┐ ┌──────┐ ┌──────────┐ ┌──────────┐             │
-│  │SearX │ │DocsDB│ │ Crawl4AI │ │ Reranker │             │
-│  │NG    │ │FTS5+ │ │(Playwrgt)│ │(LiteLLM/ │             │
-│  │      │ │sqlite│ │          │ │ Qwen3    │             │
-│  │      │ │-vec  │ │          │ │ local)   │             │
-│  └──────┘ └──────┘ └──────────┘ └──────────┘             │
-│                                                         │
-│  ┌──────────────────────────────────────────────────┐   │
-│  │  WebCache (SQLite, TTL)  │  rclone sync (docs)   │   │
-│  └──────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-```
-
----
+| **Embedded** (default) | `WET_AUTO_SEARXNG=true` | Auto-installs and manages SearXNG as subprocess |
+| **External** | `WET_AUTO_SEARXNG=false` + `SEARXNG_URL=http://host:port` | Connects to pre-existing SearXNG instance |
 
 ## Build from Source
 
 ```bash
-git clone https://github.com/n24q02m/wet-mcp
+git clone https://github.com/n24q02m/wet-mcp.git
 cd wet-mcp
-
-# Setup (requires mise: https://mise.jdx.dev/)
-mise run setup
-
-# Run
+uv sync
 uv run wet-mcp
 ```
 
-### Docker Build
-
-```bash
-docker build -t n24q02m/wet-mcp:latest .
-```
-
-**Requirements:** Python 3.13 (not 3.14+)
-
----
-
 ## Compatible With
 
-[![Claude Desktop](https://img.shields.io/badge/Claude_Desktop-F9DC7C?logo=anthropic&logoColor=black)](#quick-start)
 [![Claude Code](https://img.shields.io/badge/Claude_Code-000000?logo=anthropic&logoColor=white)](#quick-start)
+[![Claude Desktop](https://img.shields.io/badge/Claude_Desktop-F9DC7C?logo=anthropic&logoColor=black)](#quick-start)
 [![Cursor](https://img.shields.io/badge/Cursor-000000?logo=cursor&logoColor=white)](#quick-start)
 [![VS Code Copilot](https://img.shields.io/badge/VS_Code_Copilot-007ACC?logo=visualstudiocode&logoColor=white)](#quick-start)
 [![Antigravity](https://img.shields.io/badge/Antigravity-4285F4?logo=google&logoColor=white)](#quick-start)
@@ -355,23 +224,18 @@ docker build -t n24q02m/wet-mcp:latest .
 
 ## Also by n24q02m
 
-| Server | Description | Install |
-|--------|-------------|---------|
-| [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) | Notion API for AI agents | `npx -y @n24q02m/better-notion-mcp@latest` |
-| [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) | Persistent AI memory with hybrid search | `uvx mnemo-mcp@latest` |
-| [better-email-mcp](https://github.com/n24q02m/better-email-mcp) | Email (IMAP/SMTP) for AI agents | `npx -y @n24q02m/better-email-mcp@latest` |
-| [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) | Godot Engine for AI agents | `npx -y @n24q02m/better-godot-mcp@latest` |
-| [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) | Telegram Bot API + MTProto for AI agents | `uvx --python 3.13 better-telegram-mcp@latest` |
-
-## Related Projects
-
-- **[modalcom-ai-workers](https://github.com/n24q02m/modalcom-ai-workers)** — GPU-accelerated AI workers on Modal.com (embedding, reranking)
-- **[qwen3-embed](https://github.com/n24q02m/qwen3-embed)** — Local embedding/reranking library used by wet-mcp
+| Server | Description |
+|:-------|:------------|
+| [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) | Persistent AI memory with hybrid search and embedded sync |
+| [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) | Enhanced Notion API integration with 9 composite tools |
+| [better-email-mcp](https://github.com/n24q02m/better-email-mcp) | Email management via IMAP/SMTP |
+| [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) | Telegram Bot API + MTProto for AI agents |
+| [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) | Godot Engine for AI agents |
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-MIT - See [LICENSE](LICENSE)
+MIT -- See [LICENSE](LICENSE).
