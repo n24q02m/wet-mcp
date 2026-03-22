@@ -1990,6 +1990,16 @@ _NAV_LINK_LINE_RE = re.compile(
     r"^\s*[-*]\s+(?:\[.*?\]\s*)?\[.*?\]\(https?://.*?\)\s*$"
     r"|^\s*\d+\.\s+\[.*?\]\(https?://.*?\)\s*$",
 )
+
+# ⚡ Bolt Optimization: Use a multiline regex to find entire nav blocks at once
+# without iterating over every line in Python.
+_NAV_LINE_PAT = (
+    r"^[ \t]*[-*][ \t]+(?:\[[^\]]*\][ \t]*)?\[[^\]]*\]\(https?://[^\)]*\)[ \t]*(?:\n|$)"
+    r"|^[ \t]*\d+\.[ \t]+\[[^\]]*\]\(https?://[^\)]*\)[ \t]*(?:\n|$)"
+)
+_NAV_BLOCK_MIN_LINES = 8
+_NAV_BLOCK_RE = re.compile(f"(?:{_NAV_LINE_PAT}){{{_NAV_BLOCK_MIN_LINES},}}", re.MULTILINE)
+
 # MkDocs UI artifacts that leak into crawled markdown
 _MKDOCS_UI_RE = re.compile(
     r"^\s*(?:"
@@ -1998,8 +2008,26 @@ _MKDOCS_UI_RE = re.compile(
     r")\s*$",
     re.IGNORECASE,
 )
-# Minimum consecutive nav-link lines to consider it a navigation block
-_NAV_BLOCK_MIN_LINES = 8
+
+# ⚡ Bolt Optimization: Combined noise patterns for single-pass stripping
+_COMBINED_NOISE_MULTILINE_RE = re.compile(
+    r"^[ \t]*(?:"
+    r"(?:"
+    r"\u2190 Previous|Next \u2192|Skip to (?:main )?content|"
+    r"Table of [Cc]ontents|On this page|"
+    r"Edit (?:this|on) (?:page|GitHub)|"
+    r"Suggest (?:changes|edits)|"
+    r"Was this (?:page|article) helpful\?|"
+    r"\u2b50 Star (?:us|this)|"
+    r"Built with|Powered by|Made with|Generated (?:by|with)|"
+    r"Copyright[ \t]*(?:\u00a9|\(c\))|\u00a9[ \t]*\d{4}|"
+    r"All [Rr]ights [Rr]eserved"
+    r").*|"
+    r"(?:Initializing search|Toggle (?:navigation|search)|Search|"
+    r"Back to top|Share\b|Go to repository)[ \t]*"
+    r")(?:\n|$)",
+    re.IGNORECASE | re.MULTILINE
+)
 
 
 def _strip_nav_blocks(content: str) -> str:
@@ -2010,28 +2038,11 @@ def _strip_nav_blocks(content: str) -> str:
     This targets MkDocs Material sidebars, Sphinx toctrees, and similar
     navigation structures that leak into crawled markdown.
     """
-    lines = content.splitlines()
-    result: list[str] = []
-    nav_block: list[str] = []
-
-    for line in lines:
-        if _NAV_LINK_LINE_RE.match(line):
-            nav_block.append(line)
-        else:
-            if len(nav_block) >= _NAV_BLOCK_MIN_LINES:
-                # Navigation block detected — discard it
-                pass
-            else:
-                # Short link list — keep it (could be legitimate content)
-                result.extend(nav_block)
-            nav_block = []
-            result.append(line)
-
-    # Handle trailing nav block
-    if len(nav_block) < _NAV_BLOCK_MIN_LINES:
-        result.extend(nav_block)
-
-    return "\n".join(result)
+    if not content:
+        return content
+    res = _NAV_BLOCK_RE.sub("", content)
+    # Split and join to preserve splitlines() behavior (no trailing newline unless intended)
+    return "\n".join(res.splitlines())
 
 
 def _strip_nav_heading_blocks(content: str) -> str:
@@ -2173,23 +2184,9 @@ def _clean_doc_content(content: str) -> str:
     # Remove navigation heading blocks (## Topic A / ## Topic B / ...)
     content = _strip_nav_heading_blocks(content)
 
-    # Filter noise lines
-    lines = content.splitlines()
-    cleaned = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            cleaned.append(line)
-            continue
-        if _NAV_RE.match(stripped):
-            continue
-        if _FOOTER_RE.match(stripped):
-            continue
-        if _MKDOCS_UI_RE.match(stripped):
-            continue
-        cleaned.append(line)
-
-    return "\n".join(cleaned)
+    # ⚡ Bolt Optimization: Filter noise lines in a single pass
+    res = _COMBINED_NOISE_MULTILINE_RE.sub("", content)
+    return "\n".join(res.splitlines())
 
 
 # ---------------------------------------------------------------------------
