@@ -225,12 +225,13 @@ uv run wet-mcp
 ## Also by n24q02m
 
 | Server | Description |
-|:-------|:------------|
-| [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) | Persistent AI memory with hybrid search and embedded sync |
-| [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) | Enhanced Notion API integration with 9 composite tools |
-| [better-email-mcp](https://github.com/n24q02m/better-email-mcp) | Email management via IMAP/SMTP |
-| [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) | Telegram Bot API + MTProto for AI agents |
-| [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) | Godot Engine for AI agents |
+|--------|-------------|
+| [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) | Persistent AI memory with hybrid search and cross-machine sync |
+| [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) | Markdown-first Notion API with 9 composite tools |
+| [better-email-mcp](https://github.com/n24q02m/better-email-mcp) | Email (IMAP/SMTP) with multi-account and auto-discovery |
+| [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) | Godot Engine 4.x with 18 tools for scenes, scripts, and shaders |
+| [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) | Telegram dual-mode (Bot API + MTProto) with 6 composite tools |
+| [better-code-review-graph](https://github.com/n24q02m/better-code-review-graph) | Knowledge graph for token-efficient code reviews |
 
 ## Contributing
 
