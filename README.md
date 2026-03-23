@@ -145,6 +145,7 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 | `extract` | `extract`, `batch`, `crawl`, `map`, `convert`, `extract_structured` | Content extraction, batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema) |
 | `media` | `list`, `download`, `analyze` | Media discovery, download, and analysis |
 | `config` | `status`, `set`, `cache_clear`, `docs_reindex` | Server configuration and cache management |
+| `setup` | `warmup`, `setup_sync` | Pre-download models, configure cloud sync |
 | `help` | -- | Full documentation for any tool |
 
 ## Configuration
