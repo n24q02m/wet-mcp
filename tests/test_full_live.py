@@ -217,7 +217,9 @@ class TestFullExtract:
         """extract.convert -- convert a local file to markdown."""
         # Create a simple text file to convert
         test_file = tmp_path / "test.txt"
-        test_file.write_text("This is a test document for conversion.", encoding="utf-8")
+        test_file.write_text(
+            "This is a test document for conversion.", encoding="utf-8"
+        )
         r = await mcp_session.call_tool(
             "extract",
             {"action": "convert", "paths": [str(test_file)]},
@@ -240,7 +242,9 @@ class TestFullMedia:
             "media", {"action": "list", "url": "https://httpbin.org/image"}
         )
         text = parse(r)
-        assert "image" in text.lower() or "media" in text.lower() or "http" in text.lower(), text[:120]
+        assert (
+            "image" in text.lower() or "media" in text.lower() or "http" in text.lower()
+        ), text[:120]
 
     async def test_media_download(self, mcp_session: ClientSession):
         """media.download -- download media file."""
@@ -265,9 +269,9 @@ class TestFullConfig:
         r = await mcp_session.call_tool("config", {"action": "status"})
         text = parse(r)
         data = json.loads(text)
-        assert "database" in data or "embedding" in data, (
-            f"Missing expected keys: {list(data.keys())}"
-        )
+        assert (
+            "database" in data or "embedding" in data
+        ), f"Missing expected keys: {list(data.keys())}"
 
     async def test_config_set_embedding_backend(self, mcp_session: ClientSession):
         """config.set -- change embedding_backend."""
@@ -275,7 +279,9 @@ class TestFullConfig:
             "config", {"action": "set", "key": "embedding_backend", "value": "local"}
         )
         text = parse(r)
-        assert any(w in text.lower() for w in ("updated", "set", "embedding")), text[:120]
+        assert any(w in text.lower() for w in ("updated", "set", "embedding")), text[
+            :120
+        ]
 
     async def test_config_set_rerank_backend(self, mcp_session: ClientSession):
         """config.set -- change rerank_backend."""
@@ -290,7 +296,8 @@ class TestFullConfig:
         r = await mcp_session.call_tool("config", {"action": "cache_clear"})
         text = parse_allow_error(r)
         assert any(
-            w in text.lower() for w in ("clear", "cache", "removed", "error", "database")
+            w in text.lower()
+            for w in ("clear", "cache", "removed", "error", "database")
         ), text[:120]
 
     async def test_config_docs_reindex(self, mcp_session: ClientSession):
@@ -322,9 +329,9 @@ class TestFullSetup:
         """setup with invalid action returns error."""
         r = await mcp_session.call_tool("setup", {"action": "invalid"})
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("error", "unknown", "invalid")
-        ), text[:120]
+        assert any(w in text.lower() for w in ("error", "unknown", "invalid")), text[
+            :120
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -399,12 +406,14 @@ class TestFullRerankOff:
         text = parse(r)
         assert len(text) > 50, f"Docs result too short: {len(text)} chars"
 
-    async def test_config_status_rerank_off(self, mcp_session_rerank_off: ClientSession):
+    async def test_config_status_rerank_off(
+        self, mcp_session_rerank_off: ClientSession
+    ):
         """config.status should show reranking disabled."""
         r = await mcp_session_rerank_off.call_tool("config", {"action": "status"})
         text = parse(r)
         data = json.loads(text)
-        rerank = data.get("reranking", data.get("rerank", {}))
+        _ = data.get("reranking", data.get("rerank", {}))  # noqa: F841
         # Either shows disabled or empty backend
         assert isinstance(data, dict), f"Expected dict, got: {type(data)}"
 
