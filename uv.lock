@@ -2408,7 +2408,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", specifier = ">=1.5.0" },
+    { name = "qwen3-embed", specifier = ">=1.5.1" },
     { name = "sqlite-vec" },
 ]
 
@@ -2417,7 +2417,7 @@ dev = [
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff" },
