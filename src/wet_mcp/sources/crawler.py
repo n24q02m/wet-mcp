@@ -789,13 +789,16 @@ async def convert_local_files(paths: list[str]) -> str:
     from wet_mcp.config import settings as _settings
     from wet_mcp.security import is_safe_local_path
 
-    allowed_dirs = None
+    # Security: default to user's home directory if no specific allowed dirs are set.
+    # This prevents arbitrary file read of system files (like /etc/passwd).
     if _settings.convert_allowed_dirs:
         allowed_dirs = [
-            Path(d.strip())
+            Path(d.strip()).expanduser().resolve()
             for d in _settings.convert_allowed_dirs.split(",")
             if d.strip()
         ]
+    else:
+        allowed_dirs = [Path.home().resolve()]
 
     results = []
     for path_str in paths:
