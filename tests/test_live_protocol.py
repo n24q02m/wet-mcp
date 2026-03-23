@@ -102,9 +102,9 @@ class TestHelp:
     async def test_help_invalid_topic(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool("help", {"tool_name": "nonexistent"})
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("error", "not found", "unknown")
-        ), f"Expected error response, got: {text[:80]}"
+        assert any(w in text.lower() for w in ("error", "not found", "unknown")), (
+            f"Expected error response, got: {text[:80]}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -141,18 +141,18 @@ class TestConfig:
             "config", {"action": "docs_reindex", "key": "fastapi"}
         )
         text = parse(r)
-        assert any(
-            w in text.lower() for w in ("clear", "reindex", "fastapi")
-        ), text[:80]
+        assert any(w in text.lower() for w in ("clear", "reindex", "fastapi")), text[
+            :80
+        ]
 
     async def test_config_set_invalid_key(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
             "config", {"action": "set", "key": "invalid_key", "value": "x"}
         )
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("error", "invalid", "valid")
-        ), f"Expected error for invalid key, got: {text[:80]}"
+        assert any(w in text.lower() for w in ("error", "invalid", "valid")), (
+            f"Expected error for invalid key, got: {text[:80]}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -170,9 +170,9 @@ class TestSetup:
     async def test_setup_invalid_action(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool("setup", {"action": "invalid"})
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("error", "unknown", "invalid")
-        ), text[:80]
+        assert any(w in text.lower() for w in ("error", "unknown", "invalid")), text[
+            :80
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -184,32 +184,32 @@ class TestErrorPaths:
     async def test_search_missing_query(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool("search", {"action": "search"})
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("error", "query", "required")
-        ), f"Expected error, got: {text[:80]}"
+        assert any(w in text.lower() for w in ("error", "query", "required")), (
+            f"Expected error, got: {text[:80]}"
+        )
 
     async def test_search_invalid_action(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
             "search", {"action": "invalid", "query": "test"}
         )
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("error", "unknown", "invalid")
-        ), f"Expected error, got: {text[:80]}"
+        assert any(w in text.lower() for w in ("error", "unknown", "invalid")), (
+            f"Expected error, got: {text[:80]}"
+        )
 
     async def test_extract_missing_urls(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool("extract", {"action": "extract"})
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("error", "url", "required")
-        ), f"Expected error, got: {text[:80]}"
+        assert any(w in text.lower() for w in ("error", "url", "required")), (
+            f"Expected error, got: {text[:80]}"
+        )
 
     async def test_media_missing_url(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool("media", {"action": "list"})
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("error", "url", "required")
-        ), f"Expected error, got: {text[:80]}"
+        assert any(w in text.lower() for w in ("error", "url", "required")), (
+            f"Expected error, got: {text[:80]}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -224,9 +224,9 @@ class TestSecurity:
             {"action": "extract", "urls": ["http://169.254.169.254/latest/meta-data"]},
         )
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("block", "denied", "ssrf", "error")
-        ), f"SSRF not blocked: {text[:80]}"
+        assert any(w in text.lower() for w in ("block", "denied", "ssrf", "error")), (
+            f"SSRF not blocked: {text[:80]}"
+        )
 
     async def test_ssrf_localhost(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
@@ -234,9 +234,9 @@ class TestSecurity:
             {"action": "extract", "urls": ["http://127.0.0.1:8080/secret"]},
         )
         text = parse_allow_error(r)
-        assert any(
-            w in text.lower() for w in ("block", "denied", "ssrf", "error")
-        ), f"SSRF not blocked: {text[:80]}"
+        assert any(w in text.lower() for w in ("block", "denied", "ssrf", "error")), (
+            f"SSRF not blocked: {text[:80]}"
+        )
 
     async def test_media_path_traversal(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
@@ -332,9 +332,7 @@ class TestMedia:
             {"action": "download", "media_urls": ["https://httpbin.org/image/png"]},
         )
         text = parse(r)
-        assert any(
-            w in text.lower() for w in ("download", "path", "file")
-        ), text[:80]
+        assert any(w in text.lower() for w in ("download", "path", "file")), text[:80]
 
     async def test_media_analyze_no_key(self, mcp_session: ClientSession):
         """media.analyze without API keys should fail gracefully."""
@@ -344,6 +342,6 @@ class TestMedia:
         )
         text = parse_allow_error(r)
         # Should error about missing API key or file not found
-        assert any(
-            w in text.lower() for w in ("api", "key", "error", "not found")
-        ), text[:80]
+        assert any(w in text.lower() for w in ("api", "key", "error", "not found")), (
+            text[:80]
+        )

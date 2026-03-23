@@ -861,7 +861,14 @@ async def extract(
         case _:
             import difflib
 
-            valid_actions = ["batch", "convert", "crawl", "extract", "extract_structured", "map"]
+            valid_actions = [
+                "batch",
+                "convert",
+                "crawl",
+                "extract",
+                "extract_structured",
+                "map",
+            ]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return (
