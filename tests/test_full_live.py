@@ -452,3 +452,76 @@ class TestFullSecurity:
             w in text.lower()
             for w in ("error", "denied", "security", "block", "traversal")
         ), f"Path traversal not blocked: {text[:120]}"
+
+
+# ---------------------------------------------------------------------------
+# Cloud embedding mode (SDK mode via API_KEYS)
+# ---------------------------------------------------------------------------
+
+API_KEYS = os.environ.get("API_KEYS", "")
+
+
+@pytest.mark.skipif(not API_KEYS, reason="API_KEYS not set")
+@pytest.mark.timeout(120)
+class TestFullCloudMode:
+    """Tests with cloud embedding via API_KEYS (SDK mode)."""
+
+    @pytest.fixture
+    async def cloud_session(self, tmp_path):
+        """MCP session using cloud SDK mode via API_KEYS."""
+        server_params = StdioServerParameters(
+            command="uv",
+            args=["run", "wet-mcp"],
+            env={
+                **os.environ,
+                "LOG_LEVEL": "WARNING",
+                "CACHE_DIR": str(tmp_path),
+                "DOCS_DB_PATH": str(tmp_path / "docs.db"),
+                "DOWNLOAD_DIR": str(tmp_path / "downloads"),
+                "API_KEYS": API_KEYS,
+            },
+        )
+        try:
+            async with stdio_client(server_params) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    yield session
+        except (RuntimeError, ExceptionGroup) as exc:
+            msg = str(exc).lower()
+            if "cancel scope" in msg or "different task" in msg:
+                warnings.warn(
+                    f"Suppressed teardown error: {exc}",
+                    RuntimeWarning,
+                    stacklevel=1,
+                )
+            else:
+                raise
+
+    async def test_search_docs_cloud_embed(self, cloud_session: ClientSession):
+        """search.docs with cloud embedding should return results."""
+        r = await cloud_session.call_tool(
+            "search", {"action": "docs", "library": "requests", "query": "get"}
+        )
+        text = parse(r)
+        assert len(text) > 50, f"Docs result too short: {len(text)} chars"
+
+    async def test_config_status_shows_cloud(self, cloud_session: ClientSession):
+        """config.status should show cloud/sdk embedding mode."""
+        r = await cloud_session.call_tool("config", {"action": "status"})
+        text = parse(r)
+        data = json.loads(text)
+        embedding = data.get("embedding", {})
+        backend = embedding.get("backend", "")
+        assert backend != "local", f"Expected cloud backend, got: {backend}"
+
+    async def test_media_analyze_with_api_key(self, cloud_session: ClientSession):
+        """media.analyze with API key should return analysis."""
+        r = await cloud_session.call_tool(
+            "media",
+            {
+                "action": "analyze",
+                "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/300px-PNG_transparency_demonstration_1.png",
+            },
+        )
+        text = parse(r)
+        assert len(text) > 20, f"Analysis result too short: {len(text)} chars"
