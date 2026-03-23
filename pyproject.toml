@@ -95,8 +95,10 @@ python_files = ["test_*.py"]
 timeout = 30
 markers = [
     "integration: integration tests (require network/services)",
+    "live: live MCP protocol tests (spawn real server via stdio)",
+    "network: tests requiring network access",
 ]
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration and not live'"
 
 [tool.ty]
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }
