@@ -1,11 +1,10 @@
-"""Tests to cover remaining gaps in sync.py, __main__.py, cache.py, and reranker.py."""
+"""Tests to cover remaining gaps in sync.py, setup_tool.py, cache.py, and reranker.py."""
 
 import asyncio
 import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import numpy as np
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -261,67 +260,55 @@ class TestSetupSyncNoToken:
 
 
 # ---------------------------------------------------------------------------
-# __main__.py coverage gaps
+# setup_tool.py coverage gaps (migrated from __main__.py)
 # ---------------------------------------------------------------------------
 
 
-class TestWarmupEmptyResults:
-    """Cover __main__.py L108, L118: empty embedding results."""
+class TestSetupToolCoverageGaps:
+    """Cover setup_tool.py edge cases for local embedding/reranker."""
 
-    @patch("wet_mcp.setup.run_auto_setup")
     @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_local_embedding_empty_result(self, mock_settings, mock_te, mock_setup):
-        """L108: embed returns empty list."""
-        from wet_mcp.__main__ import _warmup
+    def test_local_embedding_empty_result(self, mock_te):
+        """embed returns empty list -- returns warning dict."""
+        from wet_mcp.setup_tool import _download_local_embedding
 
-        mock_settings.setup_litellm.return_value = "local"
+        mock_settings = MagicMock()
         mock_settings.resolve_local_embedding_model.return_value = "org/embed"
-        mock_settings.rerank_enabled = False
 
         mock_model = MagicMock()
-        mock_model.embed.return_value = iter([])  # empty
+        mock_model.embed.return_value = iter([])
         mock_te.return_value = mock_model
 
-        _warmup()  # Should print warning but not raise
+        result = _download_local_embedding(mock_settings)
+        assert result["status"] == "warning"
 
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.__main__._clear_model_cache")
+    @patch("wet_mcp.setup_tool.clear_model_cache")
     @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_local_embedding_empty_after_retry(
-        self, mock_settings, mock_te, mock_clear, mock_setup
-    ):
-        """L118: embed returns empty after cache clear retry."""
-        from wet_mcp.__main__ import _warmup
+    def test_local_embedding_empty_after_retry(self, mock_te, mock_clear):
+        """embed returns empty after cache clear retry."""
+        from wet_mcp.setup_tool import _download_local_embedding
 
-        mock_settings.setup_litellm.return_value = "local"
+        mock_settings = MagicMock()
         mock_settings.resolve_local_embedding_model.return_value = "org/embed"
-        mock_settings.rerank_enabled = False
 
-        # First call: cache error, second call: empty result
         exc = Exception("NO_SUCHFILE: file doesn't exist")
         mock_model_retry = MagicMock()
-        mock_model_retry.embed.return_value = iter([])  # empty after retry
+        mock_model_retry.embed.return_value = iter([])
         mock_te.side_effect = [exc, mock_model_retry]
 
-        _warmup()
+        result = _download_local_embedding(mock_settings)
 
         mock_clear.assert_called_once_with("org/embed")
+        assert result["status"] == "warning"
 
-
-class TestWarmupRerankerEdgeCases:
-    """Cover __main__.py L87-88, L134, L144-146."""
-
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.server._EMBEDDING_CANDIDATES", ["gemini/embed"])
+    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
+    @patch("wet_mcp.reranker.init_reranker")
     @patch("wet_mcp.embedder.init_backend")
-    @patch("wet_mcp.config.settings")
-    def test_cloud_reranker_init_exception(self, mock_settings, mock_init, mock_setup):
-        """L87-88: reranker init raises exception, caught by except."""
-        from wet_mcp.__main__ import _warmup
+    def test_cloud_reranker_init_exception(self, mock_init, mock_rr_init):
+        """reranker init raises exception, caught by except."""
+        from wet_mcp.setup_tool import _validate_cloud_models
 
-        mock_settings.setup_litellm.return_value = "sdk"
+        mock_settings = MagicMock()
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
 
@@ -329,88 +316,61 @@ class TestWarmupRerankerEdgeCases:
         mock_backend.check_available.return_value = 768
         mock_init.return_value = mock_backend
 
-        with patch("wet_mcp.reranker.init_reranker") as mock_rr_init:
-            mock_rr_init.side_effect = Exception("reranker init failed")
-            _warmup()  # Should print cloud embedding message, not raise
+        mock_rr_init.side_effect = Exception("reranker init failed")
 
-    @patch("wet_mcp.setup.run_auto_setup")
+        result = _validate_cloud_models(mock_settings)
+        assert result["cloud_ready"] is True
+        assert result["reranker"] is None
+
     @patch("qwen3_embed.TextCrossEncoder")
-    @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_local_reranker_empty_result(
-        self, mock_settings, mock_te, mock_tce, mock_setup
-    ):
-        """L134: local reranker returns empty scores."""
-        from wet_mcp.__main__ import _warmup
+    def test_local_reranker_empty_result(self, mock_tce):
+        """local reranker returns empty scores."""
+        from wet_mcp.setup_tool import _download_local_reranker
 
-        mock_settings.setup_litellm.return_value = "local"
-        mock_settings.resolve_local_embedding_model.return_value = "org/embed"
-        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
+        mock_settings = MagicMock()
         mock_settings.rerank_enabled = True
-
-        mock_embed = MagicMock()
-        mock_embed.embed.return_value = iter([np.array([0.1])])
-        mock_te.return_value = mock_embed
+        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
 
         mock_reranker = MagicMock()
-        mock_reranker.rerank.return_value = iter([])  # empty scores
+        mock_reranker.rerank.return_value = iter([])
         mock_tce.return_value = mock_reranker
 
-        _warmup()  # Should print warning but not raise
+        result = _download_local_reranker(mock_settings)
+        assert result["status"] == "warning"
 
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.__main__._clear_model_cache")
+    @patch("wet_mcp.setup_tool.clear_model_cache")
     @patch("qwen3_embed.TextCrossEncoder")
-    @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_local_reranker_empty_after_retry(
-        self, mock_settings, mock_te, mock_tce, mock_clear, mock_setup
-    ):
-        """L144-146: reranker retry returns empty scores."""
-        from wet_mcp.__main__ import _warmup
+    def test_local_reranker_empty_after_retry(self, mock_tce, mock_clear):
+        """reranker retry returns empty scores."""
+        from wet_mcp.setup_tool import _download_local_reranker
 
-        mock_settings.setup_litellm.return_value = "local"
-        mock_settings.resolve_local_embedding_model.return_value = "org/embed"
-        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
+        mock_settings = MagicMock()
         mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
 
-        mock_embed = MagicMock()
-        mock_embed.embed.return_value = iter([np.array([0.1])])
-        mock_te.return_value = mock_embed
-
-        # First call: cache error, second call: empty result
         exc = Exception("NO_SUCHFILE: file doesn't exist")
         mock_reranker_retry = MagicMock()
         mock_reranker_retry.rerank.return_value = iter([])
         mock_tce.side_effect = [exc, mock_reranker_retry]
 
-        _warmup()
+        result = _download_local_reranker(mock_settings)
 
         mock_clear.assert_called_once_with("org/rerank")
+        assert result["status"] == "warning"
 
-    @patch("wet_mcp.setup.run_auto_setup")
     @patch("qwen3_embed.TextCrossEncoder")
-    @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_local_reranker_non_cache_error_reraises(
-        self, mock_settings, mock_te, mock_tce, mock_setup
-    ):
-        """L146: non-cache reranker error is re-raised."""
-        from wet_mcp.__main__ import _warmup
+    def test_local_reranker_non_cache_error_reraises(self, mock_tce):
+        """non-cache reranker error is re-raised."""
+        from wet_mcp.setup_tool import _download_local_reranker
 
-        mock_settings.setup_litellm.return_value = "local"
-        mock_settings.resolve_local_embedding_model.return_value = "org/embed"
-        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
+        mock_settings = MagicMock()
         mock_settings.rerank_enabled = True
-
-        mock_embed = MagicMock()
-        mock_embed.embed.return_value = iter([np.array([0.1])])
-        mock_te.return_value = mock_embed
+        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
 
         mock_tce.side_effect = ImportError("qwen3_embed broken")
 
         with pytest.raises(ImportError, match="broken"):
-            _warmup()
+            _download_local_reranker(mock_settings)
 
 
 # ---------------------------------------------------------------------------

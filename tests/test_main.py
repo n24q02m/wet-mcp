@@ -1,4 +1,4 @@
-"""Tests for wet_mcp.__main__ — CLI dispatcher and warmup."""
+"""Tests for wet_mcp.__main__ — CLI entry point and setup_tool functions."""
 
 import sys
 from unittest.mock import MagicMock, patch
@@ -7,54 +7,30 @@ import numpy as np
 
 
 class TestCli:
-    """CLI dispatcher routes subcommands correctly."""
+    """CLI dispatcher starts MCP server."""
 
-    @patch("wet_mcp.server.main")
+    @patch("wet_mcp.__main__.main")
     def test_default_runs_server(self, mock_main):
         from wet_mcp.__main__ import _cli
 
-        with patch.object(sys, "argv", ["wet-mcp"]):
-            _cli()
+        _cli()
         mock_main.assert_called_once()
 
-    @patch("wet_mcp.server.main")
-    def test_unknown_arg_runs_server(self, mock_main):
+    @patch("wet_mcp.__main__.main")
+    def test_cli_always_runs_server(self, mock_main):
+        """_cli() always starts MCP server (no subcommands)."""
         from wet_mcp.__main__ import _cli
 
-        with patch.object(sys, "argv", ["wet-mcp", "--help"]):
+        with patch.object(sys, "argv", ["wet-mcp", "anything"]):
             _cli()
         mock_main.assert_called_once()
-
-    def test_warmup_subcommand(self):
-        with patch("wet_mcp.__main__._warmup") as mock_warmup:
-            from wet_mcp.__main__ import _cli
-
-            with patch.object(sys, "argv", ["wet-mcp", "warmup"]):
-                _cli()
-            mock_warmup.assert_called_once()
-
-    def test_setup_sync_subcommand_with_remote(self):
-        with patch("wet_mcp.sync.setup_sync") as mock_setup:
-            from wet_mcp.__main__ import _cli
-
-            with patch.object(sys, "argv", ["wet-mcp", "setup-sync", "gdrive"]):
-                _cli()
-            mock_setup.assert_called_once_with("gdrive")
-
-    def test_setup_sync_default_remote_type(self):
-        with patch("wet_mcp.sync.setup_sync") as mock_setup:
-            from wet_mcp.__main__ import _cli
-
-            with patch.object(sys, "argv", ["wet-mcp", "setup-sync"]):
-                _cli()
-            mock_setup.assert_called_once_with("drive")
 
 
 class TestClearModelCache:
-    """_clear_model_cache removes corrupted HF Hub cache directories."""
+    """clear_model_cache removes corrupted HF Hub cache directories."""
 
     def test_removes_existing_cache(self, tmp_path):
-        from wet_mcp.__main__ import _clear_model_cache
+        from wet_mcp.setup_tool import clear_model_cache
 
         model_dir = tmp_path / "models--org--model"
         model_dir.mkdir(parents=True)
@@ -63,33 +39,47 @@ class TestClearModelCache:
         (model_dir / "blobs" / "abc.incomplete").touch()
 
         with patch.dict("os.environ", {"QWEN3_EMBED_CACHE_PATH": str(tmp_path)}):
-            _clear_model_cache("org/model")
+            result = clear_model_cache("org/model")
 
         assert not model_dir.exists()
+        assert result is not None
 
     def test_noop_when_cache_missing(self, tmp_path):
-        from wet_mcp.__main__ import _clear_model_cache
+        from wet_mcp.setup_tool import clear_model_cache
 
         with patch.dict("os.environ", {"QWEN3_EMBED_CACHE_PATH": str(tmp_path)}):
-            _clear_model_cache("nonexistent/model")  # Should not raise
+            result = clear_model_cache("nonexistent/model")
+
+        assert result is None
 
 
-class TestWarmupCorruptedCache:
-    """_warmup handles corrupted ONNX cache (NO_SUCHFILE) gracefully."""
+class TestDownloadLocalEmbedding:
+    """_download_local_embedding validates and downloads local models."""
 
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.__main__._clear_model_cache")
     @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_corrupted_embedding_cache_clears_and_retries(
-        self, mock_settings, mock_te, mock_clear, mock_setup
-    ):
-        """When TextEmbedding raises NO_SUCHFILE, clears cache and retries."""
-        from wet_mcp.__main__ import _warmup
+    def test_embedding_success(self, mock_te):
+        from wet_mcp.setup_tool import _download_local_embedding
 
-        mock_settings.setup_litellm.return_value = "local"
+        mock_settings = MagicMock()
         mock_settings.resolve_local_embedding_model.return_value = "org/embed"
-        mock_settings.rerank_enabled = False
+
+        mock_model = MagicMock()
+        mock_model.embed.return_value = iter([np.array([0.1, 0.2])])
+        mock_te.return_value = mock_model
+
+        result = _download_local_embedding(mock_settings)
+
+        assert result["step"] == "local_embedding"
+        assert result["status"] == "ok"
+        assert result["dims"] == 2
+
+    @patch("wet_mcp.setup_tool.clear_model_cache")
+    @patch("qwen3_embed.TextEmbedding")
+    def test_corrupted_cache_clears_and_retries(self, mock_te, mock_clear):
+        from wet_mcp.setup_tool import _download_local_embedding
+
+        mock_settings = MagicMock()
+        mock_settings.resolve_local_embedding_model.return_value = "org/embed"
 
         mock_model_ok = MagicMock()
         mock_model_ok.embed.return_value = iter([np.array([0.1, 0.2])])
@@ -97,76 +87,162 @@ class TestWarmupCorruptedCache:
         exc = Exception("[ONNXRuntimeError] : 3 : NO_SUCHFILE : file doesn't exist")
         mock_te.side_effect = [exc, mock_model_ok]
 
-        _warmup()
+        result = _download_local_embedding(mock_settings)
 
         mock_clear.assert_called_once_with("org/embed")
-        assert mock_te.call_count == 2
+        assert result["status"] == "ok"
+        assert result.get("retried") is True
 
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.__main__._clear_model_cache")
-    @patch("qwen3_embed.TextCrossEncoder")
     @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_corrupted_reranker_cache_clears_and_retries(
-        self, mock_settings, mock_te, mock_tce, mock_clear, mock_setup
-    ):
-        """When TextCrossEncoder raises NO_SUCHFILE, clears cache and retries."""
-        from wet_mcp.__main__ import _warmup
+    def test_non_cache_error_reraises(self, mock_te):
+        from wet_mcp.setup_tool import _download_local_embedding
 
-        mock_settings.setup_litellm.return_value = "local"
-        mock_settings.resolve_local_embedding_model.return_value = "org/embed"
-        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
-        mock_settings.rerank_enabled = True
-
-        # Embedding succeeds
-        mock_embed = MagicMock()
-        mock_embed.embed.return_value = iter([np.array([0.1])])
-        mock_te.return_value = mock_embed
-
-        # Reranker: first call raises, second succeeds
-        mock_reranker_ok = MagicMock()
-        mock_reranker_ok.rerank.return_value = iter([0.9])
-        exc = Exception("[ONNXRuntimeError] : 3 : NO_SUCHFILE : file doesn't exist")
-        mock_tce.side_effect = [exc, mock_reranker_ok]
-
-        _warmup()
-
-        mock_clear.assert_called_once_with("org/rerank")
-        assert mock_tce.call_count == 2
-
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_non_cache_error_re_raises(self, mock_settings, mock_te, mock_setup):
-        """Non-cache errors (e.g. import error) are re-raised."""
-        from wet_mcp.__main__ import _warmup
-
-        mock_settings.setup_litellm.return_value = "local"
+        mock_settings = MagicMock()
         mock_settings.resolve_local_embedding_model.return_value = "org/model"
-        mock_settings.rerank_enabled = False
 
         mock_te.side_effect = ImportError("qwen3_embed not installed")
 
         import pytest
 
         with pytest.raises(ImportError, match="not installed"):
-            _warmup()
+            _download_local_embedding(mock_settings)
+
+    @patch("qwen3_embed.TextEmbedding")
+    def test_embedding_empty_result(self, mock_te):
+        from wet_mcp.setup_tool import _download_local_embedding
+
+        mock_settings = MagicMock()
+        mock_settings.resolve_local_embedding_model.return_value = "org/embed"
+
+        mock_model = MagicMock()
+        mock_model.embed.return_value = iter([])
+        mock_te.return_value = mock_model
+
+        result = _download_local_embedding(mock_settings)
+        assert result["status"] == "warning"
+
+    @patch("wet_mcp.setup_tool.clear_model_cache")
+    @patch("qwen3_embed.TextEmbedding")
+    def test_embedding_empty_after_retry(self, mock_te, mock_clear):
+        from wet_mcp.setup_tool import _download_local_embedding
+
+        mock_settings = MagicMock()
+        mock_settings.resolve_local_embedding_model.return_value = "org/embed"
+
+        exc = Exception("NO_SUCHFILE")
+        mock_model_empty = MagicMock()
+        mock_model_empty.embed.return_value = iter([])
+        mock_te.side_effect = [exc, mock_model_empty]
+
+        result = _download_local_embedding(mock_settings)
+        assert result["status"] == "warning"
+        assert "after cache clear" in result["message"]
 
 
-class TestWarmup:
-    """_warmup() pre-downloads models or validates cloud models."""
+class TestDownloadLocalReranker:
+    """_download_local_reranker validates and downloads local reranker."""
 
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.server._EMBEDDING_CANDIDATES", ["gemini/embed-1"])
+    def test_rerank_disabled_skips(self):
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = False
+
+        result = _download_local_reranker(mock_settings)
+        assert result["status"] == "skipped"
+
+    @patch("qwen3_embed.TextCrossEncoder")
+    def test_reranker_success(self, mock_tce):
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
+
+        mock_reranker = MagicMock()
+        mock_reranker.rerank.return_value = iter([0.9])
+        mock_tce.return_value = mock_reranker
+
+        result = _download_local_reranker(mock_settings)
+        assert result["status"] == "ok"
+
+    @patch("wet_mcp.setup_tool.clear_model_cache")
+    @patch("qwen3_embed.TextCrossEncoder")
+    def test_corrupted_reranker_cache_retries(self, mock_tce, mock_clear):
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
+
+        mock_reranker_ok = MagicMock()
+        mock_reranker_ok.rerank.return_value = iter([0.9])
+        exc = Exception("NO_SUCHFILE")
+        mock_tce.side_effect = [exc, mock_reranker_ok]
+
+        result = _download_local_reranker(mock_settings)
+        mock_clear.assert_called_once_with("org/rerank")
+        assert result["status"] == "ok"
+        assert result.get("retried") is True
+
+    @patch("qwen3_embed.TextCrossEncoder")
+    def test_reranker_empty_result(self, mock_tce):
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
+
+        mock_reranker = MagicMock()
+        mock_reranker.rerank.return_value = iter([])
+        mock_tce.return_value = mock_reranker
+
+        result = _download_local_reranker(mock_settings)
+        assert result["status"] == "warning"
+
+    @patch("wet_mcp.setup_tool.clear_model_cache")
+    @patch("qwen3_embed.TextCrossEncoder")
+    def test_reranker_empty_after_retry(self, mock_tce, mock_clear):
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
+
+        exc = Exception("NO_SUCHFILE")
+        mock_reranker_empty = MagicMock()
+        mock_reranker_empty.rerank.return_value = iter([])
+        mock_tce.side_effect = [exc, mock_reranker_empty]
+
+        result = _download_local_reranker(mock_settings)
+        assert result["status"] == "warning"
+
+    @patch("qwen3_embed.TextCrossEncoder")
+    def test_reranker_non_cache_error_reraises(self, mock_tce):
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
+
+        mock_tce.side_effect = RuntimeError("GPU not available")
+
+        import pytest
+
+        with pytest.raises(RuntimeError, match="GPU not available"):
+            _download_local_reranker(mock_settings)
+
+
+class TestValidateCloudModels:
+    """_validate_cloud_models checks cloud embedding and reranking."""
+
+    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed-1"])
+    @patch("wet_mcp.reranker.init_reranker")
     @patch("wet_mcp.embedder.init_backend")
-    @patch("wet_mcp.config.settings")
-    def test_cloud_embedding_and_reranker_success(
-        self, mock_settings, mock_init, mock_setup
-    ):
-        """When cloud embedding + reranker work, skip local downloads."""
-        from wet_mcp.__main__ import _warmup
+    def test_cloud_embedding_and_reranker_success(self, mock_init, mock_rr_init):
+        from wet_mcp.setup_tool import _validate_cloud_models
 
-        mock_settings.setup_litellm.return_value = "sdk"
+        mock_settings = MagicMock()
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
 
@@ -174,125 +250,38 @@ class TestWarmup:
         mock_backend.check_available.return_value = 768
         mock_init.return_value = mock_backend
 
-        with patch("wet_mcp.reranker.init_reranker") as mock_rr_init:
-            mock_reranker = MagicMock()
-            mock_reranker.check_available.return_value = True
-            mock_rr_init.return_value = mock_reranker
+        mock_reranker = MagicMock()
+        mock_reranker.check_available.return_value = True
+        mock_rr_init.return_value = mock_reranker
 
-            _warmup()
+        result = _validate_cloud_models(mock_settings)
 
-        mock_setup.assert_called_once()
-        mock_init.assert_called_once_with("litellm", "gemini/embed-1")
+        assert result["cloud_ready"] is True
+        assert result["embedding"]["model"] == "gemini/embed-1"
+        assert result["reranker"]["model"] == "cohere/rerank"
 
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_no_api_keys_downloads_local_embedding(
-        self, mock_settings, mock_te, mock_setup
-    ):
-        """Without API keys, downloads local embedding model."""
-        from wet_mcp.__main__ import _warmup
-
-        mock_settings.setup_litellm.return_value = "local"
-        mock_settings.resolve_local_embedding_model.return_value = "local/embed"
-        mock_settings.rerank_enabled = False
-
-        mock_model = MagicMock()
-        mock_model.embed.return_value = iter([np.array([0.1, 0.2])])
-        mock_te.return_value = mock_model
-
-        _warmup()
-
-        mock_setup.assert_called_once()
-        mock_te.assert_called_once_with(model_name="local/embed")
-
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("qwen3_embed.TextCrossEncoder")
-    @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_local_embedding_and_reranker(
-        self, mock_settings, mock_te, mock_tce, mock_setup
-    ):
-        """Downloads both local embedding and reranker when rerank_enabled."""
-        from wet_mcp.__main__ import _warmup
-
-        mock_settings.setup_litellm.return_value = "local"
-        mock_settings.resolve_local_embedding_model.return_value = "local/embed"
-        mock_settings.resolve_local_rerank_model.return_value = "local/rerank"
-        mock_settings.rerank_enabled = True
-
-        mock_embed_model = MagicMock()
-        mock_embed_model.embed.return_value = iter([np.array([0.1])])
-        mock_te.return_value = mock_embed_model
-
-        mock_rerank_model = MagicMock()
-        mock_rerank_model.rerank.return_value = iter([0.9])
-        mock_tce.return_value = mock_rerank_model
-
-        _warmup()
-
-        mock_te.assert_called_once()
-        mock_tce.assert_called_once_with(model_name="local/rerank")
-
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.config.settings")
-    def test_rerank_disabled_skips_reranker(self, mock_settings, mock_te, mock_setup):
-        """When rerank_enabled=False, skips reranker download."""
-        from wet_mcp.__main__ import _warmup
-
-        mock_settings.setup_litellm.return_value = "local"
-        mock_settings.resolve_local_embedding_model.return_value = "local/embed"
-        mock_settings.rerank_enabled = False
-
-        mock_model = MagicMock()
-        mock_model.embed.return_value = iter([np.array([0.1])])
-        mock_te.return_value = mock_model
-
-        _warmup()
-
-        # TextCrossEncoder should not be imported/called
-        mock_te.assert_called_once()
-
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("qwen3_embed.TextEmbedding")
-    @patch("wet_mcp.server._EMBEDDING_CANDIDATES", ["model-a"])
+    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["model-a"])
     @patch("wet_mcp.embedder.init_backend")
-    @patch("wet_mcp.config.settings")
-    def test_cloud_embedding_fail_falls_back_to_local(
-        self, mock_settings, mock_init, mock_te, mock_setup
-    ):
-        """When cloud embedding fails, falls back to local download."""
-        from wet_mcp.__main__ import _warmup
+    def test_cloud_embedding_fails(self, mock_init):
+        from wet_mcp.setup_tool import _validate_cloud_models
 
-        mock_settings.setup_litellm.return_value = "sdk"
+        mock_settings = MagicMock()
         mock_settings.resolve_embedding_model.return_value = None
-        mock_settings.resolve_local_embedding_model.return_value = "local/m"
-        mock_settings.rerank_enabled = False
 
         mock_backend = MagicMock()
         mock_backend.check_available.return_value = 0
         mock_init.return_value = mock_backend
 
-        mock_model = MagicMock()
-        mock_model.embed.return_value = iter([np.array([0.1])])
-        mock_te.return_value = mock_model
+        result = _validate_cloud_models(mock_settings)
+        assert result["cloud_ready"] is False
 
-        _warmup()
-
-        mock_te.assert_called_once_with(model_name="local/m")
-
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.server._EMBEDDING_CANDIDATES", ["gemini/embed"])
+    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
+    @patch("wet_mcp.reranker.init_reranker")
     @patch("wet_mcp.embedder.init_backend")
-    @patch("wet_mcp.config.settings")
-    def test_cloud_ok_but_reranker_fail_still_succeeds(
-        self, mock_settings, mock_init, mock_setup
-    ):
-        """When cloud embedding works but reranker fails, still succeeds."""
-        from wet_mcp.__main__ import _warmup
+    def test_cloud_reranker_fails(self, mock_init, mock_rr_init):
+        from wet_mcp.setup_tool import _validate_cloud_models
 
-        mock_settings.setup_litellm.return_value = "sdk"
+        mock_settings = MagicMock()
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
 
@@ -300,46 +289,40 @@ class TestWarmup:
         mock_backend.check_available.return_value = 768
         mock_init.return_value = mock_backend
 
-        with patch("wet_mcp.reranker.init_reranker") as mock_rr_init:
-            mock_reranker = MagicMock()
-            mock_reranker.check_available.return_value = False
-            mock_rr_init.return_value = mock_reranker
+        mock_reranker = MagicMock()
+        mock_reranker.check_available.return_value = False
+        mock_rr_init.return_value = mock_reranker
 
-            _warmup()  # Should not raise
+        result = _validate_cloud_models(mock_settings)
+        assert result["cloud_ready"] is True
+        assert result["reranker"] is None
 
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.server._EMBEDDING_CANDIDATES", ["model-a"])
+    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
+    @patch("wet_mcp.reranker.init_reranker")
     @patch("wet_mcp.embedder.init_backend")
-    @patch("wet_mcp.config.settings")
-    def test_cloud_exception_falls_back(self, mock_settings, mock_init, mock_setup):
-        """When init_backend raises, catches exception and falls back."""
-        from wet_mcp.__main__ import _warmup
+    def test_cloud_reranker_init_exception(self, mock_init, mock_rr_init):
+        from wet_mcp.setup_tool import _validate_cloud_models
 
-        mock_settings.setup_litellm.return_value = "sdk"
+        mock_settings = MagicMock()
         mock_settings.resolve_embedding_model.return_value = None
-        mock_settings.resolve_local_embedding_model.return_value = "local/m"
-        mock_settings.rerank_enabled = False
+        mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
 
-        mock_init.side_effect = Exception("init failed")
+        mock_backend = MagicMock()
+        mock_backend.check_available.return_value = 768
+        mock_init.return_value = mock_backend
 
-        with patch("qwen3_embed.TextEmbedding") as mock_te:
-            mock_model = MagicMock()
-            mock_model.embed.return_value = iter([np.array([0.1])])
-            mock_te.return_value = mock_model
+        mock_rr_init.side_effect = Exception("reranker init failed")
 
-            _warmup()
+        result = _validate_cloud_models(mock_settings)
+        assert result["cloud_ready"] is True
+        assert result["reranker"] is None
 
-            mock_te.assert_called_once()
-
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.server._EMBEDDING_CANDIDATES", ["gemini/embed"])
+    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
     @patch("wet_mcp.embedder.init_backend")
-    @patch("wet_mcp.config.settings")
-    def test_explicit_model_tried_first(self, mock_settings, mock_init, mock_setup):
-        """When EMBEDDING_MODEL is set, uses that instead of candidates."""
-        from wet_mcp.__main__ import _warmup
+    def test_explicit_model_tried_first(self, mock_init):
+        from wet_mcp.setup_tool import _validate_cloud_models
 
-        mock_settings.setup_litellm.return_value = "sdk"
+        mock_settings = MagicMock()
         mock_settings.resolve_embedding_model.return_value = "explicit/model"
         mock_settings.resolve_rerank_model.return_value = None
 
@@ -347,21 +330,17 @@ class TestWarmup:
         mock_backend.check_available.return_value = 512
         mock_init.return_value = mock_backend
 
-        _warmup()
+        result = _validate_cloud_models(mock_settings)
 
         mock_init.assert_called_once_with("litellm", "explicit/model")
+        assert result["cloud_ready"] is True
 
-    @patch("wet_mcp.setup.run_auto_setup")
-    @patch("wet_mcp.server._EMBEDDING_CANDIDATES", ["gemini/embed"])
+    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
     @patch("wet_mcp.embedder.init_backend")
-    @patch("wet_mcp.config.settings")
-    def test_no_rerank_model_skips_reranker_check(
-        self, mock_settings, mock_init, mock_setup
-    ):
-        """When resolve_rerank_model returns None, skip reranker validation."""
-        from wet_mcp.__main__ import _warmup
+    def test_no_rerank_model_skips_check(self, mock_init):
+        from wet_mcp.setup_tool import _validate_cloud_models
 
-        mock_settings.setup_litellm.return_value = "sdk"
+        mock_settings = MagicMock()
         mock_settings.resolve_embedding_model.return_value = None
         mock_settings.resolve_rerank_model.return_value = None
 
@@ -369,4 +348,19 @@ class TestWarmup:
         mock_backend.check_available.return_value = 768
         mock_init.return_value = mock_backend
 
-        _warmup()  # Should complete without error
+        result = _validate_cloud_models(mock_settings)
+        assert result["cloud_ready"] is True
+        assert result["reranker"] is None
+
+    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["model-a"])
+    @patch("wet_mcp.embedder.init_backend")
+    def test_cloud_exception_returns_not_ready(self, mock_init):
+        from wet_mcp.setup_tool import _validate_cloud_models
+
+        mock_settings = MagicMock()
+        mock_settings.resolve_embedding_model.return_value = None
+
+        mock_init.side_effect = Exception("init failed")
+
+        result = _validate_cloud_models(mock_settings)
+        assert result["cloud_ready"] is False
