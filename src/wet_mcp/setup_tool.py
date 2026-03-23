@@ -12,8 +12,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from wet_mcp.config import settings
-from wet_mcp.server import _EMBEDDING_CANDIDATES
+from wet_mcp.config import _EMBEDDING_CANDIDATES, settings
 
 
 def clear_model_cache(model_name: str) -> str | None:

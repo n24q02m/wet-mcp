@@ -15,7 +15,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
 from wet_mcp.cache import WebCache
-from wet_mcp.config import settings
+from wet_mcp.config import _EMBEDDING_CANDIDATES, settings
 from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 from wet_mcp.security import wrap_external_content
@@ -37,15 +37,6 @@ from wet_mcp.sources.searxng import search as searxng_search
 # Configure logging
 logger.remove()
 logger.add(sys.stderr, level=settings.log_level)
-
-# Embedding models to try during LiteLLM auto-detection (in priority order).
-# Validated against API keys -- first success wins.
-_EMBEDDING_CANDIDATES = [
-    "jina_ai/jina-embeddings-v5-text-small",
-    "gemini/gemini-embedding-001",
-    "text-embedding-3-large",
-    "embed-multilingual-v3.0",
-]
 
 # Fixed embedding dimensions for sqlite-vec.
 # All embeddings are truncated to this size so switching models never
