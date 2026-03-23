@@ -253,9 +253,9 @@ class TestFullMedia:
             {"action": "download", "media_urls": ["https://httpbin.org/image/png"]},
         )
         text = parse(r)
-        assert any(
-            w in text.lower() for w in ("download", "saved", "path", "file")
-        ), text[:120]
+        assert any(w in text.lower() for w in ("download", "saved", "path", "file")), (
+            text[:120]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -269,9 +269,9 @@ class TestFullConfig:
         r = await mcp_session.call_tool("config", {"action": "status"})
         text = parse(r)
         data = json.loads(text)
-        assert (
-            "database" in data or "embedding" in data
-        ), f"Missing expected keys: {list(data.keys())}"
+        assert "database" in data or "embedding" in data, (
+            f"Missing expected keys: {list(data.keys())}"
+        )
 
     async def test_config_set_embedding_backend(self, mcp_session: ClientSession):
         """config.set -- change embedding_backend."""
