@@ -692,8 +692,13 @@ async def search(  # noqa: PLR0913
             )
 
         case _:
+            import difflib
+
+            valid_actions = ["docs", "research", "search", "similar"]
+            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return (
-                f"Error: Unknown action '{action}' for search tool. "
+                f"Error: Unknown action '{action}'.{suggestion} "
                 "Valid actions: search (web search), research (academic), docs (library documentation), similar (find related pages). "
                 "If you want to read content from a URL, use the `extract` tool instead."
             )
@@ -854,8 +859,13 @@ async def extract(
             )
 
         case _:
+            import difflib
+
+            valid_actions = ["batch", "convert", "crawl", "extract", "extract_structured", "map"]
+            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return (
-                f"Error: Unknown action '{action}' for extract tool. "
+                f"Error: Unknown action '{action}'.{suggestion} "
                 "Valid actions: extract (read URL content), batch (bulk extract), crawl (follow links), "
                 "map (site structure), convert (local files to markdown), extract_structured (schema-based). "
                 "If you want to search for information, use the `search` tool instead."
@@ -942,7 +952,12 @@ async def media(  # noqa: PLR0913
             )
 
         case _:
-            return f"Error: Unknown action '{action}' for media tool. Valid actions: list (discover media on page), download (save to local), analyze (LLM vision analysis)."
+            import difflib
+
+            valid_actions = ["analyze", "download", "list"]
+            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
+            return f"Error: Unknown action '{action}'.{suggestion} Valid actions: list (discover media on page), download (save to local), analyze (LLM vision analysis)."
 
 
 @mcp.tool(
@@ -966,7 +981,11 @@ async def help(tool_name: str = "search") -> str:
     """
     allowed_tools = {"search", "extract", "media", "config", "setup", "help"}
     if tool_name not in allowed_tools:
-        return f"Error: Invalid tool_name '{tool_name}'. Valid options: {', '.join(sorted(allowed_tools))}."
+        import difflib
+
+        closest = difflib.get_close_matches(tool_name, sorted(allowed_tools), n=1)
+        suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
+        return f"Error: Invalid tool_name '{tool_name}'.{suggestion} Valid options: {', '.join(sorted(allowed_tools))}."
 
     try:
         doc_file = files("wet_mcp.docs").joinpath(f"{tool_name}.md")
@@ -1113,15 +1132,15 @@ async def config(
             return json.dumps({"error": f"Library '{key}' not found in index"})
 
         case _:
+            import difflib
+
+            valid_actions = ["cache_clear", "docs_reindex", "set", "status"]
+            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return json.dumps(
                 {
-                    "error": f"Unknown action: {action}",
-                    "valid_actions": [
-                        "status",
-                        "set",
-                        "cache_clear",
-                        "docs_reindex",
-                    ],
+                    "error": f"Unknown action '{action}'.{suggestion}",
+                    "valid_actions": valid_actions,
                 }
             )
 
@@ -1168,10 +1187,15 @@ async def setup(
             return json.dumps(result, indent=2, default=str)
 
         case _:
+            import difflib
+
+            valid_actions = ["setup_sync", "warmup"]
+            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return json.dumps(
                 {
-                    "error": f"Unknown action: {action}",
-                    "valid_actions": ["warmup", "setup_sync"],
+                    "error": f"Unknown action '{action}'.{suggestion}",
+                    "valid_actions": valid_actions,
                 }
             )
 
