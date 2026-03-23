@@ -1964,40 +1964,37 @@ _HTML_TAG_RE = re.compile(
 )
 # TOC anchor links (- [Title](#anchor))
 _TOC_LINK_RE = re.compile(r"^\s*[-*]\s*\[.*?\]\(#[^)]*\)\s*$", re.MULTILINE)
-# Navigation line patterns
-_NAV_RE = re.compile(
-    r"^\s*(?:"
+# Navigation link line: bullet or number + markdown link with full URL
+_NAV_LINK_LINE_RE = re.compile(
+    r"^\s*[-*]\s+(?:\[.*?\]\s*)?\[.*?\]\(https?://.*?\)\s*$"
+    r"|^\s*\d+\.\s+\[.*?\]\(https?://.*?\)\s*$",
+)
+# Combined noise lines (Navigation, Footer, MkDocs UI) to be stripped out
+_NOISE_LINES_RE = re.compile(
+    r"^[ \t]*(?:"
+    r"(?:"
     r"\u2190 Previous|Next \u2192|Skip to (?:main )?content|"
     r"Table of [Cc]ontents|On this page|"
     r"Edit (?:this|on) (?:page|GitHub)|"
     r"Suggest (?:changes|edits)|"
     r"Was this (?:page|article) helpful\?|"
     r"\u2b50 Star (?:us|this)"
-    r")",
-    re.IGNORECASE,
-)
-# Footer boilerplate
-_FOOTER_RE = re.compile(
-    r"^\s*(?:"
+    r")[^\n]*"
+    r"|"
+    r"(?:"
     r"Built with|Powered by|Made with|Generated (?:by|with)|"
     r"Copyright\s*(?:\u00a9|\(c\))|\u00a9\s*\d{4}|"
     r"All [Rr]ights [Rr]eserved"
-    r")",
-    re.IGNORECASE,
-)
-# Navigation link line: bullet or number + markdown link with full URL
-_NAV_LINK_LINE_RE = re.compile(
-    r"^\s*[-*]\s+(?:\[.*?\]\s*)?\[.*?\]\(https?://.*?\)\s*$"
-    r"|^\s*\d+\.\s+\[.*?\]\(https?://.*?\)\s*$",
-)
-# MkDocs UI artifacts that leak into crawled markdown
-_MKDOCS_UI_RE = re.compile(
-    r"^\s*(?:"
+    r")[^\n]*"
+    r"|"
+    r"(?:"
     r"Initializing search|Toggle (?:navigation|search)|Search"
     r"|Back to top|Share\b|Go to repository"
-    r")\s*$",
-    re.IGNORECASE,
+    r")[ \t]*"
+    r")(?:\n|$)",
+    re.IGNORECASE | re.MULTILINE,
 )
+
 # Minimum consecutive nav-link lines to consider it a navigation block
 _NAV_BLOCK_MIN_LINES = 8
 
@@ -2174,22 +2171,9 @@ def _clean_doc_content(content: str) -> str:
     content = _strip_nav_heading_blocks(content)
 
     # Filter noise lines
-    lines = content.splitlines()
-    cleaned = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped:
-            cleaned.append(line)
-            continue
-        if _NAV_RE.match(stripped):
-            continue
-        if _FOOTER_RE.match(stripped):
-            continue
-        if _MKDOCS_UI_RE.match(stripped):
-            continue
-        cleaned.append(line)
+    content = _NOISE_LINES_RE.sub("", content)
 
-    return "\n".join(cleaned)
+    return content
 
 
 # ---------------------------------------------------------------------------
