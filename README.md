@@ -107,13 +107,17 @@ claude plugin add n24q02m/wet-mcp
 
 ### Pre-install (optional)
 
-```bash
-# Pre-download SearXNG, Playwright, embedding model (~570MB), and reranker model (~570MB)
-uvx --python 3.13 wet-mcp warmup
+Use the `setup` MCP tool to warmup models and install dependencies:
 
-# With cloud embedding (validates API key, skips local download if cloud works)
-API_KEYS="GOOGLE_API_KEY:AIza..." uvx --python 3.13 wet-mcp warmup
 ```
+# Via MCP tool call (recommended):
+setup(action="warmup")
+
+# With cloud embedding configured, warmup validates API keys
+# and skips local model download if cloud models are available.
+```
+
+The warmup action pre-downloads SearXNG, Playwright, and embedding/reranker models (~1.1GB total) so the first real connection does not timeout.
 
 ### Sync setup
 

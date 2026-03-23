@@ -964,15 +964,16 @@ async def media(  # noqa: PLR0913
 async def help(tool_name: str = "search") -> str:
     """Get detailed documentation for any tool. Call this when you need full parameter reference or usage examples.
 
-    Valid tool_name values: search, extract, media, config, help.
+    Valid tool_name values: search, extract, media, config, setup, help.
 
     Quick guide -- which tool to use:
     - Need to FIND information? Use `search` (returns result listings with URLs)
     - Need to READ a page? Use `extract` (returns full page content from a URL)
     - Need media files? Use `media` (discover, download, analyze images/videos/audio)
     - Need server settings? Use `config` (status, cache, settings)
+    - Need first-time setup? Use `setup` (warmup models, configure sync)
     """
-    allowed_tools = {"search", "extract", "media", "config", "help"}
+    allowed_tools = {"search", "extract", "media", "config", "setup", "help"}
     if tool_name not in allowed_tools:
         return f"Error: Invalid tool_name '{tool_name}'. Valid options: {', '.join(sorted(allowed_tools))}."
 
@@ -1130,6 +1131,56 @@ async def config(
                         "cache_clear",
                         "docs_reindex",
                     ],
+                }
+            )
+
+
+# ---------------------------------------------------------------------------
+# Setup (warmup + setup-sync as MCP tool)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Server setup and warmup. Actions: "
+        "warmup|setup_sync. "
+        "warmup: Pre-download models and install dependencies. "
+        "setup_sync: Configure cloud sync (rclone authorize)."
+    ),
+    annotations=ToolAnnotations(
+        title="Setup",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def setup(
+    action: str,
+    remote_type: str | None = None,
+) -> str:
+    """Server setup and warmup operations.
+
+    Actions:
+    - warmup: Pre-download models and run first-time setup
+    - setup_sync: Configure cloud sync (remote_type defaults to 'drive')
+    """
+    from wet_mcp.setup_tool import run_setup_sync, run_warmup
+
+    match action:
+        case "warmup":
+            result = await run_warmup()
+            return json.dumps(result, indent=2, default=str)
+
+        case "setup_sync":
+            result = await run_setup_sync(remote_type or "drive")
+            return json.dumps(result, indent=2, default=str)
+
+        case _:
+            return json.dumps(
+                {
+                    "error": f"Unknown action: {action}",
+                    "valid_actions": ["warmup", "setup_sync"],
                 }
             )
 
