@@ -690,7 +690,7 @@ async def test_help_tool_not_found():
             FileNotFoundError("not found")
         )
         res = await server.help("nonexistent_tool")
-        assert "Error: No documentation found" in res
+        assert "Error: Invalid tool_name 'nonexistent_tool'" in res
         assert "nonexistent_tool" in res
 
 

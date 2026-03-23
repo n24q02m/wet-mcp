@@ -972,6 +972,10 @@ async def help(tool_name: str = "search") -> str:
     - Need media files? Use `media` (discover, download, analyze images/videos/audio)
     - Need server settings? Use `config` (status, cache, settings)
     """
+    allowed_tools = {"search", "extract", "media", "config", "help"}
+    if tool_name not in allowed_tools:
+        return f"Error: Invalid tool_name '{tool_name}'. Valid options: {', '.join(sorted(allowed_tools))}."
+
     try:
         doc_file = files("wet_mcp.docs").joinpath(f"{tool_name}.md")
         return doc_file.read_text()
