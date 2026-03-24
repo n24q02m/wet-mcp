@@ -337,6 +337,53 @@ def test_kill_stale_port_process():
         mock_kill.assert_any_call(1234, signal.SIGTERM)
 
 
+def test_kill_stale_port_process_lsof_not_found():
+    with (
+        patch("sys.platform", "linux"),
+        patch("subprocess.run") as mock_run,
+    ):
+
+        def run_side_effect(*args, **kwargs):
+            if args[0][0] == "lsof":
+                raise FileNotFoundError("lsof not found")
+            return MagicMock(returncode=0)
+
+        mock_run.side_effect = run_side_effect
+
+        _kill_stale_port_process(8080)
+
+        mock_run.assert_any_call(
+            ["fuser", "-k", "8080/tcp"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=5,
+        )
+
+
+def test_kill_stale_port_process_fuser_not_found():
+    with (
+        patch("sys.platform", "linux"),
+        patch("subprocess.run") as mock_run,
+    ):
+        mock_run.side_effect = FileNotFoundError("command not found")
+
+        _kill_stale_port_process(8080)
+
+        mock_run.assert_any_call(
+            ["lsof", "-ti", ":8080"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        mock_run.assert_any_call(
+            ["fuser", "-k", "8080/tcp"],
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=5,
+        )
+
+
 def test_is_process_alive():
     import wet_mcp.searxng_runner as module
 
