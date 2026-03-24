@@ -188,8 +188,10 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
         warmup_task.cancel()
         try:
             await warmup_task
-        except (asyncio.CancelledError, Exception):
-            pass
+        except asyncio.CancelledError:
+            logger.debug("SearXNG warmup task cancelled during shutdown.")
+        except Exception as e:
+            logger.error(f"Error cancelling SearXNG warmup task: {e}")
 
     # Stop auto-sync
     from wet_mcp.config import settings
