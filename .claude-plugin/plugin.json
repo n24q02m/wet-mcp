@@ -25,11 +25,13 @@
         "LITELLM_PROXY_URL": "",
         "LITELLM_PROXY_KEY": "",
         "SEARXNG_URL": "",
+        "GITHUB_TOKEN": "",
         "EMBEDDING_MODEL": "",
         "EMBEDDING_BACKEND": "",
         "RERANK_MODEL": "",
         "RERANK_BACKEND": "",
         "RERANK_ENABLED": "true",
+        "SYNC_ENABLED": "true",
         "LOG_LEVEL": "INFO"
       }
     },
@@ -41,11 +43,13 @@
         "LITELLM_PROXY_URL": "",
         "LITELLM_PROXY_KEY": "",
         "SEARXNG_URL": "",
+        "GITHUB_TOKEN": "",
         "EMBEDDING_MODEL": "",
         "EMBEDDING_BACKEND": "",
         "RERANK_MODEL": "",
         "RERANK_BACKEND": "",
         "RERANK_ENABLED": "true",
+        "SYNC_ENABLED": "true",
         "LOG_LEVEL": "INFO"
       }
     },
@@ -57,11 +61,13 @@
         "LITELLM_PROXY_URL": "",
         "LITELLM_PROXY_KEY": "",
         "SEARXNG_URL": "",
+        "GITHUB_TOKEN": "",
         "EMBEDDING_MODEL": "",
         "EMBEDDING_BACKEND": "",
         "RERANK_MODEL": "",
         "RERANK_BACKEND": "",
         "RERANK_ENABLED": "true",
+        "SYNC_ENABLED": "true",
         "LOG_LEVEL": "INFO"
       }
     }
