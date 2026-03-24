@@ -251,6 +251,13 @@ class TestSearch:
         results = db.search(query="anything", library_name="nonexistent")
         assert results == []
 
+    def test_fts_search_empty_library(self, db):
+        """Search in a library with zero chunks returns empty."""
+        lib_id = db.upsert_library(name="empty_lib")
+        db.upsert_version(lib_id)
+        results = db.search(query="anything", library_name="empty_lib")
+        assert results == []
+
     def test_fts_search_special_characters(self, db):
         """FTS handles special characters gracefully."""
         lib_id = db.upsert_library(name="test")
