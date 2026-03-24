@@ -1289,6 +1289,24 @@ async def _do_research(
 _MIN_GH_CHUNKS = 20
 
 
+async def _chunk_markdown_pages(pages: list[dict]) -> list[dict]:
+    """Helper to chunk multiple markdown pages."""
+    from wet_mcp.sources.docs import chunk_markdown
+
+    chunks: list[dict] = []
+    for page in pages:
+        page_chunks = await asyncio.to_thread(
+            chunk_markdown,
+            content=page["content"],
+            url=page.get("url", ""),
+        )
+        for chunk in page_chunks:
+            if not chunk.get("title") and page.get("title"):
+                chunk["title"] = page["title"]
+        chunks.extend(page_chunks)
+    return chunks
+
+
 async def _fetch_and_chunk_docs(
     docs_url: str,
     repo_url: str = "",
@@ -1308,7 +1326,6 @@ async def _fetch_and_chunk_docs(
     from wet_mcp.sources.docs import (
         _try_github_raw_docs,
         chunk_llms_txt,
-        chunk_markdown,
         fetch_docs_pages,
         try_llms_txt,
     )
@@ -1335,16 +1352,7 @@ async def _fetch_and_chunk_docs(
     gh_chunks: list[dict] = []
     gh_page_count = 0
     if gh_pages:
-        for page in gh_pages:
-            page_chunks = await asyncio.to_thread(
-                chunk_markdown,
-                content=page["content"],
-                url=page.get("url", ""),
-            )
-            for chunk in page_chunks:
-                if not chunk.get("title") and page.get("title"):
-                    chunk["title"] = page["title"]
-            gh_chunks.extend(page_chunks)
+        gh_chunks = await _chunk_markdown_pages(gh_pages)
         gh_page_count = len(gh_pages)
 
         # Quality gate: if GitHub raw produced too few meaningful chunks,
@@ -1369,17 +1377,7 @@ async def _fetch_and_chunk_docs(
         query=query,
         max_pages=50,
     )
-    chunks: list[dict] = []
-    for page in pages:
-        page_chunks = await asyncio.to_thread(
-            chunk_markdown,
-            content=page["content"],
-            url=page.get("url", ""),
-        )
-        for chunk in page_chunks:
-            if not chunk.get("title") and page.get("title"):
-                chunk["title"] = page["title"]
-        chunks.extend(page_chunks)
+    chunks = await _chunk_markdown_pages(pages)
 
     # If Tier 2 crawl produced no results (e.g. Cloudflare blocked) but
     # Tier 1 GitHub raw had some content (below threshold), use it instead
