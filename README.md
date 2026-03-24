@@ -71,6 +71,30 @@ Configure env vars in `~/.claude/settings.local.json` or shell profile. See [Env
 }
 ```
 
+<details>
+<summary>Other MCP clients (Cursor, Codex, Gemini CLI)</summary>
+
+```jsonc
+// Cursor (~/.cursor/mcp.json), Windsurf, Cline, Amp, OpenCode
+{
+  "mcpServers": {
+    "wet": {
+      "command": "uvx",
+      "args": ["--python", "3.13", "wet-mcp@latest"]
+    }
+  }
+}
+```
+
+```toml
+# Codex (~/.codex/config.toml)
+[mcp_servers.wet]
+command = "uvx"
+args = ["--python", "3.13", "wet-mcp@latest"]
+```
+
+</details>
+
 #### Option 2: Docker
 
 ```jsonc
@@ -137,6 +161,13 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 | `setup` | `warmup`, `setup_sync` | Pre-download models, configure cloud sync |
 | `help` | -- | Full documentation for any tool |
 
+### MCP Prompts
+
+| Prompt | Parameters | Description |
+|:-------|:-----------|:------------|
+| `research_topic` | `topic` | Research a topic using academic search |
+| `library_docs` | `library`, `question` | Find library documentation |
+
 ## Configuration
 
 | Variable | Required | Default | Description |
@@ -195,6 +226,13 @@ Both embedding and reranking are **always available** -- local models are built-
 |:-----|:-------|:------------|
 | **Embedded** (default) | `WET_AUTO_SEARXNG=true` | Auto-installs and manages SearXNG as subprocess |
 | **External** | `WET_AUTO_SEARXNG=false` + `SEARXNG_URL=http://host:port` | Connects to pre-existing SearXNG instance |
+
+### Security
+
+- **SSRF prevention** -- URL validation on crawl targets
+- **Graceful fallbacks** -- Cloud → Local embedding, multi-tier crawling
+- **Error sanitization** -- No credentials in error messages
+- **File conversion sandboxing** -- Optional `CONVERT_ALLOWED_DIRS` restriction
 
 ## Build from Source
 
