@@ -1223,15 +1223,13 @@ class TestAnalyzeMediaErrorPaths:
 # -----------------------------------------------------------------------
 
 
-class TestLiteLLMRerankerWithApiBaseAndKey:
-    """Cover lines 85, 87, 119, 121: api_base and api_key pass-through."""
+class TestCohereRerankerWithApiKey:
+    """Cover CohereReranker api_key pass-through."""
 
-    def test_rerank_with_api_base_and_key(self):
-        from wet_mcp.reranker import LiteLLMReranker
+    def test_rerank_with_api_key(self):
+        from wet_mcp.reranker import CohereReranker
 
-        reranker = LiteLLMReranker(
-            "cohere/rerank", api_base="http://proxy:4000", api_key="sk-test"
-        )
+        reranker = CohereReranker(model="rerank-v4.0-pro", api_key="sk-test")
 
         mock_response = MagicMock()
         item = MagicMock()
@@ -1239,19 +1237,18 @@ class TestLiteLLMRerankerWithApiBaseAndKey:
         item.relevance_score = 0.9
         mock_response.results = [item]
 
-        with patch("litellm.rerank", return_value=mock_response) as mock_rerank:
+        mock_client = MagicMock()
+        mock_client.rerank.return_value = mock_response
+
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             results = reranker.rerank("query", ["doc1"])
-            call_kwargs = mock_rerank.call_args[1]
-            assert call_kwargs["api_base"] == "http://proxy:4000"
-            assert call_kwargs["api_key"] == "sk-test"
             assert len(results) == 1
+            assert reranker.api_key == "sk-test"
 
-    def test_check_available_with_api_base_and_key(self):
-        from wet_mcp.reranker import LiteLLMReranker
+    def test_check_available_with_api_key(self):
+        from wet_mcp.reranker import CohereReranker
 
-        reranker = LiteLLMReranker(
-            "cohere/rerank", api_base="http://proxy:4000", api_key="sk-test"
-        )
+        reranker = CohereReranker(model="rerank-v4.0-pro", api_key="sk-test")
 
         mock_response = MagicMock()
         item = MagicMock()
@@ -1259,12 +1256,13 @@ class TestLiteLLMRerankerWithApiBaseAndKey:
         item.relevance_score = 0.5
         mock_response.results = [item]
 
-        with patch("litellm.rerank", return_value=mock_response) as mock_rerank:
+        mock_client = MagicMock()
+        mock_client.rerank.return_value = mock_response
+
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             result = reranker.check_available()
             assert result is True
-            call_kwargs = mock_rerank.call_args[1]
-            assert call_kwargs["api_base"] == "http://proxy:4000"
-            assert call_kwargs["api_key"] == "sk-test"
+            assert reranker.api_key == "sk-test"
 
 
 class TestQwen3RerankerLoadModel:
@@ -1297,15 +1295,18 @@ class TestQwen3RerankerLoadModel:
                     reranker._get_model()
 
 
-class TestLiteLLMRerankerCheckAvailableEmpty:
+class TestCohereRerankerCheckAvailableEmpty:
     """Cover edge case: check_available with empty results."""
 
     def test_check_available_empty_results(self):
-        from wet_mcp.reranker import LiteLLMReranker
+        from wet_mcp.reranker import CohereReranker
 
-        reranker = LiteLLMReranker("cohere/rerank")
+        reranker = CohereReranker(api_key="test-key")
         mock_response = MagicMock()
         mock_response.results = []
 
-        with patch("litellm.rerank", return_value=mock_response):
+        mock_client = MagicMock()
+        mock_client.rerank.return_value = mock_response
+
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             assert reranker.check_available() is False

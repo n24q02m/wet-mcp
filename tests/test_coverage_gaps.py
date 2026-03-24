@@ -414,22 +414,27 @@ class TestCachePurgeAndClose:
 # ---------------------------------------------------------------------------
 
 
-class TestRerankerDictResult:
-    """Cover reranker.py L95: LiteLLM returns dict items (proxy mode)."""
+class TestCohereRerankerResults:
+    """Cover CohereReranker rerank result parsing."""
 
-    def test_rerank_with_dict_results(self):
-        from wet_mcp.reranker import LiteLLMReranker
+    def test_rerank_with_object_results(self):
+        from wet_mcp.reranker import CohereReranker
 
-        reranker = LiteLLMReranker("cohere/rerank-v3")
+        reranker = CohereReranker(api_key="test-key")
 
         mock_response = MagicMock()
-        # Proxy returns dicts, not objects
-        mock_response.results = [
-            {"index": 0, "relevance_score": 0.8},
-            {"index": 1, "relevance_score": 0.95},
-        ]
+        item0 = MagicMock()
+        item0.index = 0
+        item0.relevance_score = 0.8
+        item1 = MagicMock()
+        item1.index = 1
+        item1.relevance_score = 0.95
+        mock_response.results = [item0, item1]
 
-        with patch("litellm.rerank", return_value=mock_response):
+        mock_client = MagicMock()
+        mock_client.rerank.return_value = mock_response
+
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             results = reranker.rerank("query", ["doc1", "doc2"], top_n=2)
 
         assert results == [(1, 0.95), (0, 0.8)]

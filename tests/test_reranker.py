@@ -1,6 +1,6 @@
 """Tests for src/wet_mcp/reranker.py — Dual-backend reranking.
 
-Covers LiteLLMReranker, Qwen3Reranker, factory functions, and
+Covers CohereReranker, Qwen3Reranker, factory functions, and
 graceful fallback behavior.
 """
 
@@ -9,21 +9,21 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from wet_mcp.reranker import (
-    LiteLLMReranker,
+    CohereReranker,
     Qwen3Reranker,
     get_reranker,
     init_reranker,
 )
 
 # -----------------------------------------------------------------------
-# LiteLLMReranker
+# CohereReranker
 # -----------------------------------------------------------------------
 
 
-class TestLiteLLMReranker:
+class TestCohereReranker:
     def test_rerank_success(self):
         """Reranking returns sorted (index, score) tuples."""
-        reranker = LiteLLMReranker("cohere/rerank-v3.5")
+        reranker = CohereReranker(model="rerank-v4.0-pro", api_key="test-key")
 
         mock_response = MagicMock()
         item0 = MagicMock()
@@ -37,7 +37,10 @@ class TestLiteLLMReranker:
         item2.relevance_score = 0.6
         mock_response.results = [item0, item1, item2]
 
-        with patch("litellm.rerank", return_value=mock_response):
+        mock_client = MagicMock()
+        mock_client.rerank.return_value = mock_response
+
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             results = reranker.rerank(
                 "test query",
                 ["doc a", "doc b", "doc c"],
@@ -53,22 +56,25 @@ class TestLiteLLMReranker:
 
     def test_rerank_empty_documents(self):
         """Empty documents return empty results."""
-        reranker = LiteLLMReranker("cohere/rerank-v3.5")
+        reranker = CohereReranker(api_key="test-key")
         results = reranker.rerank("query", [], top_n=5)
         assert results == []
 
     def test_rerank_api_error_returns_empty(self):
         """API errors return empty results (graceful fallback)."""
-        reranker = LiteLLMReranker("cohere/rerank-v3.5")
+        reranker = CohereReranker(api_key="test-key")
 
-        with patch("litellm.rerank", side_effect=Exception("API error")):
+        mock_client = MagicMock()
+        mock_client.rerank.side_effect = Exception("API error")
+
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             results = reranker.rerank("query", ["doc1", "doc2"])
 
         assert results == []
 
     def test_check_available_success(self):
         """Returns True when model is available."""
-        reranker = LiteLLMReranker("cohere/rerank-v3.5")
+        reranker = CohereReranker(api_key="test-key")
 
         mock_response = MagicMock()
         item = MagicMock()
@@ -76,15 +82,49 @@ class TestLiteLLMReranker:
         item.relevance_score = 0.5
         mock_response.results = [item]
 
-        with patch("litellm.rerank", return_value=mock_response):
+        mock_client = MagicMock()
+        mock_client.rerank.return_value = mock_response
+
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             assert reranker.check_available() is True
 
     def test_check_available_failure(self):
         """Returns False when model is not available."""
-        reranker = LiteLLMReranker("nonexistent")
+        reranker = CohereReranker(api_key="test-key")
 
-        with patch("litellm.rerank", side_effect=Exception("Not found")):
+        mock_client = MagicMock()
+        mock_client.rerank.side_effect = Exception("Not found")
+
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             assert reranker.check_available() is False
+
+    def test_default_model(self):
+        """Default model is rerank-v4.0-pro."""
+        reranker = CohereReranker(api_key="test-key")
+        assert reranker.model == "rerank-v4.0-pro"
+
+    def test_api_key_from_env(self):
+        """API key falls back to COHERE_API_KEY env var."""
+        with patch.dict("os.environ", {"COHERE_API_KEY": "env-key"}, clear=False):
+            reranker = CohereReranker()
+            assert reranker.api_key == "env-key"
+
+    def test_api_key_from_co_env(self):
+        """API key falls back to CO_API_KEY env var."""
+        with patch.dict(
+            "os.environ",
+            {"CO_API_KEY": "co-key"},
+            clear=False,
+        ):
+            # Remove COHERE_API_KEY if present
+            import os
+
+            env = os.environ.copy()
+            env.pop("COHERE_API_KEY", None)
+            env["CO_API_KEY"] = "co-key"
+            with patch.dict("os.environ", env, clear=True):
+                reranker = CohereReranker()
+                assert reranker.api_key == "co-key"
 
 
 # -----------------------------------------------------------------------
@@ -167,45 +207,49 @@ class TestQwen3Reranker:
 # -----------------------------------------------------------------------
 
 
-class TestLiteLLMRerankerApiKeyValidation:
+class TestCohereRerankerApiKeyValidation:
     """check_available() distinguishes API key errors from other failures."""
 
     def test_api_key_401_returns_false(self):
         """401 errors return False."""
-        reranker = LiteLLMReranker("cohere/rerank")
-        with patch("litellm.rerank", side_effect=Exception("401 Unauthorized")):
+        reranker = CohereReranker(api_key="bad-key")
+        mock_client = MagicMock()
+        mock_client.rerank.side_effect = Exception("401 Unauthorized")
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             assert reranker.check_available() is False
 
     def test_api_key_403_returns_false(self):
         """403 errors return False."""
-        reranker = LiteLLMReranker("cohere/rerank")
-        with patch("litellm.rerank", side_effect=Exception("403 Forbidden")):
+        reranker = CohereReranker(api_key="bad-key")
+        mock_client = MagicMock()
+        mock_client.rerank.side_effect = Exception("403 Forbidden")
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             assert reranker.check_available() is False
 
     def test_invalid_key_detected(self):
         """'invalid' keyword triggers warning path."""
-        reranker = LiteLLMReranker("cohere/rerank")
-        with patch(
-            "litellm.rerank",
-            side_effect=Exception("Invalid API key"),
-        ):
+        reranker = CohereReranker(api_key="bad-key")
+        mock_client = MagicMock()
+        mock_client.rerank.side_effect = Exception("Invalid API key")
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             assert reranker.check_available() is False
 
     def test_non_auth_error_returns_false(self):
         """Non-auth errors also return False."""
-        reranker = LiteLLMReranker("cohere/rerank")
-        with patch(
-            "litellm.rerank",
-            side_effect=Exception("Model not found"),
-        ):
+        reranker = CohereReranker(api_key="test-key")
+        mock_client = MagicMock()
+        mock_client.rerank.side_effect = Exception("Model not found")
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             assert reranker.check_available() is False
 
     def test_success_returns_true(self):
         """Successful check returns True."""
-        reranker = LiteLLMReranker("cohere/rerank")
+        reranker = CohereReranker(api_key="test-key")
         mock_response = MagicMock()
         mock_response.results = [MagicMock(index=0, relevance_score=0.9)]
-        with patch("litellm.rerank", return_value=mock_response):
+        mock_client = MagicMock()
+        mock_client.rerank.return_value = mock_response
+        with patch.object(reranker, "_get_client", return_value=mock_client):
             assert reranker.check_available() is True
 
 
@@ -228,10 +272,16 @@ class TestQwen3RerankerGetModelWarning:
 
 
 class TestRerankerFactory:
-    def test_init_litellm_reranker(self):
-        """init_reranker('litellm') creates LiteLLMReranker."""
-        reranker = init_reranker("litellm", "cohere/rerank-v3.5")
-        assert isinstance(reranker, LiteLLMReranker)
+    def test_init_cloud_reranker(self):
+        """init_reranker('cloud') creates CohereReranker."""
+        reranker = init_reranker("cloud", api_key="test-key")
+        assert isinstance(reranker, CohereReranker)
+        assert get_reranker() is reranker
+
+    def test_init_litellm_backward_compat(self):
+        """init_reranker('litellm') creates CohereReranker (backward compat)."""
+        reranker = init_reranker("litellm", api_key="test-key")
+        assert isinstance(reranker, CohereReranker)
         assert get_reranker() is reranker
 
     def test_init_local_reranker(self):
@@ -239,11 +289,6 @@ class TestRerankerFactory:
         reranker = init_reranker("local")
         assert isinstance(reranker, Qwen3Reranker)
         assert get_reranker() is reranker
-
-    def test_init_litellm_requires_model(self):
-        """LiteLLM reranker requires model name."""
-        with pytest.raises(ValueError, match="model is required"):
-            init_reranker("litellm")
 
     def test_init_unknown_backend(self):
         """Unknown backend type raises ValueError."""
@@ -256,3 +301,15 @@ class TestRerankerFactory:
 
         mod._backend = None
         assert get_reranker() is None
+
+    def test_init_cloud_default_model(self):
+        """Cloud reranker uses default model when none specified."""
+        reranker = init_reranker("cloud", api_key="test-key")
+        assert isinstance(reranker, CohereReranker)
+        assert reranker.model == "rerank-v4.0-pro"
+
+    def test_init_cloud_custom_model(self):
+        """Cloud reranker accepts custom model."""
+        reranker = init_reranker("cloud", model="rerank-v3.5", api_key="test-key")
+        assert isinstance(reranker, CohereReranker)
+        assert reranker.model == "rerank-v3.5"
