@@ -3393,6 +3393,57 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _sort_by_query(urls: list[str], query: str) -> list[str]:
+    """Sort URLs by query term overlap (highest first)."""
+    if not query or not urls:
+        return urls
+    query_words = frozenset(query.lower().split())
+
+    def score_url(url: str) -> int:
+        from urllib.parse import urlparse
+
+        path = urlparse(url).path.lower()
+        path_words = set(
+            path.replace("-", " ")
+            .replace("_", " ")
+            .replace("/", " ")
+            .replace(".", " ")
+            .split()
+        )
+        return len(query_words & path_words)
+
+    return sorted(urls, key=score_url, reverse=True)
+
+
+async def _fetch_batch(
+    urls: list[str],
+    batch_timeout: int,
+    spa_kwargs: dict,
+    desc: str,
+) -> list[dict]:
+    """Fetch a batch of URLs using Crawl4AI extract, handling timeouts."""
+    import asyncio
+
+    from loguru import logger
+
+    from wet_mcp.sources.crawler import extract
+
+    if not urls:
+        return []
+
+    try:
+        result_str = await asyncio.wait_for(
+            extract(urls=urls, format="markdown", stealth=True, **spa_kwargs),
+            timeout=batch_timeout,
+        )
+        return json.loads(result_str)
+    except TimeoutError:
+        logger.warning(
+            f"{desc} fetch timed out after {batch_timeout}s ({len(urls)} pages)"
+        )
+        return []
+
+
 async def fetch_docs_pages(
     docs_url: str,
     query: str = "",
@@ -3414,7 +3465,6 @@ async def fetch_docs_pages(
 
     Returns list of {url, title, content} dicts.
     """
-    from wet_mcp.sources.crawler import extract
 
     # SPA-friendly crawl settings: scroll full page to trigger lazy-loaded
     # content and add a small delay for JS rendering before capture.
@@ -3425,15 +3475,11 @@ async def fetch_docs_pages(
 
     # Step 1: Fetch root page
     logger.info(f"Fetching docs root: {docs_url}")
-    try:
-        root_result_str = await asyncio.wait_for(
-            extract(urls=[docs_url], format="markdown", stealth=True, **_SPA_KWARGS),
-            timeout=batch_timeout,
-        )
-    except TimeoutError:
-        logger.warning(f"Root page fetch timed out after {batch_timeout}s: {docs_url}")
+    root_results = await _fetch_batch(
+        [docs_url], batch_timeout, _SPA_KWARGS, "Root page"
+    )
+    if not root_results:
         return []
-    root_results = json.loads(root_result_str)
 
     pages: list[dict] = []
     seen_urls: set[str] = {docs_url}
@@ -3527,25 +3573,6 @@ async def fetch_docs_pages(
             seen_urls.add(full_url)
         return urls
 
-    def _sort_by_query(urls: list[str]) -> list[str]:
-        """Sort URLs by query term overlap (highest first)."""
-        if not query or not urls:
-            return urls
-        query_words = frozenset(query.lower().split())
-
-        def score_url(url: str) -> int:
-            path = urlparse(url).path.lower()
-            path_words = set(
-                path.replace("-", " ")
-                .replace("_", " ")
-                .replace("/", " ")
-                .replace(".", " ")
-                .split()
-            )
-            return len(query_words & path_words)
-
-        return sorted(urls, key=score_url, reverse=True)
-
     # Process root page results
     blocked_count = 0
     for r in root_results:
@@ -3606,7 +3633,7 @@ async def fetch_docs_pages(
         seen_urls.add(su)
 
     # Sort by query relevance
-    pending_urls = _sort_by_query(pending_urls)
+    pending_urls = _sort_by_query(pending_urls, query)
 
     # --- Fetch round 1 ---
     remaining = max_pages - len(pages)
@@ -3617,16 +3644,35 @@ async def fetch_docs_pages(
         pending_urls = pending_urls[round1_limit:]
 
         logger.info(f"Fetching {len(batch1_urls)} docs pages (round 1)...")
-        try:
-            batch1_str = await asyncio.wait_for(
-                extract(
-                    urls=batch1_urls, format="markdown", stealth=True, **_SPA_KWARGS
-                ),
-                timeout=batch_timeout,
-            )
-            batch1_results = json.loads(batch1_str)
+        batch1_results = await _fetch_batch(
+            batch1_urls, batch_timeout, _SPA_KWARGS, "Round 1"
+        )
+        for br in batch1_results:
+            if br.get("content") and not br.get("error"):
+                if _is_blocked_content(br["content"]):
+                    blocked_count += 1
+                    continue
+                pages.append(
+                    {
+                        "url": br["url"],
+                        "title": br.get("title", ""),
+                        "content": br["content"],
+                    }
+                )
+                # Depth-2: discover links from fetched pages
+                pending_urls.extend(_collect_links(br))
 
-            for br in batch1_results:
+    # --- Fetch round 2 (depth-2 discovery) ---
+    remaining = max_pages - len(pages)
+    if remaining > 0 and pending_urls:
+        pending_urls = _sort_by_query(pending_urls, query)
+        batch2_urls = pending_urls[:remaining]
+        if batch2_urls:
+            logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
+            batch2_results = await _fetch_batch(
+                batch2_urls, batch_timeout, _SPA_KWARGS, "Round 2"
+            )
+            for br in batch2_results:
                 if br.get("content") and not br.get("error"):
                     if _is_blocked_content(br["content"]):
                         blocked_count += 1
@@ -3638,46 +3684,6 @@ async def fetch_docs_pages(
                             "content": br["content"],
                         }
                     )
-                    # Depth-2: discover links from fetched pages
-                    pending_urls.extend(_collect_links(br))
-        except TimeoutError:
-            logger.warning(
-                f"Round 1 crawl timed out after {batch_timeout}s "
-                f"({len(batch1_urls)} pages)"
-            )
-
-    # --- Fetch round 2 (depth-2 discovery) ---
-    remaining = max_pages - len(pages)
-    if remaining > 0 and pending_urls:
-        pending_urls = _sort_by_query(pending_urls)
-        batch2_urls = pending_urls[:remaining]
-        if batch2_urls:
-            logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
-            try:
-                batch2_str = await asyncio.wait_for(
-                    extract(
-                        urls=batch2_urls, format="markdown", stealth=True, **_SPA_KWARGS
-                    ),
-                    timeout=batch_timeout,
-                )
-                batch2_results = json.loads(batch2_str)
-                for br in batch2_results:
-                    if br.get("content") and not br.get("error"):
-                        if _is_blocked_content(br["content"]):
-                            blocked_count += 1
-                            continue
-                        pages.append(
-                            {
-                                "url": br["url"],
-                                "title": br.get("title", ""),
-                                "content": br["content"],
-                            }
-                        )
-            except TimeoutError:
-                logger.warning(
-                    f"Round 2 crawl timed out after {batch_timeout}s "
-                    f"({len(batch2_urls)} pages)"
-                )
 
     if blocked_count:
         logger.warning(f"Filtered {blocked_count} bot-protected pages from {docs_url}")
