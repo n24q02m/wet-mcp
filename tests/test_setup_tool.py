@@ -13,7 +13,7 @@ class TestRunWarmup:
             patch("wet_mcp.setup_tool.settings") as mock_settings,
             patch("qwen3_embed.TextEmbedding") as mock_embed,
         ):
-            mock_settings.setup_litellm.return_value = "local"
+            mock_settings.setup_providers.return_value = "local"
             mock_settings.rerank_enabled = False
             mock_settings.resolve_local_embedding_model.return_value = "Qwen/test-model"
             mock_settings.resolve_local_rerank_model.return_value = "Qwen/test-reranker"
@@ -35,7 +35,7 @@ class TestRunWarmup:
             patch("wet_mcp.embedder.init_backend") as mock_init_backend,
             patch("wet_mcp.reranker.init_reranker") as mock_init_reranker,
         ):
-            mock_settings.setup_litellm.return_value = "proxy"
+            mock_settings.setup_providers.return_value = "sdk"
             mock_settings.resolve_embedding_model.return_value = (
                 "text-embedding-3-large"
             )
@@ -67,7 +67,7 @@ class TestRunWarmup:
             patch("wet_mcp.embedder.init_backend") as mock_init_backend,
             patch("qwen3_embed.TextEmbedding") as mock_embed,
         ):
-            mock_settings.setup_litellm.return_value = "sdk"
+            mock_settings.setup_providers.return_value = "sdk"
             mock_settings.resolve_embedding_model.return_value = None
             mock_settings.rerank_enabled = False
             mock_settings.resolve_local_embedding_model.return_value = "Qwen/test-model"
@@ -94,7 +94,7 @@ class TestRunWarmup:
             patch("wet_mcp.setup_tool.settings") as mock_settings,
             patch("qwen3_embed.TextEmbedding") as mock_embed,
         ):
-            mock_settings.setup_litellm.return_value = "local"
+            mock_settings.setup_providers.return_value = "local"
             mock_settings.rerank_enabled = False
             mock_settings.resolve_local_embedding_model.return_value = "Qwen/test-model"
 
@@ -115,7 +115,7 @@ class TestRunWarmup:
             patch("qwen3_embed.TextEmbedding") as mock_embed,
             patch("qwen3_embed.TextCrossEncoder") as mock_reranker,
         ):
-            mock_settings.setup_litellm.return_value = "local"
+            mock_settings.setup_providers.return_value = "local"
             mock_settings.rerank_enabled = True
             mock_settings.resolve_local_embedding_model.return_value = "Qwen/test-model"
             mock_settings.resolve_local_rerank_model.return_value = "Qwen/test-reranker"
@@ -139,7 +139,7 @@ class TestRunWarmup:
             patch("wet_mcp.setup_tool.clear_model_cache") as mock_clear,
             patch("qwen3_embed.TextEmbedding") as mock_embed,
         ):
-            mock_settings.setup_litellm.return_value = "local"
+            mock_settings.setup_providers.return_value = "local"
             mock_settings.rerank_enabled = False
             mock_settings.resolve_local_embedding_model.return_value = "Qwen/test-model"
 

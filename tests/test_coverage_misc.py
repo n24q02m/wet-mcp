@@ -930,53 +930,48 @@ class TestExtractErrorPath:
 # -----------------------------------------------------------------------
 
 
-class TestLiteLLMBackendCheckAvailableEmptyData:
-    """Cover line 221: check_available returns 0 when data is empty."""
+class TestCloudEmbeddingBackendCheckAvailableEmpty:
+    """Cover check_available returns 0 when embeddings are empty."""
 
     def test_check_available_empty_data(self):
-        from wet_mcp.embedder import LiteLLMBackend
+        from wet_mcp.embedder import CloudEmbeddingBackend
 
-        backend = LiteLLMBackend("test-model")
-        mock_response = MagicMock()
-        mock_response.data = []
+        backend = CloudEmbeddingBackend("text-embedding-3-large")
 
-        with patch("litellm.embedding", return_value=mock_response):
+        with patch.object(backend, "_call_provider", return_value=[]):
             assert backend.check_available() == 0
 
 
-class TestLiteLLMBackendWithApiBaseAndKey:
-    """Cover lines 137, 139, 213, 215: api_base and api_key pass-through."""
+class TestCloudEmbeddingBackendWithApiBaseAndKey:
+    """Cover api_base and api_key pass-through."""
 
     def test_embed_with_api_base_and_key(self):
-        from wet_mcp.embedder import LiteLLMBackend
+        from wet_mcp.embedder import CloudEmbeddingBackend
 
-        backend = LiteLLMBackend(
-            "test-model", api_base="http://proxy:4000", api_key="sk-test"
+        backend = CloudEmbeddingBackend(
+            "text-embedding-3-large",
+            api_base="http://proxy:4000",
+            api_key="sk-test",
         )
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.1]}]
+        assert backend.api_base == "http://proxy:4000"
+        assert backend.api_key == "sk-test"
 
-        with patch("litellm.embedding", return_value=mock_response) as mock_embed:
-            backend.embed_texts(["test"])
-            call_kwargs = mock_embed.call_args[1]
-            assert call_kwargs["api_base"] == "http://proxy:4000"
-            assert call_kwargs["api_key"] == "sk-test"
+        with patch.object(backend, "_call_provider", return_value=[[0.1]]):
+            result = backend.embed_texts(["test"])
+            assert result == [[0.1]]
 
     def test_check_available_with_api_base_and_key(self):
-        from wet_mcp.embedder import LiteLLMBackend
+        from wet_mcp.embedder import CloudEmbeddingBackend
 
-        backend = LiteLLMBackend(
-            "test-model", api_base="http://proxy:4000", api_key="sk-test"
+        backend = CloudEmbeddingBackend(
+            "text-embedding-3-large",
+            api_base="http://proxy:4000",
+            api_key="sk-test",
         )
-        mock_response = MagicMock()
-        mock_response.data = [{"embedding": [0.1, 0.2]}]
 
-        with patch("litellm.embedding", return_value=mock_response) as mock_embed:
+        with patch.object(backend, "_call_provider", return_value=[[0.1, 0.2]]):
             dims = backend.check_available()
             assert dims == 2
-            call_kwargs = mock_embed.call_args[1]
-            assert call_kwargs["api_base"] == "http://proxy:4000"
-            assert call_kwargs["api_key"] == "sk-test"
 
 
 class TestQwen3EmbedBackendLoadError:
@@ -1080,142 +1075,117 @@ class TestGetLlmConfigEmptyModels:
 
 
 class TestAnalyzeMediaMimeUnknown:
-    """Cover line 92: unknown mime type."""
+    """Cover unknown mime type."""
 
     def test_mime_type_none(self, tmp_path):
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
         original_download = settings.download_dir
-        original_keys = settings.api_keys
         settings.download_dir = str(tmp_path)
 
         # Create file with no extension
         f = tmp_path / "noext"
         f.write_bytes(b"\x00\x01\x02")
 
-        # Need API keys set so we get past local mode check
-        from pydantic import SecretStr
-
-        settings.api_keys = SecretStr("GOOGLE_API_KEY:fake")
-        settings.llm_models = "gemini/fake"
-
         try:
-            result = asyncio.run(analyze_media(str(f)))
+            with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+                result = asyncio.run(analyze_media(str(f)))
             assert "Error" in result
         finally:
             settings.download_dir = original_download
-            settings.api_keys = original_keys
 
 
 class TestAnalyzeMediaErrorPaths:
     """Cover lines 120-121, 131-132, 134-135, 166-168: error handling."""
 
     def test_text_file_completion_error(self, tmp_path):
-        from pydantic import SecretStr
-
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
         settings.download_dir = str(tmp_path)
-        original_keys = settings.api_keys
-        settings.api_keys = SecretStr("GOOGLE_API_KEY:fake")
 
         txt = tmp_path / "test.txt"
         txt.write_text("hello")
 
-        try:
-            with patch(
+        with (
+            patch("wet_mcp.llm._has_llm_provider", return_value=True),
+            patch(
                 "wet_mcp.llm.acompletion",
                 side_effect=Exception("API down"),
-            ):
-                result = asyncio.run(analyze_media(str(txt)))
-                assert "Error analyzing text file" in result
-        finally:
-            settings.api_keys = original_keys
+            ),
+        ):
+            result = asyncio.run(analyze_media(str(txt)))
+            assert "Error analyzing text file" in result
 
     def test_audio_not_supported(self, tmp_path):
-        from pydantic import SecretStr
-
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
         settings.download_dir = str(tmp_path)
-        original_keys = settings.api_keys
-        settings.api_keys = SecretStr("GOOGLE_API_KEY:fake")
 
         audio_file = tmp_path / "test.mp3"
         audio_file.write_bytes(b"fake audio")
 
-        try:
-            with patch("wet_mcp.llm.get_model_capabilities") as mock_caps:
-                mock_caps.return_value = {
-                    "vision": False,
-                    "audio_input": False,
-                    "audio_output": False,
-                }
-                result = asyncio.run(analyze_media(str(audio_file)))
-                assert "does not support audio input" in result
-        finally:
-            settings.api_keys = original_keys
+        with (
+            patch("wet_mcp.llm._has_llm_provider", return_value=True),
+            patch("wet_mcp.llm.get_model_capabilities") as mock_caps,
+        ):
+            mock_caps.return_value = {
+                "vision": False,
+                "audio_input": False,
+                "audio_output": False,
+            }
+            result = asyncio.run(analyze_media(str(audio_file)))
+            assert "does not support audio input" in result
 
     def test_video_not_supported(self, tmp_path):
-        from pydantic import SecretStr
-
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
         settings.download_dir = str(tmp_path)
-        original_keys = settings.api_keys
-        settings.api_keys = SecretStr("GOOGLE_API_KEY:fake")
 
         video_file = tmp_path / "test.mp4"
         video_file.write_bytes(b"fake video")
 
-        try:
-            with patch("wet_mcp.llm.get_model_capabilities") as mock_caps:
-                mock_caps.return_value = {
-                    "vision": False,
-                    "audio_input": False,
-                    "audio_output": False,
-                }
-                result = asyncio.run(analyze_media(str(video_file)))
-                assert "does not support video" in result
-        finally:
-            settings.api_keys = original_keys
+        with (
+            patch("wet_mcp.llm._has_llm_provider", return_value=True),
+            patch("wet_mcp.llm.get_model_capabilities") as mock_caps,
+        ):
+            mock_caps.return_value = {
+                "vision": False,
+                "audio_input": False,
+                "audio_output": False,
+            }
+            result = asyncio.run(analyze_media(str(video_file)))
+            assert "does not support video" in result
 
     def test_media_analysis_exception(self, tmp_path):
-        """Cover lines 166-168: exception during media analysis."""
-        from pydantic import SecretStr
-
+        """Cover exception during media analysis."""
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
         settings.download_dir = str(tmp_path)
-        original_keys = settings.api_keys
-        settings.api_keys = SecretStr("GOOGLE_API_KEY:fake")
 
         img = tmp_path / "test.jpg"
         img.write_bytes(b"fake image")
 
-        try:
-            with (
-                patch("wet_mcp.llm.get_model_capabilities") as mock_caps,
-                patch(
-                    "wet_mcp.llm.acompletion",
-                    side_effect=Exception("LLM crashed"),
-                ),
-            ):
-                mock_caps.return_value = {
-                    "vision": True,
-                    "audio_input": False,
-                    "audio_output": False,
-                }
-                result = asyncio.run(analyze_media(str(img)))
-                assert "Error analyzing media" in result
-                assert "LLM crashed" in result
-        finally:
-            settings.api_keys = original_keys
+        with (
+            patch("wet_mcp.llm._has_llm_provider", return_value=True),
+            patch("wet_mcp.llm.get_model_capabilities") as mock_caps,
+            patch(
+                "wet_mcp.llm.acompletion",
+                side_effect=Exception("LLM crashed"),
+            ),
+        ):
+            mock_caps.return_value = {
+                "vision": True,
+                "audio_input": False,
+                "audio_output": False,
+            }
+            result = asyncio.run(analyze_media(str(img)))
+            assert "Error analyzing media" in result
+            assert "LLM crashed" in result
 
 
 # -----------------------------------------------------------------------

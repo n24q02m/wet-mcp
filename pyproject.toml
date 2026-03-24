@@ -30,9 +30,7 @@ dependencies = [
     "pydantic-settings",
     # Logging
     "loguru",
-    # LLM
-    "litellm",
-    # Direct SDK clients (replacing LiteLLM for specific modules)
+    # LLM + Embedding (native SDKs)
     "cohere>=5.20",
     "httpx>=0.27",
     "google-genai>=1.0",

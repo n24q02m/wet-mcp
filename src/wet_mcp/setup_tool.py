@@ -45,7 +45,7 @@ def _validate_cloud_models(settings_obj) -> dict:
     embedding_info = None
     for candidate in candidates:
         try:
-            backend = init_backend("litellm", candidate)
+            backend = init_backend("cloud", candidate)
             dims = backend.check_available()
             if dims > 0:
                 embedding_info = {"model": candidate, "dims": dims}
@@ -60,7 +60,7 @@ def _validate_cloud_models(settings_obj) -> dict:
     rerank_model = settings_obj.resolve_rerank_model()
     if rerank_model:
         try:
-            reranker = init_reranker("litellm", rerank_model)
+            reranker = init_reranker("cloud", rerank_model)
             if reranker.check_available():
                 reranker_info = {"model": rerank_model}
         except Exception:
@@ -191,16 +191,16 @@ async def run_warmup() -> dict:
             }
         )
 
-    # 2. Check cloud models if LiteLLM is configured
-    mode = settings.setup_litellm()
-    if mode in ("proxy", "sdk"):
+    # 2. Check cloud models if API keys are configured
+    mode = settings.setup_providers()
+    if mode == "sdk":
         cloud_result = await asyncio.to_thread(_validate_cloud_models, settings)
         if cloud_result["cloud_ready"]:
             steps.append(
                 {
                     "step": "cloud_models",
                     "status": "ok",
-                    "litellm_mode": mode,
+                    "provider_mode": mode,
                 }
             )
             return {

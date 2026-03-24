@@ -81,8 +81,14 @@ def test_setup_api_keys_whitespace():
 
 def test_resolve_embedding_backend_explicit():
     """Explicit EMBEDDING_BACKEND is returned as-is."""
+    settings = Settings(embedding_backend="cloud")
+    assert settings.resolve_embedding_backend() == "cloud"
+
+
+def test_resolve_embedding_backend_explicit_litellm_compat():
+    """Explicit EMBEDDING_BACKEND='litellm' is mapped to 'cloud'."""
     settings = Settings(embedding_backend="litellm")
-    assert settings.resolve_embedding_backend() == "litellm"
+    assert settings.resolve_embedding_backend() == "cloud"
 
 
 def test_resolve_embedding_backend_local_auto():
@@ -92,24 +98,17 @@ def test_resolve_embedding_backend_local_auto():
         assert settings.resolve_embedding_backend() == "local"
 
 
-def test_resolve_embedding_backend_litellm_auto():
-    """Auto-detect returns 'litellm' when API keys are set and no local."""
+def test_resolve_embedding_backend_cloud_auto():
+    """Auto-detect returns 'cloud' when API keys are set."""
     settings = Settings(embedding_backend="", api_keys=SecretStr("GOOGLE_API_KEY:abc"))
-    with mock.patch("builtins.__import__", side_effect=ImportError("no qwen3_embed")):
-        # Can't easily block a specific import while allowing others,
-        # so test the fallback logic directly
-        result = settings.resolve_embedding_backend()
-        assert result in ("local", "litellm")
+    result = settings.resolve_embedding_backend()
+    assert result == "cloud"
 
 
 def test_resolve_embedding_backend_none():
-    """Returns empty string when no backend is available and no keys."""
+    """Returns 'local' when no backend is available and no keys."""
     settings = Settings(embedding_backend="", api_keys=None)
-    with mock.patch(
-        "wet_mcp.config.Settings.resolve_embedding_backend",
-        wraps=settings.resolve_embedding_backend,
-    ):
-        # The actual result depends on qwen3-embed availability
+    with mock.patch.dict(os.environ, {}, clear=True):
         result = settings.resolve_embedding_backend()
         assert isinstance(result, str)
 
@@ -127,8 +126,14 @@ def test_resolve_rerank_backend_disabled():
 
 def test_resolve_rerank_backend_explicit():
     """Explicit RERANK_BACKEND is returned as-is."""
+    settings = Settings(rerank_backend="cloud", rerank_enabled=True)
+    assert settings.resolve_rerank_backend() == "cloud"
+
+
+def test_resolve_rerank_backend_explicit_litellm_compat():
+    """Explicit RERANK_BACKEND='litellm' is mapped to 'cloud'."""
     settings = Settings(rerank_backend="litellm", rerank_enabled=True)
-    assert settings.resolve_rerank_backend() == "litellm"
+    assert settings.resolve_rerank_backend() == "cloud"
 
 
 def test_resolve_rerank_backend_follows_embedding():
@@ -248,50 +253,40 @@ def test_setup_api_keys_file_read_error(tmp_path):
 
 
 # -----------------------------------------------------------------------
-# resolve_rerank_backend: proxy, rerank_model, env var, api_keys detection
+# resolve_rerank_backend: rerank_model, env var, api_keys detection
 # -----------------------------------------------------------------------
 
 
-def test_resolve_rerank_backend_proxy_mode():
-    """Returns 'litellm' when litellm_proxy_url is set."""
-    settings = Settings(
-        rerank_enabled=True,
-        rerank_backend="",
-        litellm_proxy_url="http://proxy:4000",
-    )
-    assert settings.resolve_rerank_backend() == "litellm"
-
-
 def test_resolve_rerank_backend_rerank_model_set():
-    """Returns 'litellm' when rerank_model is explicitly set."""
+    """Returns 'cloud' when rerank_model is explicitly set."""
     settings = Settings(
         rerank_enabled=True,
         rerank_backend="",
         rerank_model="cohere/rerank-v3",
     )
-    assert settings.resolve_rerank_backend() == "litellm"
+    assert settings.resolve_rerank_backend() == "cloud"
 
 
 def test_resolve_rerank_backend_env_var_detection():
-    """Returns 'litellm' when COHERE_API_KEY is in env."""
+    """Returns 'cloud' when COHERE_API_KEY is in env."""
     settings = Settings(
         rerank_enabled=True,
         rerank_backend="",
         api_keys=None,
     )
     with mock.patch.dict(os.environ, {"COHERE_API_KEY": "test-key"}, clear=False):
-        assert settings.resolve_rerank_backend() == "litellm"
+        assert settings.resolve_rerank_backend() == "cloud"
 
 
 def test_resolve_rerank_backend_api_keys_cohere():
-    """Returns 'litellm' when API_KEYS contains COHERE_API_KEY."""
+    """Returns 'cloud' when API_KEYS contains COHERE_API_KEY."""
     settings = Settings(
         rerank_enabled=True,
         rerank_backend="",
         api_keys=SecretStr("COHERE_API_KEY:test"),
     )
     with mock.patch.dict(os.environ, {}, clear=True):
-        assert settings.resolve_rerank_backend() == "litellm"
+        assert settings.resolve_rerank_backend() == "cloud"
 
 
 def test_resolve_rerank_backend_local_fallback():
@@ -344,64 +339,68 @@ def test_resolve_rerank_model_none():
 
 
 # -----------------------------------------------------------------------
-# resolve_litellm_mode and setup_litellm
+# resolve_provider_mode and setup_providers
 # -----------------------------------------------------------------------
 
 
-def test_resolve_litellm_mode_proxy():
-    """Returns 'proxy' when litellm_proxy_url is set."""
-    settings = Settings(litellm_proxy_url="http://proxy:4000")
-    assert settings.resolve_litellm_mode() == "proxy"
+def test_resolve_provider_mode_sdk():
+    """Returns 'sdk' when api_keys is set."""
+    settings = Settings(api_keys=SecretStr("GOOGLE_API_KEY:abc"))
+    assert settings.resolve_provider_mode() == "sdk"
 
 
-def test_setup_litellm_proxy_mode():
-    """setup_litellm configures proxy mode with env vars."""
-    settings = Settings(
-        litellm_proxy_url="http://proxy:4000",
-        litellm_proxy_key=SecretStr("sk-proxy-key"),
-    )
+def test_resolve_provider_mode_sdk_env():
+    """Returns 'sdk' when provider env var is set."""
+    settings = Settings(api_keys=None)
+    with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "test"}, clear=True):
+        assert settings.resolve_provider_mode() == "sdk"
 
+
+def test_resolve_provider_mode_local():
+    """Returns 'local' when no keys configured."""
+    settings = Settings(api_keys=None)
     with mock.patch.dict(os.environ, {}, clear=True):
-        litellm_mock = mock.MagicMock()
-        with mock.patch.dict("sys.modules", {"litellm": litellm_mock}):
-            mode = settings.setup_litellm()
-
-        assert mode == "proxy"
-        assert os.environ["LITELLM_PROXY_API_BASE"] == "http://proxy:4000"
-        assert os.environ["LITELLM_PROXY_API_KEY"] == "sk-proxy-key"
+        assert settings.resolve_provider_mode() == "local"
 
 
-def test_setup_litellm_proxy_mode_no_key():
-    """setup_litellm proxy mode works without proxy key."""
-    settings = Settings(
-        litellm_proxy_url="http://proxy:4000",
-        litellm_proxy_key=None,
-    )
-
-    with mock.patch.dict(os.environ, {}, clear=True):
-        litellm_mock = mock.MagicMock()
-        with mock.patch.dict("sys.modules", {"litellm": litellm_mock}):
-            mode = settings.setup_litellm()
-
-        assert mode == "proxy"
-        assert os.environ["LITELLM_PROXY_API_KEY"] == ""
-
-
-def test_setup_litellm_sdk_mode():
-    """setup_litellm configures SDK mode and calls setup_api_keys."""
+def test_setup_providers_sdk_mode():
+    """setup_providers configures SDK mode and calls setup_api_keys."""
     settings = Settings(
         api_keys=SecretStr("GOOGLE_API_KEY:abc"),
     )
 
     with mock.patch.dict(os.environ, {}, clear=True):
-        mode = settings.setup_litellm()
+        mode = settings.setup_providers()
 
         assert mode == "sdk"
         assert os.environ["GOOGLE_API_KEY"] == "abc"
 
 
+def test_setup_providers_local_mode():
+    """setup_providers returns 'local' when no keys configured."""
+    settings = Settings(api_keys=None)
+    with mock.patch.dict(os.environ, {}, clear=True):
+        mode = settings.setup_providers()
+    assert mode == "local"
+
+
+# Backward compat aliases
+def test_resolve_litellm_mode_compat():
+    """resolve_litellm_mode is a backward-compat alias for resolve_provider_mode."""
+    settings = Settings(api_keys=SecretStr("GOOGLE_API_KEY:abc"))
+    assert settings.resolve_litellm_mode() == "sdk"
+
+
+def test_setup_litellm_compat():
+    """setup_litellm is a backward-compat alias for setup_providers."""
+    settings = Settings(api_keys=SecretStr("GOOGLE_API_KEY:abc"))
+    with mock.patch.dict(os.environ, {}, clear=True):
+        mode = settings.setup_litellm()
+    assert mode == "sdk"
+
+
 # -----------------------------------------------------------------------
-# Additional coverage: helper functions, cache path, local models, local mode
+# Additional coverage: helper functions, cache path, local models
 # -----------------------------------------------------------------------
 
 
@@ -500,13 +499,3 @@ def test_resolve_local_rerank_model():
         result = settings.resolve_local_rerank_model()
         assert result == "test-rerank"
         m.assert_called_once()
-
-
-def test_setup_litellm_local_mode():
-    """setup_litellm returns 'local' when no proxy/keys configured."""
-    settings = Settings(
-        litellm_proxy_url="",
-        api_keys=None,
-    )
-    mode = settings.setup_litellm()
-    assert mode == "local"

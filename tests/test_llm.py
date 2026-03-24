@@ -1,6 +1,7 @@
 """Tests for LLM integration."""
 
 import asyncio
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -94,8 +95,9 @@ def test_analyze_media(mock_completion, mock_settings, tmp_path):
             "audio_output": False,
         }
 
-        # Run test
-        result = asyncio.run(analyze_media(str(img_path), "Describe"))
+        # Also mock _has_llm_provider to return True
+        with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+            result = asyncio.run(analyze_media(str(img_path), "Describe"))
 
     assert result == "A nice cat."
 
@@ -119,16 +121,18 @@ def test_analyze_media_no_keys(tmp_path):
     img_path = tmp_path / "test.jpg"
     img_path.touch()
 
-    result = asyncio.run(analyze_media(str(img_path)))
+    with patch.dict(os.environ, {}, clear=True):
+        result = asyncio.run(analyze_media(str(img_path)))
 
     settings.api_keys = original_keys
-    assert "Error: LLM analysis requires LITELLM_PROXY_URL or API_KEYS" in result
+    assert "Error: LLM analysis requires API keys" in result
 
 
 def test_analyze_media_file_not_found(mock_settings, tmp_path):
     """Test file not found error."""
     settings.download_dir = str(tmp_path)
-    result = asyncio.run(analyze_media(str(tmp_path / "non_existent_file.jpg")))
+    with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+        result = asyncio.run(analyze_media(str(tmp_path / "non_existent_file.jpg")))
     assert "Error: File not found" in result
 
 
@@ -145,7 +149,8 @@ def test_analyze_media_text_file(mock_completion, mock_settings, tmp_path):
     mock_response.choices[0].message.content = "Summary of text."
     mock_completion.return_value = mock_response
 
-    result = asyncio.run(analyze_media(str(txt_path)))
+    with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+        result = asyncio.run(analyze_media(str(txt_path)))
     assert result == "Summary of text."
 
     # Verify call structure for text
@@ -161,7 +166,8 @@ def test_analyze_media_unsupported_type(mock_settings, tmp_path):
     bin_path = tmp_path / "test.bin"
     bin_path.write_bytes(b"\x00\x01")  # unknown binary
 
-    result = asyncio.run(analyze_media(str(bin_path)))
+    with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+        result = asyncio.run(analyze_media(str(bin_path)))
     assert (
         "Error: Cannot determine file type" in result
         or "Unsupported media type" in result
@@ -183,7 +189,8 @@ def test_analyze_media_large_text_file(mock_completion, mock_settings, tmp_path)
     mock_response.choices[0].message.content = "Summary of large text."
     mock_completion.return_value = mock_response
 
-    result = asyncio.run(analyze_media(str(txt_path)))
+    with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+        result = asyncio.run(analyze_media(str(txt_path)))
     assert result == "Summary of large text."
 
     # Verify truncation
@@ -206,7 +213,8 @@ def test_analyze_media_path_traversal(mock_settings, tmp_path):
     outside_file = tmp_path / "secret.txt"
     outside_file.write_text("secret data")
 
-    result = asyncio.run(analyze_media(str(outside_file)))
+    with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+        result = asyncio.run(analyze_media(str(outside_file)))
     assert "Error: Access denied" in result
     assert "download directory" in result
 
@@ -272,7 +280,8 @@ def test_analyze_media_path_traversal_dotdot(mock_settings, tmp_path):
     outside_file.write_text("secret data")
     traversal_path = str(download_dir / ".." / "secret.txt")
 
-    result = asyncio.run(analyze_media(traversal_path))
+    with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+        result = asyncio.run(analyze_media(traversal_path))
     assert "Error: Access denied" in result
 
 
@@ -282,6 +291,7 @@ def test_analyze_media_tilde_download_dir(mock_settings, tmp_path, monkeypatch):
     fake_home = tmp_path / "fakehome"
     fake_home.mkdir()
     monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))  # Windows compat
 
     dl_dir = fake_home / ".wet-mcp" / "downloads"
     dl_dir.mkdir(parents=True)
@@ -291,47 +301,80 @@ def test_analyze_media_tilde_download_dir(mock_settings, tmp_path, monkeypatch):
     img_file = dl_dir / "test.jpg"
     img_file.write_bytes(b"fake-image-data")
 
-    # Should NOT get "Access denied" — tilde must be expanded
-    result = asyncio.run(analyze_media(str(img_file), "Describe"))
+    with patch("wet_mcp.llm._has_llm_provider", return_value=True):
+        # Should NOT get "Access denied" -- tilde must be expanded
+        result = asyncio.run(analyze_media(str(img_file), "Describe"))
     # File exists and is within download_dir, so we should get past the path check
     # (will fail at LLM call since we didn't mock it, but NOT "Access denied")
     assert "Access denied" not in result
 
 
-@patch("litellm.supports_vision")
-@patch("litellm.supports_audio_input")
-@patch("litellm.supports_audio_output")
-def test_get_model_capabilities(mock_audio_out, mock_audio_in, mock_vision):
+def test_get_model_capabilities():
+    """Test capability detection with hardcoded maps."""
     from wet_mcp.llm import get_model_capabilities
 
-    mock_vision.return_value = True
-    mock_audio_in.return_value = False
-    mock_audio_out.return_value = True
+    # Vision + audio model
+    caps = get_model_capabilities("gemini/gemini-3-flash-preview")
+    assert caps == {
+        "vision": True,
+        "audio_input": True,
+        "audio_output": False,
+    }
 
-    caps = get_model_capabilities("test-model")
-
-    mock_vision.assert_called_once_with("test-model")
-    mock_audio_in.assert_called_once_with("test-model")
-    mock_audio_out.assert_called_once_with("test-model")
-
+    # Vision-only model (xAI)
+    caps = get_model_capabilities("xai/grok-4-1-fast-reasoning")
     assert caps == {
         "vision": True,
         "audio_input": False,
-        "audio_output": True,
+        "audio_output": False,
+    }
+
+    # Unknown model
+    caps = get_model_capabilities("some/unknown-model")
+    assert caps == {
+        "vision": False,
+        "audio_input": False,
+        "audio_output": False,
     }
 
 
-@patch("litellm.supports_vision")
-@patch("litellm.supports_audio_input")
-@patch("litellm.supports_audio_output")
-def test_get_model_capabilities_exception(mock_audio_out, mock_audio_in, mock_vision):
+def test_get_model_capabilities_bare_name():
+    """Test capability detection with bare model names (no provider prefix)."""
     from wet_mcp.llm import get_model_capabilities
 
-    mock_vision.side_effect = Exception("LiteLLM Error")
+    caps = get_model_capabilities("gemini-2.5-flash")
+    assert caps["vision"] is True
+    assert caps["audio_input"] is True
 
-    with pytest.raises(Exception, match="LiteLLM Error"):
-        get_model_capabilities("test-model")
 
-    mock_vision.assert_called_once_with("test-model")
-    mock_audio_in.assert_not_called()
-    mock_audio_out.assert_not_called()
+def test_strip_provider():
+    """Test provider prefix stripping."""
+    from wet_mcp.llm import _strip_provider
+
+    assert _strip_provider("gemini/gemini-3-flash-preview") == "gemini-3-flash-preview"
+    assert _strip_provider("openai/gpt-4") == "gpt-4"
+    assert _strip_provider("bare-model") == "bare-model"
+
+
+def test_detect_provider():
+    """Test provider detection from model name."""
+    from wet_mcp.llm import _detect_provider
+
+    assert _detect_provider("gemini/gemini-3-flash-preview") == "gemini"
+    assert _detect_provider("openai/gpt-4") == "openai"
+    assert _detect_provider("xai/grok-4-1-fast-reasoning") == "xai"
+    assert _detect_provider("grok/some-model") == "xai"
+
+
+def test_has_llm_provider():
+    """Test LLM provider detection."""
+    from wet_mcp.llm import _has_llm_provider
+
+    with patch.dict(os.environ, {}, clear=True):
+        assert _has_llm_provider() is False
+
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "test"}, clear=True):
+        assert _has_llm_provider() is True
+
+    with patch.dict(os.environ, {"XAI_API_KEY": "test"}, clear=True):
+        assert _has_llm_provider() is True

@@ -30,14 +30,14 @@ def _mock_settings():
         mock.get_db_path.return_value = MagicMock()
         mock.get_cache_db_path.return_value = MagicMock()
         mock.resolve_embedding_dims.return_value = 768
-        mock.resolve_embedding_backend.return_value = "litellm"
-        mock.resolve_rerank_backend.return_value = "litellm"
+        mock.resolve_embedding_backend.return_value = "cloud"
+        mock.resolve_rerank_backend.return_value = "cloud"
         mock.resolve_embedding_model.return_value = "gemini"
         mock.resolve_rerank_model.return_value = "gemini-rerank"
         mock.resolve_local_embedding_model.return_value = "local-model"
         mock.resolve_local_rerank_model.return_value = "local-rerank"
         mock.wet_auto_searxng = False
-        mock.setup_litellm.return_value = "sdk"
+        mock.setup_providers.return_value = "sdk"
         mock.download_dir = "/tmp/downloads"
         mock.sync_remote = ""
         mock.sync_folder = ""
@@ -78,7 +78,7 @@ async def test_lifespan_startup_no_github_token():
         patch("wet_mcp.server._init_reranker_backend", new_callable=AsyncMock),
         patch("wet_mcp.config.settings") as cfg,
     ):
-        cfg.setup_litellm.return_value = "sdk"
+        cfg.setup_providers.return_value = "sdk"
         cfg.wet_auto_searxng = False
         cfg.wet_cache = False
         cfg.sync_enabled = False
@@ -99,7 +99,7 @@ async def test_lifespan_startup_with_auto_searxng():
         patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch("wet_mcp.config.settings") as cfg,
     ):
-        cfg.setup_litellm.return_value = "sdk"
+        cfg.setup_providers.return_value = "sdk"
         cfg.wet_auto_searxng = True
         cfg.wet_cache = False
         cfg.sync_enabled = False
@@ -128,7 +128,7 @@ async def test_lifespan_startup_backends_init_failure():
         ),
         patch("wet_mcp.config.settings") as cfg,
     ):
-        cfg.setup_litellm.return_value = "sdk"
+        cfg.setup_providers.return_value = "sdk"
         cfg.wet_auto_searxng = False
         cfg.wet_cache = False
         cfg.sync_enabled = False
@@ -150,7 +150,7 @@ async def test_lifespan_startup_sync_enabled():
         patch("wet_mcp.sync.start_auto_sync") as mock_sync,
         patch("wet_mcp.config.settings") as cfg,
     ):
-        cfg.setup_litellm.return_value = "sdk"
+        cfg.setup_providers.return_value = "sdk"
         cfg.wet_auto_searxng = False
         cfg.wet_cache = False
         cfg.sync_enabled = True
@@ -225,13 +225,13 @@ async def test_init_embedding_litellm_explicit_model_success():
 
 
 async def test_init_embedding_litellm_explicit_model_failure_fallback_local():
-    """Lines 224, 247-261: explicit model fails, falls back to local."""
+    """Explicit model fails, falls back to local."""
     call_count = 0
 
     def fake_init_backend(backend_type, model, **kwargs):
         nonlocal call_count
         call_count += 1
-        if backend_type == "litellm":
+        if backend_type == "cloud":
             raise Exception("cloud unavailable")
         mock_b = MagicMock()
         mock_b.check_available.return_value = 384
@@ -239,13 +239,13 @@ async def test_init_embedding_litellm_explicit_model_failure_fallback_local():
 
     with patch("wet_mcp.embedder.init_backend", side_effect=fake_init_backend):
         await server._init_embedding_backend("sdk")
-        assert call_count == 2  # litellm + local
+        assert call_count == 2  # cloud + local
 
 
 async def test_init_embedding_litellm_autodetect(_mock_settings):
     """Lines 225-242: auto-detect candidate models when no explicit model."""
     _mock_settings.resolve_embedding_model.return_value = None
-    _mock_settings.resolve_embedding_backend.return_value = "litellm"
+    _mock_settings.resolve_embedding_backend.return_value = "cloud"
 
     attempts = []
 
@@ -270,10 +270,10 @@ async def test_init_embedding_litellm_autodetect_all_fail_local_fallback(
 ):
     """Lines 244-261: all candidates fail, uses local backend."""
     _mock_settings.resolve_embedding_model.return_value = None
-    _mock_settings.resolve_embedding_backend.return_value = "litellm"
+    _mock_settings.resolve_embedding_backend.return_value = "cloud"
 
     def fake_init(backend_type, model, **kwargs):
-        if backend_type == "litellm":
+        if backend_type == "cloud":
             raise Exception("not available")
         mock_b = MagicMock()
         mock_b.check_available.return_value = 384
@@ -327,7 +327,7 @@ async def test_init_reranker_disabled(_mock_settings):
 
 async def test_init_reranker_litellm_success(_mock_settings):
     """Lines 281-291: litellm reranker, successful."""
-    _mock_settings.resolve_rerank_backend.return_value = "litellm"
+    _mock_settings.resolve_rerank_backend.return_value = "cloud"
     _mock_settings.resolve_rerank_model.return_value = "cohere-rerank"
 
     with patch("wet_mcp.reranker.init_reranker") as mock_init:
@@ -340,7 +340,7 @@ async def test_init_reranker_litellm_success(_mock_settings):
 
 async def test_init_reranker_litellm_fail_fallback_local(_mock_settings):
     """Lines 292-307: cloud reranker fails, falls back to local."""
-    _mock_settings.resolve_rerank_backend.return_value = "litellm"
+    _mock_settings.resolve_rerank_backend.return_value = "cloud"
     _mock_settings.resolve_rerank_model.return_value = "cohere-rerank"
 
     call_count = 0
@@ -348,7 +348,7 @@ async def test_init_reranker_litellm_fail_fallback_local(_mock_settings):
     def fake_init(backend_type, model, **kwargs):
         nonlocal call_count
         call_count += 1
-        if backend_type == "litellm":
+        if backend_type == "cloud":
             raise Exception("cloud unavailable")
         mock_r = MagicMock()
         mock_r.check_available.return_value = True

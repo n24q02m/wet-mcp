@@ -17,12 +17,12 @@ def mock_settings():
         mock.get_db_path.return_value = MagicMock()
         mock.get_cache_db_path.return_value = MagicMock()
         mock.resolve_embedding_dims.return_value = 768
-        mock.resolve_embedding_backend.return_value = "litellm"
-        mock.resolve_rerank_backend.return_value = "litellm"
+        mock.resolve_embedding_backend.return_value = "cloud"
+        mock.resolve_rerank_backend.return_value = "cloud"
         mock.resolve_embedding_model.return_value = "gemini"
         mock.resolve_rerank_model.return_value = "gemini-rerank"
         mock.wet_auto_searxng = False
-        mock.setup_litellm.return_value = "sdk"
+        mock.setup_providers.return_value = "sdk"
         # For tests, pretend we don't have timeout so tasks run synchronously
         mock.tool_timeout = 0
         yield mock
@@ -796,7 +796,7 @@ async def test_lifespan_startup_sync_enabled():
         patch("wet_mcp.sync.start_auto_sync") as mock_start_sync,
         patch("wet_mcp.sync.stop_auto_sync") as mock_stop_sync,
     ):
-        ms.setup_litellm.return_value = "sdk"
+        ms.setup_providers.return_value = "sdk"
         ms.wet_auto_searxng = False
         ms.wet_cache = False
         ms.sync_enabled = True
@@ -824,7 +824,7 @@ async def test_lifespan_shutdown_sync_enabled():
         patch("wet_mcp.sync.start_auto_sync"),
         patch("wet_mcp.sync.stop_auto_sync") as mock_stop,
     ):
-        ms.setup_litellm.return_value = "sdk"
+        ms.setup_providers.return_value = "sdk"
         ms.wet_auto_searxng = False
         ms.wet_cache = False
         ms.sync_enabled = True

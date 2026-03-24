@@ -2,11 +2,10 @@
 
 import json
 
-from litellm import acompletion
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.llm import get_llm_config
+from wet_mcp.llm import acompletion, get_llm_config
 from wet_mcp.sources.crawler import extract as raw_extract
 
 _MAX_CONTENT_CHARS = 50_000
