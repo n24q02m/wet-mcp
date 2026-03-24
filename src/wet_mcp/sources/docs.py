@@ -2964,6 +2964,59 @@ async def _fetch_github_readme(repo_url: str) -> list[dict] | None:
     return None
 
 
+async def _fetch_github_tree_paths(
+    client: httpx.AsyncClient,
+    api_base: str,
+    default_branch: str,
+    library_hint: str = "",
+) -> tuple[list[str], bool] | None:
+    """Fetch and filter candidate document paths from a GitHub repository tree."""
+    candidate_paths: list[str] = []
+    try:
+        resp = await client.get(
+            f"{api_base}/git/trees/{default_branch}?recursive=1",
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                **_github_headers(),
+            },
+        )
+        if resp.status_code != 200:
+            return None
+
+        tree = resp.json().get("tree", [])
+        for item in tree:
+            if item.get("type") != "blob":
+                continue
+            path = item.get("path", "")
+            path_lower = path.lower()
+
+            if path_lower.startswith(".github/"):
+                continue
+
+            fname = path.rsplit("/", 1)[-1]
+            stem = fname.rsplit(".", 1)[0].lower()
+            if stem in _SKIP_FILES:
+                continue
+
+            if path_lower in ("readme.md", "readme.rst"):
+                candidate_paths.append(path)
+                continue
+
+            if not path_lower.endswith((".md", ".mdx", ".rst")):
+                continue
+
+            parts = path.split("/")
+            if any(p.lower() in _DOC_DIRS for p in parts):
+                candidate_paths.append(path)
+    except Exception:
+        return None
+
+    if not candidate_paths:
+        return None
+
+    return _filter_doc_paths(candidate_paths, library_hint=library_hint)
+
+
 async def _try_github_raw_docs(
     repo_url: str,
     max_files: int = 50,
@@ -3011,59 +3064,13 @@ async def _try_github_raw_docs(
         except Exception:
             return None
 
-        # Collect all candidate markdown files from tree API
-        candidate_paths: list[str] = []
-        try:
-            resp = await client.get(
-                f"{api_base}/git/trees/{default_branch}?recursive=1",
-                headers={
-                    "Accept": "application/vnd.github.v3+json",
-                    **_github_headers(),
-                },
-            )
-            if resp.status_code != 200:
-                return None
-
-            tree = resp.json().get("tree", [])
-            for item in tree:
-                if item.get("type") != "blob":
-                    continue
-                path = item.get("path", "")
-                path_lower = path.lower()
-
-                # Skip .github/ directory files (templates, workflows)
-                if path_lower.startswith(".github/"):
-                    continue
-
-                # Skip known non-doc files by stem
-                fname = path.rsplit("/", 1)[-1]
-                stem = fname.rsplit(".", 1)[0].lower()
-                if stem in _SKIP_FILES:
-                    continue
-
-                # Include root README.md
-                if path_lower == "readme.md" or path_lower == "readme.rst":
-                    candidate_paths.append(path)
-                    continue
-
-                # Only markdown and RST files
-                if not path_lower.endswith((".md", ".mdx", ".rst")):
-                    continue
-
-                # Must be in a docs-like directory
-                parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
-                    candidate_paths.append(path)
-        except Exception:
-            return None
-
-        if not candidate_paths:
-            return None
-
-        # Apply smart filtering (i18n, depth priority, README last, framework)
-        filtered_paths, has_primary = _filter_doc_paths(
-            candidate_paths, library_hint=library_hint
+        tree_res = await _fetch_github_tree_paths(
+            client, api_base, default_branch, library_hint
         )
+        if not tree_res:
+            return None
+
+        filtered_paths, has_primary = tree_res
 
         if not filtered_paths:
             return None
