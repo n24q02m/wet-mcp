@@ -22,12 +22,10 @@ import pytest
 # ---------------------------------------------------------------------------
 
 LITELLM_PROXY_URL = "https://litellm.n24q02m.com"
-LITELLM_PROXY_KEY = os.environ.get(
-    "LITELLM_PROXY_KEY",
-    "REDACTED_LITELLM_KEY",
-)
+LITELLM_PROXY_KEY = os.environ.get("LITELLM_PROXY_KEY", "")
+_SEARXNG_AUTH_PASS = os.environ.get("SEARXNG_AUTH_PASS")
 SEARXNG_EXTERNAL_URL = "https://klprism:{}@searxng.n24q02m.com".format(
-    os.environ.get("SEARXNG_AUTH_PASS", "REDACTED_SEARXNG_PASS")
+    _SEARXNG_AUTH_PASS or ""
 )
 
 pytestmark = pytest.mark.integration
@@ -149,6 +147,11 @@ class TestSearchTool:
 class TestExternalSearXNG:
     """Test search using external selfhosted SearXNG."""
 
+    @pytest.fixture(autouse=True)
+    def _require_searxng_auth(self):
+        if not _SEARXNG_AUTH_PASS:
+            pytest.skip("SEARXNG_AUTH_PASS not set")
+
     async def test_external_searxng_search(self):
         import httpx
 
@@ -157,9 +160,9 @@ class TestExternalSearXNG:
                 SEARXNG_EXTERNAL_URL + "/search",
                 params={"q": "test", "format": "json"},
             )
-            assert resp.status_code == 200, (
-                f"External SearXNG unreachable: {resp.status_code}"
-            )
+            assert (
+                resp.status_code == 200
+            ), f"External SearXNG unreachable: {resp.status_code}"
             data = resp.json()
             assert len(data.get("results", [])) > 0
 
@@ -196,9 +199,9 @@ class TestExtractTool:
         )
         data = json.loads(result)
         assert len(data) == 1
-        assert "error" not in data[0] or "markitdown" not in data[0].get("error", ""), (
-            f"PDF extraction failed: {data[0]}"
-        )
+        assert "error" not in data[0] or "markitdown" not in data[0].get(
+            "error", ""
+        ), f"PDF extraction failed: {data[0]}"
         if "converter" in data[0]:
             assert data[0]["converter"] == "markitdown"
 
@@ -302,9 +305,9 @@ class TestLiteLLMProxy:
             )
             assert len(results) == 2, f"Expected 2 results, got {len(results)}"
             # Python doc should score highest
-            assert results[0][0] == 0, (
-                f"Expected Python doc first, got index {results[0][0]}"
-            )
+            assert (
+                results[0][0] == 0
+            ), f"Expected Python doc first, got index {results[0][0]}"
             assert results[0][1] > 0.5, f"Expected high score, got {results[0][1]}"
         finally:
             litellm.use_litellm_proxy = old_proxy
@@ -401,11 +404,16 @@ MODAL_EMBED_URL = (
     "https://n24q02m--ai-workers-embedding-embeddingserver-serve.modal.run"
 )
 MODAL_RERANK_URL = "https://n24q02m--ai-workers-reranker-rerankerserver-serve.modal.run"
-MODAL_API_KEY = os.environ.get("WORKER_API_KEY", "REDACTED_WORKER_KEY")
+MODAL_API_KEY = os.environ.get("WORKER_API_KEY")
 
 
 class TestModalWorkers:
     """Test custom Qwen3 models deployed on Modal.com."""
+
+    @pytest.fixture(autouse=True)
+    def _require_worker_api_key(self):
+        if not MODAL_API_KEY:
+            pytest.skip("WORKER_API_KEY not set")
 
     async def test_modal_embedding(self):
         """Test Qwen3-Embedding-0.6B via Modal (OpenAI-compatible)."""
