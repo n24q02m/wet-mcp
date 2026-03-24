@@ -954,8 +954,12 @@ class DocsDB:
                 return set()
             ids = [obj["id"] for obj in items]
             existing = set()
-            for i in range(0, len(ids), 999):
-                batch = ids[i : i + 999]
+
+            # Use 32766 batch size for modern SQLite, fallback to 999
+            batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
+
+            for i in range(0, len(ids), batch_size):
+                batch = ids[i : i + batch_size]
                 placeholders = ",".join("?" * len(batch))
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 res = self._conn.execute(
