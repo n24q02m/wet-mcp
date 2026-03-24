@@ -709,6 +709,96 @@ async def search(  # noqa: PLR0913
 # ---------------------------------------------------------------------------
 
 
+async def _do_extract_action(urls: list[str], format: str, stealth: bool) -> str:
+    cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "extract", cache_params)
+        if cached:
+            return cached
+    result = await _with_timeout(
+        _extract(urls=urls, format=format, stealth=stealth),
+        "extract",
+    )
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
+    return result
+
+
+async def _do_batch_action(urls: list[str], format: str, stealth: bool) -> str:
+    from wet_mcp.sources.crawler import batch_extract
+
+    return await _with_timeout(
+        batch_extract(urls=urls, format=format, stealth=stealth),
+        "batch",
+    )
+
+
+async def _do_crawl_action(
+    urls: list[str], depth: int, max_pages: int, format: str, stealth: bool
+) -> str:
+    cache_params = {
+        "urls": sorted(urls),
+        "depth": depth,
+        "max_pages": max_pages,
+    }
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "crawl", cache_params)
+        if cached:
+            return cached
+    result = await _with_timeout(
+        _crawl(
+            urls=urls,
+            depth=depth,
+            max_pages=max_pages,
+            format=format,
+            stealth=stealth,
+        ),
+        "crawl",
+    )
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "crawl", cache_params, result)
+    return result
+
+
+async def _do_map_action(urls: list[str], depth: int, max_pages: int) -> str:
+    cache_params = {
+        "urls": sorted(urls),
+        "depth": depth,
+        "max_pages": max_pages,
+    }
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "map", cache_params)
+        if cached:
+            return cached
+    result = await _with_timeout(
+        _sitemap(urls=urls, depth=depth, max_pages=max_pages),
+        "map",
+    )
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "map", cache_params, result)
+    return result
+
+
+async def _do_convert_action(paths: list[str]) -> str:
+    from wet_mcp.sources.crawler import convert_local_files
+
+    return await _with_timeout(
+        convert_local_files(paths=paths),
+        "convert",
+    )
+
+
+async def _do_extract_structured_action(
+    urls: list[str], schema: dict, prompt: str | None, stealth: bool
+) -> str:
+    from wet_mcp.sources.structured import extract_structured
+
+    return await _with_timeout(
+        extract_structured(urls=urls, schema=schema, prompt=prompt, stealth=stealth),
+        "extract_structured",
+    )
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -760,103 +850,36 @@ async def extract(
         case "extract":
             if not urls:
                 return 'Error: urls is required for extract action. Example: extract(action="extract", urls=["https://example.com/page"])'
-            urls = urls[:_MAX_EXTRACT_URLS]
-            cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
-            if _web_cache:
-                cached = await asyncio.to_thread(
-                    _web_cache.get, "extract", cache_params
-                )
-                if cached:
-                    return cached
-            result = await _with_timeout(
-                _extract(urls=urls, format=format, stealth=stealth),
-                "extract",
-            )
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
-            return result
+            return await _do_extract_action(urls[:_MAX_EXTRACT_URLS], format, stealth)
 
         case "batch":
             if not urls:
                 return 'Error: urls is required for batch action. Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])'
-            from wet_mcp.sources.crawler import batch_extract
-
-            return await _with_timeout(
-                batch_extract(urls=urls, format=format, stealth=stealth),
-                "batch",
-            )
+            return await _do_batch_action(urls, format, stealth)
 
         case "crawl":
             if not urls:
                 return 'Error: urls is required for crawl action. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)'
-            urls = urls[:_MAX_EXTRACT_URLS]
-            cache_params = {
-                "urls": sorted(urls),
-                "depth": depth,
-                "max_pages": max_pages,
-            }
-            if _web_cache:
-                cached = await asyncio.to_thread(_web_cache.get, "crawl", cache_params)
-                if cached:
-                    return cached
-            result = await _with_timeout(
-                _crawl(
-                    urls=urls,
-                    depth=depth,
-                    max_pages=max_pages,
-                    format=format,
-                    stealth=stealth,
-                ),
-                "crawl",
+            return await _do_crawl_action(
+                urls[:_MAX_EXTRACT_URLS], depth, max_pages, format, stealth
             )
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "crawl", cache_params, result)
-            return result
 
         case "map":
             if not urls:
                 return 'Error: urls is required for map action. Example: extract(action="map", urls=["https://example.com"])'
-            urls = urls[:_MAX_EXTRACT_URLS]
-            cache_params = {
-                "urls": sorted(urls),
-                "depth": depth,
-                "max_pages": max_pages,
-            }
-            if _web_cache:
-                cached = await asyncio.to_thread(_web_cache.get, "map", cache_params)
-                if cached:
-                    return cached
-            result = await _with_timeout(
-                _sitemap(urls=urls, depth=depth, max_pages=max_pages),
-                "map",
-            )
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "map", cache_params, result)
-            return result
+            return await _do_map_action(urls[:_MAX_EXTRACT_URLS], depth, max_pages)
 
         case "convert":
             if not paths:
                 return 'Error: paths is required for convert action. Example: extract(action="convert", paths=["/home/user/report.pdf"])'
-            from wet_mcp.sources.crawler import convert_local_files
-
-            return await _with_timeout(
-                convert_local_files(paths=paths),
-                "convert",
-            )
+            return await _do_convert_action(paths)
 
         case "extract_structured":
             if not urls:
                 return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
             if not schema:
                 return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
-            from wet_mcp.sources.structured import extract_structured
-
-            return await _with_timeout(
-                extract_structured(
-                    urls=urls, schema=schema, prompt=prompt, stealth=stealth
-                ),
-                "extract_structured",
-            )
+            return await _do_extract_structured_action(urls, schema, prompt, stealth)
 
         case _:
             import difflib
