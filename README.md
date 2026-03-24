@@ -55,23 +55,7 @@ claude plugin add n24q02m/wet-mcp
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp@latest"],
-      "env": {
-        // -- optional: cloud embedding + reranking (Jina AI recommended)
-        "API_KEYS": "JINA_AI_API_KEY:jina_...",
-        // -- or: "API_KEYS": "GOOGLE_API_KEY:AIza...,COHERE_API_KEY:co-...",
-        // -- without API_KEYS, uses built-in local Qwen3 ONNX models (CPU, ~570MB first download)
-        // -- optional: LiteLLM Proxy (production, selfhosted gateway)
-        // "LITELLM_PROXY_URL": "http://10.0.0.20:4000",
-        // "LITELLM_PROXY_KEY": "sk-your-virtual-key",
-        // -- optional: higher rate limits for docs discovery (60 -> 5000 req/hr)
-        "GITHUB_TOKEN": "ghp_...",
-        // -- optional: restrict local file conversion to specific directories
-        // "CONVERT_ALLOWED_DIRS": "/home/user/docs,/tmp/uploads",
-        // -- optional: sync indexed docs across machines via rclone
-        "SYNC_ENABLED": "true",                    // default: false
-        "SYNC_INTERVAL": "300"                     // auto-sync every 5min (0 = manual only)
-      }
+      "args": ["--python", "3.13", "wet-mcp@latest"]
     }
   }
 }
@@ -91,19 +75,14 @@ claude plugin add n24q02m/wet-mcp
         "-e", "API_KEYS",
         "-e", "GITHUB_TOKEN",
         "-e", "SYNC_ENABLED",
-        "-e", "SYNC_INTERVAL",
         "n24q02m/wet-mcp:latest"
-      ],
-      "env": {
-        "API_KEYS": "JINA_AI_API_KEY:jina_...",
-        "GITHUB_TOKEN": "ghp_...",
-        "SYNC_ENABLED": "true",
-        "SYNC_INTERVAL": "300"
-      }
+      ]
     }
   }
 }
 ```
+
+Configure env vars in `~/.claude/settings.local.json` or your shell profile. See [Environment Variables](#environment-variables) below.
 
 ### Pre-install (optional)
 
