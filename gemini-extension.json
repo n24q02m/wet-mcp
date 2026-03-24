@@ -11,9 +11,6 @@
         "wet-mcp"
       ],
       "env": {
-        "API_KEYS": "",
-        "LITELLM_PROXY_URL": "",
-        "SEARXNG_URL": "",
         "RERANK_ENABLED": "true"
       }
     }
