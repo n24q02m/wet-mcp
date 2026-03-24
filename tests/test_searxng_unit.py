@@ -157,6 +157,7 @@ async def test_search_http_error_4xx_no_retry(mock_httpx_client):
     data = json.loads(result)
     assert "error" in data
     assert "HTTP error: 400" in data["error"]
+    assert data == {"error": "HTTP error: 400"}
     # Should only call get once (no retry for 4xx)
     assert mock_context.get.call_count == 1
 
@@ -389,3 +390,27 @@ async def test_search_result_format(mock_httpx_client):
     assert r["snippet"] == "Example snippet text"
     assert r["source"] == "duckduckgo"
     assert "extra_field" not in r
+
+
+@pytest.mark.asyncio
+async def test_search_http_error_returns_error_dictionary(mock_httpx_client):
+    """Test that HTTPStatusError explicitly returns the expected error dictionary format."""
+    mock_response = unittest.mock.Mock()
+    mock_response.status_code = 403
+    error = httpx.HTTPStatusError(
+        "Forbidden", request=unittest.mock.Mock(), response=mock_response
+    )
+    mock_response.raise_for_status.side_effect = error
+
+    mock_context = unittest.mock.AsyncMock()
+    mock_context.get.return_value = mock_response
+    mock_context.__aenter__.return_value = mock_context
+    mock_httpx_client.return_value = mock_context
+
+    result = await search(
+        searxng_url="http://localhost:8080",
+        query="error_dict_test",
+    )
+
+    data = json.loads(result)
+    assert data == {"error": "HTTP error: 403"}
