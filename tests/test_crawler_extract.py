@@ -163,3 +163,14 @@ async def test_extract_empty_list(mock_crawler_instance):
 
         assert results == []
         mock_crawler_instance.arun.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_extract_with_markitdown_import_error():
+    """Test that missing markitdown dependency is handled gracefully."""
+    from wet_mcp.sources.crawler import _extract_with_markitdown
+
+    with patch.dict("sys.modules", {"markitdown": None}):
+        result = await _extract_with_markitdown("https://example.com/doc.pdf")
+        assert "error" in result
+        assert "markitdown not installed" in result["error"]
