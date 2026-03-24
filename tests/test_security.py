@@ -168,6 +168,17 @@ def test_check_ip_safe_ipv6_scope_id():
     assert not _check_ip_safe("not-an-ip-at-all", "test-host")
 
 
+def test_check_ip_safe_value_error_logged():
+    """Test _check_ip_safe logs a warning when a ValueError is caught for unparseable IPs."""
+    from unittest.mock import patch
+    from wet_mcp.security import _check_ip_safe
+
+    with patch("wet_mcp.security.logger.warning") as mock_logger:
+        result = _check_ip_safe("invalid_ip", "myhost")
+        assert result is False
+        mock_logger.assert_called_once_with("Unparseable IP 'invalid_ip' for host myhost, blocking")
+
+
 def test_is_safe_url_non_http_scheme():
     """Test is_safe_url rejects non-http/https schemes."""
     assert not is_safe_url("ftp://example.com/file")
