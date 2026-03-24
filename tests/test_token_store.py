@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from wet_mcp.token_store import (
+    _get_token_dir,
     delete_token,
     get_token_path,
     load_token,
@@ -22,6 +23,13 @@ def token_dir(tmp_path):
     with patch("wet_mcp.token_store.settings") as mock_settings:
         mock_settings.get_data_dir.return_value = tmp_path
         yield d
+
+
+def test_get_token_dir():
+    with patch("wet_mcp.token_store.settings") as mock_settings:
+        mock_settings.get_data_dir.return_value = Path("/mock/dir")
+        path = _get_token_dir()
+        assert path == Path("/mock/dir") / "tokens"
 
 
 def test_get_token_path(token_dir):
