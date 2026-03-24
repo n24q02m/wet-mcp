@@ -19,57 +19,7 @@
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp"],
-      "env": {
-        "API_KEYS": "",
-        "LITELLM_PROXY_URL": "",
-        "LITELLM_PROXY_KEY": "",
-        "SEARXNG_URL": "",
-        "GITHUB_TOKEN": "",
-        "EMBEDDING_MODEL": "",
-        "EMBEDDING_BACKEND": "",
-        "RERANK_MODEL": "",
-        "RERANK_BACKEND": "",
-        "RERANK_ENABLED": "true",
-        "SYNC_ENABLED": "true",
-        "LOG_LEVEL": "INFO"
-      }
-    },
-    "wet-pipx": {
-      "command": "pipx",
-      "args": ["run", "--python", "3.13", "wet-mcp"],
-      "env": {
-        "API_KEYS": "",
-        "LITELLM_PROXY_URL": "",
-        "LITELLM_PROXY_KEY": "",
-        "SEARXNG_URL": "",
-        "GITHUB_TOKEN": "",
-        "EMBEDDING_MODEL": "",
-        "EMBEDDING_BACKEND": "",
-        "RERANK_MODEL": "",
-        "RERANK_BACKEND": "",
-        "RERANK_ENABLED": "true",
-        "SYNC_ENABLED": "true",
-        "LOG_LEVEL": "INFO"
-      }
-    },
-    "wet-docker": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "n24q02m/wet-mcp:latest"],
-      "env": {
-        "API_KEYS": "",
-        "LITELLM_PROXY_URL": "",
-        "LITELLM_PROXY_KEY": "",
-        "SEARXNG_URL": "",
-        "GITHUB_TOKEN": "",
-        "EMBEDDING_MODEL": "",
-        "EMBEDDING_BACKEND": "",
-        "RERANK_MODEL": "",
-        "RERANK_BACKEND": "",
-        "RERANK_ENABLED": "true",
-        "SYNC_ENABLED": "true",
-        "LOG_LEVEL": "INFO"
-      }
+      "args": ["--python", "3.13", "wet-mcp"]
     }
   },
   "skills": "./skills/"
