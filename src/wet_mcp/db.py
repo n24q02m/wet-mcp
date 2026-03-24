@@ -952,6 +952,8 @@ class DocsDB:
         def _get_existing(table: str, items: list) -> set:
             if not items:
                 return set()
+            if table not in {"libraries", "versions", "doc_chunks"}:
+                raise ValueError(f"Invalid table name: {table}")
             ids = [obj["id"] for obj in items]
             existing = set()
             for i in range(0, len(ids), 999):
