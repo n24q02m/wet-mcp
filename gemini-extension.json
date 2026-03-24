@@ -11,7 +11,8 @@
         "wet-mcp"
       ],
       "env": {
-        "RERANK_ENABLED": "true"
+        "RERANK_ENABLED": "true",
+        "LOG_LEVEL": "INFO"
       }
     }
   },

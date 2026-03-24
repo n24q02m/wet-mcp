@@ -1,21 +1,12 @@
 {
   "name": "wet-mcp",
-  "description": "MCP server for web search, content extraction, and media download",
+  "description": "Web search, content extraction, and media download",
   "version": "2.15.0",
   "author": {
     "name": "n24q02m",
     "url": "https://github.com/n24q02m"
   },
   "homepage": "https://github.com/n24q02m/wet-mcp",
-  "repository": "https://github.com/n24q02m/wet-mcp",
-  "license": "MIT",
-  "keywords": [
-    "web-search",
-    "content-extraction",
-    "documentation",
-    "mcp",
-    "claude-code"
-  ],
   "mcpServers": {
     "wet": {
       "command": "uvx",
@@ -25,8 +16,18 @@
         "wet-mcp"
       ],
       "env": {
-        "RERANK_ENABLED": "true"
+        "RERANK_ENABLED": "true",
+        "LOG_LEVEL": "INFO"
       }
+    },
+    "wet-docker": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "n24q02m/wet-mcp:latest"
+      ]
     }
   },
   "skills": "./skills/"
