@@ -8,6 +8,7 @@ import pytest
 from wet_mcp.sources.searxng import (
     _apply_domain_cap,
     _build_filtered_query,
+    _is_valid_domain,
     _normalize_url,
     search,
 )
@@ -303,6 +304,47 @@ async def test_search_domain_cap_preserves_diversity(mock_httpx_client):
     b_count = sum(1 for u in urls if "b.com" in u)
     assert a_count == 3
     assert b_count == 2
+
+
+# --- _is_valid_domain tests ---
+
+
+class TestIsValidDomain:
+    @pytest.mark.parametrize(
+        "domain",
+        [
+            "example.com",
+            "docs.python.org",
+            "sub-domain.example.co.uk",
+            "a.com",
+            "123-abc.org",
+            "test.io",
+        ],
+    )
+    def test_valid_domains(self, domain):
+        assert _is_valid_domain(domain) is True
+
+    @pytest.mark.parametrize(
+        "domain",
+        [
+            "",
+            "localhost",
+            "127.0.0.1",
+            "8.8.8.8",
+            "example..com",
+            "https://example.com",
+            "example.com/path",
+            "example.com?q=1",
+            "-example.com",
+            ".example.com",
+            "example.c",
+            "a b.com",
+            "123",
+            "<script>",
+        ],
+    )
+    def test_invalid_domains(self, domain):
+        assert _is_valid_domain(domain) is False
 
 
 # --- _build_filtered_query tests ---
