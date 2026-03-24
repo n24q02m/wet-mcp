@@ -661,3 +661,33 @@ class TestRemoveNonexistent:
     def test_remove_nonexistent_returns_false(self, db):
         """remove_library returns False for unknown library."""
         assert db.remove_library("no_such_lib") is False
+
+
+def test_migration_operational_error(tmp_path):
+    """Test that sqlite3.OperationalError is caught when discovery_version already exists."""
+    db_path = tmp_path / "test_migration.db"
+
+    with patch("sqlite3.connect") as mock_connect:
+        mock_conn = MagicMock()
+        mock_connect.return_value = mock_conn
+
+        def side_effect(query, *args, **kwargs):
+            if "ALTER TABLE libraries ADD COLUMN discovery_version" in query:
+                raise sqlite3.OperationalError(
+                    "duplicate column name: discovery_version"
+                )
+            return MagicMock()
+
+        mock_conn.execute.side_effect = side_effect
+
+        # Instantiate DocsDB. This triggers _create_tables in __init__.
+        # The exception block should catch the OperationalError.
+        _ = DocsDB(db_path)
+
+        # Verify the ALTER TABLE statement was attempted and the exception was swallowed.
+        alter_calls = [
+            call
+            for call in mock_conn.execute.call_args_list
+            if "ALTER TABLE libraries ADD COLUMN discovery_version" in call[0][0]
+        ]
+        assert len(alter_calls) > 0
