@@ -258,11 +258,11 @@ def test_run_rclone(mock_env, mock_run):
         args=[], returncode=0, stdout="out"
     )
 
-    res = _run_rclone(Path("/bin/rclone"), ["arg1"], 10)
+    res = _run_rclone(Path("/bin/rclone"), ["listremotes"], 10)
 
     assert res.returncode == 0
     mock_run.assert_called_once_with(
-        ["/bin/rclone", "arg1"],
+        ["/bin/rclone", "listremotes"],
         stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
