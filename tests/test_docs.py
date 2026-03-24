@@ -12,6 +12,7 @@ import pytest
 from wet_mcp.sources.docs import (
     ChunkContext,
     _is_blocked_content,
+    _normalize_language,
     _rst_to_markdown,
     _split_preserving_code,
     chunk_llms_txt,
@@ -19,6 +20,41 @@ from wet_mcp.sources.docs import (
     discover_library,
     try_llms_txt,
 )
+
+# -----------------------------------------------------------------------
+# _normalize_language
+# -----------------------------------------------------------------------
+
+
+class TestNormalizeLanguage:
+    def test_normalize_exact_alias(self):
+        """Aliases are correctly mapped."""
+        assert _normalize_language("py") == "python"
+        assert _normalize_language("js") == "javascript"
+        assert _normalize_language("rs") == "rust"
+
+    def test_normalize_with_whitespace(self):
+        """Surrounding whitespace is stripped."""
+        assert _normalize_language("  ts  ") == "typescript"
+        assert _normalize_language("\t node \n") == "javascript"
+
+    def test_normalize_case_insensitivity(self):
+        """Input is converted to lowercase before mapping."""
+        assert _normalize_language("PY") == "python"
+        assert _normalize_language("NodeJS") == "javascript"
+        assert _normalize_language("C#") == "csharp"
+
+    def test_normalize_unknown_language(self):
+        """Languages not in the alias list are returned unchanged (but stripped/lowercased)."""
+        assert _normalize_language("java") == "java"
+        assert _normalize_language("  HTML  ") == "html"
+        assert _normalize_language("en-US") == "en-us"
+
+    def test_normalize_empty_string(self):
+        """Empty string handles correctly."""
+        assert _normalize_language("") == ""
+        assert _normalize_language("   ") == ""
+
 
 # -----------------------------------------------------------------------
 # chunk_markdown
