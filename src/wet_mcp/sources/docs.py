@@ -807,6 +807,117 @@ async def _get_github_homepage(url: str) -> str | None:
     return None
 
 
+async def _check_sphinx_inventory(
+    client: httpx.AsyncClient,
+    inv_url: str,
+    label: str,
+    clean_name_norm: str,
+    lib_name: str,
+) -> bool:
+    """Validate Sphinx inventory (objects.inv) and project name/object count."""
+    try:
+        inv_resp = await client.get(inv_url)
+        if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
+            b"# Sphinx inventory version"
+        ):
+            # For ReadTheDocs: validate project name matches lib
+            # and has enough objects (>= 50) to be real docs,
+            # not a squatter/placeholder project.
+            if label == "readthedocs":
+                inv_content = inv_resp.content
+                inv_text = inv_content[:500].decode("utf-8", errors="replace")
+                proj_match = re.search(r"^# Project:\s*(.+)$", inv_text, re.MULTILINE)
+                if proj_match:
+                    proj_name = (
+                        proj_match.group(1)
+                        .strip()
+                        .lower()
+                        .replace("-", "")
+                        .replace("_", "")
+                        .replace(" ", "")
+                    )
+                    if clean_name_norm not in proj_name:
+                        logger.debug(
+                            f"RTD project '{proj_match.group(1).strip()}'"
+                            f" doesn't match '{lib_name}', skipping"
+                        )
+                        return False
+                # Count objects: real docs have 50+, squatters < 30
+                try:
+                    # Find end of header (4 lines starting with #)
+                    hdr_pos = 0
+                    for _ in range(4):
+                        hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
+                    decompressed = zlib.decompress(inv_content[hdr_pos:])
+                    obj_count = len(decompressed.split(b"\n")) - 1
+                    if obj_count < 50:
+                        logger.debug(
+                            f"RTD {lib_name}: only {obj_count} "
+                            f"objects, likely squatter — skipping"
+                        )
+                        return False
+                except Exception:
+                    # Can't count objects — reject for safety
+                    return False
+            return True
+    except Exception:
+        pass
+    return False
+
+
+async def _check_docs_url_candidate(
+    client: httpx.AsyncClient,
+    label: str,
+    url: str,
+    original_netloc: str,
+    clean_name_norm: str,
+    lib_name: str,
+) -> tuple[str, str, int, bool] | None:
+    """Validate a docs URL candidate."""
+    try:
+        resp = await client.get(url)
+        if resp.status_code != 200:
+            return None
+        content = resp.text
+        content_len = len(content)
+        # Must be substantial HTML/text, not an error page
+        if content_len < 500:
+            return None
+        final_url = str(resp.url)
+        # Reject login/auth/account pages (false positive redirects)
+        final_path = urlparse(final_url).path.lower()
+        _auth_segments = (
+            "/login",
+            "/signin",
+            "/signup",
+            "/account",
+            "/auth",
+            "/register",
+        )
+        if any(seg in final_path for seg in _auth_segments):
+            return None
+        # Avoid redirect loops back to the original homepage
+        if urlparse(final_url).netloc == original_netloc and label not in (
+            "docs_path",
+            "original",
+        ):
+            final_parsed = urlparse(final_url)
+            if not final_parsed.path.startswith("/docs"):
+                if "docs" not in final_parsed.netloc:
+                    return None
+        # Check for objects.inv (Sphinx docs indicator)
+        inv_url = final_url.rstrip("/") + "/objects.inv"
+        has_inv = await _check_sphinx_inventory(
+            client, inv_url, label, clean_name_norm, lib_name
+        )
+        # ReadTheDocs without objects.inv is unreliable — skip
+        if label == "readthedocs" and not has_inv:
+            return None
+        return (label, final_url, content_len, has_inv)
+    except Exception:
+        return None
+
+
 async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> str:
     """Probe for a better documentation URL than the project homepage.
 
@@ -909,102 +1020,14 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     # an already-good docs URL (e.g. docs.djangoproject.com → django.readthedocs.io).
     candidates.insert(0, ("original", homepage))
 
-    async def _check(
-        client: httpx.AsyncClient, label: str, url: str
-    ) -> tuple[str, str, int, bool] | None:
-        try:
-            resp = await client.get(url)
-            if resp.status_code != 200:
-                return None
-            content = resp.text
-            content_len = len(content)
-            # Must be substantial HTML/text, not an error page
-            if content_len < 500:
-                return None
-            final_url = str(resp.url)
-            # Reject login/auth/account pages (false positive redirects)
-            final_path = urlparse(final_url).path.lower()
-            _auth_segments = (
-                "/login",
-                "/signin",
-                "/signup",
-                "/account",
-                "/auth",
-                "/register",
-            )
-            if any(seg in final_path for seg in _auth_segments):
-                return None
-            # Avoid redirect loops back to the original homepage
-            if urlparse(final_url).netloc == parsed.netloc and label not in (
-                "docs_path",
-                "original",
-            ):
-                final_parsed = urlparse(final_url)
-                if not final_parsed.path.startswith("/docs"):
-                    if "docs" not in final_parsed.netloc:
-                        return None
-            # Check for objects.inv (Sphinx docs indicator)
-            has_inv = False
-            inv_url = final_url.rstrip("/") + "/objects.inv"
-            try:
-                inv_resp = await client.get(inv_url)
-                if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
-                    b"# Sphinx inventory version"
-                ):
-                    # For ReadTheDocs: validate project name matches lib
-                    # and has enough objects (>= 50) to be real docs,
-                    # not a squatter/placeholder project.
-                    if label == "readthedocs":
-                        inv_content = inv_resp.content
-                        inv_text = inv_content[:500].decode("utf-8", errors="replace")
-                        proj_match = re.search(
-                            r"^# Project:\s*(.+)$", inv_text, re.MULTILINE
-                        )
-                        if proj_match:
-                            proj_name = (
-                                proj_match.group(1)
-                                .strip()
-                                .lower()
-                                .replace("-", "")
-                                .replace("_", "")
-                                .replace(" ", "")
-                            )
-                            if clean_name_norm not in proj_name:
-                                logger.debug(
-                                    f"RTD project '{proj_match.group(1).strip()}'"
-                                    f" doesn't match '{lib_name}', skipping"
-                                )
-                                return None
-                        # Count objects: real docs have 50+, squatters < 30
-                        try:
-                            # Find end of header (4 lines starting with #)
-                            hdr_pos = 0
-                            for _ in range(4):
-                                hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
-                            decompressed = zlib.decompress(inv_content[hdr_pos:])
-                            obj_count = len(decompressed.split(b"\n")) - 1
-                            if obj_count < 50:
-                                logger.debug(
-                                    f"RTD {lib_name}: only {obj_count} "
-                                    f"objects, likely squatter — skipping"
-                                )
-                                return None
-                        except Exception:
-                            # Can't count objects — reject for safety
-                            return None
-                    has_inv = True
-            except Exception:
-                pass
-            # ReadTheDocs without objects.inv is unreliable — skip
-            if label == "readthedocs" and not has_inv:
-                return None
-            return (label, final_url, content_len, has_inv)
-        except Exception:
-            return None
-
     async with _safe_httpx_client(timeout=10, follow_redirects=True) as client:
         results = await asyncio.gather(
-            *[_check(client, label, url) for label, url in candidates],
+            *[
+                _check_docs_url_candidate(
+                    client, label, url, parsed.netloc, clean_name_norm, lib_name
+                )
+                for label, url in candidates
+            ],
             return_exceptions=True,
         )
 
