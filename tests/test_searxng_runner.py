@@ -276,3 +276,27 @@ def test_stop_searxng(mock_cleanup):
 
     stop_searxng()
     mock_cleanup.assert_called_once()
+
+
+def test_is_searxng_installed_module_not_found():
+    """Test _is_searxng_installed handles ModuleNotFoundError."""
+    from wet_mcp.searxng_runner import _is_searxng_installed
+
+    with patch("importlib.util.find_spec", side_effect=ModuleNotFoundError):
+        assert _is_searxng_installed() is False
+
+
+def test_is_searxng_installed_found():
+    """Test _is_searxng_installed returns True when module is found."""
+    from wet_mcp.searxng_runner import _is_searxng_installed
+
+    with patch("importlib.util.find_spec", return_value=MagicMock()):
+        assert _is_searxng_installed() is True
+
+
+def test_is_searxng_installed_not_found():
+    """Test _is_searxng_installed returns False when module is not found."""
+    from wet_mcp.searxng_runner import _is_searxng_installed
+
+    with patch("importlib.util.find_spec", return_value=None):
+        assert _is_searxng_installed() is False
