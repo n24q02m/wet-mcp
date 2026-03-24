@@ -261,10 +261,26 @@ def _prepare_rclone_env() -> dict[str, str]:
     return env
 
 
+def _validate_rclone_args(args: list[str]) -> None:
+    """Validate rclone arguments to prevent command injection."""
+    if not args:
+        raise ValueError("rclone arguments cannot be empty")
+
+    allowed_cmds = {"listremotes", "copy", "copyto", "authorize", "sync"}
+    if args[0] not in allowed_cmds:
+        raise ValueError(f"Disallowed rclone command: {args[0]}")
+
+    allowed_flags = {"--progress", "--"}
+    for arg in args[1:]:
+        if arg.startswith("-") and arg not in allowed_flags:
+            raise ValueError(f"Disallowed rclone flag: {arg}")
+
+
 def _run_rclone(
     rclone_path: Path, args: list[str], timeout: int = 120
 ) -> subprocess.CompletedProcess:
     """Run rclone command synchronously."""
+    _validate_rclone_args(args)
     cmd = [str(rclone_path), *args]
     logger.debug(f"rclone: {' '.join(cmd)}")
 

@@ -390,3 +390,47 @@ class TestSyncPull:
 
             assert result is None
             mock_unlink.assert_called_once_with(missing_ok=True)
+
+
+# -----------------------------------------------------------------------
+# _validate_rclone_args
+# -----------------------------------------------------------------------
+
+
+class TestValidateRcloneArgs:
+    def test_validate_rclone_args_allowed(self):
+        """_validate_rclone_args allows safe commands and flags."""
+        from wet_mcp.sync import _validate_rclone_args
+
+        with patch("wet_mcp.config.settings") as mock_settings:
+            mock_settings.sync_remote = "gdrive"
+            mock_settings.sync_provider = "drive"
+            mock_settings.sync_folder = "docs"
+            _validate_rclone_args(
+                ["copy", "--progress", "--", "gdrive:docs", "/tmp/local"]
+            )
+            _validate_rclone_args(["listremotes"])
+
+    def test_validate_rclone_args_disallowed_cmd(self):
+        """_validate_rclone_args blocks unsafe commands."""
+        from wet_mcp.sync import _validate_rclone_args
+
+        with patch("wet_mcp.config.settings") as mock_settings:
+            mock_settings.sync_remote = "gdrive"
+            mock_settings.sync_provider = "drive"
+            mock_settings.sync_folder = "docs"
+            with pytest.raises(ValueError, match="Disallowed rclone command: delete"):
+                _validate_rclone_args(["delete", "gdrive:docs"])
+
+    def test_validate_rclone_args_disallowed_flag(self):
+        """_validate_rclone_args blocks unsafe flags."""
+        from wet_mcp.sync import _validate_rclone_args
+
+        with patch("wet_mcp.config.settings") as mock_settings:
+            mock_settings.sync_remote = "gdrive"
+            mock_settings.sync_provider = "drive"
+            mock_settings.sync_folder = "docs"
+            with pytest.raises(ValueError, match="Disallowed rclone flag: --config"):
+                _validate_rclone_args(
+                    ["copy", "--config", "/etc/passwd", "gdrive:docs", "/tmp/local"]
+                )
