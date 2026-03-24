@@ -41,13 +41,15 @@ mcp-name: io.github.n24q02m/wet-mcp
 Via marketplace (includes skills: /fact-check, /compare):
 
 ```bash
-/plugins add n24q02m/claude-plugins
+/plugin marketplace add n24q02m/claude-plugins
+/plugin install wet-mcp@claude-plugins
 ```
 
 Or install this plugin only:
 
 ```bash
-claude plugin add n24q02m/wet-mcp
+/plugin marketplace add n24q02m/wet-mcp
+/plugin install wet-mcp
 ```
 
 Configure env vars in `~/.claude/settings.local.json` or shell profile. See [Environment Variables](#environment-variables).
