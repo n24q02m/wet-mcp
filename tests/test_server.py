@@ -54,10 +54,10 @@ async def test_extract_success():
         assert "Extracted Content" in result
         assert "<untrusted_extract_content>" in result
         assert "[SECURITY:" in result
+        from wet_mcp.sources.crawler import ExtractOptions
         mock_extract.assert_called_once_with(
             urls=["https://example.com"],
-            format="markdown",
-            stealth=False,
+            options=ExtractOptions(format="markdown", stealth=False),
         )
 
 
@@ -76,10 +76,10 @@ async def test_extract_with_options():
 
         assert "Extracted Content" in result
         assert "<untrusted_extract_content>" in result
+        from wet_mcp.sources.crawler import ExtractOptions
         mock_extract.assert_called_once_with(
             urls=["https://example.com"],
-            format="json",
-            stealth=False,
+            options=ExtractOptions(format="json", stealth=False),
         )
 
 

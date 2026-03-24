@@ -8,6 +8,7 @@ import pytest
 
 # Import from the module we're testing
 from wet_mcp.sources import crawler
+from wet_mcp.sources.crawler import ExtractOptions
 
 
 # Helper classes to mock AsyncWebCrawler results
@@ -60,11 +61,13 @@ async def test_extract_success():
     ):
         result_json = await crawler.extract(
             ["https://safe.com"],
-            format="markdown",
-            stealth=True,
-            scan_full_page=True,
-            delay_before_return_html=1.0,
-            page_timeout=30000,
+            options=ExtractOptions(
+                format="markdown",
+                stealth=True,
+                scan_full_page=True,
+                delay_before_return_html=1.0,
+                page_timeout=30000,
+            ),
         )
 
         data = json.loads(result_json)
@@ -80,7 +83,7 @@ async def test_extract_html_format():
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", new=MockAsyncWebCrawler),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
-        result_json = await crawler.extract(["https://safe.com"], format="html")
+        result_json = await crawler.extract(["https://safe.com"], options=ExtractOptions(format="html"))
         data = json.loads(result_json)
         assert data[0]["content"] == "<html>content</html>"
 

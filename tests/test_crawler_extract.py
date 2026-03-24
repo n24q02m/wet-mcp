@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from wet_mcp.sources.crawler import extract
+from wet_mcp.sources.crawler import ExtractOptions, extract
 
 
 @pytest.mark.asyncio
@@ -26,7 +26,9 @@ async def test_extract_success(mock_crawler_instance):
         new_callable=AsyncMock,
         return_value=mock_crawler_instance,
     ):
-        result_json = await extract(["https://example.com"], format="markdown")
+        result_json = await extract(
+            ["https://example.com"], options=ExtractOptions(format="markdown")
+        )
         results = json.loads(result_json)
 
         assert len(results) == 1
@@ -114,7 +116,9 @@ async def test_extract_html_format(mock_crawler_instance):
         new_callable=AsyncMock,
         return_value=mock_crawler_instance,
     ):
-        result_json = await extract(["https://example.com"], format="html")
+        result_json = await extract(
+            ["https://example.com"], options=ExtractOptions(format="html")
+        )
         results = json.loads(result_json)
 
         assert results[0]["content"] == "<p>HTML</p>"
@@ -138,13 +142,13 @@ async def test_extract_stealth_param(mock_crawler_instance):
         return_value=mock_crawler_instance,
     ) as mock_get_crawler:
         # Test with stealth=True
-        await extract(["https://example.com"], stealth=True)
+        await extract(["https://example.com"], options=ExtractOptions(stealth=True))
         mock_get_crawler.assert_called_with(True)
 
         mock_get_crawler.reset_mock()
 
         # Test with stealth=False
-        await extract(["https://example.com"], stealth=False)
+        await extract(["https://example.com"], options=ExtractOptions(stealth=False))
         mock_get_crawler.assert_called_with(False)
 
 

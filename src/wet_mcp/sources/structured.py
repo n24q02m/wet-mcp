@@ -7,6 +7,7 @@ from loguru import logger
 
 from wet_mcp.config import settings
 from wet_mcp.llm import get_llm_config
+from wet_mcp.sources.crawler import ExtractOptions
 from wet_mcp.sources.crawler import extract as raw_extract
 
 _MAX_CONTENT_CHARS = 50_000
@@ -106,7 +107,7 @@ async def extract_structured(
 
     # Step 2: Extract raw content
     try:
-        raw_json = await raw_extract(urls, stealth=stealth)
+        raw_json = await raw_extract(urls, options=ExtractOptions(stealth=stealth))
         pages = json.loads(raw_json)
     except Exception as e:
         logger.error(f"Content extraction failed: {e}")

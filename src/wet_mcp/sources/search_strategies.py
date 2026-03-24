@@ -8,6 +8,7 @@ from loguru import logger
 
 from wet_mcp.config import settings
 from wet_mcp.llm import get_llm_config
+from wet_mcp.sources.crawler import ExtractOptions
 from wet_mcp.sources.crawler import extract as raw_extract
 
 
@@ -68,7 +69,7 @@ async def find_similar(
     4. Return results as JSON string
     """
     # Step 1: Extract source content
-    raw = await raw_extract(urls=[url], format="markdown")
+    raw = await raw_extract(urls=[url], options=ExtractOptions(format="markdown"))
     pages = json.loads(raw)
 
     if not pages or (isinstance(pages[0], dict) and "error" in pages[0]):
@@ -200,7 +201,7 @@ async def enrich_snippets(
         return results
 
     try:
-        raw = await raw_extract(urls=urls, format="markdown")
+        raw = await raw_extract(urls=urls, options=ExtractOptions(format="markdown"))
         pages = json.loads(raw)
 
         # Build url -> content map

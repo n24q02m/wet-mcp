@@ -19,7 +19,7 @@ logger.add(sys.stdout, level="INFO")
 
 async def test_extract():
     """Test content extraction from example.com."""
-    from wet_mcp.sources.crawler import extract
+    from wet_mcp.sources.crawler import ExtractOptions, extract
 
     print("\n" + "=" * 50)
     print("TEST 1: Extract (example.com)")
@@ -28,8 +28,7 @@ async def test_extract():
     try:
         result = await extract(
             urls=["https://example.com"],
-            format="markdown",
-            stealth=False,
+            options=ExtractOptions(format="markdown", stealth=False),
         )
         data = json.loads(result)
 

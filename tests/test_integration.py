@@ -62,7 +62,7 @@ async def test_searxng():
 
 async def test_extract():
     """Test content extraction."""
-    from wet_mcp.sources.crawler import extract
+    from wet_mcp.sources.crawler import ExtractOptions, extract
 
     print("\n" + "=" * 50)
     print("TEST: Content Extraction")
@@ -74,8 +74,7 @@ async def test_extract():
     try:
         result = await extract(
             urls=[test_url],
-            format="markdown",
-            stealth=False,
+            options=ExtractOptions(format="markdown", stealth=False),
         )
         data = json.loads(result)
 

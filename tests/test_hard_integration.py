@@ -112,7 +112,7 @@ async def test_search_quality():
 
 async def test_extract_js_heavy():
     """Test extraction from JavaScript-heavy sites."""
-    from wet_mcp.sources.crawler import extract
+    from wet_mcp.sources.crawler import ExtractOptions, extract
 
     print("\n" + "=" * 60)
     print("TEST: JavaScript-Heavy Site Extraction")
@@ -134,8 +134,7 @@ async def test_extract_js_heavy():
         try:
             result = await extract(
                 urls=[url],
-                format="markdown",
-                stealth=True,
+                options=ExtractOptions(format="markdown", stealth=True),
             )
             data = json.loads(result)
 
@@ -201,7 +200,7 @@ async def test_extract_js_heavy():
 
 async def test_antibot_sites():
     """Test sites with anti-bot protection."""
-    from wet_mcp.sources.crawler import extract
+    from wet_mcp.sources.crawler import ExtractOptions, extract
 
     print("\n" + "=" * 60)
     print("TEST: Anti-Bot Protected Sites")
@@ -228,8 +227,7 @@ async def test_antibot_sites():
         try:
             result = await extract(
                 urls=[url],
-                format="markdown",
-                stealth=True,  # Enable stealth mode
+                options=ExtractOptions(format="markdown", stealth=True),  # Enable stealth mode
             )
             data = json.loads(result)
 

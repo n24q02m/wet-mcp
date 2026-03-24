@@ -14,6 +14,7 @@ import json
 import os
 import tempfile
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -24,6 +25,18 @@ from loguru import logger
 from wet_mcp.config import settings
 from wet_mcp.security import is_safe_url
 from wet_mcp.security import safe_httpx_client as _safe_httpx_client
+
+
+@dataclass
+class ExtractOptions:
+    """Options for content extraction."""
+
+    format: str = "markdown"
+    stealth: bool = True
+    scan_full_page: bool = False
+    delay_before_return_html: float = 0.0
+    page_timeout: int = 60000
+
 
 # Document extensions that markitdown handles better than Crawl4AI
 _DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls"}
@@ -249,39 +262,32 @@ async def _extract_with_markitdown(url: str) -> dict:
 
 async def extract(
     urls: list[str],
-    format: str = "markdown",
-    stealth: bool = True,
-    scan_full_page: bool = False,
-    delay_before_return_html: float = 0.0,
-    page_timeout: int = 60000,
+    options: ExtractOptions | None = None,
 ) -> str:
     """Extract content from URLs.
 
     Args:
         urls: List of URLs to extract
-        format: Output format (markdown, text, html)
-        stealth: Enable stealth mode
-        scan_full_page: Auto-scroll to trigger lazy-loaded content
-        delay_before_return_html: Seconds to wait after page load before capture
-        page_timeout: Page loading timeout in milliseconds
+        options: Extraction options
 
     Returns:
         JSON string with extracted content
     """
     logger.info(f"Extracting content from {len(urls)} URLs")
 
-    crawler = await _get_crawler(stealth)
+    opts = options or ExtractOptions()
+    crawler = await _get_crawler(opts.stealth)
     sem = _get_semaphore()
 
     # Build CrawlerRunConfig with optional SPA-friendly settings
     run_config_kwargs: dict = {"verbose": False}
-    if scan_full_page:
+    if opts.scan_full_page:
         run_config_kwargs["scan_full_page"] = True
         run_config_kwargs["scroll_delay"] = 0.3
-    if delay_before_return_html > 0:
-        run_config_kwargs["delay_before_return_html"] = delay_before_return_html
-    if page_timeout != 60000:
-        run_config_kwargs["page_timeout"] = page_timeout
+    if opts.delay_before_return_html > 0:
+        run_config_kwargs["delay_before_return_html"] = opts.delay_before_return_html
+    if opts.page_timeout != 60000:
+        run_config_kwargs["page_timeout"] = opts.page_timeout
     run_config = CrawlerRunConfig(**run_config_kwargs)
 
     async def process_url(url: str):
@@ -303,7 +309,7 @@ async def extract(
 
                 if result.success:
                     content = (
-                        result.markdown if format == "markdown" else result.cleaned_html
+                        result.markdown if opts.format == "markdown" else result.cleaned_html
                     )
                     return {
                         "url": url,
@@ -736,7 +742,9 @@ async def batch_extract(
     async def process_url(url: str) -> dict:
         async with limiter.acquire(url):
             try:
-                raw = await extract(urls=[url], format=format, stealth=stealth)
+                raw = await extract(
+                    urls=[url], options=ExtractOptions(format=format, stealth=stealth)
+                )
                 pages = json.loads(raw)
                 if pages and isinstance(pages, list):
                     return pages[0]

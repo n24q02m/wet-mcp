@@ -19,6 +19,7 @@ from wet_mcp.config import _EMBEDDING_CANDIDATES, settings
 from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 from wet_mcp.security import wrap_external_content
+from wet_mcp.sources.crawler import ExtractOptions
 from wet_mcp.sources.crawler import (
     crawl as _crawl,
 )
@@ -769,7 +770,9 @@ async def extract(
                 if cached:
                     return cached
             result = await _with_timeout(
-                _extract(urls=urls, format=format, stealth=stealth),
+                _extract(
+                    urls=urls, options=ExtractOptions(format=format, stealth=stealth)
+                ),
                 "extract",
             )
             if _web_cache and not result.startswith("Error"):

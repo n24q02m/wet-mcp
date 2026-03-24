@@ -3414,7 +3414,7 @@ async def fetch_docs_pages(
 
     Returns list of {url, title, content} dicts.
     """
-    from wet_mcp.sources.crawler import extract
+    from wet_mcp.sources.crawler import ExtractOptions, extract
 
     # SPA-friendly crawl settings: scroll full page to trigger lazy-loaded
     # content and add a small delay for JS rendering before capture.
@@ -3427,7 +3427,7 @@ async def fetch_docs_pages(
     logger.info(f"Fetching docs root: {docs_url}")
     try:
         root_result_str = await asyncio.wait_for(
-            extract(urls=[docs_url], format="markdown", stealth=True, **_SPA_KWARGS),
+            extract(urls=[docs_url], options=ExtractOptions(format="markdown", stealth=True, **_SPA_KWARGS)),
             timeout=batch_timeout,
         )
     except TimeoutError:
@@ -3620,7 +3620,10 @@ async def fetch_docs_pages(
         try:
             batch1_str = await asyncio.wait_for(
                 extract(
-                    urls=batch1_urls, format="markdown", stealth=True, **_SPA_KWARGS
+                    urls=batch1_urls,
+                    options=ExtractOptions(
+                        format="markdown", stealth=True, **_SPA_KWARGS
+                    ),
                 ),
                 timeout=batch_timeout,
             )
@@ -3656,7 +3659,10 @@ async def fetch_docs_pages(
             try:
                 batch2_str = await asyncio.wait_for(
                     extract(
-                        urls=batch2_urls, format="markdown", stealth=True, **_SPA_KWARGS
+                        urls=batch2_urls,
+                        options=ExtractOptions(
+                            format="markdown", stealth=True, **_SPA_KWARGS
+                        ),
                     ),
                     timeout=batch_timeout,
                 )

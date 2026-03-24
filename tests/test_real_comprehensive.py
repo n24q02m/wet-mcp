@@ -173,12 +173,11 @@ class TestExtractTool:
     """Test content extraction including document conversion."""
 
     async def test_extract_web_page(self):
-        from wet_mcp.sources.crawler import extract
+        from wet_mcp.sources.crawler import ExtractOptions, extract
 
         result = await extract(
             ["https://httpbin.org/html"],
-            format="markdown",
-            stealth=False,
+            options=ExtractOptions(format="markdown", stealth=False),
         )
         data = json.loads(result)
         assert len(data) == 1
@@ -187,12 +186,12 @@ class TestExtractTool:
 
     async def test_extract_pdf_markitdown(self):
         """Test PDF extraction via markitdown."""
-        from wet_mcp.sources.crawler import extract
+        from wet_mcp.sources.crawler import ExtractOptions, extract
 
         # Use a well-known small public PDF
         result = await extract(
             ["https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"],
-            format="markdown",
+            options=ExtractOptions(format="markdown"),
         )
         data = json.loads(result)
         assert len(data) == 1

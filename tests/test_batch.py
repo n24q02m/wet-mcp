@@ -60,7 +60,7 @@ async def test_batch_extract_success():
 async def test_batch_extract_partial_failure():
     """One URL fails, others succeed -- verify partial results."""
 
-    async def mock_extract_fn(urls, format, stealth):
+    async def mock_extract_fn(urls, options=None):
         url = urls[0]
         if "fail" in url:
             return json.dumps([{"url": url, "error": "Connection refused"}])
