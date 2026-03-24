@@ -1,0 +1,22 @@
+{
+  "name": "wet-mcp",
+  "version": "2.15.0",
+  "description": "Web search, content extraction, and media download MCP server",
+  "mcpServers": {
+    "wet": {
+      "command": "uvx",
+      "args": [
+        "--python",
+        "3.13",
+        "wet-mcp"
+      ],
+      "env": {
+        "API_KEYS": "",
+        "LITELLM_PROXY_URL": "",
+        "SEARXNG_URL": "",
+        "RERANK_ENABLED": "true"
+      }
+    }
+  },
+  "contextFileName": "GEMINI.md"
+}
