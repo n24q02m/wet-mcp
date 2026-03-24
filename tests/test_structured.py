@@ -87,6 +87,43 @@ async def test_extract_structured_local_mode_error():
         assert "LLM" in result["error"]
 
 
+async def test_extract_structured_validation_error():
+    """LLM returns JSON with incorrect types causing ValidationError."""
+    llm_output = json.dumps({"title": "Widget", "price": "Not a number"})
+
+    with (
+        patch(
+            "wet_mcp.sources.structured.raw_extract",
+            new_callable=AsyncMock,
+            return_value=json.dumps(SAMPLE_PAGES),
+        ),
+        patch("wet_mcp.sources.structured.settings") as mock_settings,
+        patch(
+            "wet_mcp.sources.structured.get_llm_config",
+            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+        ),
+        patch(
+            "wet_mcp.sources.structured.acompletion",
+            new_callable=AsyncMock,
+            return_value=_mock_llm_response(llm_output),
+        ),
+    ):
+        mock_settings.resolve_litellm_mode.return_value = "proxy"
+
+        result_str = await extract_structured(
+            urls=["https://example.com/product"],
+            schema=SAMPLE_SCHEMA,
+        )
+
+        result = json.loads(result_str)
+        assert "data" in result
+        assert "validation_warning" in result
+        assert (
+            "Not a number" in result["validation_warning"]
+            or "is not of type" in result["validation_warning"]
+        )
+
+
 async def test_extract_structured_no_content():
     """Empty/error pages return an error about no content."""
     empty_pages = [
