@@ -954,14 +954,25 @@ class DocsDB:
                 return set()
             ids = [obj["id"] for obj in items]
             existing = set()
-            for i in range(0, len(ids), 999):
-                batch = ids[i : i + 999]
+            for i in range(0, len(ids), 32766):
+                batch = ids[i : i + 32766]
                 placeholders = ",".join("?" * len(batch))
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
-                ).fetchall()
-                existing.update(r[0] for r in res)
+                try:
+                    # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                    res = self._conn.execute(
+                        f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
+                    ).fetchall()
+                    existing.update(r[0] for r in res)
+                except sqlite3.OperationalError:
+                    for j in range(0, len(batch), 999):
+                        sub_batch = batch[j : j + 999]
+                        sub_placeholders = ",".join("?" * len(sub_batch))
+                        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                        sub_res = self._conn.execute(
+                            f"SELECT id FROM {table} WHERE id IN ({sub_placeholders})",
+                            sub_batch,
+                        ).fetchall()
+                        existing.update(sub_r[0] for sub_r in sub_res)
             return existing
 
         existing_libs = (
