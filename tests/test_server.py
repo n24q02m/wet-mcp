@@ -510,3 +510,74 @@ async def test_search_enrich_flag():
         mock_enrich.assert_called_once()
         # Verify enriched content is in output
         assert "Enriched content" in result
+
+
+@pytest.mark.asyncio
+async def test_search_research_action_json_decode_error():
+    """Test research action returns original string on malformed JSON."""
+    from wet_mcp.server import _do_research
+
+    with (
+        patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+    ):
+        mock_ensure.return_value = "http://localhost:8080"
+
+        # Return malformed JSON to trigger JSONDecodeError
+        malformed_json = "This is not valid JSON"
+        mock_search.return_value = malformed_json
+
+        result = await _do_research(query="test query")
+
+        assert result == malformed_json
+
+
+@pytest.mark.asyncio
+async def test_search_research_action_json_decode_error_via_search():
+    """Test research action via search router handles JSONDecodeError."""
+    from wet_mcp.server import search
+
+    with (
+        patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+    ):
+        mock_ensure.return_value = "http://localhost:8080"
+
+        # Return malformed JSON to trigger JSONDecodeError
+        malformed_json = "This is not valid JSON"
+        mock_search.return_value = malformed_json
+
+        result = await search(action="research", query="test query")
+
+        assert malformed_json in result
+
+
+@pytest.mark.asyncio
+async def test_discover_docs_url_json_decode_error():
+    """Test _discover_docs_url handles JSONDecodeError when SearXNG returns malformed JSON."""
+    from wet_mcp.server import _discover_docs_url
+
+    with (
+        patch(
+            "wet_mcp.sources.docs.discover_library", new_callable=AsyncMock
+        ) as mock_discover,
+        patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+    ):
+        # Simulate registry lookup failure
+        mock_discover.return_value = None
+
+        mock_ensure.return_value = "http://localhost:8080"
+
+        # Return malformed JSON to trigger JSONDecodeError in the SearXNG fallback
+        mock_search.return_value = "This is not valid JSON"
+
+        # The function should swallow the JSONDecodeError and return empty strings
+        docs_url, repo_url, registry, description = await _discover_docs_url(
+            "test_lib", "python"
+        )
+
+        assert docs_url == ""
+        assert repo_url == ""
+        assert registry == ""
+        assert description == ""
