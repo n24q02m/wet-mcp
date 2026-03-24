@@ -207,6 +207,9 @@ class LiteLLMBackend:
         if not texts:
             return []
 
+        if self.MAX_BATCH_SIZE <= 0:
+            return []
+
         if len(texts) <= self.MAX_BATCH_SIZE:
             return self._embed_batch_inner(texts, dimensions)
 

@@ -227,6 +227,13 @@ class TestBatchSplitting:
 
         assert mock.call_count == 1
 
+    def test_zero_batch_size(self):
+        """Zero batch size returns early and avoids ZeroDivisionError."""
+        backend = LiteLLMBackend("test-model")
+        backend.MAX_BATCH_SIZE = 0
+        vecs = backend.embed_texts(["text_1", "text_2"])
+        assert vecs == []
+
 
 # -----------------------------------------------------------------------
 # LiteLLMBackend: Retry logic
