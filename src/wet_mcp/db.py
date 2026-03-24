@@ -913,59 +913,37 @@ class DocsDB:
 
         return "\n".join(lines)
 
-    def import_jsonl(self, data: str, mode: str = "merge") -> dict:
-        """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""
-        stats = {"libraries": 0, "versions": 0, "chunks": 0, "skipped": 0}
+    def _clear_for_import(self) -> None:
+        if self._vec_enabled:
+            try:
+                self._conn.execute("DELETE FROM doc_chunks_vec")
+            except Exception:
+                logger.warning(
+                    "Failed to clear vector table during import replace",
+                    exc_info=True,
+                )
+        self._conn.execute("DELETE FROM doc_chunks")
+        self._conn.execute("DELETE FROM versions")
+        self._conn.execute("DELETE FROM libraries")
 
-        if mode == "replace":
-            if self._vec_enabled:
-                try:
-                    self._conn.execute("DELETE FROM doc_chunks_vec")
-                except Exception:
-                    logger.warning(
-                        "Failed to clear vector table during import replace",
-                        exc_info=True,
-                    )
-            self._conn.execute("DELETE FROM doc_chunks")
-            self._conn.execute("DELETE FROM versions")
-            self._conn.execute("DELETE FROM libraries")
+    def _get_existing_ids(self, table: str, items: list) -> set:
+        if not items:
+            return set()
+        ids = [obj["id"] for obj in items]
+        existing = set()
+        for i in range(0, len(ids), 999):
+            batch = ids[i : i + 999]
+            placeholders = ",".join("?" * len(batch))
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            res = self._conn.execute(
+                f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
+            ).fetchall()
+            existing.update(r[0] for r in res)
+        return existing
 
-        lines = data.strip().split("\n")
-
-        libraries = []
-        versions = []
-        chunks = []
-
-        for line in lines:
-            if not line.strip():
-                continue
-            obj = json.loads(line)
-            obj_type = obj.pop("_type", None)
-
-            if obj_type == "library":
-                libraries.append(obj)
-            elif obj_type == "version":
-                versions.append(obj)
-            elif obj_type == "chunk":
-                chunks.append(obj)
-
-        def _get_existing(table: str, items: list) -> set:
-            if not items:
-                return set()
-            ids = [obj["id"] for obj in items]
-            existing = set()
-            for i in range(0, len(ids), 999):
-                batch = ids[i : i + 999]
-                placeholders = ",".join("?" * len(batch))
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
-                ).fetchall()
-                existing.update(r[0] for r in res)
-            return existing
-
+    def _import_libraries(self, libraries: list, mode: str, stats: dict) -> None:
         existing_libs = (
-            _get_existing("libraries", libraries) if mode == "merge" else set()
+            self._get_existing_ids("libraries", libraries) if mode == "merge" else set()
         )
         to_insert_libs = []
         for obj in libraries:
@@ -994,8 +972,9 @@ class DocsDB:
             )
             stats["libraries"] += len(to_insert_libs)
 
+    def _import_versions(self, versions: list, mode: str, stats: dict) -> None:
         existing_vers = (
-            _get_existing("versions", versions) if mode == "merge" else set()
+            self._get_existing_ids("versions", versions) if mode == "merge" else set()
         )
         to_insert_vers = []
         for obj in versions:
@@ -1025,8 +1004,9 @@ class DocsDB:
             )
             stats["versions"] += len(to_insert_vers)
 
+    def _import_chunks(self, chunks: list, mode: str, stats: dict) -> None:
         existing_chunks = (
-            _get_existing("doc_chunks", chunks) if mode == "merge" else set()
+            self._get_existing_ids("doc_chunks", chunks) if mode == "merge" else set()
         )
         to_insert_chunks = []
         for obj in chunks:
@@ -1056,6 +1036,36 @@ class DocsDB:
                 to_insert_chunks,
             )
             stats["chunks"] += len(to_insert_chunks)
+
+    def import_jsonl(self, data: str, mode: str = "merge") -> dict:
+        """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""
+        stats = {"libraries": 0, "versions": 0, "chunks": 0, "skipped": 0}
+
+        if mode == "replace":
+            self._clear_for_import()
+
+        lines = data.strip().split("\n")
+
+        libraries = []
+        versions = []
+        chunks = []
+
+        for line in lines:
+            if not line.strip():
+                continue
+            obj = json.loads(line)
+            obj_type = obj.pop("_type", None)
+
+            if obj_type == "library":
+                libraries.append(obj)
+            elif obj_type == "version":
+                versions.append(obj)
+            elif obj_type == "chunk":
+                chunks.append(obj)
+
+        self._import_libraries(libraries, mode, stats)
+        self._import_versions(versions, mode, stats)
+        self._import_chunks(chunks, mode, stats)
 
         self._conn.commit()
         return stats
