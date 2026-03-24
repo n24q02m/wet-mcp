@@ -621,6 +621,58 @@ _GITHUB_LANGUAGE_ACCEPT: dict[str, set[str]] = {
 }
 
 
+async def _search_github(client: httpx.AsyncClient, query: str) -> list[dict]:
+    """Execute a single GitHub search and return items."""
+    try:
+        resp = await client.get(
+            "https://api.github.com/search/repositories",
+            params={
+                "q": query,
+                "sort": "stars",
+                "per_page": 10,
+            },
+            headers=_github_headers(),
+        )
+        if resp.status_code != 200:
+            logger.debug(f"GitHub search returned {resp.status_code} for q={query}")
+            return []
+        return resp.json().get("items", [])
+    except Exception as e:
+        logger.debug(f"GitHub search failed for q={query}: {e}")
+        return []
+
+
+def _is_lang_ok(repo_lang: str, stars: int, accept_langs: set[str]) -> bool:
+    """Check if repository language is acceptable."""
+    lang = repo_lang.lower()
+    # Very popular repos are always accepted (>= 5000 stars)
+    if stars >= 5000:
+        return True
+    # Otherwise, must be in the accept set
+    return lang in accept_langs
+
+
+def _build_result(item: dict, match_type: str, name: str, language: str) -> dict:
+    """Build a discovery result dict from a GitHub API item."""
+    homepage = item.get("homepage") or ""
+    repo_url = item.get("html_url") or ""
+    stars = item.get("stargazers_count", 0)
+    docs_url = (
+        homepage if (homepage and "github.com" not in homepage.lower()) else repo_url
+    )
+    logger.info(
+        f"GitHub search {match_type} {name} ({language}): {repo_url} ({stars} stars)"
+    )
+    return {
+        "name": name,
+        "description": item.get("description") or "",
+        "homepage": docs_url,
+        "repository": repo_url,
+        "registry": "github",
+        "stars": stars,
+    }
+
+
 async def _discover_from_github_search(name: str, language: str) -> dict | None:
     """Search GitHub for a library repo by name and language.
 
@@ -648,58 +700,6 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
 
     # Languages accepted for this user-facing language
     accept_langs = _GITHUB_LANGUAGE_ACCEPT.get(language, {gh_lang.lower()})
-
-    async def _search_github(client: httpx.AsyncClient, query: str) -> list[dict]:
-        """Execute a single GitHub search and return items."""
-        try:
-            resp = await client.get(
-                "https://api.github.com/search/repositories",
-                params={
-                    "q": query,
-                    "sort": "stars",
-                    "per_page": 10,
-                },
-                headers=_github_headers(),
-            )
-            if resp.status_code != 200:
-                logger.debug(f"GitHub search returned {resp.status_code} for q={query}")
-                return []
-            return resp.json().get("items", [])
-        except Exception as e:
-            logger.debug(f"GitHub search failed for q={query}: {e}")
-            return []
-
-    def _is_lang_ok(repo_lang: str, stars: int) -> bool:
-        """Check if repository language is acceptable."""
-        lang = repo_lang.lower()
-        # Very popular repos are always accepted (>= 5000 stars)
-        if stars >= 5000:
-            return True
-        # Otherwise, must be in the accept set
-        return lang in accept_langs
-
-    def _build_result(item: dict, match_type: str) -> dict:
-        """Build a discovery result dict from a GitHub API item."""
-        homepage = item.get("homepage") or ""
-        repo_url = item.get("html_url") or ""
-        stars = item.get("stargazers_count", 0)
-        docs_url = (
-            homepage
-            if (homepage and "github.com" not in homepage.lower())
-            else repo_url
-        )
-        logger.info(
-            f"GitHub search {match_type} {name} ({language}): "
-            f"{repo_url} ({stars} stars)"
-        )
-        return {
-            "name": name,
-            "description": item.get("description") or "",
-            "homepage": docs_url,
-            "repository": repo_url,
-            "registry": "github",
-            "stars": stars,
-        }
 
     # Build search queries:
     #   Pass 1: primary language filter  (e.g. ``language:elixir``)
@@ -734,12 +734,12 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
                 repo_lang = item.get("language") or ""
                 stars = item.get("stargazers_count", 0)
 
-                if not _is_lang_ok(repo_lang, stars):
+                if not _is_lang_ok(repo_lang, stars, accept_langs):
                     continue
                 if stars < 20:
                     continue
 
-                return _build_result(item, "found")
+                return _build_result(item, "found", name, language)
 
             # Fuzzy match: name contained in repo name (top result only)
             top = items[0]
@@ -748,7 +748,7 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
             top_stars = top.get("stargazers_count", 0)
 
             if (
-                _is_lang_ok(top_lang, top_stars)
+                _is_lang_ok(top_lang, top_stars, accept_langs)
                 and top_stars >= 100
                 and (
                     name_lower in top_name
@@ -756,7 +756,7 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
                     or name_lower.replace("-", "") == top_name.replace("-", "")
                 )
             ):
-                return _build_result(top, "fuzzy match")
+                return _build_result(top, "fuzzy match", name, language)
 
     return None
 
