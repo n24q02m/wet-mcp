@@ -695,6 +695,17 @@ async def test_help_tool_not_found():
 
 
 @pytest.mark.asyncio
+async def test_help_tool_file_not_found():
+    """Test help when the valid tool name is used but file is missing."""
+    with patch("wet_mcp.server.files") as mock_files:
+        mock_files.return_value.joinpath.return_value.read_text.side_effect = (
+            FileNotFoundError("not found")
+        )
+        res = await server.help("search")
+        assert "Error: No documentation found for tool 'search'" in res
+
+
+@pytest.mark.asyncio
 async def test_help_tool_exception():
     """Test help when file read raises a generic exception."""
     with patch("wet_mcp.server.files") as mock_files:
