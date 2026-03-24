@@ -25,6 +25,15 @@ class TestCli:
             _cli()
         mock_main.assert_called_once()
 
+    @patch("wet_mcp.__main__.main")
+    def test_cli_empty_argv(self, mock_main):
+        """_cli() gracefully handles empty sys.argv."""
+        from wet_mcp.__main__ import _cli
+
+        with patch.object(sys, "argv", []):
+            _cli()
+        mock_main.assert_called_once()
+
 
 class TestClearModelCache:
     """clear_model_cache removes corrupted HF Hub cache directories."""
