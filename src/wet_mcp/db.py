@@ -739,9 +739,10 @@ class DocsDB:
                 LEFT JOIN libraries l ON c.library_id = l.id
                 WHERE c.id IN ({placeholders})
             """
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             chunk_rows = self._conn.execute(
                 fetch_sql, list(fts_scores.keys())
-            ).fetchall()  # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            ).fetchall()
             for row in chunk_rows:
                 chunk = dict(row)
                 cid = chunk["id"]
