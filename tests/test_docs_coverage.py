@@ -918,6 +918,69 @@ class TestDiscoverFromGithubSearch:
         assert result["homepage"] == "https://phoenixframework.org"
         assert result["registry"] == "github"
 
+    async def test_is_lang_ok_popular_repo_ignored_language(self):
+        """Very popular repos (>=5000 stars) are accepted regardless of language."""
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "items": [
+                {
+                    "name": "phoenix",
+                    "full_name": "phoenixframework/phoenix",
+                    "language": "SomeWeirdLanguage",  # Not in accept set
+                    "stargazers_count": 5000,  # >= 5000 stars
+                    "homepage": "https://phoenixframework.org",
+                    "html_url": "https://github.com/phoenixframework/phoenix",
+                }
+            ]
+        }
+        client = _make_mock_client({"api.github.com": resp})
+        with patch("wet_mcp.sources.docs._safe_httpx_client", return_value=client):
+            result = await _discover_from_github_search("phoenix", "elixir")
+        assert result is not None
+
+    async def test_is_lang_ok_accepted_language(self):
+        """Repos with <5000 stars are accepted if language is in accept set."""
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "items": [
+                {
+                    "name": "phoenix",
+                    "full_name": "phoenixframework/phoenix",
+                    "language": "erlang",  # In accept set for elixir
+                    "stargazers_count": 1000,  # < 5000 stars
+                    "homepage": "https://phoenixframework.org",
+                    "html_url": "https://github.com/phoenixframework/phoenix",
+                }
+            ]
+        }
+        client = _make_mock_client({"api.github.com": resp})
+        with patch("wet_mcp.sources.docs._safe_httpx_client", return_value=client):
+            result = await _discover_from_github_search("phoenix", "elixir")
+        assert result is not None
+
+    async def test_is_lang_ok_rejected_language(self):
+        """Repos with <5000 stars are rejected if language is not in accept set."""
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.json.return_value = {
+            "items": [
+                {
+                    "name": "phoenix",
+                    "full_name": "phoenixframework/phoenix",
+                    "language": "SomeWeirdLanguage",  # Not in accept set
+                    "stargazers_count": 1000,  # < 5000 stars
+                    "homepage": "https://phoenixframework.org",
+                    "html_url": "https://github.com/phoenixframework/phoenix",
+                }
+            ]
+        }
+        client = _make_mock_client({"api.github.com": resp})
+        with patch("wet_mcp.sources.docs._safe_httpx_client", return_value=client):
+            result = await _discover_from_github_search("phoenix", "elixir")
+        assert result is None
+
     async def test_fuzzy_match(self):
         """Finds fuzzy match when no exact match exists."""
         resp = MagicMock()
