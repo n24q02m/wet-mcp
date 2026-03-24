@@ -276,3 +276,57 @@ def test_stop_searxng(mock_cleanup):
 
     stop_searxng()
     mock_cleanup.assert_called_once()
+
+
+@patch("wet_mcp.searxng_runner.os.kill")
+def test_sigterm_then_kill_permission_error_on_sigterm(mock_kill):
+    import signal
+
+    from wet_mcp.searxng_runner import _sigterm_then_kill
+
+    mock_kill.side_effect = PermissionError
+    result = _sigterm_then_kill(12345)
+    assert result is True
+    mock_kill.assert_called_once_with(12345, signal.SIGTERM)
+
+
+@patch("wet_mcp.searxng_runner.time.sleep")
+@patch("wet_mcp.searxng_runner.os.kill")
+def test_sigterm_then_kill_permission_error_on_poll(mock_kill, mock_sleep):
+    import signal
+
+    from wet_mcp.searxng_runner import _sigterm_then_kill
+
+    def side_effect(pid, sig):
+        if sig == 0:
+            raise PermissionError
+        return None
+
+    mock_kill.side_effect = side_effect
+    result = _sigterm_then_kill(12345)
+    assert result is True
+    # Should be called with SIGTERM, then with 0
+    assert mock_kill.call_count == 2
+    mock_kill.assert_any_call(12345, signal.SIGTERM)
+    mock_kill.assert_any_call(12345, 0)
+
+
+@patch("wet_mcp.searxng_runner.time.sleep")
+@patch("wet_mcp.searxng_runner.os.kill")
+def test_sigterm_then_kill_permission_error_on_sigkill(mock_kill, mock_sleep):
+    import signal
+
+    from wet_mcp.searxng_runner import _sigterm_then_kill
+
+    def side_effect(pid, sig):
+        if sig == signal.SIGKILL:
+            raise PermissionError
+        return None
+
+    mock_kill.side_effect = side_effect
+    result = _sigterm_then_kill(12345)
+    assert result is True
+    # SIGTERM once, 0 thirty times, SIGKILL once
+    assert mock_kill.call_count == 32
+    mock_kill.assert_any_call(12345, signal.SIGTERM)
+    mock_kill.assert_any_call(12345, signal.SIGKILL)
