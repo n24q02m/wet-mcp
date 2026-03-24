@@ -13,9 +13,54 @@ import pytest
 from wet_mcp.embedder import (
     LiteLLMBackend,
     Qwen3EmbedBackend,
+    _is_retryable,
     get_backend,
     init_backend,
 )
+
+# -----------------------------------------------------------------------
+# _is_retryable tests
+# -----------------------------------------------------------------------
+
+
+class TestIsRetryable:
+    def test_retryable_patterns(self):
+        """Returns True for known retryable patterns."""
+        patterns = [
+            "rate limit exceeded",
+            "Rate_Limit error",
+            "HTTP 429 Too Many Requests",
+            "quota exceeded",
+            "internal server error 500",
+            "Bad Gateway 502",
+            "Service Unavailable 503",
+            "Gateway Timeout 504",
+            "connection timed out",
+            "Read Timeout",
+            "connection reset by peer",
+            "temporarily unavailable",
+            "server overloaded",
+            "Resource exhausted",
+            "RESOURCE_EXHAUSTED",
+        ]
+        for msg in patterns:
+            assert _is_retryable(Exception(msg)) is True
+
+    def test_non_retryable_patterns(self):
+        """Returns False for non-retryable errors."""
+        patterns = [
+            "400 Bad Request",
+            "401 Unauthorized",
+            "403 Forbidden",
+            "404 Not Found",
+            "Invalid API Key",
+            "Model not found",
+            "Invalid parameters",
+            "output_dimension is not supported",
+        ]
+        for msg in patterns:
+            assert _is_retryable(Exception(msg)) is False
+
 
 # -----------------------------------------------------------------------
 # LiteLLMBackend: embed_texts
