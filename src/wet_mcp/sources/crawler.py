@@ -309,7 +309,9 @@ async def extract(
 
                 if result.success:
                     content = (
-                        result.markdown if opts.format == "markdown" else result.cleaned_html
+                        result.markdown
+                        if opts.format == "markdown"
+                        else result.cleaned_html
                     )
                     return {
                         "url": url,

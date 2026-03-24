@@ -83,7 +83,9 @@ async def test_extract_html_format():
         patch("wet_mcp.sources.crawler.AsyncWebCrawler", new=MockAsyncWebCrawler),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
-        result_json = await crawler.extract(["https://safe.com"], options=ExtractOptions(format="html"))
+        result_json = await crawler.extract(
+            ["https://safe.com"], options=ExtractOptions(format="html")
+        )
         data = json.loads(result_json)
         assert data[0]["content"] == "<html>content</html>"
 

@@ -3427,7 +3427,10 @@ async def fetch_docs_pages(
     logger.info(f"Fetching docs root: {docs_url}")
     try:
         root_result_str = await asyncio.wait_for(
-            extract(urls=[docs_url], options=ExtractOptions(format="markdown", stealth=True, **_SPA_KWARGS)),
+            extract(
+                urls=[docs_url],
+                options=ExtractOptions(format="markdown", stealth=True, **_SPA_KWARGS),
+            ),
             timeout=batch_timeout,
         )
     except TimeoutError:

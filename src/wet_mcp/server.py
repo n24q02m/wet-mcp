@@ -19,16 +19,16 @@ from wet_mcp.config import _EMBEDDING_CANDIDATES, settings
 from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 from wet_mcp.security import wrap_external_content
-from wet_mcp.sources.crawler import ExtractOptions
+from wet_mcp.sources.crawler import (
+    ExtractOptions,
+    list_media,
+    shutdown_crawler,
+)
 from wet_mcp.sources.crawler import (
     crawl as _crawl,
 )
 from wet_mcp.sources.crawler import (
     extract as _extract,
-)
-from wet_mcp.sources.crawler import (
-    list_media,
-    shutdown_crawler,
 )
 from wet_mcp.sources.crawler import (
     sitemap as _sitemap,

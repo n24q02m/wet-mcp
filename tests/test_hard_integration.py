@@ -227,7 +227,9 @@ async def test_antibot_sites():
         try:
             result = await extract(
                 urls=[url],
-                options=ExtractOptions(format="markdown", stealth=True),  # Enable stealth mode
+                options=ExtractOptions(
+                    format="markdown", stealth=True
+                ),  # Enable stealth mode
             )
             data = json.loads(result)
 
