@@ -6,6 +6,7 @@ import unittest.mock
 import pytest
 
 from wet_mcp.sources.searxng import (
+    SearchQuery,
     _apply_domain_cap,
     _build_filtered_query,
     _normalize_url,
@@ -230,8 +231,10 @@ async def test_search_dedup_normalizes_urls(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="normalize_test",
-        max_results=10,
+        request=SearchQuery(
+            query="normalize_test",
+            max_results=10,
+        ),
     )
 
     data = json.loads(result)
@@ -259,8 +262,10 @@ async def test_search_domain_cap_applied(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="domain_cap_test",
-        max_results=10,
+        request=SearchQuery(
+            query="domain_cap_test",
+            max_results=10,
+        ),
     )
 
     data = json.loads(result)
@@ -291,8 +296,10 @@ async def test_search_domain_cap_preserves_diversity(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="diversity_test",
-        max_results=10,
+        request=SearchQuery(
+            query="diversity_test",
+            max_results=10,
+        ),
     )
 
     data = json.loads(result)
@@ -375,8 +382,10 @@ async def test_search_with_time_range(mock_httpx_client):
 
     await search(
         searxng_url="http://localhost:8080",
-        query="recent news",
-        time_range="week",
+        request=SearchQuery(
+            query="recent news",
+            time_range="week",
+        ),
     )
 
     # Verify the params passed to httpx include time_range
@@ -400,8 +409,10 @@ async def test_search_with_language(mock_httpx_client):
 
     await search(
         searxng_url="http://localhost:8080",
-        query="tin tuc",
-        language="vi",
+        request=SearchQuery(
+            query="tin tuc",
+            language="vi",
+        ),
     )
 
     call_kwargs = mock_client.get.call_args
@@ -424,8 +435,10 @@ async def test_search_invalid_time_range_ignored(mock_httpx_client):
 
     await search(
         searxng_url="http://localhost:8080",
-        query="test",
-        time_range="invalid",
+        request=SearchQuery(
+            query="test",
+            time_range="invalid",
+        ),
     )
 
     call_kwargs = mock_client.get.call_args
@@ -448,9 +461,11 @@ async def test_search_with_domain_filters(mock_httpx_client):
 
     await search(
         searxng_url="http://localhost:8080",
-        query="python tutorial",
-        include_domains=["docs.python.org"],
-        exclude_domains=["pinterest.com"],
+        request=SearchQuery(
+            query="python tutorial",
+            include_domains=["docs.python.org"],
+            exclude_domains=["pinterest.com"],
+        ),
     )
 
     call_kwargs = mock_client.get.call_args
@@ -474,8 +489,10 @@ async def test_search_preserves_original_query_in_output(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="python tutorial",
-        include_domains=["docs.python.org"],
+        request=SearchQuery(
+            query="python tutorial",
+            include_domains=["docs.python.org"],
+        ),
     )
 
     data = json.loads(result)

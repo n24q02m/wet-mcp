@@ -958,7 +958,7 @@ async def test_background_index_with_language_fallback():
         )
         # Verify fallback query includes language
         call_args = mock_search.call_args
-        assert "python" in call_args.kwargs.get("query", call_args[1].get("query", ""))
+        assert "python" in call_args.kwargs["request"].query
 
 
 async def test_background_index_embed_timeout():
@@ -1112,7 +1112,7 @@ async def test_discover_docs_url_with_language():
         assert docs_url == "http://docs.redis.io"
         # Verify language was in the query
         call_args = mock_search.call_args
-        assert "python" in call_args.kwargs.get("query", "")
+        assert "python" in call_args.kwargs["request"].query
 
 
 # ---------------------------------------------------------------------------

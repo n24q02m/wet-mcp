@@ -6,7 +6,7 @@ import unittest.mock
 import httpx
 import pytest
 
-from wet_mcp.sources.searxng import search
+from wet_mcp.sources.searxng import SearchQuery, search
 
 
 @pytest.fixture(autouse=True)
@@ -53,9 +53,11 @@ async def test_search_success(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="example",
-        categories="general",
-        max_results=1,
+        request=SearchQuery(
+            query="example",
+            categories="general",
+            max_results=1,
+        ),
     )
 
     data = json.loads(result)
@@ -80,7 +82,9 @@ async def test_search_empty(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="nonexistent",
+        request=SearchQuery(
+            query="nonexistent",
+        ),
     )
 
     data = json.loads(result)
@@ -126,7 +130,9 @@ async def test_search_http_error_5xx_retries(mock_httpx_client):
     ):
         result = await search(
             searxng_url="http://localhost:8080",
-            query="retry_test",
+            request=SearchQuery(
+                query="retry_test",
+            ),
         )
 
     data = json.loads(result)
@@ -151,7 +157,9 @@ async def test_search_http_error_4xx_no_retry(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="error",
+        request=SearchQuery(
+            query="error",
+        ),
     )
 
     data = json.loads(result)
@@ -181,7 +189,9 @@ async def test_search_http_error_5xx_all_retries_exhausted(mock_httpx_client):
     ):
         result = await search(
             searxng_url="http://localhost:8080",
-            query="error",
+            request=SearchQuery(
+                query="error",
+            ),
         )
 
     data = json.loads(result)
@@ -222,7 +232,9 @@ async def test_search_request_error_retries(mock_httpx_client):
     ):
         result = await search(
             searxng_url="http://localhost:8080",
-            query="retry_connect",
+            request=SearchQuery(
+                query="retry_connect",
+            ),
         )
 
     data = json.loads(result)
@@ -245,7 +257,9 @@ async def test_search_request_error_all_retries_exhausted(mock_httpx_client):
     ):
         result = await search(
             searxng_url="http://localhost:8080",
-            query="error",
+            request=SearchQuery(
+                query="error",
+            ),
         )
 
     data = json.loads(result)
@@ -268,7 +282,9 @@ async def test_search_general_exception(mock_httpx_client):
     ):
         result = await search(
             searxng_url="http://localhost:8080",
-            query="error",
+            request=SearchQuery(
+                query="error",
+            ),
         )
 
     data = json.loads(result)
@@ -290,7 +306,9 @@ async def test_search_health_check_called(mock_health_check, mock_httpx_client):
 
     await search(
         searxng_url="http://localhost:8080",
-        query="health_check_test",
+        request=SearchQuery(
+            query="health_check_test",
+        ),
     )
 
     mock_health_check.assert_called_once_with("http://localhost:8080")
@@ -314,7 +332,9 @@ async def test_search_uses_healthy_url(mock_health_check, mock_httpx_client):
 
     await search(
         searxng_url="http://localhost:8080",
-        query="url_test",
+        request=SearchQuery(
+            query="url_test",
+        ),
     )
 
     # Verify the search request went to the healthy URL, not the original
@@ -346,8 +366,10 @@ async def test_search_max_results_respected(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="many_results",
-        max_results=5,
+        request=SearchQuery(
+            query="many_results",
+            max_results=5,
+        ),
     )
 
     data = json.loads(result)
@@ -379,7 +401,9 @@ async def test_search_result_format(mock_httpx_client):
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="format_test",
+        request=SearchQuery(
+            query="format_test",
+        ),
     )
 
     data = json.loads(result)

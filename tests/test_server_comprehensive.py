@@ -1938,7 +1938,7 @@ async def test_discover_docs_url_with_language():
         assert docs_url == "http://redis.io/docs/python"
         # Verify language was included in search query
         call_args = mock_search.call_args
-        assert "python" in call_args.kwargs["query"]
+        assert "python" in call_args.kwargs["request"].query
 
 
 @pytest.mark.asyncio

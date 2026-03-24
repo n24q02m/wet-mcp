@@ -24,15 +24,19 @@ async def test_search_success():
         assert "<untrusted_search_content>" in result
         assert "[SECURITY:" in result
         mock_ensure.assert_called_once()
+        from wet_mcp.sources.searxng import SearchQuery
+
         mock_search.assert_called_once_with(
             searxng_url="http://localhost:8080",
-            query="test query",
-            categories="general",
-            max_results=30,  # 10 * _RERANK_CANDIDATE_MULTIPLIER (3)
-            time_range=None,
-            language=None,
-            include_domains=None,
-            exclude_domains=None,
+            request=SearchQuery(
+                query="test query",
+                categories="general",
+                max_results=30,  # 10 * _RERANK_CANDIDATE_MULTIPLIER (3)
+                time_range=None,
+                language=None,
+                include_domains=None,
+                exclude_domains=None,
+            ),
         )
 
 
@@ -449,7 +453,7 @@ async def test_search_expand_flag():
         assert "Search Results" in result
         # Verify expanded query was passed to searxng_search
         call_args = mock_search.call_args
-        assert "OR" in call_args.kwargs.get("query", call_args[1].get("query", ""))
+        assert "OR" in call_args.kwargs["request"].query
 
 
 # ---------------------------------------------------------------------------

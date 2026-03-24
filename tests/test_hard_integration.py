@@ -24,7 +24,7 @@ logger.add(sys.stdout, level="INFO")
 async def test_search_quality():
     """Test search result quality and relevance."""
     from wet_mcp.searxng_runner import ensure_searxng
-    from wet_mcp.sources.searxng import search
+    from wet_mcp.sources.searxng import SearchQuery, search
 
     print("\n" + "=" * 60)
     print("TEST: Search Quality")
@@ -57,8 +57,7 @@ async def test_search_quality():
 
         result = await search(
             searxng_url=searxng_url,
-            query=str(tc["query"]),
-            max_results=10,
+            request=SearchQuery(query=str(tc["query"]), max_results=10),
         )
         data = json.loads(result)
 

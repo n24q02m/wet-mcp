@@ -32,6 +32,7 @@ from wet_mcp.sources.crawler import (
 from wet_mcp.sources.crawler import (
     sitemap as _sitemap,
 )
+from wet_mcp.sources.searxng import SearchQuery
 from wet_mcp.sources.searxng import search as searxng_search
 
 # Configure logging
@@ -573,13 +574,15 @@ async def search(  # noqa: PLR0913
             result = await _with_timeout(
                 searxng_search(
                     searxng_url=searxng_url,
-                    query=search_query,
-                    categories=categories,
-                    max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
-                    time_range=time_range,
-                    language=language,
-                    include_domains=include_domains,
-                    exclude_domains=exclude_domains,
+                    request=SearchQuery(
+                        query=search_query,
+                        categories=categories,
+                        max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
+                        time_range=time_range,
+                        language=language,
+                        include_domains=include_domains,
+                        exclude_domains=exclude_domains,
+                    ),
                 ),
                 "search",
             )
@@ -1230,13 +1233,15 @@ async def _do_research(
 
     result_str = await searxng_search(
         searxng_url=searxng_url,
-        query=query,
-        categories="science",
-        max_results=max_results * 3,
-        time_range=time_range,
-        language=language,
-        include_domains=include_domains,
-        exclude_domains=exclude_domains,
+        request=SearchQuery(
+            query=query,
+            categories="science",
+            max_results=max_results * 3,
+            time_range=time_range,
+            language=language,
+            include_domains=include_domains,
+            exclude_domains=exclude_domains,
+        ),
     )
     try:
         data = json.loads(result_str)
@@ -1466,9 +1471,11 @@ async def _background_index_and_search(
                 fallback_result = await asyncio.wait_for(
                     searxng_search(
                         searxng_url=searxng_url,
-                        query=fallback_query,
-                        categories="general",
-                        max_results=3,
+                        request=SearchQuery(
+                            query=fallback_query,
+                            categories="general",
+                            max_results=3,
+                        ),
                     ),
                     timeout=15,
                 )
@@ -1690,9 +1697,11 @@ async def _discover_docs_url(
             search_result = await asyncio.wait_for(
                 searxng_search(
                     searxng_url=searxng_url,
-                    query=search_query,
-                    categories="general",
-                    max_results=3,
+                    request=SearchQuery(
+                        query=search_query,
+                        categories="general",
+                        max_results=3,
+                    ),
                 ),
                 timeout=15,
             )
@@ -1827,9 +1836,11 @@ async def _do_immediate_fallback_search(
         fallback_result = await asyncio.wait_for(
             searxng_search(
                 searxng_url=searxng_url,
-                query=fallback_search_query,
-                categories="general",
-                max_results=limit,
+                request=SearchQuery(
+                    query=fallback_search_query,
+                    categories="general",
+                    max_results=limit,
+                ),
             ),
             timeout=15,
         )

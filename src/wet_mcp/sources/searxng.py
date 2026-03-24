@@ -3,6 +3,7 @@
 import asyncio
 import json
 import re
+from dataclasses import dataclass
 from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
@@ -162,15 +163,56 @@ def _build_filtered_query(
     return " ".join(parts)
 
 
+@dataclass
+class SearchQuery:
+    query: str
+    categories: str = "general"
+    max_results: int = 10
+    time_range: str | None = None
+    language: str | None = None
+    include_domains: list[str] | None = None
+    exclude_domains: list[str] | None = None
+
+
+def _process_results(results: list[dict], query: str, max_results: int) -> str:
+    """Process, deduplicate, and format search results."""
+    formatted = []
+    for r in results:
+        formatted.append(
+            {
+                "url": r.get("url", ""),
+                "title": r.get("title", ""),
+                "snippet": r.get("content", ""),
+                "source": r.get("engine", ""),
+            }
+        )
+
+    seen: dict[str, dict] = {}
+    for item in formatted:
+        norm_url = _normalize_url(item["url"])
+        if norm_url in seen:
+            existing = seen[norm_url]
+            if item["source"] and item["source"] not in existing["source"]:
+                existing["source"] += f", {item['source']}"
+            if len(item.get("snippet", "")) > len(existing.get("snippet", "")):
+                existing["snippet"] = item["snippet"]
+                existing["title"] = item["title"] or existing["title"]
+        else:
+            seen[norm_url] = item
+
+    deduped = _apply_domain_cap(list(seen.values()))[:max_results]
+    output = {
+        "results": deduped,
+        "total": len(deduped),
+        "query": query,
+    }
+    logger.info(f"Found {len(deduped)} results for: {query}")
+    return json.dumps(output, ensure_ascii=False, indent=2)
+
+
 async def search(
     searxng_url: str,
-    query: str,
-    categories: str = "general",
-    max_results: int = 10,
-    time_range: str | None = None,
-    language: str | None = None,
-    include_domains: list[str] | None = None,
-    exclude_domains: list[str] | None = None,
+    request: SearchQuery,
 ) -> str:
     """Search via SearXNG API with retry logic and health verification.
 
@@ -191,22 +233,24 @@ async def search(
     Returns:
         JSON string with search results
     """
-    logger.info(f"Searching SearXNG: {query}")
+    logger.info(f"Searching SearXNG: {request.query}")
 
     # Pre-search health check + auto-restart if needed
     active_url = await _ensure_searxng_healthy(searxng_url)
 
-    effective_query = _build_filtered_query(query, include_domains, exclude_domains)
+    effective_query = _build_filtered_query(
+        request.query, request.include_domains, request.exclude_domains
+    )
 
     params = {
         "q": effective_query,
         "format": "json",
-        "categories": categories,
+        "categories": request.categories,
     }
-    if time_range and time_range in ("day", "week", "month", "year"):
-        params["time_range"] = time_range
-    if language:
-        params["language"] = language
+    if request.time_range and request.time_range in ("day", "week", "month", "year"):
+        params["time_range"] = request.time_range
+    if request.language:
+        params["language"] = request.language
 
     last_error: str | None = None
 
@@ -225,53 +269,8 @@ async def search(
                 response.raise_for_status()
                 data = response.json()
 
-                results = data.get("results", [])[: max_results * 2]
-
-                # Format results
-                formatted = []
-                for r in results:
-                    formatted.append(
-                        {
-                            "url": r.get("url", ""),
-                            "title": r.get("title", ""),
-                            "snippet": r.get("content", ""),
-                            "source": r.get("engine", ""),
-                        }
-                    )
-
-                # Deduplicate by normalized URL: with multiple engines, the same
-                # page may appear several times.  Keep the entry with the longest
-                # snippet (most informative) and merge engine sources.
-                # Python 3.7+ preserves dictionary insertion order, eliminating the need
-                # for a separate 'deduped' list mapping to track the first-seen order.
-                seen: dict[str, dict] = {}
-                for item in formatted:
-                    norm_url = _normalize_url(item["url"])
-                    if norm_url in seen:
-                        existing = seen[norm_url]
-                        # Merge engine sources
-                        if item["source"] and item["source"] not in existing["source"]:
-                            existing["source"] += f", {item['source']}"
-                        # Keep longer snippet
-                        if len(item.get("snippet", "")) > len(
-                            existing.get("snippet", "")
-                        ):
-                            existing["snippet"] = item["snippet"]
-                            existing["title"] = item["title"] or existing["title"]
-                    else:
-                        seen[norm_url] = item
-
-                # Apply per-domain cap, then trim to requested limit
-                deduped = _apply_domain_cap(list(seen.values()))[:max_results]
-
-                output = {
-                    "results": deduped,
-                    "total": len(deduped),
-                    "query": query,
-                }
-
-                logger.info(f"Found {len(deduped)} results for: {query}")
-                return json.dumps(output, ensure_ascii=False, indent=2)
+                results = data.get("results", [])[: request.max_results * 2]
+                return _process_results(results, request.query, request.max_results)
 
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code

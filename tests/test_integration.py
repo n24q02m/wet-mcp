@@ -19,7 +19,7 @@ logger.add(sys.stdout, level="INFO")
 async def test_searxng():
     """Test SearXNG search functionality."""
     from wet_mcp.searxng_runner import ensure_searxng
-    from wet_mcp.sources.searxng import search
+    from wet_mcp.sources.searxng import SearchQuery, search
 
     print("\n" + "=" * 50)
     print("TEST: SearXNG Integration")
@@ -39,9 +39,11 @@ async def test_searxng():
     try:
         result = await search(
             searxng_url=searxng_url,
-            query="python programming",
-            categories="general",
-            max_results=5,
+            request=SearchQuery(
+                query="python programming",
+                categories="general",
+                max_results=5,
+            ),
         )
         data = json.loads(result)
 

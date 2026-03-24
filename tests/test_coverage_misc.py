@@ -633,7 +633,7 @@ class TestSearchDedup:
     async def test_search_dedup_merges_engines_and_keeps_longer_snippet(self):
         import unittest.mock
 
-        from wet_mcp.sources.searxng import search
+        from wet_mcp.sources.searxng import SearchQuery, search
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -677,8 +677,10 @@ class TestSearchDedup:
         ):
             result = await search(
                 searxng_url="http://localhost:8080",
-                query="dedup_test",
-                max_results=10,
+                request=SearchQuery(
+                    query="dedup_test",
+                    max_results=10,
+                ),
             )
 
         data = json.loads(result)

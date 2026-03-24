@@ -99,23 +99,28 @@ class TestSearchTool:
 
     async def test_general_search(self):
         from wet_mcp.config import settings
-        from wet_mcp.sources.searxng import search
+        from wet_mcp.sources.searxng import SearchQuery, search
 
         searxng_url = settings.searxng_url
-        result = await search(searxng_url, "Python asyncio tutorial", max_results=5)
+        result = await search(
+            searxng_url,
+            request=SearchQuery(query="Python asyncio tutorial", max_results=5),
+        )
         data = json.loads(result)
         assert len(data) > 0, "General search should return results"
 
     async def test_academic_search(self):
         from wet_mcp.config import settings
-        from wet_mcp.sources.searxng import search
+        from wet_mcp.sources.searxng import SearchQuery, search
 
         searxng_url = settings.searxng_url
         result = await search(
             searxng_url,
-            "transformer attention mechanism",
-            categories="science",
-            max_results=5,
+            request=SearchQuery(
+                query="transformer attention mechanism",
+                categories="science",
+                max_results=5,
+            ),
         )
         data = json.loads(result)
         assert len(data) > 0, "Academic search should return results"

@@ -82,6 +82,7 @@ async def find_similar(
     keywords = await _extract_keywords(content, title)
 
     # Step 3: Search with domain exclusion
+    from wet_mcp.sources.searxng import SearchQuery
     from wet_mcp.sources.searxng import search as searxng_search
 
     if not searxng_url:
@@ -92,8 +93,10 @@ async def find_similar(
     search_query = f"{keywords} -site:{source_domain}"
     result = await searxng_search(
         searxng_url=searxng_url,
-        query=search_query,
-        max_results=max_results,
+        request=SearchQuery(
+            query=search_query,
+            max_results=max_results,
+        ),
     )
 
     return result
