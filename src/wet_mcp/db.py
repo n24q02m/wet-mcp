@@ -693,15 +693,16 @@ class DocsDB:
         for fts_query in fts_queries:
             try:
                 fts_sql = """
-                    SELECT c.*,
-                           l.name AS _library_name,
+                    SELECT f.id,
                            bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
                     FROM doc_chunks_fts f
-                    JOIN doc_chunks c ON f.id = c.id
-                    LEFT JOIN libraries l ON c.library_id = l.id
-                    WHERE doc_chunks_fts MATCH ?
                 """
                 fts_params: list = [fts_query]
+
+                if library_id or version_id:
+                    fts_sql += " JOIN doc_chunks c ON f.id = c.id"
+
+                fts_sql += " WHERE doc_chunks_fts MATCH ?"
 
                 if library_id:
                     fts_sql += " AND c.library_id = ?"
@@ -710,24 +711,41 @@ class DocsDB:
                     fts_sql += " AND c.version_id = ?"
                     fts_params.append(version_id)
 
+                if fts_scores:
+                    placeholders = ",".join("?" * len(fts_scores))
+                    fts_sql += f" AND f.id NOT IN ({placeholders})"
+                    fts_params.extend(fts_scores.keys())
+
                 fts_sql += " ORDER BY bm25_score LIMIT ?"
-                fts_params.append(candidate_limit)
+                fts_params.append(candidate_limit - len(fts_scores))
 
                 rows = self._conn.execute(fts_sql, fts_params).fetchall()
                 for row in rows:
-                    chunk = dict(row)
-                    cid = chunk["id"]
-                    score = -chunk.pop("bm25_score", 0)
-                    # Keep the best score across tiers (PHRASE > AND > OR)
-                    if cid not in fts_scores or score > fts_scores[cid]:
-                        fts_scores[cid] = score
-                        fts_chunks[cid] = chunk
-                # Stop once we have enough candidates across all tiers
+                    cid = row["id"]
+                    score = -row["bm25_score"]
+                    fts_scores[cid] = score
+
                 if len(fts_scores) >= candidate_limit:
                     break
             except Exception as e:
                 logger.debug(f"FTS search error: {e}")
                 continue
+
+        if fts_scores:
+            placeholders = ",".join("?" * len(fts_scores))
+            fetch_sql = f"""
+                SELECT c.*, l.name AS _library_name
+                FROM doc_chunks c
+                LEFT JOIN libraries l ON c.library_id = l.id
+                WHERE c.id IN ({placeholders})
+            """
+            chunk_rows = self._conn.execute(
+                fetch_sql, list(fts_scores.keys())
+            ).fetchall()
+            for row in chunk_rows:
+                chunk = dict(row)
+                cid = chunk["id"]
+                fts_chunks[cid] = chunk
 
         # Min-max normalize FTS scores to 0-1
         if fts_scores:
