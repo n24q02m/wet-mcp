@@ -38,9 +38,19 @@ mcp-name: io.github.n24q02m/wet-mcp
 
 ### Claude Code Plugin (Recommended)
 
+Via marketplace (includes skills: /fact-check, /compare):
+
+```bash
+/plugins add n24q02m/claude-plugins
+```
+
+Or install this plugin only:
+
 ```bash
 claude plugin add n24q02m/wet-mcp
 ```
+
+Configure env vars in `~/.claude/settings.local.json` or shell profile. See [Environment Variables](#environment-variables).
 
 ### MCP Server
 
