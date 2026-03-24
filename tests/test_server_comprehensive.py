@@ -248,7 +248,7 @@ async def test_do_research():
     ):
         mock_ensure.return_value = "url"
         mock_search.return_value = json.dumps({"results": [{"url": "arxiv.org"}]})
-        res = await server._do_research("test")
+        res = await server._do_research(server.ResearchParams(query="test"))
         assert "arxiv" in res
 
 
@@ -323,14 +323,14 @@ async def test_do_docs_search_new():
 @pytest.mark.asyncio
 async def test_do_research_timeout():
     with patch("wet_mcp.server.asyncio.wait_for", side_effect=TimeoutError):
-        res = await server._do_research("test")
+        res = await server._do_research(server.ResearchParams(query="test"))
         assert "timed out" in res
 
 
 @pytest.mark.asyncio
 async def test_do_research_exception():
     with patch("wet_mcp.server.asyncio.wait_for", side_effect=Exception("Test error")):
-        res = await server._do_research("test")
+        res = await server._do_research(server.ResearchParams(query="test"))
         assert "startup failed" in res
 
 
@@ -342,7 +342,7 @@ async def test_do_research_json_decode_error():
     ):
         mock_ensure.return_value = "url"
         mock_search.return_value = "invalid json"
-        res = await server._do_research("test")
+        res = await server._do_research(server.ResearchParams(query="test"))
         assert res == "invalid json"
 
 
@@ -364,7 +364,7 @@ async def test_do_research_source_types():
                 ]
             }
         )
-        res = await server._do_research("test")
+        res = await server._do_research(server.ResearchParams(query="test"))
         data = json.loads(res)
         types = [r["source_type"] for r in data["results"]]
         assert "google_scholar" in types

@@ -1194,7 +1194,7 @@ async def test_do_research_reranking_filters_low_scores():
             {"url": "http://arxiv.org/1", "content": "good", "score": 0.8},
             {"url": "http://other.org/2", "content": "bad", "score": 0.1},
         ]
-        result = await server._do_research("test query")
+        result = await server._do_research(server.ResearchParams(query="test query"))
         data = json.loads(result)
         # Low-score result filtered
         assert len(data["results"]) == 1
@@ -1224,7 +1224,7 @@ async def test_do_research_rerank_exception():
         mock_search.return_value = json.dumps(
             {"results": [{"url": "http://example.org", "content": "result"}]}
         )
-        result = await server._do_research("test query")
+        result = await server._do_research(server.ResearchParams(query="test query"))
         # Should still return results (reranking is best-effort)
         data = json.loads(result)
         assert len(data["results"]) >= 1

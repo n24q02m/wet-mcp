@@ -1,6 +1,7 @@
 """WET MCP Server - Main server definition."""
 
 import asyncio
+import dataclasses
 import functools
 import json
 import os
@@ -640,12 +641,14 @@ async def search(  # noqa: PLR0913
                     return cached
             result = await _with_timeout(
                 _do_research(
-                    query=query,
-                    max_results=max_results,
-                    time_range=time_range,
-                    language=language,
-                    include_domains=include_domains,
-                    exclude_domains=exclude_domains,
+                    ResearchParams(
+                        query=query,
+                        max_results=max_results,
+                        time_range=time_range,
+                        language=language,
+                        include_domains=include_domains,
+                        exclude_domains=exclude_domains,
+                    )
                 ),
                 "research",
             )
@@ -1212,14 +1215,17 @@ async def setup(
 # ---------------------------------------------------------------------------
 
 
-async def _do_research(
-    query: str,
-    max_results: int = 10,
-    time_range: str | None = None,
-    language: str | None = None,
-    include_domains: list[str] | None = None,
-    exclude_domains: list[str] | None = None,
-) -> str:
+@dataclasses.dataclass
+class ResearchParams:
+    query: str
+    max_results: int = 10
+    time_range: str | None = None
+    language: str | None = None
+    include_domains: list[str] | None = None
+    exclude_domains: list[str] | None = None
+
+
+async def _do_research(params: ResearchParams) -> str:
     """Academic/scientific search using SearXNG science engines."""
     try:
         searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
@@ -1230,18 +1236,20 @@ async def _do_research(
 
     result_str = await searxng_search(
         searxng_url=searxng_url,
-        query=query,
+        query=params.query,
         categories="science",
-        max_results=max_results * 3,
-        time_range=time_range,
-        language=language,
-        include_domains=include_domains,
-        exclude_domains=exclude_domains,
+        max_results=params.max_results * 3,
+        time_range=params.time_range,
+        language=params.language,
+        include_domains=params.include_domains,
+        exclude_domains=params.exclude_domains,
     )
     try:
         data = json.loads(result_str)
         if "results" in data and data["results"]:
-            reranked = await _rerank_results(query, data["results"], top_n=max_results)
+            reranked = await _rerank_results(
+                params.query, data["results"], top_n=params.max_results
+            )
             data["results"] = [r for r in reranked if r.get("score", 1.0) > 0.3]
             data["total"] = len(data["results"])
             result_str = json.dumps(data, ensure_ascii=False, indent=2)
@@ -1273,7 +1281,7 @@ async def _do_research(
                 "academic",
             )
 
-        data["query"] = query
+        data["query"] = params.query
         data["search_type"] = "academic"
         return json.dumps(data, ensure_ascii=False, indent=2)
     except json.JSONDecodeError:
