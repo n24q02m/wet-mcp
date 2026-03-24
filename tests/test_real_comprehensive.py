@@ -160,9 +160,9 @@ class TestExternalSearXNG:
                 SEARXNG_EXTERNAL_URL + "/search",
                 params={"q": "test", "format": "json"},
             )
-            assert (
-                resp.status_code == 200
-            ), f"External SearXNG unreachable: {resp.status_code}"
+            assert resp.status_code == 200, (
+                f"External SearXNG unreachable: {resp.status_code}"
+            )
             data = resp.json()
             assert len(data.get("results", [])) > 0
 
@@ -199,9 +199,9 @@ class TestExtractTool:
         )
         data = json.loads(result)
         assert len(data) == 1
-        assert "error" not in data[0] or "markitdown" not in data[0].get(
-            "error", ""
-        ), f"PDF extraction failed: {data[0]}"
+        assert "error" not in data[0] or "markitdown" not in data[0].get("error", ""), (
+            f"PDF extraction failed: {data[0]}"
+        )
         if "converter" in data[0]:
             assert data[0]["converter"] == "markitdown"
 
@@ -305,9 +305,9 @@ class TestLiteLLMProxy:
             )
             assert len(results) == 2, f"Expected 2 results, got {len(results)}"
             # Python doc should score highest
-            assert (
-                results[0][0] == 0
-            ), f"Expected Python doc first, got index {results[0][0]}"
+            assert results[0][0] == 0, (
+                f"Expected Python doc first, got index {results[0][0]}"
+            )
             assert results[0][1] > 0.5, f"Expected high score, got {results[0][1]}"
         finally:
             litellm.use_litellm_proxy = old_proxy
