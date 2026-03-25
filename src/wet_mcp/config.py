@@ -48,8 +48,8 @@ _RERANK_PROVIDERS: dict[str, str] = {
 # Known providers that support embedding
 _EMBEDDING_PROVIDERS: dict[str, str] = {
     "JINA_AI_API_KEY": "jina_ai/jina-embeddings-v5-text-small",
-    "GEMINI_API_KEY": "gemini/gemini-embedding-2-preview",
-    "GOOGLE_API_KEY": "gemini/gemini-embedding-2-preview",
+    "GEMINI_API_KEY": "gemini/gemini-embedding-001",
+    "GOOGLE_API_KEY": "gemini/gemini-embedding-001",
     "OPENAI_API_KEY": "text-embedding-3-large",
     "COHERE_API_KEY": "embed-multilingual-v3.0",
 }
@@ -106,7 +106,7 @@ class Settings(BaseSettings):
     # Media Analysis (Provider API keys)
     api_keys: SecretStr | None = None  # ENV_VAR:key,ENV_VAR:key (multiple providers)
 
-    llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
+    llm_models: str = "gemini/gemini-3-flash-preview,openai/gpt-5.4-mini-2026-03-17"  # provider/model (fallback chain)
     llm_temperature: float | None = None
 
     # Cache (web operations)
@@ -369,7 +369,7 @@ class Settings(BaseSettings):
 # Validated against API keys -- first success wins.
 _EMBEDDING_CANDIDATES = [
     "jina_ai/jina-embeddings-v5-text-small",
-    "gemini/gemini-embedding-2-preview",
+    "gemini/gemini-embedding-001",
     "text-embedding-3-large",
     "embed-multilingual-v3.0",
 ]
