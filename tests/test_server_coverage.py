@@ -261,7 +261,7 @@ async def test_init_embedding_litellm_autodetect(_mock_settings):
         server._embedding_dims = 0
         await server._init_embedding_backend("sdk")
         # First candidate fails, second succeeds
-        assert "gemini/gemini-embedding-2-preview" in attempts
+        assert "gemini/gemini-embedding-001" in attempts
         assert "text-embedding-3-large" in attempts
 
 

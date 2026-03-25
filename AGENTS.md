@@ -114,7 +114,7 @@ src/wet_mcp/
   llm.py                      # Native LLM providers (google-genai, openai)
   cache.py                    # Web cache (SQLite)
   db.py                       # Docs DB (SQLite + sqlite-vec)
-  embedder.py                 # Embedding backend (Cohere cloud + local ONNX)
+  embedder.py                 # Embedding backend (Jina/Gemini/OpenAI/Cohere cloud + local ONNX)
   reranker.py                 # Reranker backend
   searxng_runner.py           # Embedded SearXNG subprocess
   setup.py                    # Auto-setup (SearXNG + Playwright)
