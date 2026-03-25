@@ -1,6 +1,10 @@
 """Config schema for relay page setup."""
 
-RELAY_SCHEMA = {
+from __future__ import annotations
+
+from typing import Any
+
+RELAY_SCHEMA: dict[str, Any] = {
     "server": "wet-mcp",
     "displayName": "Web Extended Toolkit",
     "modes": [

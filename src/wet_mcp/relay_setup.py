@@ -21,7 +21,10 @@ def load_config_from_file() -> dict[str, str] | None:
 
         from mcp_relay_core.storage.config_file import read_config
 
-        return asyncio.get_event_loop().run_until_complete(read_config("wet-mcp"))
+        result = read_config("wet-mcp")
+        if asyncio.iscoroutine(result):
+            result = asyncio.run(result)
+        return result  # type: ignore[return-value]
     except Exception:
         return None
 
@@ -42,10 +45,11 @@ async def trigger_relay_setup() -> dict[str, str] | None:
         from .relay_schema import RELAY_SCHEMA
 
         relay_url = os.environ.get("MCP_RELAY_URL", DEFAULT_RELAY_URL)
-        session = await create_session(relay_url, "wet-mcp", RELAY_SCHEMA)
+        session = await create_session(relay_url, "wet-mcp", RELAY_SCHEMA)  # type: ignore[arg-type]
 
+        session_url: str = session["relay_url"]  # type: ignore[index]
         print(
-            f"\nSetup: Open this URL to configure:\n{session['relay_url']}\n",
+            f"\nSetup: Open this URL to configure:\n{session_url}\n",
             file=sys.stderr,
             flush=True,
         )
@@ -54,7 +58,7 @@ async def trigger_relay_setup() -> dict[str, str] | None:
 
         from mcp_relay_core.storage.config_file import write_config
 
-        await write_config("wet-mcp", config)
+        await write_config("wet-mcp", config)  # type: ignore[arg-type]
 
         return config
     except Exception as e:
