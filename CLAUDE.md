@@ -9,6 +9,8 @@ Xem `AGENTS.md` va `README.md` de hieu architecture va configuration.
   - `server.py` -- FastMCP server (orchestrator, file lon nhat)
   - `config.py` -- Pydantic Settings (singleton)
   - `cache.py`, `db.py`, `embedder.py`, `reranker.py` -- Infrastructure
+  - `relay_setup.py` -- Zero-config relay: create session, poll for config
+  - `relay_schema.py` -- Relay form schema (3 modes: local/proxy/sdk)
   - `sources/` -- Data source integrations (crawler, docs, searxng)
 - `tests/` -- Mirror source modules
 
@@ -55,6 +57,7 @@ mise run dev       # uv run wet-mcp
 - Embedding: `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`
 - Reranking: `RERANK_BACKEND`, `RERANK_MODEL`
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
+- Relay: `MCP_RELAY_URL` (default `https://wet-mcp.n24q02m.com`)
 - Infisical: project `531b3027-70ca-4761-b149-9ec8fea80d4f`
 
 ## Release & Deploy
