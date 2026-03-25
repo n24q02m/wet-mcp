@@ -116,6 +116,13 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
     logger.info("Starting WET MCP Server...")
 
+    # Try to load relay config (passive -- does not trigger relay)
+    from wet_mcp.relay_setup import apply_config, load_config_from_file
+
+    config = load_config_from_file()
+    if config:
+        apply_config(config)
+
     # 1. Setup provider mode (sdk or local)
     from wet_mcp.config import settings
 

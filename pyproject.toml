@@ -49,6 +49,8 @@ dependencies = [
     "jsonschema>=4.26.0",
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
+    # Relay setup (zero-env-config)
+    "mcp-relay-core>=0.1.0",
 ]
 
 [dependency-groups]
