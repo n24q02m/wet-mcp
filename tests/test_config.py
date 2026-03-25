@@ -85,12 +85,6 @@ def test_resolve_embedding_backend_explicit():
     assert settings.resolve_embedding_backend() == "cloud"
 
 
-def test_resolve_embedding_backend_explicit_litellm_compat():
-    """Explicit EMBEDDING_BACKEND='litellm' is mapped to 'cloud'."""
-    settings = Settings(embedding_backend="litellm")
-    assert settings.resolve_embedding_backend() == "cloud"
-
-
 def test_resolve_embedding_backend_local_auto():
     """Auto-detect returns 'local' when qwen3-embed is importable."""
     settings = Settings(embedding_backend="")
@@ -130,12 +124,6 @@ def test_resolve_rerank_backend_explicit():
     assert settings.resolve_rerank_backend() == "cloud"
 
 
-def test_resolve_rerank_backend_explicit_litellm_compat():
-    """Explicit RERANK_BACKEND='litellm' is mapped to 'cloud'."""
-    settings = Settings(rerank_backend="litellm", rerank_enabled=True)
-    assert settings.resolve_rerank_backend() == "cloud"
-
-
 def test_resolve_rerank_backend_follows_embedding():
     """Rerank backend follows embedding backend when not explicit."""
     settings = Settings(
@@ -154,8 +142,8 @@ def test_resolve_rerank_backend_follows_embedding():
 
 def test_resolve_embedding_model_explicit():
     """Explicit EMBEDDING_MODEL is returned."""
-    settings = Settings(embedding_model="gemini/gemini-embedding-001")
-    assert settings.resolve_embedding_model() == "gemini/gemini-embedding-001"
+    settings = Settings(embedding_model="gemini/gemini-embedding-2-preview")
+    assert settings.resolve_embedding_model() == "gemini/gemini-embedding-2-preview"
 
 
 def test_resolve_embedding_model_auto():
@@ -317,7 +305,7 @@ def test_resolve_rerank_model_env_var_auto():
     """Auto-detects model from COHERE_API_KEY env var."""
     settings = Settings(rerank_model="")
     with mock.patch.dict(os.environ, {"COHERE_API_KEY": "test-key"}, clear=False):
-        assert settings.resolve_rerank_model() == "cohere/rerank-multilingual-v3.0"
+        assert settings.resolve_rerank_model() == "cohere/rerank-v4.0-pro"
 
 
 def test_resolve_rerank_model_api_keys_auto():
@@ -327,7 +315,7 @@ def test_resolve_rerank_model_api_keys_auto():
         api_keys=SecretStr("COHERE_API_KEY:test-key"),
     )
     with mock.patch.dict(os.environ, {}, clear=True):
-        assert settings.resolve_rerank_model() == "cohere/rerank-multilingual-v3.0"
+        assert settings.resolve_rerank_model() == "cohere/rerank-v4.0-pro"
 
 
 def test_resolve_rerank_model_none():
@@ -382,21 +370,6 @@ def test_setup_providers_local_mode():
     with mock.patch.dict(os.environ, {}, clear=True):
         mode = settings.setup_providers()
     assert mode == "local"
-
-
-# Backward compat aliases
-def test_resolve_litellm_mode_compat():
-    """resolve_litellm_mode is a backward-compat alias for resolve_provider_mode."""
-    settings = Settings(api_keys=SecretStr("GOOGLE_API_KEY:abc"))
-    assert settings.resolve_litellm_mode() == "sdk"
-
-
-def test_setup_litellm_compat():
-    """setup_litellm is a backward-compat alias for setup_providers."""
-    settings = Settings(api_keys=SecretStr("GOOGLE_API_KEY:abc"))
-    with mock.patch.dict(os.environ, {}, clear=True):
-        mode = settings.setup_litellm()
-    assert mode == "sdk"
 
 
 # -----------------------------------------------------------------------

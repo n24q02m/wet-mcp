@@ -11,7 +11,7 @@ from loguru import logger
 from wet_mcp.config import settings
 
 # ---------------------------------------------------------------------------
-# Capability maps (replace litellm.supports_vision / supports_audio)
+# Capability maps (vision / audio support detection)
 # ---------------------------------------------------------------------------
 
 _VISION_MODELS = {
@@ -80,7 +80,7 @@ def _detect_provider(model: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Native async completion (replaces litellm.acompletion)
+# Native async completion
 # ---------------------------------------------------------------------------
 
 

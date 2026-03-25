@@ -42,14 +42,14 @@ def _resolve_local_model(onnx_name: str, gguf_name: str) -> str:
 # Known providers that support reranking
 _RERANK_PROVIDERS: dict[str, str] = {
     "JINA_AI_API_KEY": "jina_ai/jina-reranker-v3",
-    "COHERE_API_KEY": "cohere/rerank-multilingual-v3.0",
+    "COHERE_API_KEY": "cohere/rerank-v4.0-pro",
 }
 
 # Known providers that support embedding
 _EMBEDDING_PROVIDERS: dict[str, str] = {
     "JINA_AI_API_KEY": "jina_ai/jina-embeddings-v5-text-small",
-    "GEMINI_API_KEY": "gemini/gemini-embedding-001",
-    "GOOGLE_API_KEY": "gemini/gemini-embedding-001",
+    "GEMINI_API_KEY": "gemini/gemini-embedding-2-preview",
+    "GOOGLE_API_KEY": "gemini/gemini-embedding-2-preview",
     "OPENAI_API_KEY": "text-embedding-3-large",
     "COHERE_API_KEY": "embed-multilingual-v3.0",
 }
@@ -106,10 +106,6 @@ class Settings(BaseSettings):
     # Media Analysis (Provider API keys)
     api_keys: SecretStr | None = None  # ENV_VAR:key,ENV_VAR:key (multiple providers)
 
-    # Legacy LiteLLM proxy settings (kept for backward-compat env var parsing)
-    litellm_proxy_url: str = ""
-    litellm_proxy_key: SecretStr | None = None
-
     llm_models: str = "gemini/gemini-3-flash-preview"  # provider/model (fallback chain)
     llm_temperature: float | None = None
 
@@ -123,14 +119,14 @@ class Settings(BaseSettings):
     # Embedding
     embedding_model: str = ""  # Model name, auto-detect if empty
     embedding_dims: int = 0  # 0 = use server default (768)
-    embedding_backend: str = ""  # "cloud" | "litellm" (compat) | "local" | "" (auto)
+    embedding_backend: str = ""  # "cloud" | "local" | "" (auto)
 
     # Reranking
     rerank_enabled: bool = (
         True  # Enable reranking (always available via local fallback)
     )
-    rerank_backend: str = ""  # "cloud" | "litellm" (compat) | "local" | "" (auto)
-    rerank_model: str = ""  # Rerank model (e.g., "rerank-multilingual-v3.0")
+    rerank_backend: str = ""  # "cloud" | "local" | "" (auto)
+    rerank_model: str = ""  # Rerank model (e.g., "rerank-v4.0-pro")
     rerank_top_n: int = 10  # Return top N after reranking
 
     # Docs sync (rclone)
@@ -257,7 +253,6 @@ class Settings(BaseSettings):
         """Resolve embedding backend: 'local' or 'cloud'.
 
         Always returns a valid backend (never empty).
-        Backward-compat: 'litellm' is treated as 'cloud'.
 
         Auto-detect order:
         1. Explicit EMBEDDING_BACKEND setting
@@ -265,9 +260,6 @@ class Settings(BaseSettings):
         3. 'local' (qwen3-embed built-in, always available)
         """
         if self.embedding_backend:
-            # Backward compat: 'litellm' -> 'cloud'
-            if self.embedding_backend == "litellm":
-                return "cloud"
             return self.embedding_backend
         mode = self.resolve_provider_mode()
         if mode == "sdk":
@@ -288,7 +280,6 @@ class Settings(BaseSettings):
 
         Returns '' only if reranking is explicitly disabled.
         Always returns a valid backend otherwise.
-        Backward-compat: 'litellm' is treated as 'cloud'.
 
         Auto-detect order:
         1. Explicit RERANK_BACKEND setting
@@ -299,9 +290,6 @@ class Settings(BaseSettings):
         if not self.rerank_enabled:
             return ""
         if self.rerank_backend:
-            # Backward compat: 'litellm' -> 'cloud'
-            if self.rerank_backend == "litellm":
-                return "cloud"
             return self.rerank_backend
         if self.rerank_model:
             return "cloud"
@@ -337,7 +325,7 @@ class Settings(BaseSettings):
                         return model
         return None
 
-    # --- Provider mode resolution (replaces LiteLLM mode) ---
+    # --- Provider mode resolution ---
 
     def resolve_provider_mode(self) -> str:
         """Detect provider mode: 'sdk' or 'local'.
@@ -361,14 +349,6 @@ class Settings(BaseSettings):
             return "sdk"
         return "local"
 
-    # Backward compatibility aliases
-    def resolve_litellm_mode(self) -> str:
-        """Backward-compat: maps to resolve_provider_mode().
-
-        Returns 'sdk' or 'local' (no more 'proxy').
-        """
-        return self.resolve_provider_mode()
-
     def setup_providers(self) -> str:
         """One-time provider configuration. Call once during lifespan startup.
 
@@ -384,17 +364,12 @@ class Settings(BaseSettings):
 
         return mode
 
-    # Backward compatibility alias
-    def setup_litellm(self) -> str:
-        """Backward-compat alias for setup_providers()."""
-        return self.setup_providers()
-
 
 # Embedding models to try during auto-detection (in priority order).
 # Validated against API keys -- first success wins.
 _EMBEDDING_CANDIDATES = [
     "jina_ai/jina-embeddings-v5-text-small",
-    "gemini/gemini-embedding-001",
+    "gemini/gemini-embedding-2-preview",
     "text-embedding-3-large",
     "embed-multilingual-v3.0",
 ]

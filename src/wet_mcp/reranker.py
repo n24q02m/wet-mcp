@@ -223,7 +223,7 @@ def init_reranker(
     """Initialize and cache the reranker backend.
 
     Args:
-        backend_type: 'cloud', 'litellm' (backward-compat alias for cloud), or 'local'
+        backend_type: 'cloud' or 'local'
         model: Model name (optional for cloud, defaults to rerank-v4.0-pro)
         api_key: Custom API key (cloud only)
         **kwargs: Additional keyword arguments (ignored, for backward compatibility)
@@ -232,10 +232,6 @@ def init_reranker(
         Initialized reranker backend instance.
     """
     global _backend
-
-    # Backward compatibility: 'litellm' maps to 'cloud'
-    if backend_type == "litellm":
-        backend_type = "cloud"
 
     if backend_type == "cloud":
         _backend = CohereReranker(model=model, api_key=api_key)

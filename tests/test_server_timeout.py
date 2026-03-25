@@ -21,7 +21,6 @@ def mock_dependencies():
         "httpx": MagicMock(),
         "pydantic": MagicMock(),
         "pydantic_settings": MagicMock(),
-        "litellm": MagicMock(),
         "sqlite_vec": MagicMock(),
         # Internal modules
         "wet_mcp.cache": MagicMock(),

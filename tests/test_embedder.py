@@ -11,7 +11,6 @@ import pytest
 
 from wet_mcp.embedder import (
     CloudEmbeddingBackend,
-    LiteLLMBackend,
     Qwen3EmbedBackend,
     _detect_embedding_provider,
     _is_retryable,
@@ -190,10 +189,6 @@ class TestCloudEmbeddingBackend:
 
         assert dims == 0
 
-    def test_backward_compat_alias(self):
-        """LiteLLMBackend is an alias for CloudEmbeddingBackend."""
-        assert LiteLLMBackend is CloudEmbeddingBackend
-
 
 # -----------------------------------------------------------------------
 # CloudEmbeddingBackend: Provider-specific SDK mocks
@@ -282,25 +277,30 @@ class TestProviderSDKs:
             )
 
     def test_embed_cohere(self):
-        """Cohere SDK is called with correct params."""
+        """Cohere SDK (ClientV2) is called with correct params."""
         backend = CloudEmbeddingBackend("embed-multilingual-v3.0", api_key="test-key")
 
+        mock_embeddings = MagicMock()
+        mock_embeddings.float_ = [[0.1, 0.2, 0.3]]
+
         mock_response = MagicMock()
-        mock_response.embeddings = [[0.1, 0.2, 0.3]]
+        mock_response.embeddings = mock_embeddings
 
         mock_client = MagicMock()
         mock_client.embed.return_value = mock_response
 
         mock_cohere_mod = MagicMock()
-        mock_cohere_mod.Client.return_value = mock_client
+        mock_cohere_mod.ClientV2.return_value = mock_client
 
         with patch.dict("sys.modules", {"cohere": mock_cohere_mod}):
             result = backend._embed_cohere(["test"])
-            mock_cohere_mod.Client.assert_called_once_with(api_key="test-key")
+            mock_cohere_mod.ClientV2.assert_called_once_with(api_key="test-key")
             mock_client.embed.assert_called_once_with(
-                texts=["test"],
                 model="embed-multilingual-v3.0",
+                texts=["test"],
                 input_type="search_document",
+                embedding_types=["float"],
+                truncate="END",
             )
 
         assert result == [[0.1, 0.2, 0.3]]
@@ -309,14 +309,17 @@ class TestProviderSDKs:
         """Cohere truncates locally when dimensions requested."""
         backend = CloudEmbeddingBackend("embed-multilingual-v3.0", api_key="test-key")
 
+        mock_embeddings = MagicMock()
+        mock_embeddings.float_ = [[0.1] * 1024]
+
         mock_response = MagicMock()
-        mock_response.embeddings = [[0.1] * 1024]
+        mock_response.embeddings = mock_embeddings
 
         mock_client = MagicMock()
         mock_client.embed.return_value = mock_response
 
         mock_cohere_mod = MagicMock()
-        mock_cohere_mod.Client.return_value = mock_client
+        mock_cohere_mod.ClientV2.return_value = mock_client
 
         with patch.dict("sys.modules", {"cohere": mock_cohere_mod}):
             result = backend._embed_cohere(["test"], dimensions=768)
@@ -616,12 +619,6 @@ class TestBackendFactory:
         assert isinstance(backend, CloudEmbeddingBackend)
         assert get_backend() is backend
 
-    def test_init_litellm_backward_compat(self):
-        """init_backend('litellm') creates CloudEmbeddingBackend (backward compat)."""
-        backend = init_backend("litellm", "test-model")
-        assert isinstance(backend, CloudEmbeddingBackend)
-        assert get_backend() is backend
-
     def test_init_local_backend(self):
         """init_backend('local') creates Qwen3EmbedBackend."""
         backend = init_backend("local")
@@ -632,11 +629,6 @@ class TestBackendFactory:
         """Cloud backend requires model name."""
         with pytest.raises(ValueError, match="model is required"):
             init_backend("cloud")
-
-    def test_init_litellm_requires_model(self):
-        """LiteLLM (backward compat) backend requires model name."""
-        with pytest.raises(ValueError, match="model is required"):
-            init_backend("litellm")
 
     def test_init_unknown_backend(self):
         """Unknown backend type raises ValueError."""

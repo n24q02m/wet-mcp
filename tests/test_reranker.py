@@ -278,12 +278,6 @@ class TestRerankerFactory:
         assert isinstance(reranker, CohereReranker)
         assert get_reranker() is reranker
 
-    def test_init_litellm_backward_compat(self):
-        """init_reranker('litellm') creates CohereReranker (backward compat)."""
-        reranker = init_reranker("litellm", api_key="test-key")
-        assert isinstance(reranker, CohereReranker)
-        assert get_reranker() is reranker
-
     def test_init_local_reranker(self):
         """init_reranker('local') creates Qwen3Reranker."""
         reranker = init_reranker("local")

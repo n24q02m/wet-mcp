@@ -180,11 +180,11 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 | `GEMINI_API_KEY` | No | -- | Google Gemini API key (LLM + embedding) |
 | `OPENAI_API_KEY` | No | -- | OpenAI API key (LLM + embedding) |
 | `GITHUB_TOKEN` | No | auto-detect | GitHub token for docs discovery (60 -> 5000 req/hr). Auto-detected from `gh auth token` |
-| `EMBEDDING_BACKEND` | No | auto-detect | `cloud` or `local` (Qwen3). Auto: API_KEYS -> cloud, else local. `litellm` is alias for `cloud` |
+| `EMBEDDING_BACKEND` | No | auto-detect | `cloud` or `local` (Qwen3). Auto: API_KEYS -> cloud, else local |
 | `EMBEDDING_MODEL` | No | auto-detect | Cloud embedding model name |
 | `EMBEDDING_DIMS` | No | `0` (auto=768) | Embedding dimensions |
 | `RERANK_ENABLED` | No | `true` | Enable reranking after search |
-| `RERANK_BACKEND` | No | auto-detect | `cloud` or `local`. Auto: Cohere/Jina key -> cloud, else local. `litellm` is alias for `cloud` |
+| `RERANK_BACKEND` | No | auto-detect | `cloud` or `local`. Auto: Cohere/Jina key -> cloud, else local |
 | `RERANK_MODEL` | No | auto-detect | Cloud rerank model name |
 | `RERANK_TOP_N` | No | `10` | Return top N results after reranking |
 | `LLM_MODELS` | No | `gemini-3-flash-preview` | LLM model for media analysis (google-genai or openai) |

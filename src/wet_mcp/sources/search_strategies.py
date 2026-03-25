@@ -15,7 +15,7 @@ async def expand_query(query: str) -> list[str]:
 
     Returns [original_query, alt1, alt2]. Falls back to [query] if LLM unavailable.
     """
-    mode = settings.resolve_litellm_mode()
+    mode = settings.resolve_provider_mode()
     if mode == "local":
         return [query]
 
@@ -100,7 +100,7 @@ async def find_similar(
 
 async def _extract_keywords(content: str, title: str) -> str:
     """Extract search keywords from content. LLM if available, else title."""
-    mode = settings.resolve_litellm_mode()
+    mode = settings.resolve_provider_mode()
     if mode == "local":
         return title if title else content[:200]
 
@@ -147,7 +147,7 @@ async def generate_hyde_query(query: str, library: str) -> str | None:
 
     Returns None if LLM unavailable or generation fails.
     """
-    mode = settings.resolve_litellm_mode()
+    mode = settings.resolve_provider_mode()
     if mode == "local":
         return None
 

@@ -141,7 +141,7 @@ def _strip_provider(model: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Cloud Backend (native SDKs, replaces LiteLLMBackend)
+# Cloud Backend (native SDKs)
 # ---------------------------------------------------------------------------
 
 
@@ -276,19 +276,22 @@ class CloudEmbeddingBackend:
     def _embed_cohere(
         self, texts: list[str], dimensions: int | None = None
     ) -> list[list[float]]:
-        """Embed via Cohere SDK."""
+        """Embed via Cohere SDK (ClientV2)."""
         import cohere
 
         key = self.api_key or os.getenv("COHERE_API_KEY") or ""
-        client = cohere.Client(api_key=key)
+        client = cohere.ClientV2(api_key=key)
 
         response = client.embed(
-            texts=texts,
             model=self._bare_model,
+            texts=texts,
             input_type="search_document",
+            embedding_types=["float"],
+            truncate="END",
         )
 
-        embeddings = [list(e) for e in response.embeddings]
+        raw = response.embeddings.float_ or []
+        embeddings = [list(e) for e in raw]
         # Truncate locally if dimensions requested (Cohere doesn't support it natively)
         if dimensions and embeddings and len(embeddings[0]) > dimensions:
             embeddings = [e[:dimensions] for e in embeddings]
@@ -387,10 +390,6 @@ class CloudEmbeddingBackend:
             else:
                 logger.debug(f"Embedding model {self.model} not available: {e}")
             return 0
-
-
-# Backward compatibility alias
-LiteLLMBackend = CloudEmbeddingBackend
 
 
 # ---------------------------------------------------------------------------
@@ -508,7 +507,7 @@ def init_backend(
     """Initialize and cache the embedding backend.
 
     Args:
-        backend_type: 'cloud', 'litellm' (backward-compat alias for cloud), or 'local'
+        backend_type: 'cloud' or 'local'
         model: Model name (required for cloud, optional for local)
         api_base: Custom API base URL (cloud only)
         api_key: Custom API key (cloud only)
@@ -518,8 +517,7 @@ def init_backend(
     """
     global _backend
 
-    # Backward compatibility: 'litellm' maps to 'cloud'
-    if backend_type in ("litellm", "cloud"):
+    if backend_type == "cloud":
         if not model:
             raise ValueError("model is required for cloud backend")
         _backend = CloudEmbeddingBackend(model, api_base=api_base, api_key=api_key)

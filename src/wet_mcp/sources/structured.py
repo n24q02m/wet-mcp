@@ -92,7 +92,7 @@ async def extract_structured(
         or {error}.
     """
     # Step 1: Check LLM availability
-    mode = settings.resolve_litellm_mode()
+    mode = settings.resolve_provider_mode()
     if mode == "local":
         return json.dumps(
             {

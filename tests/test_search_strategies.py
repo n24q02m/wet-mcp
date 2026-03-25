@@ -44,7 +44,7 @@ async def test_expand_query_success():
             return_value=_mock_llm_response("python web scraping\nweb crawling python"),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result = await expand_query("python scraping")
 
@@ -57,7 +57,7 @@ async def test_expand_query_success():
 async def test_expand_query_local_mode_fallback():
     """Local mode (no LLM) returns only original query."""
     with patch("wet_mcp.sources.search_strategies.settings") as mock_settings:
-        mock_settings.resolve_litellm_mode.return_value = "local"
+        mock_settings.resolve_provider_mode.return_value = "local"
 
         result = await expand_query("python scraping")
 
@@ -80,7 +80,7 @@ async def test_expand_query_llm_failure_fallback():
             side_effect=Exception("API error"),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "sdk"
+        mock_settings.resolve_provider_mode.return_value = "sdk"
 
         result = await expand_query("python scraping")
 
@@ -103,7 +103,7 @@ async def test_expand_query_numbered_lines():
             return_value=_mock_llm_response("1. alternative one\n2) alternative two"),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result = await expand_query("original")
 
@@ -128,7 +128,7 @@ async def test_expand_query_empty_llm_response():
             return_value=_mock_llm_response(""),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result = await expand_query("original")
 
@@ -152,7 +152,7 @@ async def test_expand_query_more_than_two_alts():
             return_value=_mock_llm_response("alt1\nalt2\nalt3\nalt4"),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result = await expand_query("original")
 
@@ -285,7 +285,7 @@ async def test_extract_keywords_local_mode():
     from wet_mcp.sources.search_strategies import _extract_keywords
 
     with patch("wet_mcp.sources.search_strategies.settings") as mock_settings:
-        mock_settings.resolve_litellm_mode.return_value = "local"
+        mock_settings.resolve_provider_mode.return_value = "local"
 
         result = await _extract_keywords("some content", "My Title")
         assert result == "My Title"
@@ -296,7 +296,7 @@ async def test_extract_keywords_local_no_title():
     from wet_mcp.sources.search_strategies import _extract_keywords
 
     with patch("wet_mcp.sources.search_strategies.settings") as mock_settings:
-        mock_settings.resolve_litellm_mode.return_value = "local"
+        mock_settings.resolve_provider_mode.return_value = "local"
 
         result = await _extract_keywords("some content here", "")
         assert result == "some content here"
@@ -320,7 +320,7 @@ async def test_extract_keywords_llm_success():
             return_value=_mock_llm_response("python, scraping, web, automation"),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "sdk"
+        mock_settings.resolve_provider_mode.return_value = "sdk"
 
         result = await _extract_keywords("content about python", "Python Guide")
         assert result == "python, scraping, web, automation"
@@ -344,7 +344,7 @@ async def test_extract_keywords_llm_failure():
             side_effect=Exception("API error"),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "sdk"
+        mock_settings.resolve_provider_mode.return_value = "sdk"
 
         result = await _extract_keywords("content", "Fallback Title")
         assert result == "Fallback Title"
@@ -517,7 +517,7 @@ async def test_generate_hyde_query_success():
             ),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result = await generate_hyde_query("how to make HTTP requests", "requests")
 
@@ -528,7 +528,7 @@ async def test_generate_hyde_query_success():
 async def test_generate_hyde_query_local_mode():
     """Local mode (no LLM) returns None."""
     with patch("wet_mcp.sources.search_strategies.settings") as mock_settings:
-        mock_settings.resolve_litellm_mode.return_value = "local"
+        mock_settings.resolve_provider_mode.return_value = "local"
 
         result = await generate_hyde_query("some query", "some-lib")
 
@@ -551,7 +551,7 @@ async def test_generate_hyde_query_llm_failure():
             side_effect=Exception("API error"),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "sdk"
+        mock_settings.resolve_provider_mode.return_value = "sdk"
 
         result = await generate_hyde_query("some query", "some-lib")
 
@@ -574,7 +574,7 @@ async def test_generate_hyde_query_empty_response():
             return_value=_mock_llm_response(""),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result = await generate_hyde_query("some query", "some-lib")
 

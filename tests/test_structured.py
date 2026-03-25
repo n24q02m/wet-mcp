@@ -57,7 +57,7 @@ async def test_extract_structured_success():
             return_value=_mock_llm_response(llm_output),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result_str = await extract_structured(
             urls=["https://example.com/product"],
@@ -75,7 +75,7 @@ async def test_extract_structured_success():
 async def test_extract_structured_local_mode_error():
     """Local mode (no LLM) returns an error."""
     with patch("wet_mcp.sources.structured.settings") as mock_settings:
-        mock_settings.resolve_litellm_mode.return_value = "local"
+        mock_settings.resolve_provider_mode.return_value = "local"
 
         result_str = await extract_structured(
             urls=["https://example.com"],
@@ -101,7 +101,7 @@ async def test_extract_structured_no_content():
         ),
         patch("wet_mcp.sources.structured.settings") as mock_settings,
     ):
-        mock_settings.resolve_litellm_mode.return_value = "sdk"
+        mock_settings.resolve_provider_mode.return_value = "sdk"
 
         result_str = await extract_structured(
             urls=["https://example.com"],
@@ -135,7 +135,7 @@ async def test_extract_structured_validation_warning():
             return_value=_mock_llm_response(llm_output),
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result_str = await extract_structured(
             urls=["https://example.com/product"],
@@ -178,7 +178,7 @@ async def test_extract_structured_fallback_to_json_object():
             side_effect=mock_acompletion,
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result_str = await extract_structured(
             urls=["https://example.com/product"],
@@ -213,7 +213,7 @@ async def test_extract_structured_llm_failure():
             side_effect=mock_acompletion,
         ),
     ):
-        mock_settings.resolve_litellm_mode.return_value = "proxy"
+        mock_settings.resolve_provider_mode.return_value = "proxy"
 
         result_str = await extract_structured(
             urls=["https://example.com/product"],
