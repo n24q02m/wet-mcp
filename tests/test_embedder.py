@@ -1,39 +1,105 @@
-"""Tests for src/wet_mcp/embedder.py — Dual-backend embedding.
+"""Tests for src/wet_mcp/embedder.py -- Dual-backend embedding.
 
-Covers LiteLLMBackend (batch embedding, batch splitting, retry logic),
-Qwen3EmbedBackend (local ONNX embedding), factory functions, and
-legacy backward-compatible module-level functions.
+Covers CloudEmbeddingBackend (native SDK providers: OpenAI, Cohere, Gemini, Jina),
+batch splitting, retry logic, Qwen3EmbedBackend (local ONNX), factory functions,
+and provider detection helpers.
 """
 
-import logging
 from unittest.mock import MagicMock, call, patch
 
 import pytest
 
 from wet_mcp.embedder import (
+    CloudEmbeddingBackend,
     LiteLLMBackend,
     Qwen3EmbedBackend,
+    _detect_embedding_provider,
+    _is_retryable,
+    _is_unsupported_param,
+    _strip_provider,
     get_backend,
     init_backend,
 )
 
 # -----------------------------------------------------------------------
-# LiteLLMBackend: embed_texts
+# Helper function tests
 # -----------------------------------------------------------------------
 
 
-class TestLiteLLMBackend:
+class TestHelpers:
+    def test_detect_provider_gemini(self):
+        assert _detect_embedding_provider("gemini/gemini-embedding-001") == "gemini"
+        assert _detect_embedding_provider("gemini-embedding-001") == "gemini"
+
+    def test_detect_provider_openai(self):
+        assert _detect_embedding_provider("text-embedding-3-small") == "openai"
+        assert _detect_embedding_provider("openai/text-embedding-3-small") == "openai"
+
+    def test_detect_provider_cohere(self):
+        assert _detect_embedding_provider("embed-multilingual-v3.0") == "cohere"
+        assert _detect_embedding_provider("cohere/embed-v4") == "cohere"
+
+    def test_detect_provider_jina(self):
+        assert _detect_embedding_provider("jina_ai/jina-embeddings-v3") == "jina"
+        assert _detect_embedding_provider("jina-embeddings-v3") == "jina"
+
+    def test_detect_provider_fallback_env(self):
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "k"}, clear=False):
+            assert _detect_embedding_provider("unknown-model") == "gemini"
+
+    def test_detect_provider_fallback_default(self):
+        with patch.dict(
+            "os.environ",
+            {},
+            clear=True,
+        ):
+            # Remove all provider env vars
+            import os
+
+            for k in (
+                "GEMINI_API_KEY",
+                "GOOGLE_API_KEY",
+                "OPENAI_API_KEY",
+                "COHERE_API_KEY",
+            ):
+                os.environ.pop(k, None)
+            assert _detect_embedding_provider("unknown-model") == "openai"
+
+    def test_strip_provider(self):
+        assert _strip_provider("gemini/model-name") == "model-name"
+        assert _strip_provider("model-name") == "model-name"
+
+    def test_is_retryable(self):
+        assert _is_retryable(Exception("429 rate limit exceeded"))
+        assert _is_retryable(Exception("503 service temporarily unavailable"))
+        assert _is_retryable(Exception("connection timeout"))
+        assert not _is_retryable(Exception("Invalid API key"))
+
+    def test_is_unsupported_param(self):
+        assert _is_unsupported_param(
+            Exception("does not support parameters: dimensions"), "dimensions"
+        )
+        assert _is_unsupported_param(
+            Exception("output_dimension is not supported for this model"), "dimensions"
+        )
+        assert not _is_unsupported_param(Exception("rate limit"), "dimensions")
+
+
+# -----------------------------------------------------------------------
+# CloudEmbeddingBackend: embed_texts (mocking _call_provider)
+# -----------------------------------------------------------------------
+
+
+class TestCloudEmbeddingBackend:
     def test_embed_texts_success(self):
         """Batch embedding returns correct vectors."""
-        backend = LiteLLMBackend("text-embedding-3-small")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"index": 0, "embedding": [0.1, 0.2, 0.3]},
-            {"index": 1, "embedding": [0.4, 0.5, 0.6]},
-        ]
-
-        with patch("litellm.embedding", return_value=mock_response):
+        with patch.object(
+            backend,
+            "_call_provider",
+            return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+        ):
             vecs = backend.embed_texts(["hello", "world"])
 
         assert len(vecs) == 2
@@ -42,68 +108,36 @@ class TestLiteLLMBackend:
 
     def test_embed_texts_empty_input(self):
         """Empty input returns empty list without API call."""
-        backend = LiteLLMBackend("text-embedding-3-small")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
         vecs = backend.embed_texts([])
         assert vecs == []
 
-    def test_embed_texts_preserves_order(self):
-        """Results are sorted by index even if API returns out-of-order."""
-        backend = LiteLLMBackend("text-embedding-3-small")
-
-        mock_response = MagicMock()
-        mock_response.data = [
-            {"index": 2, "embedding": [0.7, 0.8]},
-            {"index": 0, "embedding": [0.1, 0.2]},
-            {"index": 1, "embedding": [0.4, 0.5]},
-        ]
-
-        with patch("litellm.embedding", return_value=mock_response):
-            vecs = backend.embed_texts(["a", "b", "c"])
-
-        assert vecs[0] == [0.1, 0.2]
-        assert vecs[1] == [0.4, 0.5]
-        assert vecs[2] == [0.7, 0.8]
-
     def test_embed_texts_with_dimensions(self):
-        """Dimensions parameter is passed to LiteLLM."""
-        backend = LiteLLMBackend("text-embedding-3-small")
+        """Dimensions parameter is passed through to _call_provider."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.1]}]
-
-        with patch("litellm.embedding", return_value=mock_response) as mock_embed:
+        with patch.object(backend, "_call_provider", return_value=[[0.1]]) as mock_call:
             backend.embed_texts(["test"], dimensions=256)
-            mock_embed.assert_called_once_with(
-                model="text-embedding-3-small",
-                input=["test"],
-                dimensions=256,
-            )
+            mock_call.assert_called_once_with(["test"], 256)
 
     def test_embed_texts_no_dimensions(self):
         """No dimensions parameter when not specified."""
-        backend = LiteLLMBackend("text-embedding-3-small")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.1]}]
-
-        with patch("litellm.embedding", return_value=mock_response) as mock_embed:
+        with patch.object(backend, "_call_provider", return_value=[[0.1]]) as mock_call:
             backend.embed_texts(["test"])
-            call_kwargs = mock_embed.call_args[1]
-            assert "dimensions" not in call_kwargs
+            mock_call.assert_called_once_with(["test"], None)
 
     def test_embed_texts_dimensions_fallback(self):
         """Falls back to local truncation when provider rejects dimensions param."""
-        backend = LiteLLMBackend("embed-multilingual-v3.0")
+        backend = CloudEmbeddingBackend("embed-multilingual-v3.0")
 
-        mock_response = MagicMock()
-        # Cohere returns 1024 dims when dimensions param is not passed
-        mock_response.data = [{"index": 0, "embedding": [0.1] * 1024}]
-
-        # First call with dimensions fails, second without dimensions succeeds
         unsupported_err = Exception("output_dimension is not supported for this model")
-        with patch(
-            "litellm.embedding",
-            side_effect=[unsupported_err, mock_response],
+
+        with patch.object(
+            backend,
+            "_call_provider",
+            side_effect=[unsupported_err, [[0.1] * 1024]],
         ):
             result = backend.embed_texts(["test"], dimensions=768)
             # Should truncate locally to 768
@@ -111,125 +145,287 @@ class TestLiteLLMBackend:
 
     def test_embed_texts_local_truncation(self):
         """Truncates locally when server returns more dims than requested."""
-        backend = LiteLLMBackend("gemini/gemini-embedding-001")
+        backend = CloudEmbeddingBackend("gemini/gemini-embedding-001")
 
-        mock_response = MagicMock()
-        # Gemini returns 3072 dims even when 768 requested (no server-side MRL)
-        mock_response.data = [{"index": 0, "embedding": [0.1] * 3072}]
-
-        with patch("litellm.embedding", return_value=mock_response):
+        with patch.object(backend, "_call_provider", return_value=[[0.1] * 3072]):
             result = backend.embed_texts(["test"], dimensions=768)
             assert len(result[0]) == 768
 
     def test_embed_texts_api_error(self):
         """Non-retryable API errors are raised to caller."""
-        backend = LiteLLMBackend("text-embedding-3-small")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch(
-            "litellm.embedding",
-            side_effect=Exception("Invalid model"),
+        with patch.object(
+            backend, "_call_provider", side_effect=Exception("Invalid model")
         ):
             with pytest.raises(Exception, match="Invalid model"):
                 backend.embed_texts(["test"])
 
     def test_embed_single_success(self):
         """Single text embedding returns one vector."""
-        backend = LiteLLMBackend("text-embedding-3-small")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.1, 0.2, 0.3]}]
-
-        with patch("litellm.embedding", return_value=mock_response):
+        with patch.object(backend, "_call_provider", return_value=[[0.1, 0.2, 0.3]]):
             vec = backend.embed_single("hello")
 
         assert vec == [0.1, 0.2, 0.3]
 
     def test_check_available(self):
         """Returns dimension count when model is available."""
-        backend = LiteLLMBackend("text-embedding-3-small")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        mock_response = MagicMock()
-        mock_response.data = [{"index": 0, "embedding": [0.0] * 768}]
-
-        with patch("litellm.embedding", return_value=mock_response):
+        with patch.object(backend, "_call_provider", return_value=[[0.0] * 768]):
             dims = backend.check_available()
 
         assert dims == 768
 
     def test_check_unavailable(self):
         """Returns 0 when model is not available."""
-        backend = LiteLLMBackend("nonexistent")
+        backend = CloudEmbeddingBackend("nonexistent")
 
-        with patch(
-            "litellm.embedding",
-            side_effect=Exception("Invalid API key"),
+        with patch.object(
+            backend, "_call_provider", side_effect=Exception("Invalid API key")
         ):
             dims = backend.check_available()
 
         assert dims == 0
 
+    def test_backward_compat_alias(self):
+        """LiteLLMBackend is an alias for CloudEmbeddingBackend."""
+        assert LiteLLMBackend is CloudEmbeddingBackend
+
 
 # -----------------------------------------------------------------------
-# LiteLLMBackend: Batch splitting
+# CloudEmbeddingBackend: Provider-specific SDK mocks
+# -----------------------------------------------------------------------
+
+
+class TestProviderSDKs:
+    """Test that each provider SDK is called correctly."""
+
+    def test_embed_openai(self):
+        """OpenAI SDK is called with correct params."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small", api_key="test-key")
+
+        mock_embedding = MagicMock()
+        mock_embedding.index = 0
+        mock_embedding.embedding = [0.1, 0.2, 0.3]
+
+        mock_response = MagicMock()
+        mock_response.data = [mock_embedding]
+
+        mock_client = MagicMock()
+        mock_client.embeddings.create.return_value = mock_response
+
+        mock_openai_cls = MagicMock(return_value=mock_client)
+        mock_openai_mod = MagicMock(OpenAI=mock_openai_cls)
+
+        with patch.dict("sys.modules", {"openai": mock_openai_mod}):
+            result = backend._embed_openai(["test"])
+            mock_openai_cls.assert_called_once_with(
+                api_key="test-key", base_url="https://api.openai.com/v1"
+            )
+            mock_client.embeddings.create.assert_called_once_with(
+                model="text-embedding-3-small", input=["test"]
+            )
+
+        assert result == [[0.1, 0.2, 0.3]]
+
+    def test_embed_openai_with_dimensions(self):
+        """OpenAI passes dimensions param."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small", api_key="test-key")
+
+        mock_embedding = MagicMock()
+        mock_embedding.index = 0
+        mock_embedding.embedding = [0.1]
+
+        mock_response = MagicMock()
+        mock_response.data = [mock_embedding]
+
+        mock_client = MagicMock()
+        mock_client.embeddings.create.return_value = mock_response
+
+        mock_openai_cls = MagicMock(return_value=mock_client)
+        mock_openai_mod = MagicMock(OpenAI=mock_openai_cls)
+
+        with patch.dict("sys.modules", {"openai": mock_openai_mod}):
+            backend._embed_openai(["test"], dimensions=256)
+            mock_client.embeddings.create.assert_called_once_with(
+                model="text-embedding-3-small", input=["test"], dimensions=256
+            )
+
+    def test_embed_openai_with_api_base(self):
+        """OpenAI uses custom api_base."""
+        backend = CloudEmbeddingBackend(
+            "text-embedding-3-small",
+            api_key="test-key",
+            api_base="https://custom.api/v1",
+        )
+
+        mock_embedding = MagicMock()
+        mock_embedding.index = 0
+        mock_embedding.embedding = [0.1]
+
+        mock_response = MagicMock()
+        mock_response.data = [mock_embedding]
+
+        mock_client = MagicMock()
+        mock_client.embeddings.create.return_value = mock_response
+
+        mock_openai_cls = MagicMock(return_value=mock_client)
+        mock_openai_mod = MagicMock(OpenAI=mock_openai_cls)
+
+        with patch.dict("sys.modules", {"openai": mock_openai_mod}):
+            backend._embed_openai(["test"])
+            mock_openai_cls.assert_called_once_with(
+                api_key="test-key", base_url="https://custom.api/v1"
+            )
+
+    def test_embed_cohere(self):
+        """Cohere SDK is called with correct params."""
+        backend = CloudEmbeddingBackend("embed-multilingual-v3.0", api_key="test-key")
+
+        mock_response = MagicMock()
+        mock_response.embeddings = [[0.1, 0.2, 0.3]]
+
+        mock_client = MagicMock()
+        mock_client.embed.return_value = mock_response
+
+        mock_cohere_mod = MagicMock()
+        mock_cohere_mod.Client.return_value = mock_client
+
+        with patch.dict("sys.modules", {"cohere": mock_cohere_mod}):
+            result = backend._embed_cohere(["test"])
+            mock_cohere_mod.Client.assert_called_once_with(api_key="test-key")
+            mock_client.embed.assert_called_once_with(
+                texts=["test"],
+                model="embed-multilingual-v3.0",
+                input_type="search_document",
+            )
+
+        assert result == [[0.1, 0.2, 0.3]]
+
+    def test_embed_cohere_truncates_locally(self):
+        """Cohere truncates locally when dimensions requested."""
+        backend = CloudEmbeddingBackend("embed-multilingual-v3.0", api_key="test-key")
+
+        mock_response = MagicMock()
+        mock_response.embeddings = [[0.1] * 1024]
+
+        mock_client = MagicMock()
+        mock_client.embed.return_value = mock_response
+
+        mock_cohere_mod = MagicMock()
+        mock_cohere_mod.Client.return_value = mock_client
+
+        with patch.dict("sys.modules", {"cohere": mock_cohere_mod}):
+            result = backend._embed_cohere(["test"], dimensions=768)
+
+        assert len(result[0]) == 768
+
+    def test_embed_gemini(self):
+        """Gemini SDK is called with correct params."""
+        backend = CloudEmbeddingBackend(
+            "gemini/gemini-embedding-001", api_key="test-key"
+        )
+
+        mock_embedding = MagicMock()
+        mock_embedding.values = [0.1, 0.2, 0.3]
+
+        mock_result = MagicMock()
+        mock_result.embeddings = [mock_embedding]
+
+        mock_client = MagicMock()
+        mock_client.models.embed_content.return_value = mock_result
+
+        mock_genai = MagicMock()
+        mock_genai.Client.return_value = mock_client
+
+        mock_google = MagicMock()
+        mock_google.genai = mock_genai
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "google": mock_google,
+                "google.genai": mock_genai,
+                "google.genai.types": MagicMock(),
+            },
+        ):
+            result = backend._embed_gemini(["test"])
+            mock_genai.Client.assert_called_once_with(api_key="test-key")
+
+        assert result == [[0.1, 0.2, 0.3]]
+
+    def test_embed_jina(self):
+        """Jina AI REST API is called with correct params."""
+        backend = CloudEmbeddingBackend(
+            "jina_ai/jina-embeddings-v3", api_key="test-key"
+        )
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "data": [{"index": 0, "embedding": [0.1, 0.2, 0.3]}]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_httpx = MagicMock()
+        mock_httpx.post.return_value = mock_response
+
+        with patch.dict("sys.modules", {"httpx": mock_httpx}):
+            result = backend._embed_jina(["test"])
+
+        assert result == [[0.1, 0.2, 0.3]]
+
+
+# -----------------------------------------------------------------------
+# CloudEmbeddingBackend: Batch splitting
 # -----------------------------------------------------------------------
 
 
 class TestBatchSplitting:
     def test_splits_large_batch(self):
         """Texts exceeding MAX_BATCH_SIZE are split into sub-batches."""
-        backend = LiteLLMBackend("test-model")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
         n = backend.MAX_BATCH_SIZE + 50  # 150 texts -> 2 batches
 
-        def mock_embed(**kwargs):
-            batch_input = kwargs["input"]
-            resp = MagicMock()
-            resp.data = [
-                {"index": j, "embedding": [float(j)]} for j in range(len(batch_input))
-            ]
-            return resp
+        def mock_call(texts, dimensions=None):
+            return [[float(j)] for j in range(len(texts))]
 
-        with patch("litellm.embedding", side_effect=mock_embed):
+        with patch.object(backend, "_call_provider", side_effect=mock_call):
             vecs = backend.embed_texts([f"text_{i}" for i in range(n)])
 
         assert len(vecs) == n
 
     def test_batch_call_count(self):
         """Correct number of API calls for split batches."""
-        backend = LiteLLMBackend("test-model")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
         n = backend.MAX_BATCH_SIZE * 2 + 10  # 210 texts -> 3 batches
 
-        def mock_embed(**kwargs):
-            resp = MagicMock()
-            resp.data = [
-                {"index": j, "embedding": [0.0]} for j in range(len(kwargs["input"]))
-            ]
-            return resp
+        def mock_call(texts, dimensions=None):
+            return [[0.0] for _ in range(len(texts))]
 
-        with patch("litellm.embedding", side_effect=mock_embed) as mock:
+        with patch.object(backend, "_call_provider", side_effect=mock_call) as mock:
             backend.embed_texts([f"t{i}" for i in range(n)])
 
         assert mock.call_count == 3
 
     def test_no_split_under_limit(self):
         """No splitting when under MAX_BATCH_SIZE."""
-        backend = LiteLLMBackend("test-model")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
         n = backend.MAX_BATCH_SIZE
 
-        def mock_embed(**kwargs):
-            resp = MagicMock()
-            resp.data = [
-                {"index": j, "embedding": [0.0]} for j in range(len(kwargs["input"]))
-            ]
-            return resp
+        def mock_call(texts, dimensions=None):
+            return [[0.0] for _ in range(len(texts))]
 
-        with patch("litellm.embedding", side_effect=mock_embed) as mock:
+        with patch.object(backend, "_call_provider", side_effect=mock_call) as mock:
             backend.embed_texts([f"text_{i}" for i in range(n)])
 
         assert mock.call_count == 1
 
 
 # -----------------------------------------------------------------------
-# LiteLLMBackend: Retry logic
+# CloudEmbeddingBackend: Retry logic
 # -----------------------------------------------------------------------
 
 
@@ -237,16 +433,14 @@ class TestRetryLogic:
     @patch("wet_mcp.embedder.time.sleep")
     def test_retries_on_rate_limit(self, mock_sleep):
         """Retries on rate limit errors with exponential backoff."""
-        backend = LiteLLMBackend("test-model")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        success_response = MagicMock()
-        success_response.data = [{"index": 0, "embedding": [0.1]}]
-
-        with patch(
-            "litellm.embedding",
+        with patch.object(
+            backend,
+            "_call_provider",
             side_effect=[
                 Exception("429 rate limit exceeded"),
-                success_response,
+                [[0.1]],
             ],
         ):
             result = backend.embed_texts(["test"])
@@ -257,16 +451,14 @@ class TestRetryLogic:
     @patch("wet_mcp.embedder.time.sleep")
     def test_retries_on_server_error(self, mock_sleep):
         """Retries on 5xx server errors."""
-        backend = LiteLLMBackend("test-model")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        success_response = MagicMock()
-        success_response.data = [{"index": 0, "embedding": [0.2]}]
-
-        with patch(
-            "litellm.embedding",
+        with patch.object(
+            backend,
+            "_call_provider",
             side_effect=[
                 Exception("503 service temporarily unavailable"),
-                success_response,
+                [[0.2]],
             ],
         ):
             result = backend.embed_texts(["test"])
@@ -276,10 +468,11 @@ class TestRetryLogic:
     @patch("wet_mcp.embedder.time.sleep")
     def test_no_retry_on_non_retryable(self, mock_sleep):
         """Non-retryable errors fail immediately without retry."""
-        backend = LiteLLMBackend("test-model")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch(
-            "litellm.embedding",
+        with patch.object(
+            backend,
+            "_call_provider",
             side_effect=Exception("Invalid API key"),
         ):
             with pytest.raises(Exception, match="Invalid API key"):
@@ -290,17 +483,15 @@ class TestRetryLogic:
     @patch("wet_mcp.embedder.time.sleep")
     def test_exponential_backoff(self, mock_sleep):
         """Retry delays use exponential backoff."""
-        backend = LiteLLMBackend("test-model")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        success_response = MagicMock()
-        success_response.data = [{"index": 0, "embedding": [0.1]}]
-
-        with patch(
-            "litellm.embedding",
+        with patch.object(
+            backend,
+            "_call_provider",
             side_effect=[
                 Exception("429 rate limit"),
                 Exception("429 rate limit"),
-                success_response,
+                [[0.1]],
             ],
         ):
             backend.embed_texts(["test"])
@@ -310,10 +501,11 @@ class TestRetryLogic:
     @patch("wet_mcp.embedder.time.sleep")
     def test_max_retries_exhausted(self, mock_sleep):
         """Raises after all retries are exhausted."""
-        backend = LiteLLMBackend("test-model")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch(
-            "litellm.embedding",
+        with patch.object(
+            backend,
+            "_call_provider",
             side_effect=Exception("429 rate limit"),
         ):
             with pytest.raises(Exception, match="429 rate limit"):
@@ -418,10 +610,16 @@ class TestQwen3EmbedBackend:
 
 
 class TestBackendFactory:
-    def test_init_litellm_backend(self):
-        """init_backend('litellm') creates LiteLLMBackend."""
+    def test_init_cloud_backend(self):
+        """init_backend('cloud') creates CloudEmbeddingBackend."""
+        backend = init_backend("cloud", "test-model")
+        assert isinstance(backend, CloudEmbeddingBackend)
+        assert get_backend() is backend
+
+    def test_init_litellm_backward_compat(self):
+        """init_backend('litellm') creates CloudEmbeddingBackend (backward compat)."""
         backend = init_backend("litellm", "test-model")
-        assert isinstance(backend, LiteLLMBackend)
+        assert isinstance(backend, CloudEmbeddingBackend)
         assert get_backend() is backend
 
     def test_init_local_backend(self):
@@ -430,8 +628,13 @@ class TestBackendFactory:
         assert isinstance(backend, Qwen3EmbedBackend)
         assert get_backend() is backend
 
+    def test_init_cloud_requires_model(self):
+        """Cloud backend requires model name."""
+        with pytest.raises(ValueError, match="model is required"):
+            init_backend("cloud")
+
     def test_init_litellm_requires_model(self):
-        """LiteLLM backend requires model name."""
+        """LiteLLM (backward compat) backend requires model name."""
         with pytest.raises(ValueError, match="model is required"):
             init_backend("litellm")
 
@@ -442,7 +645,7 @@ class TestBackendFactory:
 
 
 # -----------------------------------------------------------------------
-# LiteLLM logging suppression
+# check_available: API key validation messages
 # -----------------------------------------------------------------------
 
 
@@ -451,50 +654,66 @@ class TestCheckAvailableApiKeyValidation:
 
     def test_api_key_401_returns_zero(self):
         """401 errors are caught and return 0."""
-        backend = LiteLLMBackend("model")
-        with patch("litellm.embedding", side_effect=Exception("401 Unauthorized")):
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        with patch.object(
+            backend, "_call_provider", side_effect=Exception("401 Unauthorized")
+        ):
             assert backend.check_available() == 0
 
     def test_api_key_403_returns_zero(self):
         """403 forbidden returns 0."""
-        backend = LiteLLMBackend("model")
-        with patch("litellm.embedding", side_effect=Exception("403 Forbidden")):
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        with patch.object(
+            backend, "_call_provider", side_effect=Exception("403 Forbidden")
+        ):
             assert backend.check_available() == 0
 
     def test_invalid_key_detected(self):
         """'invalid' keyword in error is caught."""
-        backend = LiteLLMBackend("model")
-        with patch(
-            "litellm.embedding",
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        with patch.object(
+            backend,
+            "_call_provider",
             side_effect=Exception("Invalid API key provided"),
         ):
             assert backend.check_available() == 0
 
     def test_unauthorized_detected(self):
         """'unauthorized' keyword in error is caught."""
-        backend = LiteLLMBackend("model")
-        with patch(
-            "litellm.embedding",
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        with patch.object(
+            backend,
+            "_call_provider",
             side_effect=Exception("Unauthorized access"),
         ):
             assert backend.check_available() == 0
 
     def test_non_auth_error_returns_zero(self):
         """Non-auth errors (e.g. model not found) also return 0."""
-        backend = LiteLLMBackend("model")
-        with patch(
-            "litellm.embedding",
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        with patch.object(
+            backend,
+            "_call_provider",
             side_effect=Exception("Model not found"),
         ):
             assert backend.check_available() == 0
 
     def test_success_returns_dims(self):
         """Successful check returns embedding dimensions."""
-        backend = LiteLLMBackend("model")
-        mock_response = MagicMock()
-        mock_response.data = [{"embedding": [0.1, 0.2, 0.3]}]
-        with patch("litellm.embedding", return_value=mock_response):
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        with patch.object(backend, "_call_provider", return_value=[[0.1, 0.2, 0.3]]):
             assert backend.check_available() == 3
+
+    def test_empty_embeddings_returns_zero(self):
+        """Returns 0 when provider returns empty embeddings."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        with patch.object(backend, "_call_provider", return_value=[]):
+            assert backend.check_available() == 0
+
+
+# -----------------------------------------------------------------------
+# Qwen3 model loading edge cases
+# -----------------------------------------------------------------------
 
 
 class TestQwen3GetModelWarning:
@@ -515,11 +734,3 @@ class TestQwen3GetModelWarning:
         mock_model.embed.return_value = iter([np.array([0.1, 0.2, 0.3])])
         with patch.object(backend, "_get_model", return_value=mock_model):
             assert backend.check_available() == 3
-
-
-class TestLoggingSuppression:
-    def test_litellm_logger_suppressed(self):
-        """LiteLLM logger should be suppressed to ERROR level after backend init."""
-        _ = LiteLLMBackend("test-model")
-        litellm_logger = logging.getLogger("LiteLLM")
-        assert litellm_logger.level >= logging.ERROR

@@ -863,12 +863,12 @@ async def test_lifespan_shutdown_crawler_error():
 
 @pytest.mark.asyncio
 async def test_init_embedding_backend_litellm_explicit_model():
-    """Test embedding init with explicit litellm model (lines 210-224)."""
+    """Test embedding init with explicit cloud model."""
     with (
         patch("wet_mcp.server.settings") as ms,
         patch("wet_mcp.embedder.init_backend") as mock_init,
     ):
-        ms.resolve_embedding_backend.return_value = "litellm"
+        ms.resolve_embedding_backend.return_value = "cloud"
         ms.resolve_embedding_model.return_value = "text-embedding-3-large"
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
@@ -878,17 +878,17 @@ async def test_init_embedding_backend_litellm_explicit_model():
         mock_init.return_value = mock_backend
 
         await server._init_embedding_backend("sdk")
-        mock_init.assert_called_once_with("litellm", "text-embedding-3-large")
+        mock_init.assert_called_once_with("cloud", "text-embedding-3-large")
 
 
 @pytest.mark.asyncio
 async def test_init_embedding_backend_litellm_explicit_model_fail():
-    """Test embedding init with explicit model failure falls to local (line 224)."""
+    """Test embedding init with explicit model failure falls to local."""
     with (
         patch("wet_mcp.server.settings") as ms,
         patch("wet_mcp.embedder.init_backend") as mock_init,
     ):
-        ms.resolve_embedding_backend.return_value = "litellm"
+        ms.resolve_embedding_backend.return_value = "cloud"
         ms.resolve_embedding_model.return_value = "bad-model"
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
@@ -912,12 +912,12 @@ async def test_init_embedding_backend_litellm_explicit_model_fail():
 
 @pytest.mark.asyncio
 async def test_init_embedding_backend_autodetect_candidates():
-    """Test embedding auto-detect tries candidates (lines 226-242)."""
+    """Test embedding auto-detect tries candidates."""
     with (
         patch("wet_mcp.server.settings") as ms,
         patch("wet_mcp.embedder.init_backend") as mock_init,
     ):
-        ms.resolve_embedding_backend.return_value = "litellm"
+        ms.resolve_embedding_backend.return_value = "cloud"
         ms.resolve_embedding_model.return_value = None
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
@@ -935,18 +935,18 @@ async def test_init_embedding_backend_autodetect_candidates():
 
         mock_init.side_effect = init_side_effect
 
-        await server._init_embedding_backend("proxy")
+        await server._init_embedding_backend("sdk")
         assert call_count == 3
 
 
 @pytest.mark.asyncio
 async def test_init_embedding_backend_all_candidates_fail():
-    """Test embedding auto-detect falls back to local when all candidates fail (lines 244-261)."""
+    """Test embedding auto-detect falls back to local when all candidates fail."""
     with (
         patch("wet_mcp.server.settings") as ms,
         patch("wet_mcp.embedder.init_backend") as mock_init,
     ):
-        ms.resolve_embedding_backend.return_value = "litellm"
+        ms.resolve_embedding_backend.return_value = "cloud"
         ms.resolve_embedding_model.return_value = None
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
@@ -956,7 +956,7 @@ async def test_init_embedding_backend_all_candidates_fail():
         def init_side_effect(backend_type, model, **kwargs):
             nonlocal call_count
             call_count += 1
-            if backend_type == "litellm":
+            if backend_type == "cloud":
                 raise Exception("not available")
             mock_backend = MagicMock()
             mock_backend.check_available.return_value = 384
@@ -1021,12 +1021,12 @@ async def test_init_reranker_backend_disabled():
 
 @pytest.mark.asyncio
 async def test_init_reranker_backend_litellm_cloud_fail_local_fallback():
-    """Test reranker cloud fail then local fallback (lines 292-307)."""
+    """Test reranker cloud fail then local fallback."""
     with (
         patch("wet_mcp.server.settings") as ms,
         patch("wet_mcp.reranker.init_reranker") as mock_init,
     ):
-        ms.resolve_rerank_backend.return_value = "litellm"
+        ms.resolve_rerank_backend.return_value = "cloud"
         ms.resolve_rerank_model.return_value = "rerank-model"
 
         ms.resolve_local_rerank_model.return_value = "local-rerank"
@@ -1036,7 +1036,7 @@ async def test_init_reranker_backend_litellm_cloud_fail_local_fallback():
         def init_side_effect(backend_type, model, **kwargs):
             nonlocal call_count
             call_count += 1
-            if backend_type == "litellm":
+            if backend_type == "cloud":
                 raise Exception("cloud not available")
             mock_reranker = MagicMock()
             mock_reranker.check_available.return_value = True

@@ -332,7 +332,7 @@ class TestValidateCloudModels:
 
         result = _validate_cloud_models(mock_settings)
 
-        mock_init.assert_called_once_with("litellm", "explicit/model")
+        mock_init.assert_called_once_with("cloud", "explicit/model")
         assert result["cloud_ready"] is True
 
     @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
