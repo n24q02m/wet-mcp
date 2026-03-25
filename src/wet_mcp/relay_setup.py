@@ -11,15 +11,15 @@ import sys
 
 from loguru import logger
 
-
 DEFAULT_RELAY_URL = "https://wet-mcp.n24q02m.com"
 
 
 def load_config_from_file() -> dict[str, str] | None:
     """Try to load config from encrypted config file. Returns None if not found."""
     try:
-        from mcp_relay_core.storage.config_file import read_config
         import asyncio
+
+        from mcp_relay_core.storage.config_file import read_config
 
         return asyncio.get_event_loop().run_until_complete(read_config("wet-mcp"))
     except Exception:

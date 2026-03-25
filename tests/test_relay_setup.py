@@ -3,8 +3,6 @@
 import os
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from wet_mcp.relay_schema import RELAY_SCHEMA
 from wet_mcp.relay_setup import (
     DEFAULT_RELAY_URL,
