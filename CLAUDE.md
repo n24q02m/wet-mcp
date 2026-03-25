@@ -51,7 +51,7 @@ mise run dev       # uv run wet-mcp
 ## Env vars
 
 - KHONG co prefix ung dung (day la open-source MCP server)
-- 2-mode LLM: Proxy (`LITELLM_PROXY_URL` + `LITELLM_PROXY_KEY`) > SDK (`API_KEYS`) > Local
+- LLM: google-genai + openai (SDK) > disable if no key. Embed/Rerank: Cohere + Jina (cloud) > local ONNX
 - Embedding: `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`
 - Reranking: `RERANK_BACKEND`, `RERANK_MODEL`
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)

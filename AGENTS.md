@@ -111,10 +111,10 @@ src/wet_mcp/
   config.py                   # Pydantic Settings (singleton)
   server.py                   # FastMCP server (largest, orchestrator)
   security.py                 # SSRF validation
-  llm.py                      # LiteLLM integration
+  llm.py                      # Native LLM providers (google-genai, openai)
   cache.py                    # Web cache (SQLite)
   db.py                       # Docs DB (SQLite + sqlite-vec)
-  embedder.py                 # Embedding backend (LiteLLM + local ONNX/GGUF)
+  embedder.py                 # Embedding backend (Cohere cloud + local ONNX)
   reranker.py                 # Reranker backend
   searxng_runner.py           # Embedded SearXNG subprocess
   setup.py                    # Auto-setup (SearXNG + Playwright)

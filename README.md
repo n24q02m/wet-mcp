@@ -174,18 +174,20 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 
 | Variable | Required | Default | Description |
 |:---------|:---------|:--------|:------------|
-| `API_KEYS` | No | -- | LLM API keys for SDK mode (format: `ENV_VAR:key,...`). Enables cloud embedding + reranking |
-| `LITELLM_PROXY_URL` | No | -- | LiteLLM Proxy URL. Enables proxy mode |
-| `LITELLM_PROXY_KEY` | No | -- | LiteLLM Proxy virtual key |
+| `API_KEYS` | No | -- | API keys for cloud providers (format: `ENV_VAR:key,...`). Enables cloud embedding + reranking |
+| `COHERE_API_KEY` | No | -- | Cohere API key (embedding + reranking) |
+| `JINA_AI_API_KEY` | No | -- | Jina AI API key (embedding + reranking) |
+| `GEMINI_API_KEY` | No | -- | Google Gemini API key (LLM + embedding) |
+| `OPENAI_API_KEY` | No | -- | OpenAI API key (LLM + embedding) |
 | `GITHUB_TOKEN` | No | auto-detect | GitHub token for docs discovery (60 -> 5000 req/hr). Auto-detected from `gh auth token` |
-| `EMBEDDING_BACKEND` | No | auto-detect | `litellm` (cloud) or `local` (Qwen3). Auto: API_KEYS -> litellm, else local |
-| `EMBEDDING_MODEL` | No | auto-detect | LiteLLM embedding model name |
+| `EMBEDDING_BACKEND` | No | auto-detect | `cloud` or `local` (Qwen3). Auto: API_KEYS -> cloud, else local. `litellm` is alias for `cloud` |
+| `EMBEDDING_MODEL` | No | auto-detect | Cloud embedding model name |
 | `EMBEDDING_DIMS` | No | `0` (auto=768) | Embedding dimensions |
 | `RERANK_ENABLED` | No | `true` | Enable reranking after search |
-| `RERANK_BACKEND` | No | auto-detect | `litellm` or `local`. Auto: Cohere/Jina key -> litellm, else local |
-| `RERANK_MODEL` | No | auto-detect | LiteLLM rerank model name |
+| `RERANK_BACKEND` | No | auto-detect | `cloud` or `local`. Auto: Cohere/Jina key -> cloud, else local. `litellm` is alias for `cloud` |
+| `RERANK_MODEL` | No | auto-detect | Cloud rerank model name |
 | `RERANK_TOP_N` | No | `10` | Return top N results after reranking |
-| `LLM_MODELS` | No | `gemini/gemini-3-flash-preview` | LiteLLM model for media analysis |
+| `LLM_MODELS` | No | `gemini-3-flash-preview` | LLM model for media analysis (google-genai or openai) |
 | `WET_AUTO_SEARXNG` | No | `true` | Auto-start embedded SearXNG subprocess |
 | `WET_SEARXNG_PORT` | No | `41592` | SearXNG port |
 | `SEARXNG_URL` | No | `http://localhost:41592` | External SearXNG URL (when auto disabled) |
@@ -214,13 +216,12 @@ Both embedding and reranking are **always available** -- local models are built-
 - **GPU auto-detection**: CUDA/DirectML auto-detected, uses GGUF models for better performance
 - All embeddings stored at **768 dims**. Switching providers never breaks the vector table
 
-### LLM Configuration (3-Mode Architecture)
+### LLM Configuration (2-Mode Architecture)
 
 | Priority | Mode | Config | Use case |
 |:---------|:-----|:-------|:---------|
-| 1 | **Proxy** | `LITELLM_PROXY_URL` + `LITELLM_PROXY_KEY` | Production (selfhosted gateway) |
-| 2 | **SDK** | `API_KEYS` | Dev/local with direct API access |
-| 3 | **Local** | Nothing needed | Offline, embedding/rerank only (no LLM) |
+| 1 | **SDK** | `GEMINI_API_KEY` or `OPENAI_API_KEY` | Direct API access (google-genai, openai) |
+| 2 | **Disabled** | Nothing needed | Offline, embedding/rerank only (no LLM) |
 
 ### SearXNG Configuration (2-Mode)
 
