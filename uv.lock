@@ -1166,6 +1166,16 @@ cli = [
 ]
 
 [[package]]
+name = "mcp-relay-core"
+version = "0.1.0"
+source = { git = "https://github.com/n24q02m/mcp-relay-core.git?subdirectory=packages%2Fcore-py&rev=main#ed2398c1d1dba41566983d46c284545dcb76f758" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "httpx" },
+    { name = "platformdirs" },
+]
+
+[[package]]
 name = "mdurl"
 version = "0.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2511,6 +2521,7 @@ dependencies = [
     { name = "loguru" },
     { name = "markitdown", extra = ["docx", "pdf", "pptx", "xlsx"] },
     { name = "mcp", extra = ["cli"] },
+    { name = "mcp-relay-core" },
     { name = "openai" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -2546,6 +2557,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
+    { name = "mcp-relay-core", git = "https://github.com/n24q02m/mcp-relay-core.git?subdirectory=packages%2Fcore-py&rev=main" },
     { name = "openai", specifier = ">=1.50" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pydantic" },

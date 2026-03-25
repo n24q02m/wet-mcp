@@ -49,6 +49,8 @@ dependencies = [
     "jsonschema>=4.26.0",
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
+    # Relay setup (zero-env-config)
+    "mcp-relay-core @ git+https://github.com/n24q02m/mcp-relay-core.git@main#subdirectory=packages/core-py",
 ]
 
 [dependency-groups]
@@ -71,6 +73,9 @@ wet-mcp = "wet_mcp:main"
 Homepage = "https://github.com/n24q02m/wet-mcp"
 Repository = "https://github.com/n24q02m/wet-mcp.git"
 Issues = "https://github.com/n24q02m/wet-mcp/issues"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [build-system]
 requires = ["hatchling"]

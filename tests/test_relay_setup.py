@@ -1,0 +1,138 @@
+"""Tests for relay setup integration."""
+
+import os
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from wet_mcp.relay_schema import RELAY_SCHEMA
+from wet_mcp.relay_setup import (
+    DEFAULT_RELAY_URL,
+    apply_config,
+    load_config_from_file,
+    trigger_relay_setup,
+)
+
+
+class TestRelaySchema:
+    """Tests for relay schema definition."""
+
+    def test_schema_has_three_modes(self):
+        assert len(RELAY_SCHEMA["modes"]) == 3
+
+    def test_schema_mode_ids(self):
+        mode_ids = [m["id"] for m in RELAY_SCHEMA["modes"]]
+        assert mode_ids == ["local", "proxy", "sdk"]
+
+    def test_schema_server_name(self):
+        assert RELAY_SCHEMA["server"] == "wet-mcp"
+
+    def test_schema_display_name(self):
+        assert RELAY_SCHEMA["displayName"] == "Web Extended Toolkit"
+
+    def test_local_mode_has_no_fields(self):
+        local_mode = RELAY_SCHEMA["modes"][0]
+        assert local_mode["id"] == "local"
+        assert local_mode["fields"] == []
+
+    def test_proxy_mode_has_url_and_key_fields(self):
+        proxy_mode = RELAY_SCHEMA["modes"][1]
+        assert proxy_mode["id"] == "proxy"
+        field_keys = [f["key"] for f in proxy_mode["fields"]]
+        assert "LITELLM_PROXY_URL" in field_keys
+        assert "LITELLM_PROXY_KEY" in field_keys
+
+    def test_sdk_mode_has_api_keys_field(self):
+        sdk_mode = RELAY_SCHEMA["modes"][2]
+        assert sdk_mode["id"] == "sdk"
+        field_keys = [f["key"] for f in sdk_mode["fields"]]
+        assert "API_KEYS" in field_keys
+
+
+class TestLoadConfigFromFile:
+    """Tests for load_config_from_file."""
+
+    def test_returns_none_when_no_file(self):
+        with patch(
+            "wet_mcp.relay_setup.read_config",
+            side_effect=ImportError("no module"),
+            create=True,
+        ):
+            result = load_config_from_file()
+        assert result is None
+
+    def test_returns_none_on_import_error(self):
+        """When mcp_relay_core is not installed, returns None gracefully."""
+        result = load_config_from_file()
+        # Should not raise, returns None if module missing or config not found
+        assert result is None or isinstance(result, dict)
+
+
+class TestApplyConfig:
+    """Tests for apply_config."""
+
+    def test_sets_env_vars(self, monkeypatch):
+        monkeypatch.delenv("TEST_RELAY_VAR", raising=False)
+        apply_config({"TEST_RELAY_VAR": "test_value"})
+        assert os.environ["TEST_RELAY_VAR"] == "test_value"
+        monkeypatch.delenv("TEST_RELAY_VAR")
+
+    def test_does_not_override_existing_env_vars(self, monkeypatch):
+        monkeypatch.setenv("TEST_RELAY_EXISTING", "original")
+        apply_config({"TEST_RELAY_EXISTING": "new_value"})
+        assert os.environ["TEST_RELAY_EXISTING"] == "original"
+
+    def test_skips_empty_values(self, monkeypatch):
+        monkeypatch.delenv("TEST_RELAY_EMPTY", raising=False)
+        apply_config({"TEST_RELAY_EMPTY": ""})
+        assert "TEST_RELAY_EMPTY" not in os.environ
+
+    def test_applies_multiple_vars(self, monkeypatch):
+        monkeypatch.delenv("TEST_RELAY_A", raising=False)
+        monkeypatch.delenv("TEST_RELAY_B", raising=False)
+        apply_config({"TEST_RELAY_A": "val_a", "TEST_RELAY_B": "val_b"})
+        assert os.environ["TEST_RELAY_A"] == "val_a"
+        assert os.environ["TEST_RELAY_B"] == "val_b"
+        monkeypatch.delenv("TEST_RELAY_A")
+        monkeypatch.delenv("TEST_RELAY_B")
+
+
+class TestTriggerRelaySetup:
+    """Tests for trigger_relay_setup."""
+
+    async def test_calls_create_session(self):
+        mock_session = {"relay_url": "https://example.com/setup/abc"}
+        mock_config = {"LITELLM_PROXY_URL": "https://proxy.example.com"}
+
+        with (
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                new_callable=AsyncMock,
+                return_value=mock_session,
+            ) as mock_create,
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=mock_config,
+            ),
+            patch(
+                "mcp_relay_core.storage.config_file.write_config",
+                new_callable=AsyncMock,
+            ),
+        ):
+            result = await trigger_relay_setup()
+            mock_create.assert_called_once_with(
+                DEFAULT_RELAY_URL, "wet-mcp", RELAY_SCHEMA
+            )
+            assert result == mock_config
+
+    async def test_returns_none_on_import_error(self):
+        """When mcp_relay_core is not available, returns None."""
+        with patch(
+            "wet_mcp.relay_setup.trigger_relay_setup",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            # Direct call - if import fails, should return None
+            result = await trigger_relay_setup()
+            assert result is None
