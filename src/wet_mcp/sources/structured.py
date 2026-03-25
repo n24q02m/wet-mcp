@@ -49,7 +49,7 @@ async def _call_llm_with_schema(
     # Attempt 1: json_schema mode (structured output)
     try:
         response = await acompletion(
-            **llm_kwargs,
+            **llm_kwargs,  # type: ignore[invalid-argument-type]  # dict unpacking
             response_format={
                 "type": "json_schema",
                 "json_schema": {
@@ -66,7 +66,7 @@ async def _call_llm_with_schema(
 
     # Attempt 2: json_object mode (simpler, wider provider support)
     response = await acompletion(
-        **llm_kwargs,
+        **llm_kwargs,  # type: ignore[invalid-argument-type]  # dict unpacking
         response_format={"type": "json_object"},
     )
     content = response.choices[0].message.content

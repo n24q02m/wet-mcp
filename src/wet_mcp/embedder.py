@@ -245,11 +245,12 @@ class CloudEmbeddingBackend:
 
         result = client.models.embed_content(
             model=self._bare_model,
-            contents=texts,
+            contents=texts,  # type: ignore[invalid-argument-type]  # SDK accepts list[str]
             config=types.EmbedContentConfig(**config_kwargs) if config_kwargs else None,
         )
 
-        return [list(e.values) for e in result.embeddings]
+        embeddings = result.embeddings or []
+        return [list(e.values or []) for e in embeddings]
 
     def _embed_openai(
         self, texts: list[str], dimensions: int | None = None
