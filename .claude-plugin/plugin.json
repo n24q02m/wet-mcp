@@ -19,8 +19,11 @@
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp"]
+      "args": [
+        "--python",
+        "3.13",
+        "wet-mcp"
+      ]
     }
-  },
-  "skills": "./skills/"
+  }
 }
