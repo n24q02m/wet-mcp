@@ -49,6 +49,22 @@ Via marketplace (includes skills: /fact-check, /compare):
 
 Configure env vars in `~/.claude/settings.local.json` or shell profile. See [Environment Variables](#environment-variables).
 
+### Gemini CLI Extension
+
+```bash
+gemini extensions install https://github.com/n24q02m/wet-mcp
+```
+
+### Codex CLI
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.wet]
+command = "uvx"
+args = ["--python", "3.13", "wet-mcp"]
+```
+
 ### MCP Server
 
 > **Python 3.13 required** -- Python 3.14+ is **not** supported due to SearXNG incompatibility. You **must** specify `--python 3.13` when using `uvx`.
@@ -67,30 +83,6 @@ Configure env vars in `~/.claude/settings.local.json` or shell profile. See [Env
   }
 }
 ```
-
-<details>
-<summary>Other MCP clients (Cursor, Codex, Gemini CLI)</summary>
-
-```jsonc
-// Cursor (~/.cursor/mcp.json), Windsurf, Cline, Amp, OpenCode
-{
-  "mcpServers": {
-    "wet": {
-      "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp@latest"]
-    }
-  }
-}
-```
-
-```toml
-# Codex (~/.codex/config.toml)
-[mcp_servers.wet]
-command = "uvx"
-args = ["--python", "3.13", "wet-mcp@latest"]
-```
-
-</details>
 
 #### Option 2: Docker
 
@@ -114,38 +106,6 @@ args = ["--python", "3.13", "wet-mcp@latest"]
 ```
 
 Configure env vars in `~/.claude/settings.local.json` or your shell profile. See [Environment Variables](#environment-variables) below.
-
-### Pre-install (optional)
-
-Use the `setup` MCP tool to warmup models and install dependencies:
-
-```
-# Via MCP tool call (recommended):
-setup(action="warmup")
-
-# With cloud embedding configured, warmup validates API keys
-# and skips local model download if cloud models are available.
-```
-
-The warmup action pre-downloads SearXNG, Playwright, and embedding/reranker models (~1.1GB total) so the first real connection does not timeout.
-
-### Sync setup
-
-Sync is fully automatic. Just set `SYNC_ENABLED=true` and the server handles everything:
-
-1. **First sync**: rclone is auto-downloaded, a browser opens for OAuth authentication
-2. **Token saved**: OAuth token is stored locally at `~/.wet-mcp/tokens/` (600 permissions)
-3. **Subsequent runs**: Token is loaded automatically -- no manual steps needed
-
-For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
-
-```jsonc
-{
-  "SYNC_ENABLED": "true",
-  "SYNC_PROVIDER": "dropbox",
-  "SYNC_REMOTE": "dropbox"
-}
-```
 
 ## Tools
 
@@ -179,6 +139,40 @@ Your credentials never leave your machine. The relay server only sees encrypted 
 For CI/automation, you can still use environment variables (see below).
 
 ## Configuration
+
+### Pre-install (optional)
+
+Use the `setup` MCP tool to warmup models and install dependencies:
+
+```
+# Via MCP tool call (recommended):
+setup(action="warmup")
+
+# With cloud embedding configured, warmup validates API keys
+# and skips local model download if cloud models are available.
+```
+
+The warmup action pre-downloads SearXNG, Playwright, and embedding/reranker models (~1.1GB total) so the first real connection does not timeout.
+
+### Sync setup
+
+Sync is fully automatic. Just set `SYNC_ENABLED=true` and the server handles everything:
+
+1. **First sync**: rclone is auto-downloaded, a browser opens for OAuth authentication
+2. **Token saved**: OAuth token is stored locally at `~/.wet-mcp/tokens/` (600 permissions)
+3. **Subsequent runs**: Token is loaded automatically -- no manual steps needed
+
+For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
+
+```jsonc
+{
+  "SYNC_ENABLED": "true",
+  "SYNC_PROVIDER": "dropbox",
+  "SYNC_REMOTE": "dropbox"
+}
+```
+
+### Environment Variables
 
 | Variable | Required | Default | Description |
 |:---------|:---------|:--------|:------------|
@@ -238,7 +232,7 @@ Both embedding and reranking are **always available** -- local models are built-
 | **Embedded** (default) | `WET_AUTO_SEARXNG=true` | Auto-installs and manages SearXNG as subprocess |
 | **External** | `WET_AUTO_SEARXNG=false` + `SEARXNG_URL=http://host:port` | Connects to pre-existing SearXNG instance |
 
-### Security
+## Security
 
 - **SSRF prevention** -- URL validation on crawl targets
 - **Graceful fallbacks** -- Cloud → Local embedding, multi-tier crawling
@@ -253,32 +247,6 @@ cd wet-mcp
 uv sync
 uv run wet-mcp
 ```
-
-## Compatible With
-
-[![Claude Code](https://img.shields.io/badge/Claude_Code-000000?logo=anthropic&logoColor=white)](#quick-start)
-[![Claude Desktop](https://img.shields.io/badge/Claude_Desktop-F9DC7C?logo=anthropic&logoColor=black)](#quick-start)
-[![Cursor](https://img.shields.io/badge/Cursor-000000?logo=cursor&logoColor=white)](#quick-start)
-[![VS Code Copilot](https://img.shields.io/badge/VS_Code_Copilot-007ACC?logo=visualstudiocode&logoColor=white)](#quick-start)
-[![Antigravity](https://img.shields.io/badge/Antigravity-4285F4?logo=google&logoColor=white)](#quick-start)
-[![Gemini CLI](https://img.shields.io/badge/Gemini_CLI-8E75B2?logo=googlegemini&logoColor=white)](#quick-start)
-[![OpenAI Codex](https://img.shields.io/badge/Codex-412991?logo=openai&logoColor=white)](#quick-start)
-[![OpenCode](https://img.shields.io/badge/OpenCode-F7DF1E?logoColor=black)](#quick-start)
-
-## Also by n24q02m
-
-| Server | Description |
-|--------|-------------|
-| [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) | Persistent AI memory with hybrid search and cross-machine sync |
-| [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) | Markdown-first Notion API with 9 composite tools |
-| [better-email-mcp](https://github.com/n24q02m/better-email-mcp) | Email (IMAP/SMTP) with multi-account and auto-discovery |
-| [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) | Godot Engine 4.x with 18 tools for scenes, scripts, and shaders |
-| [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) | Telegram dual-mode (Bot API + MTProto) with 6 composite tools |
-| [better-code-review-graph](https://github.com/n24q02m/better-code-review-graph) | Knowledge graph for token-efficient code reviews |
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
