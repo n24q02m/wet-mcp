@@ -2511,7 +2511,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.17.0b1"
+version = "2.17.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -2562,7 +2562,7 @@ requires-dist = [
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
     { name = "mcp-relay-core", specifier = ">=0.1.0" },
-    { name = "openai", specifier = ">=1.109.1" },
+    { name = "openai", specifier = ">=2.30.0" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pydantic" },
     { name = "pydantic-settings" },

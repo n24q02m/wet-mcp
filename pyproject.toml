@@ -34,7 +34,7 @@ dependencies = [
     "cohere>=5.21.1",
     "httpx>=0.28.1",
     "google-genai>=1.68.0",
-    "openai>=1.109.1",
+    "openai>=2.30.0",
     # Vector search for docs
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
