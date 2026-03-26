@@ -6,7 +6,7 @@
     "url": "https://github.com/n24q02m/wet-mcp.git",
     "source": "github"
   },
-  "version": "2.14.2",
+  "version": "2.17.0-beta.1",
   "packages": [
     {
       "registryType": "pypi",

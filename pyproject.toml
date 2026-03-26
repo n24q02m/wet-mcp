@@ -111,7 +111,7 @@ rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibl
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-version_variables = [".claude-plugin/plugin.json:version", "gemini-extension.json:version"]
+version_variables = [".claude-plugin/plugin.json:version", "gemini-extension.json:version", "server.json:version"]
 tag_format = "v{version}"
 commit_message = "chore(release): v{version}"
 major_on_zero = false
