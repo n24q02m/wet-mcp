@@ -789,13 +789,16 @@ async def convert_local_files(paths: list[str]) -> str:
     from wet_mcp.config import settings as _settings
     from wet_mcp.security import is_safe_local_path
 
-    allowed_dirs = None
     if _settings.convert_allowed_dirs:
         allowed_dirs = [
             Path(d.strip())
             for d in _settings.convert_allowed_dirs.split(",")
             if d.strip()
         ]
+    else:
+        # Default to allowing access only to the home directory and /tmp
+        # to prevent arbitrary file read of sensitive system files.
+        allowed_dirs = [Path.home().resolve(), Path("/tmp").resolve()]
 
     results = []
     for path_str in paths:
