@@ -42,15 +42,10 @@ Via marketplace (includes skills: /fact-check, /compare):
 
 ```bash
 /plugin marketplace add n24q02m/claude-plugins
-/plugin install wet-mcp@claude-plugins
+/plugin install wet-mcp@n24q02m-plugins
 ```
 
-Or install this plugin only:
 
-```bash
-/plugin marketplace add n24q02m/wet-mcp
-/plugin install wet-mcp
-```
 
 Configure env vars in `~/.claude/settings.local.json` or shell profile. See [Environment Variables](#environment-variables).
 
