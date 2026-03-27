@@ -11,6 +11,9 @@ Xem `AGENTS.md` va `README.md` de hieu architecture va configuration.
   - `cache.py`, `db.py`, `embedder.py`, `reranker.py` -- Infrastructure
   - `relay_setup.py` -- Zero-config relay: create session, poll for config
   - `relay_schema.py` -- Relay form schema (3 modes: local/proxy/sdk)
+  - `sync.py` -- Google Drive sync (OAuth Device Code, httpx)
+  - `token_store.py` -- Local token storage cho OAuth (~/.wet-mcp/tokens/)
+  - `setup_tool.py` -- Warmup + setup-sync logic (MCP-callable)
   - `sources/` -- Data source integrations (crawler, docs, searxng)
 - `tests/` -- Mirror source modules
 
