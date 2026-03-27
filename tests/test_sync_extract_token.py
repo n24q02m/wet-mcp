@@ -30,9 +30,7 @@ def test_load_token_none():
 
 def test_has_token_via_load():
     """_has_token_available uses _load_token internally."""
-    with patch(
-        "wet_mcp.token_store.load_token", return_value={"access_token": "tok"}
-    ):
+    with patch("wet_mcp.token_store.load_token", return_value={"access_token": "tok"}):
         assert _has_token_available() is True
 
     with patch("wet_mcp.token_store.load_token", return_value=None):
