@@ -1,14 +1,10 @@
-"""Relay-first setup flow for wet-mcp.
+"""Credential resolution for wet-mcp.
 
-Always shows the relay URL at startup so users can configure cloud providers
-via browser. If the user skips or relay is unreachable, falls back to local
-ONNX mode (works without any credentials).
-
-Resolution order:
-1. Environment variables (highest priority, checked by Settings)
-2. Encrypted config file (~/.config/mcp/config.enc)
-3. Relay setup (browser-based form, 30s timeout for optional-cred server)
-4. Local mode fallback (ONNX embedding, SearXNG search)
+Resolution order (relay only when ALL local sources are empty):
+1. ENV VARS          -- User explicitly set (highest priority, skip everything)
+2. RELAY CONFIG      -- Saved from previous relay setup (~/.config/mcp/config.enc)
+3. RELAY SETUP       -- Interactive, ONLY when steps 1-2 are ALL empty (30s timeout)
+4. LOCAL MODE        -- Fallback (ONNX embedding, SearXNG search)
 """
 
 from __future__ import annotations
@@ -50,13 +46,13 @@ def apply_config(config: dict[str, str]) -> None:
 async def ensure_config() -> dict[str, str] | None:
     """Resolve config: env vars -> config file -> relay setup -> local fallback.
 
-    Always shows relay URL at startup for relay-first design.
+    Relay is ONLY triggered when steps 1-2 are ALL empty.
     Uses 30s timeout since wet-mcp works locally without credentials.
 
     Returns:
         Config dict with API keys, or None if skipped/failed (local mode).
     """
-    # 1. Check if env vars already provide cloud keys
+    # 1. Check if env vars already provide cloud keys (highest priority)
     cloud_keys = [
         "JINA_AI_API_KEY",
         "GEMINI_API_KEY",
@@ -64,16 +60,16 @@ async def ensure_config() -> dict[str, str] | None:
         "COHERE_API_KEY",
     ]
     if any(os.environ.get(k) for k in cloud_keys):
-        logger.info("Cloud API keys found in environment")
+        logger.info("Cloud API keys found in environment, skipping relay")
         return None  # env vars take priority, no relay needed
 
-    # 2. Check config file
+    # 2. Check saved relay config file
     config = load_config_from_file()
     if config is not None:
         apply_config(config)
         return config
 
-    # 3. Always trigger relay setup (relay-first design)
+    # 3. No local credentials found -- trigger relay setup
     logger.info("No cloud credentials found. Starting relay setup...")
     try:
         from mcp_relay_core.relay.client import create_session, poll_for_result
