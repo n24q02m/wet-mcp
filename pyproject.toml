@@ -52,8 +52,8 @@ dependencies = [
     # Relay setup (zero-env-config)
     "mcp-relay-core>=0.1.0",
     # Google Drive sync
-    "google-api-python-client>=2.0",
-    "google-auth>=2.0",
+    "google-api-python-client>=2.193.0",
+    "google-auth>=2.49.1",
 ]
 
 [dependency-groups]

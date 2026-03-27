@@ -2611,7 +2611,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.18.0b1"
+version = "2.18.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -2656,8 +2656,8 @@ requires-dist = [
     { name = "crawl4ai" },
     { name = "cryptography", specifier = ">=46.0.6" },
     { name = "diskcache", specifier = ">=5.6.3" },
-    { name = "google-api-python-client", specifier = ">=2.0" },
-    { name = "google-auth", specifier = ">=2.0" },
+    { name = "google-api-python-client", specifier = ">=2.193.0" },
+    { name = "google-auth", specifier = ">=2.49.1" },
     { name = "google-genai", specifier = ">=1.68.0" },
     { name = "httpx" },
     { name = "httpx", specifier = ">=0.28.1" },
