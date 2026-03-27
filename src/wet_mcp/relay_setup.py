@@ -95,6 +95,21 @@ async def ensure_config() -> dict[str, str] | None:
         write_config(SERVER_NAME, config)
         logger.info("Config saved successfully")
 
+        # Notify relay page that setup is complete
+        try:
+            import httpx
+
+            async with httpx.AsyncClient() as http:
+                await http.post(
+                    f"{relay_url}/api/sessions/{session.session_id}/messages",
+                    json={
+                        "type": "complete",
+                        "text": "wet-mcp config saved. Setup complete!",
+                    },
+                )
+        except Exception:
+            pass
+
         apply_config(config)
         return config
 
@@ -133,6 +148,21 @@ async def trigger_relay_setup() -> dict[str, str] | None:
         from mcp_relay_core.storage.config_file import write_config
 
         write_config(SERVER_NAME, config)
+
+        # Notify relay page that setup is complete
+        try:
+            import httpx
+
+            async with httpx.AsyncClient() as http:
+                await http.post(
+                    f"{relay_url}/api/sessions/{session.session_id}/messages",
+                    json={
+                        "type": "complete",
+                        "text": "wet-mcp config saved. Setup complete!",
+                    },
+                )
+        except Exception:
+            pass
 
         return config
 
