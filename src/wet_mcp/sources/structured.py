@@ -98,7 +98,7 @@ async def extract_structured(
             {
                 "error": (
                     "Structured extraction requires LLM. "
-                    "Configure LITELLM_PROXY_URL or API_KEYS."
+                    "Configure API_KEYS (e.g. GEMINI_API_KEY, OPENAI_API_KEY)."
                 )
             }
         )

@@ -1,7 +1,7 @@
 """Tests for relay setup integration."""
 
 import os
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from wet_mcp.relay_schema import RELAY_SCHEMA
 from wet_mcp.relay_setup import (
@@ -15,12 +15,12 @@ from wet_mcp.relay_setup import (
 class TestRelaySchema:
     """Tests for relay schema definition."""
 
-    def test_schema_has_three_modes(self):
-        assert len(RELAY_SCHEMA["modes"]) == 3
+    def test_schema_has_two_modes(self):
+        assert len(RELAY_SCHEMA["modes"]) == 2
 
     def test_schema_mode_ids(self):
         mode_ids = [m["id"] for m in RELAY_SCHEMA["modes"]]
-        assert mode_ids == ["local", "proxy", "sdk"]
+        assert mode_ids == ["local", "sdk"]
 
     def test_schema_server_name(self):
         assert RELAY_SCHEMA["server"] == "wet-mcp"
@@ -33,15 +33,8 @@ class TestRelaySchema:
         assert local_mode["id"] == "local"
         assert local_mode["fields"] == []
 
-    def test_proxy_mode_has_url_and_key_fields(self):
-        proxy_mode = RELAY_SCHEMA["modes"][1]
-        assert proxy_mode["id"] == "proxy"
-        field_keys = [f["key"] for f in proxy_mode["fields"]]
-        assert "LITELLM_PROXY_URL" in field_keys
-        assert "LITELLM_PROXY_KEY" in field_keys
-
     def test_sdk_mode_has_api_keys_field(self):
-        sdk_mode = RELAY_SCHEMA["modes"][2]
+        sdk_mode = RELAY_SCHEMA["modes"][1]
         assert sdk_mode["id"] == "sdk"
         field_keys = [f["key"] for f in sdk_mode["fields"]]
         assert "API_KEYS" in field_keys
@@ -99,8 +92,11 @@ class TestTriggerRelaySetup:
     """Tests for trigger_relay_setup."""
 
     async def test_calls_create_session(self):
-        mock_session = {"relay_url": "https://example.com/setup/abc"}
-        mock_config = {"LITELLM_PROXY_URL": "https://proxy.example.com"}
+        mock_session = MagicMock(
+            relay_url="https://example.com/setup/abc",
+            session_id="test-session-id",
+        )
+        mock_config = {"GEMINI_API_KEY": "AIza_test_key"}
 
         with (
             patch(
@@ -115,9 +111,11 @@ class TestTriggerRelaySetup:
             ),
             patch(
                 "mcp_relay_core.storage.config_file.write_config",
-                new_callable=AsyncMock,
             ),
+            patch("httpx.AsyncClient") as mock_httpx,
         ):
+            mock_httpx.return_value.__aenter__ = AsyncMock()
+            mock_httpx.return_value.__aexit__ = AsyncMock()
             result = await trigger_relay_setup()
             mock_create.assert_called_once_with(
                 DEFAULT_RELAY_URL, "wet-mcp", RELAY_SCHEMA
@@ -127,10 +125,9 @@ class TestTriggerRelaySetup:
     async def test_returns_none_on_import_error(self):
         """When mcp_relay_core is not available, returns None."""
         with patch(
-            "wet_mcp.relay_setup.trigger_relay_setup",
+            "mcp_relay_core.relay.client.create_session",
             new_callable=AsyncMock,
-            return_value=None,
+            side_effect=ImportError("No module named 'mcp_relay_core'"),
         ):
-            # Direct call - if import fails, should return None
             result = await trigger_relay_setup()
             assert result is None

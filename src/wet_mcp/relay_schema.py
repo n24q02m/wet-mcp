@@ -15,25 +15,6 @@ RELAY_SCHEMA: dict[str, Any] = {
             "fields": [],
         },
         {
-            "id": "proxy",
-            "label": "LiteLLM Proxy",
-            "description": "Use a LiteLLM proxy for LLM and embedding",
-            "fields": [
-                {
-                    "key": "LITELLM_PROXY_URL",
-                    "label": "Proxy URL",
-                    "type": "url",
-                    "placeholder": "https://litellm.example.com",
-                },
-                {
-                    "key": "LITELLM_PROXY_KEY",
-                    "label": "Proxy API Key",
-                    "type": "password",
-                    "required": False,
-                },
-            ],
-        },
-        {
             "id": "sdk",
             "label": "Direct API Keys",
             "description": "Use API keys directly (OpenAI, Gemini, etc.)",
