@@ -118,7 +118,7 @@ src/wet_mcp/
   reranker.py                 # Reranker backend
   searxng_runner.py           # Embedded SearXNG subprocess
   setup.py                    # Auto-setup (SearXNG + Playwright)
-  sync.py                     # rclone sync
+  sync.py                     # Google Drive sync (OAuth Device Code, httpx)
   sources/                    # Data source integrations
     crawler.py, docs.py, searxng.py
   docs/                       # Tool documentation markdown
