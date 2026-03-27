@@ -77,7 +77,7 @@ async def ensure_config() -> dict[str, str] | None:
         from .relay_schema import RELAY_SCHEMA
 
         relay_url = os.environ.get("MCP_RELAY_URL", DEFAULT_RELAY_URL)
-        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)
+        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)  # ty: ignore[invalid-argument-type]
 
         print(
             f"\nConfigure cloud providers (optional, 30s timeout):"
@@ -134,7 +134,7 @@ async def trigger_relay_setup() -> dict[str, str] | None:
         from .relay_schema import RELAY_SCHEMA
 
         relay_url = os.environ.get("MCP_RELAY_URL", DEFAULT_RELAY_URL)
-        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)
+        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)  # ty: ignore[invalid-argument-type]
 
         session_url: str = session.relay_url
         print(
