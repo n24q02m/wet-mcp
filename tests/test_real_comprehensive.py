@@ -575,7 +575,7 @@ class TestConfigTool:
 
 
 class TestSyncConfig:
-    """Test sync configuration (without actual rclone)."""
+    """Test sync configuration (without actual Google Drive)."""
 
     async def test_sync_disabled_by_default(self):
         from wet_mcp.config import settings

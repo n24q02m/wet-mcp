@@ -1,38 +1,30 @@
-"""Embedded Rclone process management for docs sync.
+"""Google Drive sync for docs database.
 
 Syncs the docs database (libraries + chunks) across machines using
-rclone. Only docs data is synced — web cache (search/extract) is
-ephemeral and not synced.
+Google Drive API. Only docs data is synced -- web cache (search/extract)
+is ephemeral and not synced.
 
 Sync flow:
-1. rclone installed/found -> configured with remote
-2. Push: copy local DB to remote folder
-3. Pull: copy remote DB to local, merge via JSONL export/import
+1. Authenticate via OAuth Device Code flow
+2. Push: upload local DB to Google Drive folder
+3. Pull: download remote DB, merge via JSONL export/import
 4. Auto-sync: periodic push/pull in background
 
-Resilience:
-- Auto-download rclone binary on first use
-- Health check before sync operations
-- Conflict resolution via timestamp-based merge
-- Configurable sync interval (0 = manual only)
+Auth flow (Device Code -- no browser redirect needed):
+1. POST /device/code -> get user_code + verification_url
+2. User visits URL, enters code (or relay sends it)
+3. Poll /token until authorized
+4. Save access_token + refresh_token locally
+5. Auto-refresh when expired
 """
 
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
 import json
-import os
-import platform
-import shutil
-import stat
-import subprocess
-import sys
-import tempfile
-import zipfile
+import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from loguru import logger
@@ -42,315 +34,377 @@ from wet_mcp.config import settings
 if TYPE_CHECKING:
     from wet_mcp.db import DocsDB
 
-# Rclone version to download
-_RCLONE_VERSION = "v1.68.2"
+# Google OAuth endpoints
+_DEVICE_CODE_URL = "https://oauth2.googleapis.com/device/code"
+_TOKEN_URL = "https://oauth2.googleapis.com/token"
+_DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
+_DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3"
 
-# Expected SHA256 checksums for rclone archives (v1.68.2)
-_RCLONE_CHECKSUMS = {
-    "linux-amd64": "0e6fa18051e67fc600d803a2dcb10ddedb092247fc6eee61be97f64ec080a13c",
-    "linux-arm64": "c6e9d4cf9c88b279f6ad80cd5675daebc068e404890fa7e191412c1bc7a4ac5f",
-    "linux-386": "8654f19f572ac90c8cf712f3e212ee499b8e5e270e209753f3e82f0b44d9447d",
-    "osx-amd64": "cdc685e16abbf35b6f47c95b2a5b4ad73a73921ff6842e5f4136c8b461756188",
-    "osx-arm64": "323f387b32bcf9ddfc3874f01879a0b2689dbd91309beb8c3a4410db04d0c41f",
-    "windows-amd64": "812bf76cc02c04cf6327f3683f3d5a88e47d36c39db84c1a745777496be7d993",
-    "windows-arm64": "cbc6584266cf62bb9f4df912cb00d566c1cbc50ce2748f5e433f1937209e807e",
-    "windows-386": "d076d341122287cf92033aeecf1dd6900ff407c22981fa5ddf49689d5301a7e2",
-}
+# OAuth scope: only access files created by this app
+_SCOPE = "https://www.googleapis.com/auth/drive.file"
+
+# Device code flow grant type
+_DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
 
 # Background sync task reference
 _sync_task: asyncio.Task | None = None
 
-
-def _get_rclone_dir() -> Path:
-    """Get directory for rclone binary."""
-    return settings.get_data_dir() / "bin"
+# Token provider name for token_store
+_TOKEN_PROVIDER = "google_drive"
 
 
-def _get_rclone_path() -> Path | None:
-    """Find rclone binary.
+# ---------------------------------------------------------------------------
+# Token management
+# ---------------------------------------------------------------------------
 
-    Priority:
-    1. System-installed rclone (in PATH)
-    2. Bundled rclone in data dir
+
+def _load_token() -> dict | None:
+    """Load Google Drive OAuth token from local storage."""
+    from wet_mcp.token_store import load_token
+
+    return load_token(_TOKEN_PROVIDER)
+
+
+def _save_token(token: dict) -> None:
+    """Save Google Drive OAuth token to local storage."""
+    from wet_mcp.token_store import save_token
+
+    save_token(_TOKEN_PROVIDER, token)
+
+
+def _has_token_available() -> bool:
+    """Check if a Google Drive token is available."""
+    return _load_token() is not None
+
+
+async def _refresh_token(token: dict) -> dict | None:
+    """Refresh an expired access token using the refresh_token.
+
+    Returns updated token dict, or None if refresh failed.
     """
-    # Check system PATH first
-    system_rclone = shutil.which("rclone")
-    if system_rclone:
-        return Path(system_rclone)
+    refresh_token = token.get("refresh_token")
+    client_id = token.get("client_id", settings.google_drive_client_id)
 
-    # Check bundled binary
-    ext = ".exe" if sys.platform == "win32" else ""
-    bundled = _get_rclone_dir() / f"rclone{ext}"
-    if bundled.exists():
-        return bundled
+    if not refresh_token or not client_id:
+        logger.warning("Cannot refresh token: missing refresh_token or client_id")
+        return None
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                _TOKEN_URL,
+                data={
+                    "client_id": client_id,
+                    "grant_type": "refresh_token",
+                    "refresh_token": refresh_token,
+                },
+                timeout=30.0,
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Token refresh failed: {response.text}")
+                return None
+
+            data = response.json()
+
+            # Update token (keep existing refresh_token if not returned)
+            updated = {
+                "access_token": data["access_token"],
+                "refresh_token": data.get("refresh_token", refresh_token),
+                "expiry": time.time() + data.get("expires_in", 3600),
+                "client_id": client_id,
+                "token_type": data.get("token_type", "Bearer"),
+            }
+            _save_token(updated)
+            logger.debug("Token refreshed successfully")
+            return updated
+
+    except Exception as e:
+        logger.error(f"Token refresh error: {e}")
+        return None
+
+
+async def _get_valid_token() -> dict | None:
+    """Get a valid (non-expired) access token, refreshing if needed.
+
+    Returns token dict with valid access_token, or None.
+    """
+    token = _load_token()
+    if not token:
+        return None
+
+    # Check expiry (refresh 60s before actual expiry)
+    expiry = token.get("expiry", 0)
+    if time.time() >= expiry - 60:
+        logger.debug("Token expired, refreshing...")
+        token = await _refresh_token(token)
+
+    return token
+
+
+# ---------------------------------------------------------------------------
+# Google Drive API helpers
+# ---------------------------------------------------------------------------
+
+
+async def _drive_request(
+    method: str,
+    url: str,
+    token: dict,
+    *,
+    params: dict | None = None,
+    json_data: dict | None = None,
+    content: bytes | None = None,
+    headers: dict | None = None,
+    timeout: float = 120.0,
+) -> httpx.Response:
+    """Make an authenticated Google Drive API request."""
+    req_headers = {
+        "Authorization": f"Bearer {token['access_token']}",
+        **(headers or {}),
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.request(
+            method,
+            url,
+            params=params,
+            json=json_data,
+            content=content,
+            headers=req_headers,
+            timeout=timeout,
+        )
+
+    return response
+
+
+async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
+    """Find or create a Google Drive folder by name.
+
+    Returns folder ID, or None on failure.
+    """
+    # Search for existing folder
+    query = (
+        f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
+        f"and trashed=false"
+    )
+    response = await _drive_request(
+        "GET",
+        f"{_DRIVE_API_BASE}/files",
+        token,
+        params={"q": query, "fields": "files(id,name)", "spaces": "drive"},
+    )
+
+    if response.status_code == 200:
+        files = response.json().get("files", [])
+        if files:
+            return files[0]["id"]
+
+    # Create new folder
+    metadata: dict[str, Any] = {
+        "name": folder_name,
+        "mimeType": "application/vnd.google-apps.folder",
+    }
+    response = await _drive_request(
+        "POST",
+        f"{_DRIVE_API_BASE}/files",
+        token,
+        json_data=metadata,
+        params={"fields": "id"},
+    )
+
+    if response.status_code == 200:
+        return response.json().get("id")
+
+    logger.error(f"Failed to create folder '{folder_name}': {response.text}")
+    return None
+
+
+async def _find_file_in_folder(
+    token: dict, folder_id: str, file_name: str
+) -> dict | None:
+    """Find a file by name in a specific folder.
+
+    Returns file metadata dict (id, name, modifiedTime), or None.
+    """
+    query = f"name='{file_name}' and '{folder_id}' in parents and trashed=false"
+    response = await _drive_request(
+        "GET",
+        f"{_DRIVE_API_BASE}/files",
+        token,
+        params={
+            "q": query,
+            "fields": "files(id,name,modifiedTime)",
+            "spaces": "drive",
+        },
+    )
+
+    if response.status_code == 200:
+        files = response.json().get("files", [])
+        if files:
+            return files[0]
 
     return None
 
 
-def _get_platform_info() -> tuple[str, str, str]:
-    """Get OS, arch, and file extension for rclone download.
+async def _upload_file(
+    token: dict,
+    file_path: Path,
+    folder_id: str,
+    existing_file_id: str | None = None,
+) -> bool:
+    """Upload or update a file in Google Drive.
 
-    Returns:
-        Tuple of (os_name, arch_name, extension).
+    If existing_file_id is provided, updates the file content.
+    Otherwise creates a new file in the specified folder.
     """
-    system = platform.system().lower()
-    machine = platform.machine().lower()
+    file_content = await asyncio.to_thread(file_path.read_bytes)
 
-    if system == "windows":
-        os_name = "windows"
-        ext = ".exe"
-    elif system == "darwin":
-        os_name = "osx"
-        ext = ""
+    if existing_file_id:
+        # Update existing file content
+        response = await _drive_request(
+            "PATCH",
+            f"{_DRIVE_UPLOAD_BASE}/files/{existing_file_id}",
+            token,
+            content=file_content,
+            params={"uploadType": "media"},
+            headers={"Content-Type": "application/x-sqlite3"},
+        )
     else:
-        os_name = "linux"
-        ext = ""
+        # Create new file with multipart upload (metadata + content)
 
-    if machine in ("x86_64", "amd64"):
-        arch = "amd64"
-    elif machine in ("aarch64", "arm64"):
-        arch = "arm64"
-    elif machine in ("i386", "i686"):
-        arch = "386"
-    else:
-        arch = "amd64"  # Fallback
+        metadata = json.dumps(
+            {
+                "name": file_path.name,
+                "parents": [folder_id],
+            }
+        )
 
-    return os_name, arch, ext
+        # Use simple two-part upload
+        boundary = "wet_mcp_upload_boundary"
+        body = (
+            (
+                f"--{boundary}\r\n"
+                f"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+                f"{metadata}\r\n"
+                f"--{boundary}\r\n"
+                f"Content-Type: application/x-sqlite3\r\n\r\n"
+            ).encode()
+            + file_content
+            + f"\r\n--{boundary}--".encode()
+        )
 
+        response = await _drive_request(
+            "POST",
+            f"{_DRIVE_UPLOAD_BASE}/files",
+            token,
+            content=body,
+            params={"uploadType": "multipart", "fields": "id"},
+            headers={
+                "Content-Type": f"multipart/related; boundary={boundary}",
+            },
+        )
 
-def _extract_zip_sync(zip_path: Path, target_path: Path, binary_name: str) -> bool:
-    """Synchronous helper to extract rclone binary from zip."""
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        for info in zf.infolist():
-            if info.filename.endswith(binary_name) and not info.is_dir():
-                with zf.open(info) as src:
-                    target_path.write_bytes(src.read())
-                return True
+    if response.status_code in (200, 201):
+        return True
+
+    logger.error(f"Upload failed ({response.status_code}): {response.text[:300]}")
     return False
 
 
-async def _download_rclone() -> Path | None:
-    """Download rclone binary for current platform.
-
-    Returns path to binary on success, None on failure.
-    """
-    os_name, arch, ext = _get_platform_info()
-    archive_name = f"rclone-{_RCLONE_VERSION}-{os_name}-{arch}.zip"
-    url = f"https://github.com/rclone/rclone/releases/download/{_RCLONE_VERSION}/{archive_name}"
-
-    install_dir = _get_rclone_dir()
-    install_dir.mkdir(parents=True, exist_ok=True)
-    target_path = install_dir / f"rclone{ext}"
-
-    if target_path.exists():
-        return target_path
-
-    logger.info(f"Downloading rclone {_RCLONE_VERSION} for {os_name}-{arch}...")
-
-    try:
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            response = await client.get(url, timeout=120.0)
-            response.raise_for_status()
-
-            # Write to temp file
-            with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-                tmp.write(response.content)
-                tmp_path = Path(tmp.name)
-
-        # Verify SHA256 checksum
-        expected_hash = _RCLONE_CHECKSUMS.get(f"{os_name}-{arch}")
-        if expected_hash:
-            sha256 = hashlib.sha256()
-            with open(tmp_path, "rb") as f:
-                while chunk := f.read(8192):
-                    sha256.update(chunk)
-            file_hash = sha256.hexdigest()
-
-            if file_hash != expected_hash:
-                tmp_path.unlink(missing_ok=True)
-                logger.error(
-                    f"Checksum mismatch for rclone download!\n"
-                    f"Expected: {expected_hash}\n"
-                    f"Got:      {file_hash}"
-                )
-                raise ValueError("SHA256 checksum verification failed")
-        else:
-            logger.warning(
-                f"No checksum found for platform {os_name}-{arch}. "
-                "Skipping verification."
-            )
-
-        # Extract rclone binary from zip
-        binary_name = f"rclone{ext}"
-        found = await asyncio.to_thread(
-            _extract_zip_sync, tmp_path, target_path, binary_name
-        )
-        if not found:
-            logger.error("rclone binary not found in archive")
-            return None
-
-        # Make executable on Unix
-        if ext == "":
-            target_path.chmod(target_path.stat().st_mode | stat.S_IEXEC)
-
-        # Cleanup temp zip
-        tmp_path.unlink(missing_ok=True)
-
-        logger.info(f"rclone installed: {target_path}")
-        return target_path
-
-    except Exception as e:
-        logger.error(f"Failed to download rclone: {e}")
-        return None
-
-
-async def ensure_rclone() -> Path | None:
-    """Ensure rclone is available, downloading if needed.
-
-    Returns path to rclone binary, or None if unavailable.
-    """
-    path = await asyncio.to_thread(_get_rclone_path)
-    if path:
-        return path
-
-    # Download
-    return await _download_rclone()
-
-
-def _prepare_rclone_env() -> dict[str, str]:
-    """Prepare env dict for rclone with auto-token management.
-
-    Automatically sets ``RCLONE_CONFIG_<REMOTE>_TYPE`` from ``sync_provider``
-    so users never need to set ``RCLONE_CONFIG_*`` env vars manually.
-
-    Token resolution priority:
-    1. Env var ``RCLONE_CONFIG_*_TOKEN`` (backward compatible)
-    2. Local token file (~/.wet-mcp/tokens/<provider>.json)
-    """
-    from wet_mcp.token_store import load_token
-
-    env = os.environ.copy()
-    remote = settings.sync_remote
-    remote_upper = remote.upper()
-    token_key = f"RCLONE_CONFIG_{remote_upper}_TOKEN"
-    type_key = f"RCLONE_CONFIG_{remote_upper}_TYPE"
-
-    # Always set TYPE from sync_provider (user never needs RCLONE_CONFIG_*_TYPE)
-    if type_key not in env:
-        env[type_key] = settings.sync_provider
-
-    # Priority 1: Env var tokens (decode base64 if needed)
-    for key in list(env):
-        if key.startswith("RCLONE_CONFIG_") and key.endswith("_TOKEN"):
-            value = env[key]
-            if value and not value.lstrip().startswith("{"):
-                try:
-                    decoded = base64.b64decode(value).decode("utf-8")
-                    json.loads(decoded)  # Validate JSON structure
-                    env[key] = decoded
-                except Exception:
-                    pass
-
-    # Priority 2: Local token file (only if env var not set)
-    if token_key not in env or not env[token_key]:
-        token = load_token(settings.sync_provider)
-        if token:
-            env[token_key] = json.dumps(token)
-            logger.debug(f"Using local token for {settings.sync_provider}")
-
-    return env
-
-
-def _run_rclone(
-    rclone_path: Path, args: list[str], timeout: int = 120
-) -> subprocess.CompletedProcess:
-    """Run rclone command synchronously."""
-    cmd = [str(rclone_path), *args]
-    logger.debug(f"rclone: {' '.join(cmd)}")
-
-    return subprocess.run(
-        cmd,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        env=_prepare_rclone_env(),
+async def _download_file(token: dict, file_id: str, dest_path: Path) -> bool:
+    """Download a file from Google Drive to a local path."""
+    response = await _drive_request(
+        "GET",
+        f"{_DRIVE_API_BASE}/files/{file_id}",
+        token,
+        params={"alt": "media"},
+        timeout=300.0,
     )
 
-
-async def check_remote_configured(rclone_path: Path, remote: str) -> bool:
-    """Check if an rclone remote is configured."""
-    result = await asyncio.to_thread(_run_rclone, rclone_path, ["listremotes"], 10)
-    if result.returncode != 0:
-        return False
-
-    remotes = [
-        r.strip().rstrip(":") for r in result.stdout.strip().split("\n") if r.strip()
-    ]
-    return remote in remotes
-
-
-async def sync_push(rclone_path: Path, db_path: Path, remote: str, folder: str) -> bool:
-    """Push local database to remote.
-
-    Copies the SQLite database file to the remote folder.
-    Uses rclone copy (not sync) to avoid deleting remote files.
-    """
-    remote_dest = f"{remote}:{folder}"
-
-    logger.info(f"Pushing {db_path.name} to {remote_dest}...")
-
-    result = await asyncio.to_thread(
-        _run_rclone,
-        rclone_path,
-        ["copy", "--progress", "--", str(db_path), remote_dest],
-        300,
-    )
-
-    if result.returncode == 0:
-        logger.info(f"Push complete: {db_path.name} -> {remote_dest}")
+    if response.status_code == 200:
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(dest_path.write_bytes, response.content)
         return True
-    else:
-        logger.error(f"Push failed: {result.stderr[:300]}")
+
+    logger.error(f"Download failed ({response.status_code}): {response.text[:300]}")
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Public sync operations
+# ---------------------------------------------------------------------------
+
+
+async def sync_push(db_path: Path, folder_name: str) -> bool:
+    """Push local database to Google Drive folder.
+
+    Uploads the SQLite database file to Google Drive.
+    Updates existing file or creates new one.
+    """
+    token = await _get_valid_token()
+    if not token:
+        logger.error("No valid token for push")
         return False
 
+    logger.info(f"Pushing {db_path.name} to Google Drive/{folder_name}...")
 
-async def sync_pull(
-    rclone_path: Path, db_path: Path, remote: str, folder: str
-) -> Path | None:
-    """Pull remote database to local temp directory.
+    folder_id = await _find_or_create_folder(token, folder_name)
+    if not folder_id:
+        logger.error("Failed to find/create sync folder")
+        return False
+
+    existing = await _find_file_in_folder(token, folder_id, db_path.name)
+    existing_id = existing["id"] if existing else None
+
+    success = await _upload_file(token, db_path, folder_id, existing_id)
+    if success:
+        logger.info(f"Push complete: {db_path.name} -> Google Drive/{folder_name}")
+    else:
+        logger.error("Push failed")
+
+    return success
+
+
+async def sync_pull(db_path: Path, folder_name: str) -> Path | None:
+    """Pull remote database from Google Drive to local temp directory.
 
     Downloads the remote DB file to a temp location for merging.
     Returns path to downloaded file, or None on failure.
     """
-    remote_src = f"{remote}:{folder}/{db_path.name}"
+    token = await _get_valid_token()
+    if not token:
+        logger.error("No valid token for pull")
+        return None
+
+    logger.info(f"Pulling from Google Drive/{folder_name}...")
+
+    folder_id = await _find_or_create_folder(token, folder_name)
+    if not folder_id:
+        logger.warning("Sync folder not found")
+        return None
+
+    remote_file = await _find_file_in_folder(token, folder_id, db_path.name)
+    if not remote_file:
+        logger.info("No remote DB file found")
+        return None
+
     temp_dir = db_path.parent / "sync_temp"
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_db = temp_dir / f"remote_{db_path.name}"
 
-    logger.info(f"Pulling from {remote_src}...")
-
-    result = await asyncio.to_thread(
-        _run_rclone,
-        rclone_path,
-        ["copyto", "--progress", "--", remote_src, str(temp_db)],
-        300,
-    )
-
-    if result.returncode == 0 and temp_db.exists():
-        logger.info(f"Pull complete: {remote_src} -> {temp_db}")
+    success = await _download_file(token, remote_file["id"], temp_db)
+    if success and temp_db.exists():
+        logger.info(f"Pull complete: Google Drive/{folder_name} -> {temp_db}")
         return temp_db
-    else:
-        logger.warning(f"Pull failed or no remote file: {result.stderr[:200]}")
-        # Cleanup
-        temp_db.unlink(missing_ok=True)
-        return None
+
+    logger.warning("Pull failed or downloaded file missing")
+    temp_db.unlink(missing_ok=True)
+    return None
 
 
 async def sync_full(db: DocsDB) -> dict:
-    """Full sync cycle: pull → merge → push.
-
-    Auto-provisions tokens if needed (interactive browser auth on first run).
+    """Full sync cycle: pull -> merge -> push.
 
     Returns:
         Dict with sync results.
@@ -360,36 +414,35 @@ async def sync_full(db: DocsDB) -> dict:
     if not settings.sync_enabled:
         return {"status": "disabled", "message": "Sync not configured"}
 
-    rclone_path = await ensure_rclone()
-    if not rclone_path:
-        return {"status": "error", "message": "rclone not available"}
-
-    # Auto-provision token if needed
-    if not _has_token_available():
-        token = await _interactive_auth(rclone_path, settings.sync_provider)
-        if not token:
-            return {
-                "status": "error",
-                "message": "No sync token available. "
-                "Run the server interactively to complete OAuth setup.",
-            }
-
-    # Check remote is configured (env vars or local token loaded by _prepare_rclone_env)
-    if not await check_remote_configured(rclone_path, settings.sync_remote):
+    if not settings.google_drive_client_id:
         return {
             "status": "error",
-            "message": f"rclone remote '{settings.sync_remote}' not configured. "
-            "Token may be invalid — try deleting the token file and re-authenticating.",
+            "message": "GOOGLE_DRIVE_CLIENT_ID not configured",
+        }
+
+    # Check for valid token
+    if not _has_token_available():
+        return {
+            "status": "error",
+            "message": "No Google Drive token available. "
+            "Run setup_sync to complete OAuth setup.",
+        }
+
+    token = await _get_valid_token()
+    if not token:
+        return {
+            "status": "error",
+            "message": "Google Drive token expired and refresh failed. "
+            "Run setup_sync to re-authenticate.",
         }
 
     db_path = settings.get_db_path()
-    remote = settings.sync_remote
     folder = settings.sync_folder
 
     result: dict = {"status": "ok", "pull": None, "push": None}
 
     # 1. Pull remote DB
-    remote_db_path = await sync_pull(rclone_path, db_path, remote, folder)
+    remote_db_path = await sync_pull(db_path, folder)
     if remote_db_path:
         try:
             # Open remote DB and export JSONL
@@ -430,10 +483,165 @@ async def sync_full(db: DocsDB) -> dict:
         }
 
     # 2. Push local DB to remote
-    push_ok = await sync_push(rclone_path, db_path, remote, folder)
+    push_ok = await sync_push(db_path, folder)
     result["push"] = {"success": push_ok}
 
     return result
+
+
+async def check_health() -> bool:
+    """Verify Google Drive access by listing files."""
+    token = await _get_valid_token()
+    if not token:
+        return False
+
+    try:
+        response = await _drive_request(
+            "GET",
+            f"{_DRIVE_API_BASE}/files",
+            token,
+            params={"pageSize": 1, "fields": "files(id)"},
+        )
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Device Code OAuth flow
+# ---------------------------------------------------------------------------
+
+
+async def setup_google_auth(
+    relay_url: str | None = None,
+    session_id: str | None = None,
+) -> bool:
+    """Interactive Google OAuth setup via Device Code flow.
+
+    If relay_url + session_id provided, send device code via relay messaging.
+    Otherwise print to stderr.
+
+    Returns True on success, False on failure.
+    """
+    import sys
+
+    client_id = settings.google_drive_client_id
+    if not client_id:
+        logger.error("GOOGLE_DRIVE_CLIENT_ID not configured")
+        return False
+
+    # 1. Request device code
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                _DEVICE_CODE_URL,
+                data={
+                    "client_id": client_id,
+                    "scope": _SCOPE,
+                },
+                timeout=30.0,
+            )
+
+            if response.status_code != 200:
+                logger.error(f"Device code request failed: {response.text}")
+                return False
+
+            device_data = response.json()
+
+    except Exception as e:
+        logger.error(f"Device code request error: {e}")
+        return False
+
+    device_code = device_data["device_code"]
+    user_code = device_data["user_code"]
+    verification_url = device_data["verification_url"]
+    interval = device_data.get("interval", 5)
+    expires_in = device_data.get("expires_in", 1800)
+
+    # 2. Present code to user
+    auth_message = (
+        f"Google Drive Authorization\n"
+        f"Visit: {verification_url}\n"
+        f"Enter code: {user_code}"
+    )
+
+    if relay_url and session_id:
+        # Send via relay messaging
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{relay_url}/api/sessions/{session_id}/messages",
+                    json={
+                        "type": "oauth_device_code",
+                        "text": auth_message,
+                        "data": {
+                            "verification_url": verification_url,
+                            "user_code": user_code,
+                        },
+                    },
+                )
+        except Exception as e:
+            logger.warning(f"Failed to send code via relay: {e}")
+    else:
+        print(f"\n{auth_message}\n", file=sys.stderr, flush=True)
+
+    # 3. Poll for token
+    deadline = time.time() + expires_in
+
+    while time.time() < deadline:
+        await asyncio.sleep(interval)
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    _TOKEN_URL,
+                    data={
+                        "client_id": client_id,
+                        "device_code": device_code,
+                        "grant_type": _DEVICE_CODE_GRANT,
+                    },
+                    timeout=30.0,
+                )
+
+                data = response.json()
+
+                if response.status_code == 200:
+                    # Success -- save token
+                    token = {
+                        "access_token": data["access_token"],
+                        "refresh_token": data.get("refresh_token", ""),
+                        "expiry": time.time() + data.get("expires_in", 3600),
+                        "client_id": client_id,
+                        "token_type": data.get("token_type", "Bearer"),
+                    }
+                    _save_token(token)
+                    logger.info("Google Drive authentication successful!")
+                    return True
+
+                error = data.get("error", "")
+                if error == "authorization_pending":
+                    continue
+                elif error == "slow_down":
+                    interval += 1
+                    continue
+                elif error in ("access_denied", "expired_token"):
+                    logger.error(f"Auth failed: {error}")
+                    return False
+                else:
+                    logger.error(f"Unexpected error: {data}")
+                    return False
+
+        except Exception as e:
+            logger.error(f"Token poll error: {e}")
+            return False
+
+    logger.error("Device code expired")
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Auto-sync loop
+# ---------------------------------------------------------------------------
 
 
 async def _auto_sync_loop(db: DocsDB) -> None:
@@ -485,172 +693,44 @@ def stop_auto_sync() -> None:
         _sync_task = None
 
 
-def _has_token_available() -> bool:
-    """Check if a sync token is available (env var or local file)."""
-    from wet_mcp.token_store import load_token
-
-    remote_upper = settings.sync_remote.upper()
-    token_key = f"RCLONE_CONFIG_{remote_upper}_TOKEN"
-
-    # Check env var
-    if os.environ.get(token_key):
-        return True
-
-    # Check local token file
-    return load_token(settings.sync_provider) is not None
+# ---------------------------------------------------------------------------
+# CLI setup entry point
+# ---------------------------------------------------------------------------
 
 
-async def _interactive_auth(rclone_path: Path, provider: str) -> dict | None:
-    """Run rclone authorize interactively to get OAuth token.
+def setup_sync() -> None:
+    """Set up Google Drive sync interactively.
 
-    Opens browser for user authentication. Blocks until complete
-    or timeout (5 minutes).
-
-    Returns token dict on success, None on failure.
+    Usage: wet-mcp setup-sync
+    Runs Device Code OAuth flow, saves token locally.
     """
-    from wet_mcp.token_store import save_token
+    import sys
 
-    logger.info(f"No sync token found. Starting {provider} authentication...")
-    logger.info("A browser window will open for authentication.")
+    print("=== WET MCP: Setup Google Drive Sync ===")
 
-    result = await asyncio.to_thread(
-        lambda: subprocess.run(
-            [str(rclone_path), "authorize", "--", provider],
-            stdout=subprocess.PIPE,
-            text=True,
-            timeout=300,
-        )
-    )
-
-    if result.returncode != 0:
-        logger.error(f"Authentication failed (exit {result.returncode})")
-        return None
-
-    token_str = _extract_token(result.stdout or "")
-    if not token_str:
-        logger.error("Could not extract token from rclone output")
-        return None
-
-    try:
-        token = json.loads(token_str)
-    except json.JSONDecodeError:
-        logger.error("Invalid token JSON from rclone")
-        return None
-
-    save_token(provider, token)
-    logger.info("Authentication successful! Token saved locally.")
-    return token
-
-
-def _extract_token(output: str) -> str | None:
-    """Extract rclone OAuth token JSON from authorize output.
-
-    rclone outputs the token between dashed lines like:
-        Paste the following into your remote machine config
-        --------------------
-        {"access_token":"...","token_type":"Bearer",...}
-        --------------------
-    """
-    import re
-
-    # Try to find JSON between ---- markers
-    pattern = r"-{4,}\s*\n\s*(\{[^}]+\})\s*\n\s*-{4,}"
-    match = re.search(pattern, output)
-    if match:
-        return match.group(1).strip()
-
-    # Fallback: find any JSON object with access_token
-    pattern = r'\{"access_token"[^}]+\}'
-    match = re.search(pattern, output)
-    if match:
-        return match.group(0).strip()
-
-    return None
-
-
-def setup_sync(remote_type: str = "drive") -> None:
-    """Download rclone, run authorize, and save token locally.
-
-    Usage: wet-mcp setup-sync [type]
-    Default type: drive (Google Drive)
-
-    Token is saved to ~/.wet-mcp/tokens/<type>.json so no env vars
-    are needed for sync — just set SYNC_ENABLED=true.
-    """
-    from wet_mcp.token_store import save_token
-
-    print(f"=== WET MCP: Setup Sync ({remote_type}) ===")
-
-    # 1. Ensure rclone is available
-    rclone_path = _get_rclone_path()
-    if rclone_path:
-        print(f"rclone found: {rclone_path}")
-    else:
-        print("Downloading rclone...")
-        rclone_path = asyncio.run(_download_rclone())
-        if not rclone_path:
-            print("ERROR: Failed to download rclone", file=sys.stderr)
-            sys.exit(1)
-        print(f"rclone installed: {rclone_path}")
-
-    # 2. Run rclone authorize (interactive — opens browser)
-    print(f'\nRunning: rclone authorize "{remote_type}"')
-    print("A browser window will open for authentication.\n")
-    print("-" * 50)
-
-    result = subprocess.run(
-        [str(rclone_path), "authorize", "--", remote_type],
-        stdout=subprocess.PIPE,
-        text=True,
-        timeout=300,
-    )
-
-    print("-" * 50)
-
-    if result.returncode != 0:
+    client_id = settings.google_drive_client_id
+    if not client_id:
         print(
-            f"\nERROR: rclone authorize failed (exit {result.returncode})",
+            "ERROR: GOOGLE_DRIVE_CLIENT_ID not set.\n"
+            "Create an OAuth client ID at:\n"
+            "  https://console.cloud.google.com/apis/credentials\n"
+            "Set GOOGLE_DRIVE_CLIENT_ID in your MCP config.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # 3. Extract token JSON from stdout
-    token_json = _extract_token(result.stdout or "")
-
-    remote_name = "gdrive" if remote_type == "drive" else remote_type
-
-    if token_json:
-        # Save token locally
-        try:
-            token_dict = json.loads(token_json)
-            save_token(remote_type, token_dict)
-            from wet_mcp.token_store import get_token_path
-
-            token_path = get_token_path(remote_type)
-
-            print(f"\n{'=' * 60}")
-            print("SUCCESS! Token saved locally.")
-            print(f"{'=' * 60}\n")
-            print(f"Token file: {token_path}")
-            print("\nAll you need in your MCP config:")
-            print('  "SYNC_ENABLED": "true"')
-            if remote_type != "drive":
-                print(f'  "SYNC_PROVIDER": "{remote_type}"')
-            if remote_name != "gdrive":
-                print(f'  "SYNC_REMOTE": "{remote_name}"')
-            print("\nThe server will auto-load the token from disk.")
-            print("No need to copy/paste any tokens!")
-        except json.JSONDecodeError:
-            # Fallback: print base64 for manual config
-            token_b64 = base64.b64encode(token_json.encode()).decode()
-            print(f"\n{'=' * 60}")
-            print("Token saved but could not parse JSON. Base64 token:")
-            print(f"{'=' * 60}\n")
-            print(token_b64)
-    else:
+    success = asyncio.run(setup_google_auth())
+    if success:
         print(f"\n{'=' * 60}")
-        print("MANUAL SETUP")
+        print("SUCCESS! Token saved locally.")
         print(f"{'=' * 60}\n")
-        print("Could not auto-extract token from rclone output.")
-        print("Try running the server with SYNC_ENABLED=true — it will")
-        print("open a browser for authentication automatically.")
+        print("All you need in your MCP config:")
+        print('  "SYNC_ENABLED": "true"')
+        print(f'  "GOOGLE_DRIVE_CLIENT_ID": "{client_id}"')
+        print("\nThe server will auto-load the token from disk.")
+    else:
+        print(
+            "\nERROR: Authentication failed. Please try again.",
+            file=sys.stderr,
+        )
+        sys.exit(1)

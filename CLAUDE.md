@@ -57,6 +57,8 @@ mise run dev       # uv run wet-mcp
 - Embedding: `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`
 - Reranking: `RERANK_BACKEND`, `RERANK_MODEL`
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
+- Sync: `SYNC_ENABLED` (default false), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
+- Sync dung Google Drive API truc tiep (google-api-python-client + google-auth). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`
 - Relay: `MCP_RELAY_URL` (default `https://wet-mcp.n24q02m.com`)
 - Infisical: project `531b3027-70ca-4761-b149-9ec8fea80d4f`
 

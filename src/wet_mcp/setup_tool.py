@@ -233,22 +233,28 @@ async def run_warmup() -> dict:
 
 
 async def run_setup_sync(remote_type: str = "drive") -> dict:
-    """Run cloud sync setup (rclone authorize).
+    """Run Google Drive sync setup (OAuth Device Code flow).
 
     Returns a structured dict with setup results.
     """
     try:
-        from wet_mcp.sync import setup_sync as sync_setup_sync
+        from wet_mcp.sync import setup_google_auth
 
-        await asyncio.to_thread(sync_setup_sync, remote_type)
+        success = await setup_google_auth()
+        if success:
+            return {
+                "status": "ok",
+                "provider": "google_drive",
+                "message": "Google Drive sync setup complete. Token saved locally.",
+            }
         return {
-            "status": "ok",
-            "remote_type": remote_type,
-            "message": f"Sync setup complete for '{remote_type}'",
+            "status": "error",
+            "provider": "google_drive",
+            "error": "Authentication failed or was cancelled",
         }
     except Exception as exc:
         return {
             "status": "error",
-            "remote_type": remote_type,
+            "provider": "google_drive",
             "error": str(exc),
         }

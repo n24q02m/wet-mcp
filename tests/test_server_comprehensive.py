@@ -1316,10 +1316,10 @@ async def test_config_set_sync_interval(mock_settings):
 @pytest.mark.asyncio
 async def test_config_set_generic_key(mock_settings):
     """Test setting a generic key via setattr (lines 887-888)."""
-    res = await server.config("set", key="sync_remote", value="https://remote")
+    res = await server.config("set", key="sync_folder", value="my-sync-folder")
     data = json.loads(res)
     assert data["status"] == "updated"
-    assert data["key"] == "sync_remote"
+    assert data["key"] == "sync_folder"
 
 
 @pytest.mark.asyncio

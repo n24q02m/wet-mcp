@@ -1,7 +1,6 @@
 """Tests to cover remaining gaps in sync.py, setup_tool.py, cache.py, and reranker.py."""
 
 import asyncio
-import subprocess
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,68 +11,13 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-class TestDownloadRcloneBinaryNotFound:
-    """Cover sync.py L147-148: rclone binary not found in archive (for-else)."""
-
-    @pytest.mark.asyncio
-    @patch("wet_mcp.sync._get_rclone_dir")
-    @patch("wet_mcp.sync._get_platform_info")
-    @patch.object(Path, "exists")
-    @patch("wet_mcp.sync.httpx.AsyncClient")
-    @patch("wet_mcp.sync.tempfile.NamedTemporaryFile")
-    @patch("wet_mcp.sync.zipfile.ZipFile")
-    @patch.object(Path, "mkdir")
-    async def test_binary_not_in_archive(
-        self,
-        mock_mkdir,
-        mock_zip,
-        mock_temp,
-        mock_client,
-        mock_exists,
-        mock_info,
-        mock_dir,
-    ):
-        from wet_mcp.sync import _download_rclone
-
-        mock_info.return_value = ("linux", "amd64", "")
-        mock_dir.return_value = Path("/mock/dir")
-        mock_exists.return_value = False
-
-        # Mock httpx response
-        mock_resp = MagicMock()
-        mock_resp.content = b"zip_content"
-        mock_client_instance = AsyncMock()
-        mock_client_instance.get = AsyncMock(return_value=mock_resp)
-        mock_client.return_value.__aenter__ = AsyncMock(
-            return_value=mock_client_instance
-        )
-        mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
-
-        # Setup tempfile
-        mock_tmp = MagicMock()
-        mock_tmp.name = "/tmp/fake.zip"
-        mock_temp.return_value.__enter__.return_value = mock_tmp
-
-        # Setup zipfile with NO matching binary (triggers for-else)
-        mock_zf = MagicMock()
-        mock_info_entry = MagicMock()
-        mock_info_entry.filename = "rclone-v1.68.2-linux-amd64/README.md"
-        mock_info_entry.is_dir.return_value = False
-        mock_zf.infolist.return_value = [mock_info_entry]
-        mock_zip.return_value.__enter__.return_value = mock_zf
-
-        result = await _download_rclone()
-        assert result is None
-
-
 class TestSyncFullEmptyJsonl:
-    """Cover sync.py L331: empty remote JSONL branch."""
+    """Cover sync_full: empty remote JSONL branch."""
 
     @pytest.mark.asyncio
     @patch("wet_mcp.sync._has_token_available", return_value=True)
+    @patch("wet_mcp.sync._get_valid_token")
     @patch("wet_mcp.sync.settings")
-    @patch("wet_mcp.sync.ensure_rclone")
-    @patch("wet_mcp.sync.check_remote_configured")
     @patch("wet_mcp.sync.sync_pull")
     @patch("wet_mcp.sync.sync_push")
     @patch("wet_mcp.db.DocsDB")
@@ -82,20 +26,18 @@ class TestSyncFullEmptyJsonl:
         mock_DocsDB,
         mock_push,
         mock_pull,
-        mock_check,
-        mock_ensure,
+        mock_valid_token,
         mock_settings,
         _mock_token,
     ):
         from wet_mcp.sync import sync_full
 
         mock_settings.sync_enabled = True
-        mock_settings.sync_remote = "gdrive"
+        mock_settings.google_drive_client_id = "client123"
         mock_settings.sync_folder = "folder"
         mock_settings.get_db_path.return_value = Path("/db/db.sqlite")
 
-        mock_ensure.return_value = Path("/rclone")
-        mock_check.return_value = True
+        mock_valid_token.return_value = {"access_token": "t"}
         mock_pull.return_value = Path("/tmp/remote.sqlite")
         mock_push.return_value = True
 
@@ -113,7 +55,7 @@ class TestSyncFullEmptyJsonl:
 
 
 class TestAutoSyncLoopError:
-    """Cover sync.py L374, L378-379: auto_sync_loop normal iteration + error handling."""
+    """Cover auto_sync_loop normal iteration + error handling."""
 
     @pytest.mark.asyncio
     @patch("wet_mcp.sync.settings")
@@ -144,7 +86,7 @@ class TestAutoSyncLoopError:
     @patch("wet_mcp.sync.settings")
     @patch("wet_mcp.sync.sync_full")
     async def test_auto_sync_loop_runs_sync(self, mock_sync, mock_settings):
-        """Cover L374: successful sync_full call in loop."""
+        """Successful sync_full call in loop."""
         from wet_mcp.sync import _auto_sync_loop
 
         mock_settings.sync_interval = 1
@@ -167,7 +109,7 @@ class TestAutoSyncLoopError:
 
 
 class TestStartAutoSyncDisabled:
-    """Cover sync.py L388: start_auto_sync returns when interval <= 0."""
+    """Cover start_auto_sync returns when interval <= 0."""
 
     @patch("wet_mcp.sync.settings")
     @patch("wet_mcp.sync.asyncio.create_task")
@@ -196,67 +138,33 @@ class TestStartAutoSyncDisabled:
         mock_create.assert_not_called()
 
 
-class TestSetupSyncNoToken:
-    """Cover sync.py L498-515: setup_sync manual setup path when token extraction fails."""
+class TestSyncFullNoClientId:
+    """Cover sync_full when client ID is not set."""
 
-    @patch("wet_mcp.sync._get_rclone_path")
-    @patch("wet_mcp.sync.subprocess.run")
-    @patch("wet_mcp.sync._extract_token")
-    def test_manual_setup_unix(self, mock_extract, mock_run, mock_get_path, capsys):
+    @pytest.mark.asyncio
+    @patch("wet_mcp.sync.settings")
+    async def test_sync_full_no_client_id(self, mock_settings):
+        from wet_mcp.sync import sync_full
+
+        mock_settings.sync_enabled = True
+        mock_settings.google_drive_client_id = ""
+
+        result = await sync_full(MagicMock())
+        assert result["status"] == "error"
+        assert "GOOGLE_DRIVE_CLIENT_ID" in result["message"]
+
+
+class TestSetupSyncNoClientId:
+    """Cover setup_sync when no GOOGLE_DRIVE_CLIENT_ID is set."""
+
+    @patch("wet_mcp.sync.settings")
+    def test_setup_sync_no_client_id(self, mock_settings):
         from wet_mcp.sync import setup_sync
 
-        mock_get_path.return_value = Path("/rclone")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="some output"
-        )
-        mock_extract.return_value = None  # Token extraction fails
+        mock_settings.google_drive_client_id = ""
 
-        with patch("wet_mcp.sync.sys.platform", "linux"):
-            setup_sync("drive")
-
-        captured = capsys.readouterr()
-        assert "MANUAL SETUP" in captured.out
-        assert "Could not auto-extract token" in captured.out
-        assert "SYNC_ENABLED=true" in captured.out
-
-    @patch("wet_mcp.sync._get_rclone_path")
-    @patch("wet_mcp.sync.subprocess.run")
-    @patch("wet_mcp.sync._extract_token")
-    def test_manual_setup_windows(self, mock_extract, mock_run, mock_get_path, capsys):
-        from wet_mcp.sync import setup_sync
-
-        mock_get_path.return_value = Path("/rclone")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="some output"
-        )
-        mock_extract.return_value = None
-
-        with patch("wet_mcp.sync.sys.platform", "win32"):
-            setup_sync("drive")
-
-        captured = capsys.readouterr()
-        assert "MANUAL SETUP" in captured.out
-        assert "SYNC_ENABLED=true" in captured.out
-
-    @patch("wet_mcp.sync._get_rclone_path")
-    @patch("wet_mcp.sync.subprocess.run")
-    @patch("wet_mcp.sync._extract_token")
-    def test_non_drive_remote_name(self, mock_extract, mock_run, mock_get_path, capsys):
-        """Non-drive remote type uses type name as remote name."""
-        from wet_mcp.sync import setup_sync
-
-        mock_get_path.return_value = Path("/rclone")
-        mock_run.return_value = subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="output"
-        )
-        mock_extract.return_value = None
-
-        with patch("wet_mcp.sync.sys.platform", "linux"):
-            setup_sync("s3")
-
-        captured = capsys.readouterr()
-        assert "MANUAL SETUP" in captured.out
-        assert "SYNC_ENABLED=true" in captured.out
+        with pytest.raises(SystemExit):
+            setup_sync()
 
 
 # ---------------------------------------------------------------------------

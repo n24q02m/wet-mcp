@@ -1,35 +1,39 @@
-"""Tests for _extract_token in sync module."""
+"""Tests for Google Drive sync token storage and loading."""
 
-from wet_mcp.sync import _extract_token
+from unittest.mock import patch
 
-
-def test_extract_token_valid():
-    """Test extracting a valid token from rclone authorize output."""
-    output = (
-        "Paste the following into your remote machine config\n"
-        "--------------------\n"
-        '{"access_token":"abc123","token_type":"Bearer"}\n'
-        "--------------------\n"
-    )
-    result = _extract_token(output)
-    assert result == '{"access_token":"abc123","token_type":"Bearer"}'
+from wet_mcp.sync import _has_token_available, _load_token, _save_token
 
 
-def test_extract_token_no_token():
-    """Test with output that has no token."""
-    output = "Some random rclone output\nwithout any token"
-    result = _extract_token(output)
-    assert result is None
+def test_load_token_delegates():
+    """_load_token delegates to token_store.load_token."""
+    with patch(
+        "wet_mcp.token_store.load_token", return_value={"access_token": "x"}
+    ) as mock:
+        result = _load_token()
+        assert result == {"access_token": "x"}
+        mock.assert_called_once_with("google_drive")
 
 
-def test_extract_token_empty_string():
-    """Test with an empty string."""
-    result = _extract_token("")
-    assert result is None
+def test_save_token_delegates():
+    """_save_token delegates to token_store.save_token."""
+    with patch("wet_mcp.token_store.save_token") as mock:
+        _save_token({"access_token": "y"})
+        mock.assert_called_once_with("google_drive", {"access_token": "y"})
 
 
-def test_extract_token_fallback_no_markers():
-    """Test fallback regex when dashed markers are absent."""
-    output = 'Some prefix {"access_token":"xyz","token_type":"Bearer"} some suffix'
-    result = _extract_token(output)
-    assert result == '{"access_token":"xyz","token_type":"Bearer"}'
+def test_load_token_none():
+    """Returns None when no token stored."""
+    with patch("wet_mcp.token_store.load_token", return_value=None):
+        assert _load_token() is None
+
+
+def test_has_token_via_load():
+    """_has_token_available uses _load_token internally."""
+    with patch(
+        "wet_mcp.token_store.load_token", return_value={"access_token": "tok"}
+    ):
+        assert _has_token_available() is True
+
+    with patch("wet_mcp.token_store.load_token", return_value=None):
+        assert _has_token_available() is False

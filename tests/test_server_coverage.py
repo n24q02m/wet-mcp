@@ -39,8 +39,8 @@ def _mock_settings():
         mock.wet_auto_searxng = False
         mock.setup_providers.return_value = "sdk"
         mock.download_dir = "/tmp/downloads"
-        mock.sync_remote = ""
         mock.sync_folder = ""
+        mock.google_drive_client_id = ""
         mock.sync_interval = 300
         yield mock
 
@@ -583,11 +583,11 @@ async def test_config_set_sync_interval():
 
 
 async def test_config_set_generic_key():
-    """Lines 887-888: set generic key (e.g. sync_remote) via setattr."""
-    result = await server.config("set", key="sync_remote", value="s3://bucket")
+    """Lines 887-888: set generic key (e.g. sync_folder) via setattr."""
+    result = await server.config("set", key="sync_folder", value="my-folder")
     data = json.loads(result)
     assert data["status"] == "updated"
-    assert data["key"] == "sync_remote"
+    assert data["key"] == "sync_folder"
 
 
 # ---------------------------------------------------------------------------

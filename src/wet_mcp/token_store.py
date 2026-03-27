@@ -1,15 +1,14 @@
-"""Local token storage for rclone OAuth tokens.
+"""Local token storage for OAuth tokens.
 
 Stores tokens in ~/.wet-mcp/tokens/<provider>.json with secure
-file permissions (0600). Eliminates the need to paste long base64
-tokens into MCP config — tokens are persisted locally after the
+file permissions (0600). Eliminates the need to paste long tokens
+into MCP config -- tokens are persisted locally after the
 first interactive OAuth flow.
 
 Token lifecycle:
-1. First run: no token → rclone authorize opens browser → token saved
-2. Subsequent runs: token loaded from disk → rclone uses it directly
-3. Token refresh: rclone handles refresh_token automatically
-4. Re-auth: delete token file → next run triggers new OAuth flow
+1. First run: no token -> Device Code OAuth flow -> token saved
+2. Subsequent runs: token loaded from disk -> auto-refreshed when expired
+3. Re-auth: delete token file -> next run triggers new OAuth flow
 """
 
 from __future__ import annotations

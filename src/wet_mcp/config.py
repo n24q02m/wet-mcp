@@ -74,11 +74,10 @@ class Settings(BaseSettings):
     - RERANK_BACKEND: "cloud" | "local" (auto: Cohere key -> cloud, else local)
     - RERANK_MODEL: Rerank model (auto-detected from API_KEYS if Cohere)
     - RERANK_TOP_N: Return top N results after reranking (default: 10)
-    - SYNC_ENABLED: Enable rclone sync (default: false)
-    - SYNC_PROVIDER: rclone provider type (default: "drive" for Google Drive)
-    - SYNC_REMOTE: Rclone remote name (default: "gdrive")
-    - SYNC_FOLDER: Remote folder name (default: "wet-mcp")
+    - SYNC_ENABLED: Enable Google Drive sync (default: false)
+    - SYNC_FOLDER: Google Drive folder name (default: "wet-mcp")
     - SYNC_INTERVAL: Auto-sync interval in seconds (default: 300)
+    - GOOGLE_DRIVE_CLIENT_ID: OAuth client ID for Google Drive sync
 
     Provider Mode Detection (resolve_provider_mode):
     - "sdk": API_KEYS set -> direct SDK calls
@@ -129,12 +128,11 @@ class Settings(BaseSettings):
     rerank_model: str = ""  # Rerank model (e.g., "rerank-v4.0-pro")
     rerank_top_n: int = 10  # Return top N after reranking
 
-    # Docs sync (rclone)
+    # Docs sync (Google Drive API)
     sync_enabled: bool = False
-    sync_provider: str = "drive"  # rclone provider type (drive, dropbox, s3, etc.)
-    sync_remote: str = "gdrive"  # rclone remote name
-    sync_folder: str = "wet-mcp"  # remote folder
+    sync_folder: str = "wet-mcp"  # Google Drive folder name
     sync_interval: int = 300  # seconds, 0 = manual only
+    google_drive_client_id: str = ""  # OAuth client ID (required for sync)
 
     # Logging
     log_level: str = "INFO"

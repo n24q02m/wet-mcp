@@ -169,47 +169,37 @@ class TestRunSetupSync:
 
     async def test_setup_sync_returns_dict_with_status(self):
         """run_setup_sync() must return a dict with 'status' key."""
-        with patch("wet_mcp.sync.setup_sync") as mock_sync:
-            mock_sync.return_value = None
-
+        with patch("wet_mcp.sync.setup_google_auth", return_value=True):
             from wet_mcp.setup_tool import run_setup_sync
 
             result = await run_setup_sync("drive")
 
         assert isinstance(result, dict)
         assert "status" in result
+        assert result["status"] == "ok"
 
-    async def test_setup_sync_default_remote_type(self):
-        """Default remote_type is 'drive'."""
-        with patch("wet_mcp.sync.setup_sync") as mock_sync:
+    async def test_setup_sync_auth_fails(self):
+        """Returns error when auth fails."""
+        with patch("wet_mcp.sync.setup_google_auth", return_value=False):
             from wet_mcp.setup_tool import run_setup_sync
 
-            await run_setup_sync()
+            result = await run_setup_sync()
 
-        mock_sync.assert_called_once_with("drive")
+        assert result["status"] == "error"
+        assert "failed" in result["error"].lower()
 
-    async def test_setup_sync_custom_remote_type(self):
-        """Custom remote_type is passed through."""
-        with patch("wet_mcp.sync.setup_sync") as mock_sync:
-            from wet_mcp.setup_tool import run_setup_sync
-
-            result = await run_setup_sync("s3")
-
-        mock_sync.assert_called_once_with("s3")
-        assert result["remote_type"] == "s3"
-
-    async def test_setup_sync_failure(self):
-        """Sync setup failure returns error dict."""
+    async def test_setup_sync_exception(self):
+        """Sync setup exception returns error dict."""
         with patch(
-            "wet_mcp.sync.setup_sync",
-            side_effect=Exception("rclone failed"),
+            "wet_mcp.sync.setup_google_auth",
+            side_effect=Exception("auth error"),
         ):
             from wet_mcp.setup_tool import run_setup_sync
 
             result = await run_setup_sync()
 
         assert result["status"] == "error"
-        assert "rclone failed" in result["error"]
+        assert "auth error" in result["error"]
 
 
 class TestSetupMcpTool:

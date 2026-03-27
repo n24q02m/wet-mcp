@@ -1,227 +1,462 @@
-"""Tests for src/wet_mcp/sync.py — Rclone sync utilities.
+"""Tests for src/wet_mcp/sync.py -- Google Drive sync utilities.
 
-Covers rclone env preparation (base64 token decoding), platform detection,
-remote configuration check, and sync flow. All tests use mocks to avoid
-requiring rclone or network access.
+Covers token management, Google Drive API operations, sync flow,
+and auto-sync lifecycle. All tests use mocks to avoid requiring
+Google Drive access or network.
 """
 
 import asyncio
-import base64
-import os
+import time
 from pathlib import Path
 from typing import cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from wet_mcp import sync
 from wet_mcp.sync import (
-    _get_platform_info,
-    _prepare_rclone_env,
-    _run_rclone,
-    check_remote_configured,
+    _has_token_available,
     start_auto_sync,
     stop_auto_sync,
 )
 
 # -----------------------------------------------------------------------
-# _prepare_rclone_env — base64 token decoding
+# Token management
 # -----------------------------------------------------------------------
 
 
-class TestPrepareRcloneEnv:
-    def test_passes_through_raw_json_token(self):
-        """Raw JSON tokens are kept as-is."""
-        token_json = '{"access_token": "abc123", "token_type": "Bearer"}'
-        with patch.dict(os.environ, {"RCLONE_CONFIG_GDRIVE_TOKEN": token_json}):
-            env = _prepare_rclone_env()
-            assert env["RCLONE_CONFIG_GDRIVE_TOKEN"] == token_json
+class TestTokenManagement:
+    def test_has_token_available_true(self):
+        """Returns True when token exists."""
+        with patch("wet_mcp.sync._load_token", return_value={"access_token": "abc"}):
+            assert _has_token_available() is True
 
-    def test_decodes_base64_token(self):
-        """Base64-encoded tokens are decoded to raw JSON."""
-        token_json = '{"access_token": "abc123", "token_type": "Bearer"}'
-        token_b64 = base64.b64encode(token_json.encode()).decode()
-
-        with patch.dict(os.environ, {"RCLONE_CONFIG_GDRIVE_TOKEN": token_b64}):
-            env = _prepare_rclone_env()
-            assert env["RCLONE_CONFIG_GDRIVE_TOKEN"] == token_json
-
-    def test_ignores_non_token_vars(self):
-        """Only *_TOKEN vars are processed for base64 decoding."""
-        with patch.dict(
-            os.environ,
-            {
-                "RCLONE_CONFIG_GDRIVE_TYPE": "drive",
-                "RCLONE_CONFIG_GDRIVE_TOKEN": '{"access_token": "x"}',
-            },
-        ):
-            env = _prepare_rclone_env()
-            assert env["RCLONE_CONFIG_GDRIVE_TYPE"] == "drive"
-
-    def test_handles_invalid_base64(self):
-        """Invalid base64 is left as-is (no crash)."""
-        with patch.dict(os.environ, {"RCLONE_CONFIG_TEST_TOKEN": "not-valid-b64!!!"}):
-            env = _prepare_rclone_env()
-            assert env["RCLONE_CONFIG_TEST_TOKEN"] == "not-valid-b64!!!"
-
-    def test_handles_base64_non_json(self):
-        """Base64 that decodes to non-JSON is left as-is."""
-        not_json = base64.b64encode(b"this is not json").decode()
-        with patch.dict(os.environ, {"RCLONE_CONFIG_TEST_TOKEN": not_json}):
-            env = _prepare_rclone_env()
-            # Should stay as original base64 since decoded content isn't valid JSON
-            assert env["RCLONE_CONFIG_TEST_TOKEN"] == not_json
-
-    def test_multiple_remotes(self):
-        """Multiple remote tokens are all decoded."""
-        token1 = '{"access_token": "t1"}'
-        token2 = '{"access_token": "t2"}'
-        b64_1 = base64.b64encode(token1.encode()).decode()
-        b64_2 = base64.b64encode(token2.encode()).decode()
-
-        with patch.dict(
-            os.environ,
-            {
-                "RCLONE_CONFIG_GDRIVE_TOKEN": b64_1,
-                "RCLONE_CONFIG_DROPBOX_TOKEN": b64_2,
-            },
-        ):
-            env = _prepare_rclone_env()
-            assert env["RCLONE_CONFIG_GDRIVE_TOKEN"] == token1
-            assert env["RCLONE_CONFIG_DROPBOX_TOKEN"] == token2
-
-
-# -----------------------------------------------------------------------
-# _get_platform_info
-# -----------------------------------------------------------------------
-
-
-class TestGetPlatformInfo:
-    def test_returns_three_values(self):
-        """Returns (os_name, arch, ext) tuple."""
-        os_name, arch, ext = _get_platform_info()
-        assert os_name in ("windows", "osx", "linux")
-        assert arch in ("amd64", "arm64", "386")
-        assert ext in ("", ".exe")
-
-    def test_windows_has_exe(self):
-        """Windows platform returns .exe extension."""
-        with (
-            patch("wet_mcp.sync.platform.system", return_value="Windows"),
-            patch("wet_mcp.sync.platform.machine", return_value="AMD64"),
-        ):
-            os_name, arch, ext = _get_platform_info()
-            assert os_name == "windows"
-            assert ext == ".exe"
-
-    def test_linux_no_exe(self):
-        """Linux platform returns no extension."""
-        with (
-            patch("wet_mcp.sync.platform.system", return_value="Linux"),
-            patch("wet_mcp.sync.platform.machine", return_value="x86_64"),
-        ):
-            os_name, arch, ext = _get_platform_info()
-            assert os_name == "linux"
-            assert arch == "amd64"
-            assert ext == ""
-
-    def test_macos_arm64(self):
-        """macOS ARM is detected correctly."""
-        with (
-            patch("wet_mcp.sync.platform.system", return_value="Darwin"),
-            patch("wet_mcp.sync.platform.machine", return_value="arm64"),
-        ):
-            os_name, arch, ext = _get_platform_info()
-            assert os_name == "osx"
-            assert arch == "arm64"
-
-
-# -----------------------------------------------------------------------
-# check_remote_configured
-# -----------------------------------------------------------------------
-
-
-class TestCheckRemoteConfigured:
-    @pytest.mark.asyncio
-    async def test_remote_found(self):
-        """Returns True when remote is in rclone listremotes output."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "gdrive:\ndropbox:\n"
-
-        with patch("wet_mcp.sync._run_rclone", return_value=mock_result):
-            assert (
-                await check_remote_configured(Path("/usr/bin/rclone"), "gdrive") is True
-            )
-            assert (
-                await check_remote_configured(Path("/usr/bin/rclone"), "dropbox")
-                is True
-            )
+    def test_has_token_available_false(self):
+        """Returns False when no token."""
+        with patch("wet_mcp.sync._load_token", return_value=None):
+            assert _has_token_available() is False
 
     @pytest.mark.asyncio
-    async def test_remote_not_found(self):
-        """Returns False when remote is not in listremotes output."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "gdrive:\n"
+    async def test_refresh_token_success(self):
+        """Refreshes expired token successfully."""
+        from wet_mcp.sync import _refresh_token
 
-        with patch("wet_mcp.sync._run_rclone", return_value=mock_result):
-            assert (
-                await check_remote_configured(Path("/usr/bin/rclone"), "s3bucket")
-                is False
-            )
+        token = {
+            "access_token": "old",
+            "refresh_token": "refresh123",
+            "client_id": "client123",
+        }
 
-    @pytest.mark.asyncio
-    async def test_rclone_error(self):
-        """Returns False when rclone command fails."""
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-
-        with patch("wet_mcp.sync._run_rclone", return_value=mock_result):
-            assert (
-                await check_remote_configured(Path("/usr/bin/rclone"), "gdrive")
-                is False
-            )
-
-    @pytest.mark.asyncio
-    async def test_empty_output(self):
-        """Returns False when no remotes are configured."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-
-        with patch("wet_mcp.sync._run_rclone", return_value=mock_result):
-            assert (
-                await check_remote_configured(Path("/usr/bin/rclone"), "gdrive")
-                is False
-            )
-
-
-# -----------------------------------------------------------------------
-# _run_rclone
-# -----------------------------------------------------------------------
-
-
-class TestRunRclone:
-    def test_run_rclone_constructs_command(self):
-        """_run_rclone calls subprocess.run with correct args."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-
-        rclone_path = Path("/usr/bin/rclone")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "access_token": "new_token",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        }
 
         with (
-            patch("wet_mcp.sync.subprocess.run", return_value=mock_result) as mock_run,
-            patch("wet_mcp.sync._prepare_rclone_env", return_value=os.environ.copy()),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+            patch("wet_mcp.sync._save_token") as mock_save,
         ):
-            _run_rclone(rclone_path, ["listremotes"], timeout=10)
+            mock_instance = AsyncMock()
+            mock_instance.post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            mock_run.assert_called_once()
-            call_args = mock_run.call_args
-            assert call_args[0][0] == [str(rclone_path), "listremotes"]
-            assert call_args[1]["timeout"] == 10
-            assert call_args[1]["capture_output"] is True
-            assert call_args[1]["text"] is True
+            result = await _refresh_token(token)
+
+            assert result is not None
+            assert result["access_token"] == "new_token"
+            assert result["refresh_token"] == "refresh123"
+            mock_save.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_failure(self):
+        """Returns None when refresh fails."""
+        from wet_mcp.sync import _refresh_token
+
+        token = {
+            "access_token": "old",
+            "refresh_token": "refresh123",
+            "client_id": "client123",
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.text = "invalid_grant"
+
+        with patch("wet_mcp.sync.httpx.AsyncClient") as mock_client:
+            mock_instance = AsyncMock()
+            mock_instance.post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            result = await _refresh_token(token)
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_refresh_token_missing_fields(self):
+        """Returns None when token has no refresh_token."""
+        from wet_mcp.sync import _refresh_token
+
+        result = await _refresh_token({"access_token": "old"})
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_valid_token_no_token(self):
+        """Returns None when no token stored."""
+        from wet_mcp.sync import _get_valid_token
+
+        with patch("wet_mcp.sync._load_token", return_value=None):
+            result = await _get_valid_token()
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_valid_token_not_expired(self):
+        """Returns token when not expired."""
+        from wet_mcp.sync import _get_valid_token
+
+        token = {"access_token": "valid", "expiry": time.time() + 3600}
+        with patch("wet_mcp.sync._load_token", return_value=token):
+            result = await _get_valid_token()
+            assert result == token
+
+    @pytest.mark.asyncio
+    async def test_get_valid_token_expired_refreshes(self):
+        """Refreshes expired token."""
+        from wet_mcp.sync import _get_valid_token
+
+        old_token = {
+            "access_token": "expired",
+            "expiry": time.time() - 100,
+            "refresh_token": "refresh",
+            "client_id": "client",
+        }
+        new_token = {"access_token": "new", "expiry": time.time() + 3600}
+
+        with (
+            patch("wet_mcp.sync._load_token", return_value=old_token),
+            patch("wet_mcp.sync._refresh_token", return_value=new_token),
+        ):
+            result = await _get_valid_token()
+            assert result == new_token
+
+
+# -----------------------------------------------------------------------
+# Google Drive API helpers
+# -----------------------------------------------------------------------
+
+
+class TestDriveHelpers:
+    @pytest.mark.asyncio
+    async def test_find_or_create_folder_existing(self):
+        """Finds existing folder by name."""
+        from wet_mcp.sync import _find_or_create_folder
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "files": [{"id": "folder123", "name": "test"}]
+        }
+
+        with patch("wet_mcp.sync._drive_request", return_value=mock_response):
+            result = await _find_or_create_folder({"access_token": "t"}, "test")
+            assert result == "folder123"
+
+    @pytest.mark.asyncio
+    async def test_find_or_create_folder_creates_new(self):
+        """Creates folder when not found."""
+        from wet_mcp.sync import _find_or_create_folder
+
+        search_response = MagicMock()
+        search_response.status_code = 200
+        search_response.json.return_value = {"files": []}
+
+        create_response = MagicMock()
+        create_response.status_code = 200
+        create_response.json.return_value = {"id": "new_folder"}
+
+        with patch(
+            "wet_mcp.sync._drive_request",
+            side_effect=[search_response, create_response],
+        ):
+            result = await _find_or_create_folder({"access_token": "t"}, "test")
+            assert result == "new_folder"
+
+    @pytest.mark.asyncio
+    async def test_find_or_create_folder_failure(self):
+        """Returns None on API failure."""
+        from wet_mcp.sync import _find_or_create_folder
+
+        search_response = MagicMock()
+        search_response.status_code = 200
+        search_response.json.return_value = {"files": []}
+
+        create_response = MagicMock()
+        create_response.status_code = 500
+        create_response.text = "Internal Error"
+
+        with patch(
+            "wet_mcp.sync._drive_request",
+            side_effect=[search_response, create_response],
+        ):
+            result = await _find_or_create_folder({"access_token": "t"}, "test")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_find_file_in_folder_found(self):
+        """Finds file in folder."""
+        from wet_mcp.sync import _find_file_in_folder
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "files": [{"id": "file1", "name": "docs.db", "modifiedTime": "t"}]
+        }
+
+        with patch("wet_mcp.sync._drive_request", return_value=mock_response):
+            result = await _find_file_in_folder(
+                {"access_token": "t"}, "folder1", "docs.db"
+            )
+            assert result is not None
+            assert result["id"] == "file1"
+
+    @pytest.mark.asyncio
+    async def test_find_file_in_folder_not_found(self):
+        """Returns None when file not found."""
+        from wet_mcp.sync import _find_file_in_folder
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"files": []}
+
+        with patch("wet_mcp.sync._drive_request", return_value=mock_response):
+            result = await _find_file_in_folder(
+                {"access_token": "t"}, "folder1", "docs.db"
+            )
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_upload_file_update_existing(self):
+        """Updates existing file content."""
+        from wet_mcp.sync import _upload_file
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with (
+            patch("wet_mcp.sync._drive_request", return_value=mock_response),
+            patch(
+                "wet_mcp.sync.asyncio.to_thread",
+                return_value=b"db_content",
+            ),
+        ):
+            result = await _upload_file(
+                {"access_token": "t"},
+                Path("/mock/docs.db"),
+                "folder1",
+                "existing_file_id",
+            )
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_upload_file_create_new(self):
+        """Creates new file in folder."""
+        from wet_mcp.sync import _upload_file
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        with (
+            patch("wet_mcp.sync._drive_request", return_value=mock_response),
+            patch(
+                "wet_mcp.sync.asyncio.to_thread",
+                return_value=b"db_content",
+            ),
+        ):
+            result = await _upload_file(
+                {"access_token": "t"},
+                Path("/mock/docs.db"),
+                "folder1",
+                None,
+            )
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_upload_file_failure(self):
+        """Returns False on upload failure."""
+        from wet_mcp.sync import _upload_file
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Server Error"
+
+        with (
+            patch("wet_mcp.sync._drive_request", return_value=mock_response),
+            patch(
+                "wet_mcp.sync.asyncio.to_thread",
+                return_value=b"db_content",
+            ),
+        ):
+            result = await _upload_file(
+                {"access_token": "t"},
+                Path("/mock/docs.db"),
+                "folder1",
+                "file1",
+            )
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_download_file_success(self):
+        """Downloads file successfully."""
+        from wet_mcp.sync import _download_file
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b"downloaded_content"
+
+        with (
+            patch("wet_mcp.sync._drive_request", return_value=mock_response),
+            patch("wet_mcp.sync.asyncio.to_thread") as mock_thread,
+            patch("pathlib.Path.mkdir"),
+        ):
+            result = await _download_file(
+                {"access_token": "t"}, "file1", Path("/tmp/out.db")
+            )
+            assert result is True
+            mock_thread.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_download_file_failure(self):
+        """Returns False on download failure."""
+        from wet_mcp.sync import _download_file
+
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.text = "Not Found"
+
+        with patch("wet_mcp.sync._drive_request", return_value=mock_response):
+            result = await _download_file(
+                {"access_token": "t"}, "file1", Path("/tmp/out.db")
+            )
+            assert result is False
+
+
+# -----------------------------------------------------------------------
+# sync_push / sync_pull
+# -----------------------------------------------------------------------
+
+
+class TestSyncPush:
+    @pytest.mark.asyncio
+    async def test_push_success(self):
+        """Pushes file to Google Drive successfully."""
+        with (
+            patch(
+                "wet_mcp.sync._get_valid_token",
+                return_value={"access_token": "t"},
+            ),
+            patch("wet_mcp.sync._find_or_create_folder", return_value="folder1"),
+            patch(
+                "wet_mcp.sync._find_file_in_folder",
+                return_value={"id": "file1"},
+            ),
+            patch("wet_mcp.sync._upload_file", return_value=True),
+        ):
+            result = await sync.sync_push(Path("/db/docs.db"), "wet-mcp")
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_push_no_token(self):
+        """Returns False when no token available."""
+        with patch("wet_mcp.sync._get_valid_token", return_value=None):
+            result = await sync.sync_push(Path("/db/docs.db"), "wet-mcp")
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_push_no_folder(self):
+        """Returns False when folder creation fails."""
+        with (
+            patch(
+                "wet_mcp.sync._get_valid_token",
+                return_value={"access_token": "t"},
+            ),
+            patch("wet_mcp.sync._find_or_create_folder", return_value=None),
+        ):
+            result = await sync.sync_push(Path("/db/docs.db"), "wet-mcp")
+            assert result is False
+
+
+class TestSyncPull:
+    @pytest.mark.asyncio
+    async def test_pull_success(self):
+        """Returns downloaded file path on success."""
+        with (
+            patch(
+                "wet_mcp.sync._get_valid_token",
+                return_value={"access_token": "t"},
+            ),
+            patch("wet_mcp.sync._find_or_create_folder", return_value="folder1"),
+            patch(
+                "wet_mcp.sync._find_file_in_folder",
+                return_value={"id": "file1"},
+            ),
+            patch("wet_mcp.sync._download_file", return_value=True),
+            patch("pathlib.Path.mkdir"),
+            patch("pathlib.Path.exists", return_value=True),
+        ):
+            result = await sync.sync_pull(Path("/db/docs.db"), "wet-mcp")
+            assert result is not None
+            assert result.name == "remote_docs.db"
+
+    @pytest.mark.asyncio
+    async def test_pull_no_token(self):
+        """Returns None when no token available."""
+        with patch("wet_mcp.sync._get_valid_token", return_value=None):
+            result = await sync.sync_pull(Path("/db/docs.db"), "wet-mcp")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_pull_no_remote_file(self):
+        """Returns None when no remote file exists."""
+        with (
+            patch(
+                "wet_mcp.sync._get_valid_token",
+                return_value={"access_token": "t"},
+            ),
+            patch("wet_mcp.sync._find_or_create_folder", return_value="folder1"),
+            patch("wet_mcp.sync._find_file_in_folder", return_value=None),
+        ):
+            result = await sync.sync_pull(Path("/db/docs.db"), "wet-mcp")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_pull_download_failure(self):
+        """Returns None and cleans up on download failure."""
+        with (
+            patch(
+                "wet_mcp.sync._get_valid_token",
+                return_value={"access_token": "t"},
+            ),
+            patch("wet_mcp.sync._find_or_create_folder", return_value="folder1"),
+            patch(
+                "wet_mcp.sync._find_file_in_folder",
+                return_value={"id": "file1"},
+            ),
+            patch("wet_mcp.sync._download_file", return_value=False),
+            patch("pathlib.Path.mkdir"),
+            patch("pathlib.Path.exists", return_value=False),
+            patch("pathlib.Path.unlink") as mock_unlink,
+        ):
+            result = await sync.sync_pull(Path("/db/docs.db"), "wet-mcp")
+            assert result is None
+            mock_unlink.assert_called_once_with(missing_ok=True)
+
+
+# -----------------------------------------------------------------------
+# Auto-sync lifecycle
+# -----------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
@@ -311,82 +546,71 @@ class TestAutoSyncLifecycle:
 
 
 # -----------------------------------------------------------------------
-# sync.sync_pull
+# check_health
 # -----------------------------------------------------------------------
 
 
-class TestSyncPull:
+class TestCheckHealth:
     @pytest.mark.asyncio
-    async def test_sync_pull_success(self):
-        """Returns downloaded file path on success."""
-        rclone_path = Path("/mock/rclone")
-        db_path = Path("/mock/db/local.sqlite")
-        remote = "gdrive"
-        folder = "backup"
-
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stderr = ""
+    async def test_health_ok(self):
+        """Returns True when Drive API is accessible."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
 
         with (
             patch(
-                "wet_mcp.sync.asyncio.to_thread", return_value=mock_result
-            ) as mock_thread,
-            patch("pathlib.Path.mkdir"),
-            patch("pathlib.Path.exists", return_value=True),
+                "wet_mcp.sync._get_valid_token",
+                return_value={"access_token": "t"},
+            ),
+            patch("wet_mcp.sync._drive_request", return_value=mock_response),
         ):
-            result = await sync.sync_pull(rclone_path, db_path, remote, folder)
-
-            assert result is not None
-            assert result.name == "remote_local.sqlite"
-            assert str(result.parent).endswith("sync_temp")
-
-            mock_thread.assert_called_once()
-            args = mock_thread.call_args[0]
-            assert args[1] == rclone_path
-            assert "copyto" in args[2]
+            assert await sync.check_health() is True
 
     @pytest.mark.asyncio
-    async def test_sync_pull_failure_return_code(self):
-        """Returns None and cleans up when command fails."""
-        rclone_path = Path("/mock/rclone")
-        db_path = Path("/mock/db/local.sqlite")
-        remote = "gdrive"
-        folder = "backup"
-
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stderr = "Command failed"
-
-        with (
-            patch("wet_mcp.sync.asyncio.to_thread", return_value=mock_result),
-            patch("pathlib.Path.mkdir"),
-            patch("pathlib.Path.unlink") as mock_unlink,
-        ):
-            result = await sync.sync_pull(rclone_path, db_path, remote, folder)
-
-            assert result is None
-            mock_unlink.assert_called_once_with(missing_ok=True)
+    async def test_health_no_token(self):
+        """Returns False when no token."""
+        with patch("wet_mcp.sync._get_valid_token", return_value=None):
+            assert await sync.check_health() is False
 
     @pytest.mark.asyncio
-    async def test_sync_pull_failure_file_missing(self):
-        """Returns None and cleans up when downloaded file is missing despite success exit code."""
-        rclone_path = Path("/mock/rclone")
-        db_path = Path("/mock/db/local.sqlite")
-        remote = "gdrive"
-        folder = "backup"
+    async def test_health_api_error(self):
+        """Returns False on API error."""
+        with (
+            patch(
+                "wet_mcp.sync._get_valid_token",
+                return_value={"access_token": "t"},
+            ),
+            patch("wet_mcp.sync._drive_request", side_effect=Exception("err")),
+        ):
+            assert await sync.check_health() is False
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stderr = ""
+
+# -----------------------------------------------------------------------
+# setup_google_auth (Device Code flow)
+# -----------------------------------------------------------------------
+
+
+class TestSetupGoogleAuth:
+    @pytest.mark.asyncio
+    async def test_no_client_id(self):
+        """Returns False when client ID not configured."""
+        with patch("wet_mcp.sync.settings.google_drive_client_id", ""):
+            assert await sync.setup_google_auth() is False
+
+    @pytest.mark.asyncio
+    async def test_device_code_request_failure(self):
+        """Returns False when device code request fails."""
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+        mock_response.text = "Bad Request"
 
         with (
-            patch("wet_mcp.sync.asyncio.to_thread", return_value=mock_result),
-            patch("pathlib.Path.mkdir"),
-            patch("pathlib.Path.exists", return_value=False),
-            patch("pathlib.Path.unlink") as mock_unlink,
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
         ):
-            result = await sync.sync_pull(rclone_path, db_path, remote, folder)
+            mock_instance = AsyncMock()
+            mock_instance.post = AsyncMock(return_value=mock_response)
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            assert result is None
-            mock_unlink.assert_called_once_with(missing_ok=True)
+            assert await sync.setup_google_auth() is False

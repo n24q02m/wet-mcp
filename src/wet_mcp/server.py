@@ -1070,9 +1070,9 @@ async def config(
                 },
                 "sync": {
                     "enabled": settings.sync_enabled,
-                    "remote": settings.sync_remote,
                     "folder": settings.sync_folder,
                     "interval": settings.sync_interval,
+                    "google_drive_client_id": bool(settings.google_drive_client_id),
                 },
                 "settings": {
                     "log_level": settings.log_level,
@@ -1089,7 +1089,6 @@ async def config(
                 "tool_timeout",
                 "wet_cache",
                 "sync_enabled",
-                "sync_remote",
                 "sync_folder",
                 "sync_interval",
             }
@@ -1168,7 +1167,7 @@ async def config(
         "Server setup and warmup. Actions: "
         "warmup|setup_sync. "
         "warmup: Pre-download models and install dependencies. "
-        "setup_sync: Configure cloud sync (rclone authorize)."
+        "setup_sync: Configure Google Drive sync (OAuth Device Code flow)."
     ),
     annotations=ToolAnnotations(
         title="Setup",
@@ -1186,7 +1185,7 @@ async def setup(
 
     Actions:
     - warmup: Pre-download models and run first-time setup
-    - setup_sync: Configure cloud sync (remote_type defaults to 'drive')
+    - setup_sync: Configure Google Drive sync (OAuth Device Code flow)
     """
     from wet_mcp.setup_tool import run_setup_sync, run_warmup
 

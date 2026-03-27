@@ -48,4 +48,36 @@ RELAY_SCHEMA: dict[str, Any] = {
             ],
         },
     ],
+    "sections": [
+        {
+            "id": "google_drive_sync",
+            "label": "Google Drive Sync",
+            "description": "Sync docs database across machines via Google Drive",
+            "fields": [
+                {
+                    "key": "SYNC_ENABLED",
+                    "label": "Enable Sync",
+                    "type": "boolean",
+                    "required": False,
+                    "helpText": "Enable automatic Google Drive sync for docs database",
+                },
+                {
+                    "key": "GOOGLE_DRIVE_CLIENT_ID",
+                    "label": "OAuth Client ID",
+                    "type": "text",
+                    "placeholder": "123456789.apps.googleusercontent.com",
+                    "required": False,
+                    "helpText": "Create at console.cloud.google.com/apis/credentials (OAuth 2.0 Client ID, type: TV/Limited Input)",
+                },
+                {
+                    "key": "SYNC_FOLDER",
+                    "label": "Drive Folder",
+                    "type": "text",
+                    "placeholder": "wet-mcp",
+                    "required": False,
+                    "helpText": "Google Drive folder name for sync (default: wet-mcp)",
+                },
+            ],
+        },
+    ],
 }
