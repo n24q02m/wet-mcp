@@ -1,7 +1,14 @@
-"""Zero-env-config relay setup flow for wet-mcp.
+"""Relay-first setup flow for wet-mcp.
 
-wet-mcp works out of the box with local ONNX mode.
-Relay is only needed for proxy/sdk modes -- NOT auto-triggered.
+Always shows the relay URL at startup so users can configure cloud providers
+via browser. If the user skips or relay is unreachable, falls back to local
+ONNX mode (works without any credentials).
+
+Resolution order:
+1. Environment variables (highest priority, checked by Settings)
+2. Encrypted config file (~/.config/mcp/config.enc)
+3. Relay setup (browser-based form, 30s timeout for optional-cred server)
+4. Local mode fallback (ONNX embedding, SearXNG search)
 """
 
 from __future__ import annotations
@@ -12,19 +19,22 @@ import sys
 from loguru import logger
 
 DEFAULT_RELAY_URL = "https://wet-mcp.n24q02m.com"
+SERVER_NAME = "wet-mcp"
+
+# Shorter timeout for optional-credential servers (user can skip)
+RELAY_TIMEOUT_S = 30.0
 
 
 def load_config_from_file() -> dict[str, str] | None:
     """Try to load config from encrypted config file. Returns None if not found."""
     try:
-        import asyncio
+        from mcp_relay_core.storage.resolver import resolve_config
 
-        from mcp_relay_core.storage.config_file import read_config
-
-        result = read_config("wet-mcp")
-        if asyncio.iscoroutine(result):
-            result = asyncio.run(result)
-        return result  # type: ignore[return-value]
+        result = resolve_config(SERVER_NAME, [])
+        if result.config is not None:
+            logger.info("Config loaded from {}", result.source)
+            return result.config
+        return None
     except Exception:
         return None
 
@@ -37,17 +47,85 @@ def apply_config(config: dict[str, str]) -> None:
             logger.debug("Applied relay config: {}", key)
 
 
-async def trigger_relay_setup() -> dict[str, str] | None:
-    """Manually trigger relay setup. Returns config dict or None."""
+async def ensure_config() -> dict[str, str] | None:
+    """Resolve config: env vars -> config file -> relay setup -> local fallback.
+
+    Always shows relay URL at startup for relay-first design.
+    Uses 30s timeout since wet-mcp works locally without credentials.
+
+    Returns:
+        Config dict with API keys, or None if skipped/failed (local mode).
+    """
+    # 1. Check if env vars already provide cloud keys
+    cloud_keys = [
+        "JINA_AI_API_KEY",
+        "GEMINI_API_KEY",
+        "OPENAI_API_KEY",
+        "COHERE_API_KEY",
+    ]
+    if any(os.environ.get(k) for k in cloud_keys):
+        logger.info("Cloud API keys found in environment")
+        return None  # env vars take priority, no relay needed
+
+    # 2. Check config file
+    config = load_config_from_file()
+    if config is not None:
+        apply_config(config)
+        return config
+
+    # 3. Always trigger relay setup (relay-first design)
+    logger.info("No cloud credentials found. Starting relay setup...")
     try:
         from mcp_relay_core.relay.client import create_session, poll_for_result
 
         from .relay_schema import RELAY_SCHEMA
 
         relay_url = os.environ.get("MCP_RELAY_URL", DEFAULT_RELAY_URL)
-        session = await create_session(relay_url, "wet-mcp", RELAY_SCHEMA)  # type: ignore[arg-type]
+        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)
 
-        session_url: str = session["relay_url"]  # type: ignore[index]
+        print(
+            f"\nConfigure cloud providers (optional, 30s timeout):"
+            f"\n{session.relay_url}"
+            f"\nSkip to use local mode (ONNX embedding + SearXNG).\n",
+            file=sys.stderr,
+            flush=True,
+        )
+
+        config = await poll_for_result(relay_url, session, timeout_s=RELAY_TIMEOUT_S)
+
+        # Save to config file for future use
+        from mcp_relay_core.storage.config_file import write_config
+
+        write_config(SERVER_NAME, config)
+        logger.info("Config saved successfully")
+
+        apply_config(config)
+        return config
+
+    except RuntimeError as e:
+        if "RELAY_SKIPPED" in str(e):
+            logger.info("Relay setup skipped by user. Using local mode.")
+        elif "timed out" in str(e).lower():
+            logger.info("Relay setup timed out. Using local mode.")
+        else:
+            logger.debug("Relay setup ended: {}", e)
+        return None
+    except Exception as e:
+        logger.debug("Relay setup unavailable: {}. Using local mode.", e)
+        return None
+
+
+async def trigger_relay_setup() -> dict[str, str] | None:
+    """Manually trigger relay setup (from MCP setup tool). No timeout limit."""
+    try:
+        from mcp_relay_core.relay.client import create_session, poll_for_result
+
+        from .relay_schema import RELAY_SCHEMA
+
+        relay_url = os.environ.get("MCP_RELAY_URL", DEFAULT_RELAY_URL)
+        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)
+
+        session_url: str = session.relay_url
         print(
             f"\nSetup: Open this URL to configure:\n{session_url}\n",
             file=sys.stderr,
@@ -58,9 +136,16 @@ async def trigger_relay_setup() -> dict[str, str] | None:
 
         from mcp_relay_core.storage.config_file import write_config
 
-        await write_config("wet-mcp", config)  # type: ignore[arg-type]
+        write_config(SERVER_NAME, config)
 
         return config
+
+    except RuntimeError as e:
+        if "RELAY_SKIPPED" in str(e):
+            logger.info("Relay setup skipped by user")
+            return None
+        logger.warning("Relay setup failed: {}", e)
+        return None
     except Exception as e:
         logger.warning("Relay setup failed: {}", e)
         return None

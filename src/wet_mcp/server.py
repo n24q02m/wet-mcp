@@ -116,12 +116,13 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
     logger.info("Starting WET MCP Server...")
 
-    # Try to load relay config (passive -- does not trigger relay)
-    from wet_mcp.relay_setup import apply_config, load_config_from_file
+    # Relay-first: try env -> config file -> relay setup -> local fallback
+    try:
+        from wet_mcp.relay_setup import ensure_config
 
-    config = load_config_from_file()
-    if config:
-        apply_config(config)
+        await ensure_config()
+    except Exception as e:
+        logger.debug("Relay config not available: {}. Using local mode.", e)
 
     # 1. Setup provider mode (sdk or local)
     from wet_mcp.config import settings
