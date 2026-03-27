@@ -50,6 +50,15 @@ class WebCache:
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
 
+        # ⚡ Bolt Optimization: Use memory-mapped I/O and larger page cache for faster DB operations
+        self._conn.execute("PRAGMA mmap_size = 268435456")  # 256MB mmap
+        self._conn.execute(
+            "PRAGMA temp_store = MEMORY"
+        )  # Store temp tables/indices in memory
+        self._conn.execute(
+            "PRAGMA cache_size = -20000"
+        )  # 20MB page cache (default is 2MB)
+
         self._create_tables()
         logger.debug(f"WebCache initialized at {db_path}")
 
