@@ -411,6 +411,11 @@ def _get_settings_path(port: int) -> Path:
     secret = secrets.token_hex(32)
     content = content.replace("REPLACE_WITH_REAL_SECRET", secret)
 
+    # Disable HTTP/2 on Windows — httpcore HTTP/2 multiplexing combined with
+    # SearXNG's concurrent engine thread pool causes deadlocks on Windows.
+    if sys.platform == "win32":
+        content = content.replace("enable_http2: true", "enable_http2: false")
+
     settings_file.write_text(content)
     logger.debug(f"SearXNG settings written to: {settings_file}")
 
