@@ -17,6 +17,13 @@ from loguru import logger
 DEFAULT_RELAY_URL = "https://wet-mcp.n24q02m.com"
 SERVER_NAME = "wet-mcp"
 
+CLOUD_KEYS = [
+    "JINA_AI_API_KEY",
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "COHERE_API_KEY",
+]
+
 # Shorter timeout for optional-credential servers (user can skip)
 RELAY_TIMEOUT_S = 120.0
 
@@ -24,12 +31,12 @@ RELAY_TIMEOUT_S = 120.0
 def load_config_from_file() -> dict[str, str] | None:
     """Try to load config from encrypted config file. Returns None if not found."""
     try:
-        from mcp_relay_core.storage.resolver import resolve_config
+        from mcp_relay_core.storage.config_file import read_config
 
-        result = resolve_config(SERVER_NAME, [])
-        if result.config is not None:
-            logger.info("Config loaded from {}", result.source)
-            return result.config
+        saved = read_config(SERVER_NAME)
+        if saved and any(saved.get(k) for k in CLOUD_KEYS):
+            logger.info("Config loaded from file")
+            return saved
         return None
     except Exception:
         return None
@@ -53,13 +60,7 @@ async def ensure_config() -> dict[str, str] | None:
         Config dict with API keys, or None if skipped/failed (local mode).
     """
     # 1. Check if env vars already provide cloud keys (highest priority)
-    cloud_keys = [
-        "JINA_AI_API_KEY",
-        "GEMINI_API_KEY",
-        "OPENAI_API_KEY",
-        "COHERE_API_KEY",
-    ]
-    if any(os.environ.get(k) for k in cloud_keys):
+    if any(os.environ.get(k) for k in CLOUD_KEYS):
         logger.info("Cloud API keys found in environment, skipping relay")
         return None  # env vars take priority, no relay needed
 
