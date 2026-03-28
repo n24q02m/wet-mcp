@@ -10,7 +10,7 @@ Xem `AGENTS.md` va `README.md` de hieu architecture va configuration.
   - `config.py` -- Pydantic Settings (singleton)
   - `cache.py`, `db.py`, `embedder.py`, `reranker.py` -- Infrastructure
   - `relay_setup.py` -- Zero-config relay: create session, poll for config
-  - `relay_schema.py` -- Relay form schema (3 modes: local/proxy/sdk)
+  - `relay_schema.py` -- Relay form schema (2 modes: local/cloud)
   - `sync.py` -- Google Drive sync (OAuth Device Code, httpx)
   - `token_store.py` -- Local token storage cho OAuth (~/.wet-mcp/tokens/)
   - `setup_tool.py` -- Warmup + setup-sync logic (MCP-callable)
@@ -50,8 +50,8 @@ mise run dev       # uv run wet-mcp
 
 - `asyncio_mode = "auto"` -- KHONG can `@pytest.mark.asyncio`
 - Default timeout: 30 seconds per test
-- Integration tests excluded by default (`-m 'not integration'`)
-- `addopts = "-m 'not integration'"` trong pyproject.toml
+- Integration/live/full tests excluded by default
+- `addopts = "-m 'not integration and not live and not full'"` trong pyproject.toml
 
 ## Env vars
 
@@ -61,7 +61,7 @@ mise run dev       # uv run wet-mcp
 - Reranking: `RERANK_BACKEND`, `RERANK_MODEL`
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
 - Sync: `SYNC_ENABLED` (default false), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
-- Sync dung Google Drive API truc tiep (google-api-python-client + google-auth). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`
+- Sync dung Google Drive API truc tiep (httpx). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`
 - Relay: `MCP_RELAY_URL` (default `https://wet-mcp.n24q02m.com`)
 - Infisical: project `531b3027-70ca-4761-b149-9ec8fea80d4f`
 
