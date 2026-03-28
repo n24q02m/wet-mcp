@@ -49,14 +49,6 @@ class WebCache:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
-        # ⚡ Bolt: Performance Optimization
-        # Reduces disk I/O latency and query speed for SQLite-backed components.
-        # - mmap_size: Uses memory-mapped I/O up to 256MB.
-        # - temp_store: Stores temporary tables and indices in RAM instead of disk.
-        # - cache_size: Increases in-memory cache to 64MB (-64000 KB).
-        self._conn.execute("PRAGMA mmap_size = 268435456")
-        self._conn.execute("PRAGMA temp_store = MEMORY")
-        self._conn.execute("PRAGMA cache_size = -64000")
 
         self._create_tables()
         logger.debug(f"WebCache initialized at {db_path}")
