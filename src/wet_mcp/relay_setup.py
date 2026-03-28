@@ -18,7 +18,7 @@ DEFAULT_RELAY_URL = "https://wet-mcp.n24q02m.com"
 SERVER_NAME = "wet-mcp"
 
 # Shorter timeout for optional-credential servers (user can skip)
-RELAY_TIMEOUT_S = 30.0
+RELAY_TIMEOUT_S = 120.0
 
 
 def load_config_from_file() -> dict[str, str] | None:
