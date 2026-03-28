@@ -20,7 +20,7 @@ class TestRelaySchema:
 
     def test_schema_mode_ids(self):
         mode_ids = [m["id"] for m in RELAY_SCHEMA["modes"]]
-        assert mode_ids == ["local", "sdk"]
+        assert mode_ids == ["local", "cloud"]
 
     def test_schema_server_name(self):
         assert RELAY_SCHEMA["server"] == "wet-mcp"
@@ -33,11 +33,14 @@ class TestRelaySchema:
         assert local_mode["id"] == "local"
         assert local_mode["fields"] == []
 
-    def test_sdk_mode_has_api_keys_field(self):
-        sdk_mode = RELAY_SCHEMA["modes"][1]
-        assert sdk_mode["id"] == "sdk"
-        field_keys = [f["key"] for f in sdk_mode["fields"]]
-        assert "API_KEYS" in field_keys
+    def test_cloud_mode_has_individual_provider_fields(self):
+        cloud_mode = RELAY_SCHEMA["modes"][1]
+        assert cloud_mode["id"] == "cloud"
+        field_keys = [f["key"] for f in cloud_mode["fields"]]
+        assert "JINA_AI_API_KEY" in field_keys
+        assert "GEMINI_API_KEY" in field_keys
+        assert "OPENAI_API_KEY" in field_keys
+        assert "COHERE_API_KEY" in field_keys
 
 
 class TestLoadConfigFromFile:
@@ -45,9 +48,8 @@ class TestLoadConfigFromFile:
 
     def test_returns_none_when_no_file(self):
         with patch(
-            "wet_mcp.relay_setup.read_config",
-            side_effect=ImportError("no module"),
-            create=True,
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=None,
         ):
             result = load_config_from_file()
         assert result is None
