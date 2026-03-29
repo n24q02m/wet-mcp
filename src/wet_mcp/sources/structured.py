@@ -1,6 +1,7 @@
 """LLM-powered structured data extraction from web content."""
 
 import json
+import typing
 
 from loguru import logger
 
@@ -48,8 +49,6 @@ async def _call_llm_with_schema(
 
     # Attempt 1: json_schema mode (structured output)
     try:
-        import typing
-
         _llm_kwargs = typing.cast(typing.Any, llm_kwargs)
         response = await acompletion(
             **_llm_kwargs,
@@ -68,8 +67,6 @@ async def _call_llm_with_schema(
         logger.warning(f"json_schema mode failed, falling back to json_object: {e}")
 
     # Attempt 2: json_object mode (simpler, wider provider support)
-    import typing
-
     _llm_kwargs = typing.cast(typing.Any, llm_kwargs)
     response = await acompletion(
         **_llm_kwargs,

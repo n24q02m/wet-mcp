@@ -385,9 +385,9 @@ async def crawl(
 
             async with sem:
                 try:
-                    result = await crawler.arun(
-                        url, config=CrawlerRunConfig(verbose=False)
-                    )  # type: ignore
+                    # fmt: off
+                    result = await crawler.arun(url, config=CrawlerRunConfig(verbose=False))  # type: ignore
+                    # fmt: on
 
                     if result.success:
                         content = (
@@ -474,9 +474,9 @@ async def sitemap(
 
             async with sem:
                 try:
-                    result = await crawler.arun(
-                        url, config=CrawlerRunConfig(verbose=False)
-                    )  # type: ignore
+                    # fmt: off
+                    result = await crawler.arun(url, config=CrawlerRunConfig(verbose=False))  # type: ignore
+                    # fmt: on
 
                     if result.success and current_depth < depth:
                         for link in result.links.get("internal", [])[:20]:

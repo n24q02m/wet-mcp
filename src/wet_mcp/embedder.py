@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import time
+import typing
 from typing import Protocol
 
 from loguru import logger
@@ -244,8 +245,6 @@ class CloudEmbeddingBackend:
         config_kwargs: dict = {}
         if dimensions:
             config_kwargs["output_dimensionality"] = dimensions
-
-        import typing
 
         result = client.models.embed_content(
             model=self._bare_model,

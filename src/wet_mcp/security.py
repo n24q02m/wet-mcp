@@ -2,6 +2,7 @@ import ipaddress
 import socket
 import threading
 import time
+import typing
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -52,7 +53,7 @@ def _pinned_getaddrinfo(host, port, *args, **kwargs):
 
 
 # Install the patched getaddrinfo once at import time
-socket.getaddrinfo = _pinned_getaddrinfo  # type: ignore[assignment]
+socket.getaddrinfo = typing.cast(typing.Any, _pinned_getaddrinfo)  # type: ignore[assignment, invalid-assignment]
 
 
 def _check_ip_safe(ip_str: str, hostname: str) -> bool:
