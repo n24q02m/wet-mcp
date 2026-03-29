@@ -296,10 +296,8 @@ async def extract(
                 return await _extract_with_markitdown(url)
 
             try:
-                result = await crawler.arun(
-                    url,  # type: ignore[invalid-argument-type]
-                    config=run_config,
-                )  # type: ignore[missing-argument]
+                # Disable type checking on the crawler call due to complex Union typing in crawl4ai
+                result = await crawler.arun(url, config=run_config)  # type: ignore
 
                 if result.success:
                     content = (
@@ -388,9 +386,8 @@ async def crawl(
             async with sem:
                 try:
                     result = await crawler.arun(
-                        url,  # type: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )  # type: ignore[missing-argument]
+                        url, config=CrawlerRunConfig(verbose=False)
+                    )  # type: ignore
 
                     if result.success:
                         content = (
@@ -478,9 +475,8 @@ async def sitemap(
             async with sem:
                 try:
                     result = await crawler.arun(
-                        url,  # type: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )  # type: ignore[missing-argument]
+                        url, config=CrawlerRunConfig(verbose=False)
+                    )  # type: ignore
 
                     if result.success and current_depth < depth:
                         for link in result.links.get("internal", [])[:20]:
@@ -524,10 +520,7 @@ async def list_media(
     sem = _get_semaphore()
 
     async with sem:
-        result = await crawler.arun(
-            url,  # type: ignore[invalid-argument-type]
-            config=CrawlerRunConfig(verbose=False),
-        )  # type: ignore[missing-argument]
+        result = await crawler.arun(url, config=CrawlerRunConfig(verbose=False))  # type: ignore
 
         if not result.success:
             return json.dumps({"error": result.error_message or "Failed to load page"})
