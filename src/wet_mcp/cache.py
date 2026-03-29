@@ -49,6 +49,10 @@ class WebCache:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
+        # ⚡ Bolt Optimization: optimize disk I/O latency and query speed
+        self._conn.execute("PRAGMA mmap_size = 268435456")
+        self._conn.execute("PRAGMA temp_store = MEMORY")
+        self._conn.execute("PRAGMA cache_size = -64000")
 
         self._create_tables()
         logger.debug(f"WebCache initialized at {db_path}")
