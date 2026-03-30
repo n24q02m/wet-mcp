@@ -642,13 +642,24 @@ async def _start_searxng_subprocess() -> str | None:
         # Start SearXNG subprocess
         logger.info(f"Starting SearXNG on port {port}...")
 
+        # On Windows, stderr=PIPE without a reader causes a deadlock:
+        # SearXNG writes many engine errors/warnings to stderr, filling the
+        # OS pipe buffer (~4-8KB on Windows). Once full, the subprocess
+        # blocks on write(), freezing the Flask request handler. Use DEVNULL
+        # on Windows to avoid this. On Linux, pipe buffers are large (64KB+)
+        # and SearXNG's async architecture prevents blocking, so PIPE is safe
+        # and provides crash diagnostics.
+        stderr_target = (
+            subprocess.DEVNULL if sys.platform == "win32" else subprocess.PIPE
+        )
+
         _searxng_process = await asyncio.to_thread(
             lambda: subprocess.Popen(
                 [sys.executable, "-m", "searx.webapp"],
                 env=env,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
+                stderr=stderr_target,
                 # Use process group on Unix for clean shutdown
                 **(_get_process_kwargs()),
             )
