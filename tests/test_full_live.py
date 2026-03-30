@@ -318,20 +318,12 @@ class TestFullConfig:
 
 class TestFullSetup:
     @pytest.mark.timeout(120)
-    async def test_setup_warmup(self, mcp_session: ClientSession):
-        """setup.warmup -- pre-download/verify models."""
-        r = await mcp_session.call_tool("setup", {"action": "warmup"})
+    async def test_config_warmup(self, mcp_session: ClientSession):
+        """config.warmup -- pre-download/verify models."""
+        r = await mcp_session.call_tool("config", {"action": "warmup"})
         text = parse(r)
         data = json.loads(text)
         assert "status" in data or "embedding" in data, text[:120]
-
-    async def test_setup_invalid_action(self, mcp_session: ClientSession):
-        """setup with invalid action returns error."""
-        r = await mcp_session.call_tool("setup", {"action": "invalid"})
-        text = parse_allow_error(r)
-        assert any(w in text.lower() for w in ("error", "unknown", "invalid")), text[
-            :120
-        ]
 
 
 # ---------------------------------------------------------------------------

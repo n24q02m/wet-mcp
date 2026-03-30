@@ -983,16 +983,15 @@ async def media(  # noqa: PLR0913
 async def help(tool_name: str = "search") -> str:
     """Get detailed documentation for any tool. Call this when you need full parameter reference or usage examples.
 
-    Valid tool_name values: search, extract, media, config, setup, help.
+    Valid tool_name values: search, extract, media, config, help.
 
     Quick guide -- which tool to use:
     - Need to FIND information? Use `search` (returns result listings with URLs)
     - Need to READ a page? Use `extract` (returns full page content from a URL)
     - Need media files? Use `media` (discover, download, analyze images/videos/audio)
-    - Need server settings? Use `config` (status, cache, settings)
-    - Need first-time setup? Use `setup` (warmup models, configure sync)
+    - Need server settings? Use `config` (status, cache, settings, warmup, sync setup)
     """
-    allowed_tools = {"search", "extract", "media", "config", "setup", "help"}
+    allowed_tools = {"search", "extract", "media", "config", "help"}
     if tool_name not in allowed_tools:
         import difflib
 
@@ -1012,7 +1011,7 @@ async def help(tool_name: str = "search") -> str:
 @mcp.tool(
     description=(
         "Server config and management. Actions: "
-        "status|set|cache_clear|docs_reindex. "
+        "status|set|cache_clear|docs_reindex|warmup|setup_sync. "
         "Use help tool with tool_name='config' for full docs."
     ),
     annotations=ToolAnnotations(
@@ -1020,13 +1019,14 @@ async def help(tool_name: str = "search") -> str:
         readOnlyHint=False,
         destructiveHint=False,
         idempotentHint=True,
-        openWorldHint=False,
+        openWorldHint=True,
     ),
 )
 async def config(
     action: str,
     key: str | None = None,
     value: str | None = None,
+    remote_type: str | None = None,
 ) -> str:
     """Server configuration and management.
 
@@ -1035,6 +1035,8 @@ async def config(
     - set: Update runtime setting (key + value required)
     - cache_clear: Clear web cache
     - docs_reindex: Force re-index a library (key = library name)
+    - warmup: Pre-download models and run first-time setup
+    - setup_sync: Configure Google Drive sync (OAuth Device Code flow)
     """
     match action:
         case "status":
@@ -1143,65 +1145,29 @@ async def config(
                 )
             return json.dumps({"error": f"Library '{key}' not found in index"})
 
-        case _:
-            import difflib
-
-            valid_actions = ["cache_clear", "docs_reindex", "set", "status"]
-            closest = difflib.get_close_matches(action, valid_actions, n=1)
-            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-            return json.dumps(
-                {
-                    "error": f"Unknown action '{action}'.{suggestion}",
-                    "valid_actions": valid_actions,
-                }
-            )
-
-
-# ---------------------------------------------------------------------------
-# Setup (warmup + setup-sync as MCP tool)
-# ---------------------------------------------------------------------------
-
-
-@mcp.tool(
-    description=(
-        "Server setup and warmup. Actions: "
-        "warmup|setup_sync. "
-        "warmup: Pre-download models and install dependencies. "
-        "setup_sync: Configure Google Drive sync (OAuth Device Code flow)."
-    ),
-    annotations=ToolAnnotations(
-        title="Setup",
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=True,
-        openWorldHint=True,
-    ),
-)
-async def setup(
-    action: str,
-    remote_type: str | None = None,
-) -> str:
-    """Server setup and warmup operations.
-
-    Actions:
-    - warmup: Pre-download models and run first-time setup
-    - setup_sync: Configure Google Drive sync (OAuth Device Code flow)
-    """
-    from wet_mcp.setup_tool import run_setup_sync, run_warmup
-
-    match action:
         case "warmup":
+            from wet_mcp.setup_tool import run_warmup
+
             result = await run_warmup()
             return json.dumps(result, indent=2, default=str)
 
         case "setup_sync":
+            from wet_mcp.setup_tool import run_setup_sync
+
             result = await run_setup_sync(remote_type or "drive")
             return json.dumps(result, indent=2, default=str)
 
         case _:
             import difflib
 
-            valid_actions = ["setup_sync", "warmup"]
+            valid_actions = [
+                "cache_clear",
+                "docs_reindex",
+                "set",
+                "setup_sync",
+                "status",
+                "warmup",
+            ]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return json.dumps(

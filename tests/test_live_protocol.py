@@ -83,7 +83,7 @@ class TestMeta:
     async def test_list_tools(self, mcp_session: ClientSession):
         result = await mcp_session.list_tools()
         tool_names = sorted(t.name for t in result.tools)
-        expected = ["config", "extract", "help", "media", "search", "setup"]
+        expected = ["config", "extract", "help", "media", "search"]
         assert tool_names == expected, f"Expected {expected}, got {tool_names}"
 
 
@@ -156,23 +156,16 @@ class TestConfig:
 
 
 # ---------------------------------------------------------------------------
-# Setup tool (offline -- warmup only)
+# Config tool -- warmup action (offline)
 # ---------------------------------------------------------------------------
 
 
-class TestSetup:
-    async def test_setup_warmup(self, mcp_session: ClientSession):
-        r = await mcp_session.call_tool("setup", {"action": "warmup"})
+class TestConfigWarmup:
+    async def test_config_warmup(self, mcp_session: ClientSession):
+        r = await mcp_session.call_tool("config", {"action": "warmup"})
         text = parse(r)
         data = json.loads(text)
         assert "status" in data or "error" not in data, text[:120]
-
-    async def test_setup_invalid_action(self, mcp_session: ClientSession):
-        r = await mcp_session.call_tool("setup", {"action": "invalid"})
-        text = parse_allow_error(r)
-        assert any(w in text.lower() for w in ("error", "unknown", "invalid")), text[
-            :80
-        ]
 
 
 # ---------------------------------------------------------------------------

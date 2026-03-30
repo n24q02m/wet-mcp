@@ -12,6 +12,8 @@ Welcome to **WET** (Web Extended Toolkit) MCP Server.
 | **Download** images/videos/audio | `media` | `media(action="list", url="https://example.com/gallery")` |
 | **Convert** a local file to text | `extract` (convert) | `extract(action="convert", paths=["/home/user/report.pdf"])` |
 | **Check** server status/settings | `config` | `config(action="status")` |
+| **Warmup** models and deps | `config` | `config(action="warmup")` |
+| **Setup** cloud sync | `config` | `config(action="setup_sync")` |
 
 **Key distinction**: `search` returns result listings (titles, URLs, snippets). `extract` returns full page content. Use `search` to find URLs, then `extract` to read them.
 
@@ -22,7 +24,7 @@ Welcome to **WET** (Web Extended Toolkit) MCP Server.
 | `search` | Find information: web search, academic research, library docs search |
 | `extract` | Read content: extract from URLs, crawl sites, map structure, convert local files |
 | `media` | Media files: discover, download, and analyze images/videos/audio |
-| `config` | Server management: status, settings, cache, re-indexing |
+| `config` | Server management: status, settings, cache, re-indexing, warmup, sync setup |
 | `help` | Get full documentation for any tool |
 
 ## Quick Reference
@@ -89,6 +91,12 @@ Welcome to **WET** (Web Extended Toolkit) MCP Server.
 
 // Update a setting
 {"action": "set", "key": "log_level", "value": "DEBUG"}
+
+// Warmup models and dependencies
+{"action": "warmup"}
+
+// Configure cloud sync
+{"action": "setup_sync"}
 ```
 
 ## Getting Full Documentation
@@ -99,7 +107,7 @@ Call `help` with the tool name:
 {"tool_name": "search"}   // Search tool documentation
 {"tool_name": "extract"}  // Extract tool documentation
 {"tool_name": "media"}    // Media tool documentation
-{"tool_name": "config"}   // Config tool documentation
+{"tool_name": "config"}   // Config tool documentation (includes warmup + sync setup)
 ```
 
 ## Features
