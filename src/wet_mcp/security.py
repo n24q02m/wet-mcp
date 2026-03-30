@@ -52,7 +52,7 @@ def _pinned_getaddrinfo(host, port, *args, **kwargs):
 
 
 # Install the patched getaddrinfo once at import time
-socket.getaddrinfo = _pinned_getaddrinfo  # type: ignore[assignment]
+socket.getaddrinfo = _pinned_getaddrinfo  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
 
 
 def _check_ip_safe(ip_str: str, hostname: str) -> bool:

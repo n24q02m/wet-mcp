@@ -296,10 +296,10 @@ async def extract(
                 return await _extract_with_markitdown(url)
 
             try:
-                result = await crawler.arun(
-                    url,  # type: ignore[invalid-argument-type]
+                result = await crawler.arun(  # ty: ignore[missing-argument]
+                    url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                     config=run_config,
-                )  # type: ignore[missing-argument]
+                )
 
                 if result.success:
                     content = (
@@ -387,10 +387,10 @@ async def crawl(
 
             async with sem:
                 try:
-                    result = await crawler.arun(
-                        url,  # type: ignore[invalid-argument-type]
+                    result = await crawler.arun(  # ty: ignore[missing-argument]
+                        url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
-                    )  # type: ignore[missing-argument]
+                    )
 
                     if result.success:
                         content = (
@@ -477,10 +477,10 @@ async def sitemap(
 
             async with sem:
                 try:
-                    result = await crawler.arun(
-                        url,  # type: ignore[invalid-argument-type]
+                    result = await crawler.arun(  # ty: ignore[missing-argument]
+                        url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
-                    )  # type: ignore[missing-argument]
+                    )
 
                     if result.success and current_depth < depth:
                         for link in result.links.get("internal", [])[:20]:
@@ -524,10 +524,10 @@ async def list_media(
     sem = _get_semaphore()
 
     async with sem:
-        result = await crawler.arun(
-            url,  # type: ignore[invalid-argument-type]
+        result = await crawler.arun(  # ty: ignore[missing-argument]
+            url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
             config=CrawlerRunConfig(verbose=False),
-        )  # type: ignore[missing-argument]
+        )
 
         if not result.success:
             return json.dumps({"error": result.error_message or "Failed to load page"})

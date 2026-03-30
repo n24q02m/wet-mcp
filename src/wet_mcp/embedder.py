@@ -209,7 +209,8 @@ class CloudEmbeddingBackend:
                     break
 
         logger.error(f"Embedding failed ({self.model}): {last_exc}")
-        raise last_exc  # type: ignore[misc]
+        assert last_exc is not None  # guaranteed by loop logic
+        raise last_exc
 
     def _call_provider(
         self, texts: list[str], dimensions: int | None = None
@@ -245,7 +246,7 @@ class CloudEmbeddingBackend:
 
         result = client.models.embed_content(
             model=self._bare_model,
-            contents=texts,  # type: ignore[invalid-argument-type]  # SDK accepts list[str]
+            contents=texts,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]  # SDK accepts list[str]
             config=types.EmbedContentConfig(**config_kwargs) if config_kwargs else None,
         )
 
