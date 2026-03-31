@@ -132,7 +132,11 @@ async def ensure_config() -> dict[str, str] | None:
         # NOW send complete message (after GDrive OAuth finishes or skips)
         try:
             async with httpx.AsyncClient() as http:
-                msg = "Setup complete!" if gdrive_ok else "API keys saved. Google Drive sync can be configured later via config tool."
+                msg = (
+                    "Setup complete!"
+                    if gdrive_ok
+                    else "API keys saved. Google Drive sync can be configured later via config tool."
+                )
                 await http.post(
                     f"{relay_url}/api/sessions/{session.session_id}/messages",
                     json={"type": "complete", "text": msg},
