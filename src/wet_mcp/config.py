@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     - RERANK_BACKEND: "cloud" | "local" (auto: Cohere key -> cloud, else local)
     - RERANK_MODEL: Rerank model (auto-detected from API_KEYS if Cohere)
     - RERANK_TOP_N: Return top N results after reranking (default: 10)
-    - SYNC_ENABLED: Enable Google Drive sync (default: false)
+    - SYNC_ENABLED: Enable Google Drive sync (default: true)
     - SYNC_FOLDER: Google Drive folder name (default: "wet-mcp")
     - SYNC_INTERVAL: Auto-sync interval in seconds (default: 300)
     - GOOGLE_DRIVE_CLIENT_ID: OAuth client ID for Google Drive sync
@@ -129,7 +129,7 @@ class Settings(BaseSettings):
     rerank_top_n: int = 10  # Return top N after reranking
 
     # Docs sync (Google Drive API)
-    sync_enabled: bool = False
+    sync_enabled: bool = True
     sync_folder: str = "wet-mcp"  # Google Drive folder name
     sync_interval: int = 300  # seconds, 0 = manual only
     google_drive_client_id: str = ""  # OAuth client ID (required for sync)
