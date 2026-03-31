@@ -334,15 +334,18 @@ def _install_searxng() -> bool:
         logger.debug(f"Using pip command: {pip_cmd}")
 
         # Pre-install build dependencies required by SearXNG
+        # On Windows, also install waitress (production WSGI server) to replace
+        # Flask's Werkzeug dev server which deadlocks under concurrent requests.
+        build_deps = ["msgspec", "setuptools", "wheel", "pyyaml"]
+        if sys.platform == "win32":
+            build_deps.append("waitress>=3.0.0")
+
         logger.debug("Installing SearXNG build dependencies...")
         deps_result = subprocess.run(
             [
                 *pip_cmd,
                 "--quiet",
-                "msgspec",
-                "setuptools",
-                "wheel",
-                "pyyaml",
+                *build_deps,
             ],
             stdin=subprocess.DEVNULL,
             capture_output=True,
@@ -653,9 +656,33 @@ async def _start_searxng_subprocess() -> str | None:
             subprocess.DEVNULL if sys.platform == "win32" else subprocess.PIPE
         )
 
+        # On Windows, use waitress (production WSGI server) instead of
+        # Flask's Werkzeug dev server. Werkzeug threaded mode deadlocks
+        # when SearXNG's concurrent engine requests (Google, Bing, Brave,
+        # DuckDuckGo all fire simultaneously via httpx) exhaust worker
+        # threads. Waitress manages its own thread pool and handles
+        # concurrent requests without deadlocking.
+        if sys.platform == "win32":
+            # searx.webapp calls init() at module level on import,
+            # so the app is ready after import completes.
+            cmd = [
+                sys.executable,
+                "-c",
+                (
+                    "from waitress import serve;"
+                    " from searx.webapp import app;"
+                    f" serve(app,"
+                    f" host='127.0.0.1', port={port},"
+                    f" threads=8, channel_timeout=120,"
+                    f" cleanup_interval=30)"
+                ),
+            ]
+        else:
+            cmd = [sys.executable, "-m", "searx.webapp"]
+
         _searxng_process = await asyncio.to_thread(
             lambda: subprocess.Popen(
-                [sys.executable, "-m", "searx.webapp"],
+                cmd,
                 env=env,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
