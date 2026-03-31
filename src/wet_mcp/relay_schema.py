@@ -43,7 +43,7 @@ RELAY_SCHEMA: dict[str, Any] = {
                     "type": "password",
                     "placeholder": "sk-...",
                     "helpUrl": "https://platform.openai.com/api-keys",
-                    "helpText": "Embedding only.",
+                    "helpText": "Embedding + LLM (lower priority than Gemini).",
                     "required": False,
                 },
                 {
