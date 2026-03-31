@@ -50,15 +50,16 @@ class TestEnsureConfig:
             monkeypatch.delenv(key, raising=False)
 
         saved_config = {"GEMINI_API_KEY": "from-file", "OPENAI_API_KEY": ""}
-        with patch(
-            "wet_mcp.relay_setup.load_config_from_file",
-            return_value=saved_config,
+        with (
+            patch(
+                "wet_mcp.relay_setup.load_config_from_file",
+                return_value=saved_config,
+            ),
+            patch("wet_mcp.relay_setup.apply_config") as mock_apply,
         ):
             result = await ensure_config()
             assert result == saved_config
-            # Applied env var
-            assert os.environ.get("GEMINI_API_KEY") == "from-file"
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+            mock_apply.assert_called_once_with(saved_config)
 
     async def test_relay_setup_timeout(self, monkeypatch):
         """When relay times out, returns None (local mode)."""
@@ -188,6 +189,7 @@ class TestEnsureConfig:
             patch("mcp_relay_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
+            patch("wet_mcp.relay_setup.apply_config") as mock_apply,
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
@@ -202,8 +204,7 @@ class TestEnsureConfig:
 
             result = await ensure_config()
             assert result == mock_config
-            assert os.environ.get("GEMINI_API_KEY") == "from-relay"
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+            mock_apply.assert_called_once_with(mock_config)
 
     async def test_relay_setup_success_no_gdrive(self, monkeypatch):
         """Relay success without GDrive client ID."""
@@ -241,6 +242,7 @@ class TestEnsureConfig:
             patch("mcp_relay_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
+            patch("wet_mcp.relay_setup.apply_config") as mock_apply,
         ):
             mock_settings.google_drive_client_id = ""  # no GDrive
             mock_httpx.return_value.__aenter__ = AsyncMock(
@@ -250,7 +252,7 @@ class TestEnsureConfig:
 
             result = await ensure_config()
             assert result == mock_config
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+            mock_apply.assert_called_once_with(mock_config)
 
     async def test_relay_setup_gdrive_failure(self, monkeypatch):
         """GDrive OAuth fails but relay config still returned."""
@@ -288,6 +290,7 @@ class TestEnsureConfig:
             patch("mcp_relay_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
+            patch("wet_mcp.relay_setup.apply_config") as mock_apply,
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
@@ -302,7 +305,7 @@ class TestEnsureConfig:
 
             result = await ensure_config()
             assert result == mock_config
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+            mock_apply.assert_called_once_with(mock_config)
 
 
 class TestLoadConfigFromFile:
@@ -799,9 +802,12 @@ class TestOpenAICompletion:
             assert call_kwargs["max_tokens"] == 500
             assert call_kwargs["response_format"] == {"type": "json_object"}
 
-    async def test_custom_api_base(self):
+    async def test_custom_api_base(self, monkeypatch):
         """Custom api_base overrides default."""
         from wet_mcp.llm import _openai_completion
+
+        # Clear env vars to ensure predictable api_key
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(return_value=MagicMock())
