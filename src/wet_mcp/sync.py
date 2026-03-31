@@ -84,6 +84,7 @@ async def _refresh_token(token: dict) -> dict | None:
     """
     refresh_token = token.get("refresh_token")
     client_id = token.get("client_id", settings.google_drive_client_id)
+    client_secret = settings.google_drive_client_secret
 
     if not refresh_token or not client_id:
         logger.warning("Cannot refresh token: missing refresh_token or client_id")
@@ -95,6 +96,7 @@ async def _refresh_token(token: dict) -> dict | None:
                 _TOKEN_URL,
                 data={
                     "client_id": client_id,
+                    "client_secret": client_secret,
                     "grant_type": "refresh_token",
                     "refresh_token": refresh_token,
                 },
@@ -526,8 +528,9 @@ async def setup_google_auth(
     import sys
 
     client_id = settings.google_drive_client_id
-    if not client_id:
-        logger.error("GOOGLE_DRIVE_CLIENT_ID not configured")
+    client_secret = settings.google_drive_client_secret
+    if not client_id or not client_secret:
+        logger.error("GOOGLE_DRIVE_CLIENT_ID or CLIENT_SECRET not configured")
         return False
 
     # 1. Request device code
@@ -597,6 +600,7 @@ async def setup_google_auth(
                     _TOKEN_URL,
                     data={
                         "client_id": client_id,
+                        "client_secret": client_secret,
                         "device_code": device_code,
                         "grant_type": _DEVICE_CODE_GRANT,
                     },
