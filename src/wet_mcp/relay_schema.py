@@ -45,15 +45,6 @@ RELAY_SCHEMA: dict[str, Any] = {
             "helpText": "Embedding + Reranking.",
             "required": False,
         },
-        {
-            "key": "GOOGLE_DRIVE_CLIENT_ID",
-            "label": "Google Drive OAuth Client ID",
-            "type": "text",
-            "placeholder": "123456789.apps.googleusercontent.com",
-            "helpUrl": "https://console.cloud.google.com/apis/credentials",
-            "helpText": "For syncing docs database across machines. Create OAuth 2.0 Client ID (type: TV/Limited Input).",
-            "required": False,
-        },
     ],
     "capabilityInfo": [
         {
