@@ -754,6 +754,7 @@ async def test_lifespan_startup_no_github_token():
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
         patch.dict("os.environ", {}, clear=True),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
     ):
         async with server._lifespan(mock_fastmcp):
             pass
@@ -820,6 +821,7 @@ async def test_lifespan_shutdown_sync_enabled():
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch("wet_mcp.config.settings") as ms,
         patch("wet_mcp.sync.start_auto_sync"),
         patch("wet_mcp.sync.stop_auto_sync") as mock_stop,
@@ -851,7 +853,10 @@ async def test_lifespan_shutdown_crawler_error():
             side_effect=Exception("browser crash"),
         ),
         patch("wet_mcp.server.stop_searxng"),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
+        patch("wet_mcp.config.settings") as ms,
     ):
+        ms.sync_enabled = False
         async with server._lifespan(mock_fastmcp):
             pass
 

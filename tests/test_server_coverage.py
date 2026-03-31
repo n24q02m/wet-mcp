@@ -76,6 +76,7 @@ async def test_lifespan_startup_no_github_token():
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server._init_embedding_backend", new_callable=AsyncMock),
         patch("wet_mcp.server._init_reranker_backend", new_callable=AsyncMock),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch("wet_mcp.config.settings") as cfg,
     ):
         cfg.setup_providers.return_value = "sdk"
