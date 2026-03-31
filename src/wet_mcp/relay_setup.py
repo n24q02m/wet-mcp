@@ -24,8 +24,8 @@ CLOUD_KEYS = [
     "COHERE_API_KEY",
 ]
 
-# Shorter timeout for optional-credential servers (user can skip)
-RELAY_TIMEOUT_S = 120.0
+# 5 minutes: user needs time to copy URL, open browser, fill 4 keys
+RELAY_TIMEOUT_S = 300.0
 
 
 def load_config_from_file() -> dict[str, str] | None:
@@ -113,15 +113,15 @@ async def ensure_config() -> dict[str, str] | None:
 
         apply_config(config)
 
-        # Trigger GDrive OAuth Device Code if client ID was provided
-        gdrive_client_id = config.get("GOOGLE_DRIVE_CLIENT_ID")
-        if gdrive_client_id:
-            logger.info("Google Drive client ID provided, starting OAuth setup...")
+        # Trigger GDrive OAuth Device Code using default client ID from settings
+        from wet_mcp.config import settings as _settings
+
+        if _settings.google_drive_client_id:
+            logger.info("Starting Google Drive OAuth setup...")
             try:
                 from wet_mcp.sync import setup_google_auth
 
                 await setup_google_auth(
-                    client_id=gdrive_client_id,
                     relay_url=relay_url,
                     session_id=session.session_id,
                 )
