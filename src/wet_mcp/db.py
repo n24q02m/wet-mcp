@@ -153,6 +153,15 @@ class DocsDB:
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
 
+        # Performance optimizations
+        self._conn.execute("PRAGMA mmap_size = 268435456")  # 256MB mmap
+        self._conn.execute(
+            "PRAGMA temp_store = MEMORY"
+        )  # Store temp tables/indices in memory
+        self._conn.execute(
+            "PRAGMA cache_size = -64000"
+        )  # 64MB cache (negative means KB)
+
         # Try loading sqlite-vec extension
         if embedding_dims > 0:
             try:
