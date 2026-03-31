@@ -112,6 +112,23 @@ async def ensure_config() -> dict[str, str] | None:
             pass
 
         apply_config(config)
+
+        # Trigger GDrive OAuth Device Code if client ID was provided
+        gdrive_client_id = config.get("GOOGLE_DRIVE_CLIENT_ID")
+        if gdrive_client_id:
+            logger.info("Google Drive client ID provided, starting OAuth setup...")
+            try:
+                from wet_mcp.sync import setup_google_auth
+
+                await setup_google_auth(
+                    client_id=gdrive_client_id,
+                    relay_url=relay_url,
+                    session_id=session.session_id,
+                )
+            except Exception as e:
+                logger.warning(f"GDrive OAuth setup failed: {e}")
+                # Non-fatal -- user can set up later via config tool
+
         return config
 
     except RuntimeError as e:
