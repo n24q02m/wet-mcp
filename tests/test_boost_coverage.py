@@ -187,7 +187,7 @@ class TestEnsureConfig:
             ),
             patch("mcp_relay_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
-            patch("wet_mcp.relay_setup.settings") as mock_settings,
+            patch("wet_mcp.config.settings") as mock_settings,
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
@@ -240,7 +240,7 @@ class TestEnsureConfig:
             ),
             patch("mcp_relay_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
-            patch("wet_mcp.relay_setup.settings") as mock_settings,
+            patch("wet_mcp.config.settings") as mock_settings,
         ):
             mock_settings.google_drive_client_id = ""  # no GDrive
             mock_httpx.return_value.__aenter__ = AsyncMock(
@@ -287,7 +287,7 @@ class TestEnsureConfig:
             ),
             patch("mcp_relay_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
-            patch("wet_mcp.relay_setup.settings") as mock_settings,
+            patch("wet_mcp.config.settings") as mock_settings,
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
@@ -2193,17 +2193,18 @@ class TestSearxngRunnerExtras:
         """Unix kwargs include preexec_fn."""
         from wet_mcp.searxng_runner import _get_process_kwargs
 
-        with patch("sys.platform", "linux"):
+        with patch("wet_mcp.searxng_runner.sys") as mock_sys:
+            mock_sys.platform = "linux"
             kwargs = _get_process_kwargs()
             assert "preexec_fn" in kwargs
 
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only test")
     def test_get_process_kwargs_windows(self):
         """Windows kwargs include creationflags."""
         from wet_mcp.searxng_runner import _get_process_kwargs
 
-        with patch("sys.platform", "win32"):
-            kwargs = _get_process_kwargs()
-            assert "creationflags" in kwargs
+        kwargs = _get_process_kwargs()
+        assert "creationflags" in kwargs
 
     def test_get_startup_lock_creates_once(self):
         """Startup lock is created once and reused."""
@@ -2354,7 +2355,10 @@ class TestSearxngRunnerExtras:
 
         with patch("shutil.which", return_value=None):
             cmd = _get_pip_command()
-            assert cmd[-1] == "pip"
+            # [sys.executable, "-m", "pip", "install", "--python", sys.executable]
+            # or [sys.executable, "-m", "pip", "install"]
+            assert "pip" in cmd
+            assert "-m" in cmd
 
     def test_force_kill_already_dead(self):
         """Force kill on already dead process is no-op."""
