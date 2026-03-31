@@ -950,6 +950,8 @@ class DocsDB:
                 chunks.append(obj)
 
         def _get_existing(table: str, items: list) -> set:
+            if table not in {"libraries", "versions", "doc_chunks"}:
+                raise ValueError(f"Invalid table name: {table}")
             if not items:
                 return set()
             ids = [obj["id"] for obj in items]
