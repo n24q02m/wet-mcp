@@ -176,8 +176,8 @@ async def _lifespan_startup() -> asyncio.Task | None:
     docs_path.parent.mkdir(parents=True, exist_ok=True)
     _docs_db = DocsDB(docs_path, embedding_dims=_embedding_dims)
 
-    # Start auto-sync if configured
-    if settings.sync_enabled:
+    # Start auto-sync when Google Drive client ID is configured
+    if settings.google_drive_client_id:
         from wet_mcp.sync import start_auto_sync
 
         start_auto_sync(_docs_db)
@@ -202,7 +202,7 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
     # Stop auto-sync
     from wet_mcp.config import settings
 
-    if settings.sync_enabled:
+    if settings.google_drive_client_id:
         from wet_mcp.sync import stop_auto_sync
 
         stop_auto_sync()
