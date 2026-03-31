@@ -3,7 +3,7 @@
 Resolution order (relay only when ALL local sources are empty):
 1. ENV VARS          -- User explicitly set (highest priority, skip everything)
 2. RELAY CONFIG      -- Saved from previous relay setup (~/.config/mcp/config.enc)
-3. RELAY SETUP       -- Interactive, ONLY when steps 1-2 are ALL empty (30s timeout)
+3. RELAY SETUP       -- Interactive, ONLY when steps 1-2 are ALL empty (120s timeout)
 4. LOCAL MODE        -- Fallback (ONNX embedding, SearXNG search)
 """
 
@@ -54,7 +54,7 @@ async def ensure_config() -> dict[str, str] | None:
     """Resolve config: env vars -> config file -> relay setup -> local fallback.
 
     Relay is ONLY triggered when steps 1-2 are ALL empty.
-    Uses 30s timeout since wet-mcp works locally without credentials.
+    Uses 120s timeout since wet-mcp works locally without credentials.
 
     Returns:
         Config dict with API keys, or None if skipped/failed (local mode).
@@ -81,7 +81,7 @@ async def ensure_config() -> dict[str, str] | None:
         session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)  # ty: ignore[invalid-argument-type]
 
         print(
-            f"\nConfigure cloud providers (optional, 30s timeout):"
+            f"\nConfigure cloud providers (optional, 120s timeout):"
             f"\n{session.relay_url}"
             f"\nSkip to use local mode (ONNX embedding + SearXNG).\n",
             file=sys.stderr,
