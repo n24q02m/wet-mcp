@@ -15,12 +15,14 @@ from wet_mcp.relay_setup import (
 class TestRelaySchema:
     """Tests for relay schema definition."""
 
-    def test_schema_has_two_modes(self):
-        assert len(RELAY_SCHEMA["modes"]) == 2
+    def test_schema_has_flat_fields(self):
+        """Schema uses flat fields structure (not modes)."""
+        assert "fields" in RELAY_SCHEMA
+        assert "modes" not in RELAY_SCHEMA
 
-    def test_schema_mode_ids(self):
-        mode_ids = [m["id"] for m in RELAY_SCHEMA["modes"]]
-        assert mode_ids == ["local", "cloud"]
+    def test_schema_has_four_provider_fields(self):
+        fields = RELAY_SCHEMA["fields"]
+        assert len(fields) == 4
 
     def test_schema_server_name(self):
         assert RELAY_SCHEMA["server"] == "wet-mcp"
@@ -28,19 +30,22 @@ class TestRelaySchema:
     def test_schema_display_name(self):
         assert RELAY_SCHEMA["displayName"] == "Web Extended Toolkit"
 
-    def test_local_mode_has_no_fields(self):
-        local_mode = RELAY_SCHEMA["modes"][0]
-        assert local_mode["id"] == "local"
-        assert local_mode["fields"] == []
-
-    def test_cloud_mode_has_individual_provider_fields(self):
-        cloud_mode = RELAY_SCHEMA["modes"][1]
-        assert cloud_mode["id"] == "cloud"
-        field_keys = [f["key"] for f in cloud_mode["fields"]]
+    def test_schema_provider_keys(self):
+        field_keys = [f["key"] for f in RELAY_SCHEMA["fields"]]
         assert "JINA_AI_API_KEY" in field_keys
         assert "GEMINI_API_KEY" in field_keys
         assert "OPENAI_API_KEY" in field_keys
         assert "COHERE_API_KEY" in field_keys
+
+    def test_all_fields_optional(self):
+        for f in RELAY_SCHEMA["fields"]:
+            assert f.get("required") is False
+
+    def test_capability_info_present(self):
+        assert "capabilityInfo" in RELAY_SCHEMA
+        labels = [c["label"] for c in RELAY_SCHEMA["capabilityInfo"]]
+        assert "Embedding" in labels
+        assert "Reranking" in labels
 
 
 class TestLoadConfigFromFile:
