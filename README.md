@@ -1,5 +1,7 @@
 # WET - Web Extended Toolkit MCP Server
 
+[![SafeSkill 89/100](https://img.shields.io/badge/SafeSkill-89%2F100_Passes%20with%20Notes-yellow)](https://safeskill.dev/scan/n24q02m-wet-mcp)
+
 mcp-name: io.github.n24q02m/wet-mcp
 
 **Open-source MCP Server for web search, content extraction, library docs & multimodal analysis.**
