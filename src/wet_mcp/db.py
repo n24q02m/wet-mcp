@@ -153,7 +153,7 @@ class DocsDB:
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
 
-        # Performance optimizations (Bolt ⚡)
+        # Performance optimizations
         # mmap_size: Use memory-mapped I/O up to 256MB for faster reads
         # temp_store: Keep temporary tables/indices in memory
         # cache_size: Increase in-memory page cache to ~64MB
