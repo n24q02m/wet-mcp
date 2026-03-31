@@ -132,7 +132,7 @@ class Settings(BaseSettings):
     sync_enabled: bool = True
     sync_folder: str = "wet-mcp"  # Google Drive folder name
     sync_interval: int = 300  # seconds, 0 = manual only
-    google_drive_client_id: str = ""  # OAuth client ID (required for sync)
+    google_drive_client_id: str = "147668446467-olf2cf6e49rshqv9quvhq639110oc6hc.apps.googleusercontent.com"
 
     # Logging
     log_level: str = "INFO"
