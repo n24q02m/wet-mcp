@@ -96,7 +96,9 @@ async def ensure_config() -> dict[str, str] | None:
         write_config(SERVER_NAME, config)
         logger.info("Config saved successfully")
 
-        # Notify relay page that setup is complete
+        apply_config(config)
+
+        # Notify relay page: config saved (info, NOT complete — GDrive OAuth may follow)
         try:
             import httpx
 
@@ -104,30 +106,39 @@ async def ensure_config() -> dict[str, str] | None:
                 await http.post(
                     f"{relay_url}/api/sessions/{session.session_id}/messages",
                     json={
-                        "type": "complete",
-                        "text": "wet-mcp config saved. Setup complete!",
+                        "type": "info",
+                        "text": "API keys saved. Starting Google Drive sync setup...",
                     },
                 )
         except Exception:
             pass
 
-        apply_config(config)
-
         # Trigger GDrive OAuth Device Code using default client ID from settings
         from wet_mcp.config import settings as _settings
 
+        gdrive_ok = False
         if _settings.google_drive_client_id:
             logger.info("Starting Google Drive OAuth setup...")
             try:
                 from wet_mcp.sync import setup_google_auth
 
-                await setup_google_auth(
+                gdrive_ok = await setup_google_auth(
                     relay_url=relay_url,
                     session_id=session.session_id,
                 )
             except Exception as e:
                 logger.warning(f"GDrive OAuth setup failed: {e}")
-                # Non-fatal -- user can set up later via config tool
+
+        # NOW send complete message (after GDrive OAuth finishes or skips)
+        try:
+            async with httpx.AsyncClient() as http:
+                msg = "Setup complete!" if gdrive_ok else "API keys saved. Google Drive sync can be configured later via config tool."
+                await http.post(
+                    f"{relay_url}/api/sessions/{session.session_id}/messages",
+                    json={"type": "complete", "text": msg},
+                )
+        except Exception:
+            pass
 
         return config
 
