@@ -303,16 +303,11 @@ async def test_do_docs_search_new():
 
     with (
         patch(
-            "wet_mcp.sources.docs.discover_library", new_callable=AsyncMock
+            "wet_mcp.server._discover_docs_url", new_callable=AsyncMock
         ) as mock_discover,
         patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
     ):
-        mock_discover.return_value = {
-            "homepage": "http://docs",
-            "repository": "http://repo",
-            "registry": "npm",
-            "description": "desc",
-        }
+        mock_discover.return_value = ("http://docs", "http://repo", "npm", "desc")
 
         res = await server._do_docs_search("newlib", "query")
         data = json.loads(res)
@@ -438,11 +433,11 @@ async def test_do_docs_search_force_reindex():
 
     with (
         patch(
-            "wet_mcp.sources.docs.discover_library", new_callable=AsyncMock
+            "wet_mcp.server._discover_docs_url", new_callable=AsyncMock
         ) as mock_discover,
         patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
     ):
-        mock_discover.return_value = {"homepage": "http"}
+        mock_discover.return_value = ("http://docs", "", "", "")
         res = await server._do_docs_search("test", "test")
         assert "indexing_in_progress" in res
 
@@ -461,14 +456,16 @@ async def test_do_docs_search_no_docs_but_repo():
     server._docs_db.get_library.return_value = None
     with (
         patch(
-            "wet_mcp.sources.docs.discover_library", new_callable=AsyncMock
+            "wet_mcp.server._discover_docs_url", new_callable=AsyncMock
         ) as mock_discover,
         patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
     ):
-        mock_discover.return_value = {
-            "homepage": "",
-            "repository": "http://github.com/test",
-        }
+        mock_discover.return_value = (
+            "http://github.com/test",
+            "http://github.com/test",
+            "",
+            "",
+        )
         res = await server._do_docs_search("test", "test")
         assert "indexing_in_progress" in res
 
