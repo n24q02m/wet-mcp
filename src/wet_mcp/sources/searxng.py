@@ -1,93 +1,30 @@
-"""SearXNG search integration with retry logic and health verification."""
+"""SearXNG search integration — delegates to web-core.
 
-import asyncio
+Wraps web-core's ``search()`` function to return JSON strings (MCP tool
+format) and adds health-check + auto-restart logic before each search.
+
+Internal helpers (``_normalize_url``, ``_apply_domain_cap``, etc.) are
+re-exported from web-core for backward compatibility.
+"""
+
 import json
-import re
-from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 from loguru import logger
 
-from wet_mcp.config import settings
-
-# Default retry configuration
-_MAX_RETRIES = 3
-_BASE_DELAY = 1.0  # seconds
-_HEALTH_CHECK_TIMEOUT = 5.0
-_MAX_PER_DOMAIN = 3
-
-# Tracking parameters to strip during URL normalization
-_TRACKING_PARAMS = frozenset(
-    {
-        "utm_source",
-        "utm_medium",
-        "utm_campaign",
-        "utm_term",
-        "utm_content",
-        "fbclid",
-        "gclid",
-        "msclkid",
-        "yclid",
-        "ref",
-        "_ga",
-        "_gl",
-        "mc_cid",
-        "mc_eid",
-    }
+# Re-export URL helpers for backward compat
+from web_core.http.url import _TRACKING_PARAMS  # noqa: F401
+from web_core.http.url import is_valid_domain as _is_valid_domain  # noqa: F401
+from web_core.http.url import normalize_url as _normalize_url  # noqa: F401
+from web_core.search import SearchError
+from web_core.search import search as _wc_search
+from web_core.search.client import (  # noqa: F401
+    _apply_domain_cap,
+    _build_filtered_query,
 )
 
-
-def _normalize_url(url: str) -> str:
-    """Normalize a URL for deduplication.
-
-    Strips www. prefix, trailing slashes, and known tracking parameters.
-    """
-    if not url:
-        return ""
-
-    parsed = urlparse(url)
-
-    # Strip www. from netloc
-    netloc = parsed.netloc
-    if netloc.startswith("www."):
-        netloc = netloc[4:]
-
-    # Strip trailing slash from path
-    path = parsed.path.rstrip("/")
-
-    # Remove tracking params
-    if parsed.query:
-        params = parse_qs(parsed.query, keep_blank_values=True)
-        cleaned = {k: v for k, v in params.items() if k not in _TRACKING_PARAMS}
-        query = urlencode(cleaned, doseq=True)
-    else:
-        query = ""
-
-    # Reconstruct URL
-    result = (
-        f"{parsed.scheme}://{netloc}{path}"
-        if parsed.scheme and netloc
-        else f"{netloc}{path}"
-    )
-    if query:
-        result += f"?{query}"
-    return result
-
-
-def _apply_domain_cap(items: list[dict]) -> list[dict]:
-    """Limit results to _MAX_PER_DOMAIN per domain, preserving order."""
-    domain_counts: dict[str, int] = {}
-    result: list[dict] = []
-    for item in items:
-        parsed = urlparse(item.get("url", ""))
-        domain = parsed.netloc
-        if domain.startswith("www."):
-            domain = domain[4:]
-        count = domain_counts.get(domain, 0)
-        if count < _MAX_PER_DOMAIN:
-            result.append(item)
-            domain_counts[domain] = count + 1
-    return result
+# Default health check timeout
+_HEALTH_CHECK_TIMEOUT = 5.0
 
 
 async def _check_health(searxng_url: str) -> bool:
@@ -135,33 +72,6 @@ async def _ensure_searxng_healthy(searxng_url: str) -> str:
     return new_url
 
 
-_DOMAIN_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]*\.[a-zA-Z]{2,}$")
-
-
-def _is_valid_domain(domain: str) -> bool:
-    """Validate domain name to prevent search operator injection."""
-    return bool(_DOMAIN_RE.match(domain)) and ".." not in domain
-
-
-def _build_filtered_query(
-    query: str,
-    include_domains: list[str] | None = None,
-    exclude_domains: list[str] | None = None,
-) -> str:
-    """Build query string with domain include/exclude filters."""
-    parts = [query]
-    if include_domains:
-        safe = [d for d in include_domains[:5] if _is_valid_domain(d)]
-        if safe:
-            site_filter = " OR ".join(f"site:{d}" for d in safe)
-            parts = [f"({site_filter}) {query}"]
-    if exclude_domains:
-        for domain in exclude_domains[:10]:
-            if _is_valid_domain(domain):
-                parts.append(f"-site:{domain}")
-    return " ".join(parts)
-
-
 async def search(
     searxng_url: str,
     query: str,
@@ -172,11 +82,11 @@ async def search(
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
 ) -> str:
-    """Search via SearXNG API with retry logic and health verification.
+    """Search via SearXNG API — delegates to web-core, returns JSON string.
 
-    Retries up to _MAX_RETRIES times with exponential backoff on
-    transient failures (connection errors, 5xx responses, empty results
-    from known-good queries).
+    Adds health check + auto-restart before each search (MCP-specific).
+    web-core's search returns ``list[SearchResult]``; this wrapper converts
+    to a JSON string for MCP tool response format.
 
     Args:
         searxng_url: SearXNG instance URL
@@ -196,120 +106,53 @@ async def search(
     # Pre-search health check + auto-restart if needed
     active_url = await _ensure_searxng_healthy(searxng_url)
 
-    effective_query = _build_filtered_query(query, include_domains, exclude_domains)
+    try:
+        results = await _wc_search(
+            active_url,
+            query,
+            categories=categories,
+            max_results=max_results,
+            time_range=time_range,
+            language=language,
+            include_domains=include_domains,
+            exclude_domains=exclude_domains,
+        )
 
-    params = {
-        "q": effective_query,
-        "format": "json",
-        "categories": categories,
-    }
-    if time_range and time_range in ("day", "week", "month", "year"):
-        params["time_range"] = time_range
-    if language:
-        params["language"] = language
+        output = {
+            "results": [r.to_dict() for r in results],
+            "total": len(results),
+            "query": query,
+        }
 
-    last_error: str | None = None
+        logger.info(f"Found {len(results)} results for: {query}")
+        return json.dumps(output, ensure_ascii=False, indent=2)
 
-    async with httpx.AsyncClient(timeout=settings.searxng_timeout) as client:
-        for attempt in range(1, _MAX_RETRIES + 1):
+    except SearchError as e:
+        error_msg = str(e)
+        logger.error(f"SearXNG search failed: {error_msg}")
+
+        # On connection errors, try restart + one more attempt
+        if "Request error" in error_msg:
+            logger.info("Attempting SearXNG restart before final retry...")
+            active_url = await _ensure_searxng_healthy(active_url)
             try:
-                headers = {
-                    "X-Real-IP": "127.0.0.1",
-                    "X-Forwarded-For": "127.0.0.1",
-                }
-                response = await client.get(
-                    f"{active_url}/search",
-                    params=params,
-                    headers=headers,
+                results = await _wc_search(
+                    active_url,
+                    query,
+                    categories=categories,
+                    max_results=max_results,
+                    time_range=time_range,
+                    language=language,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
                 )
-                response.raise_for_status()
-                data = response.json()
-
-                results = data.get("results", [])[: max_results * 2]
-
-                # Format results
-                formatted = []
-                for r in results:
-                    formatted.append(
-                        {
-                            "url": r.get("url", ""),
-                            "title": r.get("title", ""),
-                            "snippet": r.get("content", ""),
-                            "source": r.get("engine", ""),
-                        }
-                    )
-
-                # Deduplicate by normalized URL: with multiple engines, the same
-                # page may appear several times.  Keep the entry with the longest
-                # snippet (most informative) and merge engine sources.
-                # Python 3.7+ preserves dictionary insertion order, eliminating the need
-                # for a separate 'deduped' list mapping to track the first-seen order.
-                seen: dict[str, dict] = {}
-                for item in formatted:
-                    norm_url = _normalize_url(item["url"])
-                    if norm_url in seen:
-                        existing = seen[norm_url]
-                        # Merge engine sources
-                        if item["source"] and item["source"] not in existing["source"]:
-                            existing["source"] += f", {item['source']}"
-                        # Keep longer snippet
-                        if len(item.get("snippet", "")) > len(
-                            existing.get("snippet", "")
-                        ):
-                            existing["snippet"] = item["snippet"]
-                            existing["title"] = item["title"] or existing["title"]
-                    else:
-                        seen[norm_url] = item
-
-                # Apply per-domain cap, then trim to requested limit
-                deduped = _apply_domain_cap(list(seen.values()))[:max_results]
-
                 output = {
-                    "results": deduped,
-                    "total": len(deduped),
+                    "results": [r.to_dict() for r in results],
+                    "total": len(results),
                     "query": query,
                 }
-
-                logger.info(f"Found {len(deduped)} results for: {query}")
                 return json.dumps(output, ensure_ascii=False, indent=2)
+            except SearchError:
+                pass
 
-            except httpx.HTTPStatusError as e:
-                status = e.response.status_code
-                last_error = f"HTTP error: {status}"
-                logger.warning(
-                    f"SearXNG HTTP {status} on attempt {attempt}/{_MAX_RETRIES}"
-                )
-
-                # Only retry on server errors (5xx), not client errors (4xx)
-                if status < 500:
-                    logger.error(f"SearXNG client error (non-retryable): {last_error}")
-                    return json.dumps({"error": last_error})
-
-            except httpx.RequestError as e:
-                last_error = f"Request error: {e}"
-                logger.warning(
-                    f"SearXNG request error on attempt {attempt}/{_MAX_RETRIES}: {e}"
-                )
-
-                # Connection refused / reset likely means SearXNG crashed
-                # Try to restart it before next retry
-                if attempt < _MAX_RETRIES:
-                    logger.info("Attempting SearXNG restart before retry...")
-                    active_url = await _ensure_searxng_healthy(active_url)
-
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(
-                    f"SearXNG unexpected error on attempt {attempt}/{_MAX_RETRIES}: {e}"
-                )
-
-            # Exponential backoff before retry (skip on last attempt)
-            if attempt < _MAX_RETRIES:
-                delay = _BASE_DELAY * (2 ** (attempt - 1))
-                logger.debug(f"Retrying in {delay:.1f}s...")
-                await asyncio.sleep(delay)
-
-    # All retries exhausted
-    error_msg = last_error or "All retry attempts failed"
-    logger.error(f"SearXNG search failed after {_MAX_RETRIES} attempts: {error_msg}")
-    return json.dumps({"error": error_msg})
+        return json.dumps({"error": error_msg})

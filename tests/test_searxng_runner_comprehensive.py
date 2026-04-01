@@ -7,9 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
-from wet_mcp.config import settings
-from wet_mcp.searxng_runner import (
+from web_core.search.runner import (
     _cleanup_process,
     _ensure_searxng_locked,
     _find_available_port,
@@ -29,6 +27,10 @@ from wet_mcp.searxng_runner import (
     _try_reuse_existing,
     _wait_for_service,
     _write_discovery,
+)
+
+from wet_mcp.config import settings
+from wet_mcp.searxng_runner import (
     ensure_searxng,
     stop_searxng,
 )
@@ -37,7 +39,7 @@ from wet_mcp.searxng_runner import (
 # Need to reset global state before each test
 @pytest.fixture(autouse=True)
 def reset_globals():
-    import wet_mcp.searxng_runner as module
+    import web_core.search.runner as module
 
     module._searxng_process = None
     module._searxng_port = None
@@ -107,7 +109,7 @@ def test_is_pid_alive_zombie():
 
 def test_read_discovery(tmp_path):
     with patch(
-        "wet_mcp.searxng_runner._DISCOVERY_FILE", tmp_path / "discovery.json"
+        "web_core.search.runner._DISCOVERY_FILE", tmp_path / "discovery.json"
     ) as mock_file:
         # File doesn't exist
         assert _read_discovery() is None
@@ -123,7 +125,7 @@ def test_read_discovery(tmp_path):
 
 def test_write_remove_discovery(tmp_path):
     file_path = tmp_path / "discovery.json"
-    with patch("wet_mcp.searxng_runner._DISCOVERY_FILE", file_path):
+    with patch("web_core.search.runner._DISCOVERY_FILE", file_path):
         _write_discovery(8080, 1234)
         assert file_path.exists()
         import json
@@ -162,10 +164,10 @@ async def test_quick_health_check():
 @pytest.mark.asyncio
 async def test_try_reuse_existing():
     with (
-        patch("wet_mcp.searxng_runner._read_discovery") as mock_read,
-        patch("wet_mcp.searxng_runner._is_pid_alive") as mock_alive,
-        patch("wet_mcp.searxng_runner._quick_health_check") as mock_health,
-        patch("wet_mcp.searxng_runner._remove_discovery") as mock_remove,
+        patch("web_core.search.runner._read_discovery") as mock_read,
+        patch("web_core.search.runner._is_pid_alive") as mock_alive,
+        patch("web_core.search.runner._quick_health_check") as mock_health,
+        patch("web_core.search.runner._remove_discovery") as mock_remove,
     ):
         # Case 1: No discovery
         mock_read.return_value = None
@@ -201,10 +203,10 @@ def test_find_available_port():
         port = _find_available_port(8080)
         assert 8080 <= port < 8080 + 50
 
-        # Bind fails
+        # Bind fails — web-core raises RuntimeError
         mock_sock_instance.bind.side_effect = OSError()
-        port = _find_available_port(8080, max_tries=5)
-        assert port == 8080  # Returns start_port on failure
+        with pytest.raises(RuntimeError, match="No available port"):
+            _find_available_port(8080, max_tries=5)
 
 
 @pytest.mark.asyncio
@@ -236,10 +238,10 @@ def test_is_searxng_installed():
 
 def test_install_searxng():
     with (
-        patch("wet_mcp.searxng_runner._get_pip_command", return_value=["pip"]),
+        patch("web_core.search.runner._get_pip_command", return_value=["pip"]),
         patch("subprocess.run") as mock_run,
-        patch("wet_mcp.searxng_runner.patch_searxng_version"),
-        patch("wet_mcp.searxng_runner.patch_searxng_windows"),
+        patch("wet_mcp.setup.patch_searxng_version"),
+        patch("wet_mcp.setup.patch_searxng_windows"),
     ):
         mock_run_result = MagicMock()
         mock_run_result.returncode = 0
@@ -258,7 +260,7 @@ def test_install_searxng():
 
 def test_get_settings_path(tmp_path):
     with (
-        patch("pathlib.Path.home", return_value=tmp_path),
+        patch("web_core.search.runner._CONFIG_DIR", tmp_path),
         patch("importlib.resources.files") as mock_files,
     ):
         mock_files.return_value.joinpath.return_value.read_text.return_value = (
@@ -272,6 +274,9 @@ def test_get_settings_path(tmp_path):
         assert "REPLACE_WITH_REAL_SECRET" not in content
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Unix process group APIs unavailable on Windows"
+)
 def test_force_kill_process():
     proc = MagicMock(spec=subprocess.Popen)
     proc.poll.return_value = None
@@ -293,6 +298,9 @@ def test_force_kill_process():
         mock_killpg.assert_any_call(1234, signal.SIGKILL)
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Unix lsof/fuser unavailable on Windows"
+)
 def test_kill_stale_port_process():
     with (
         patch("sys.platform", "linux"),
@@ -338,7 +346,7 @@ def test_kill_stale_port_process():
 
 
 def test_is_process_alive():
-    import wet_mcp.searxng_runner as module
+    import web_core.search.runner as module
 
     # Process is None
     assert module._is_process_alive() is False
@@ -357,24 +365,24 @@ def test_is_process_alive():
 @pytest.mark.asyncio
 async def test_start_searxng_subprocess():
     with (
-        patch("wet_mcp.searxng_runner._find_available_port", return_value=8080),
-        patch("wet_mcp.searxng_runner._kill_stale_port_process"),
+        patch("web_core.search.runner._find_available_port", return_value=8080),
+        patch("web_core.search.runner._kill_stale_port_process"),
         patch(
-            "wet_mcp.searxng_runner._get_settings_path",
+            "web_core.search.runner._get_settings_path",
             return_value=Path("/tmp/settings.yml"),
         ),
         patch("subprocess.Popen") as mock_popen,
-        patch("wet_mcp.searxng_runner._wait_for_service", return_value=True),
-        patch("wet_mcp.searxng_runner._write_discovery"),
+        patch("web_core.search.runner._wait_for_service", return_value=True),
+        patch("web_core.search.runner._write_discovery"),
     ):
         mock_proc = MagicMock()
         mock_proc.pid = 1234
         mock_popen.return_value = mock_proc
 
-        url = await _start_searxng_subprocess()
+        url = await _start_searxng_subprocess(8080)
         assert url == "http://127.0.0.1:8080"
 
-        import wet_mcp.searxng_runner as module
+        import web_core.search.runner as module
 
         assert module._searxng_process is mock_proc
         assert module._searxng_port == 8080
@@ -384,65 +392,65 @@ async def test_start_searxng_subprocess():
 @pytest.mark.asyncio
 async def test_start_searxng_subprocess_fail():
     with (
-        patch("wet_mcp.searxng_runner._find_available_port", return_value=8080),
-        patch("wet_mcp.searxng_runner._kill_stale_port_process"),
+        patch("web_core.search.runner._find_available_port", return_value=8080),
+        patch("web_core.search.runner._kill_stale_port_process"),
         patch(
-            "wet_mcp.searxng_runner._get_settings_path",
+            "web_core.search.runner._get_settings_path",
             return_value=Path("/tmp/settings.yml"),
         ),
         patch("subprocess.Popen") as mock_popen,
-        patch("wet_mcp.searxng_runner._wait_for_service", return_value=False),
-        patch("wet_mcp.searxng_runner._force_kill_process"),
+        patch("web_core.search.runner._wait_for_service", return_value=False),
+        patch("web_core.search.runner._force_kill_process"),
     ):
         mock_proc = MagicMock()
         mock_proc.poll.return_value = 1
         mock_popen.return_value = mock_proc
 
-        url = await _start_searxng_subprocess()
+        url = await _start_searxng_subprocess(8080)
         assert url is None
 
 
 @pytest.mark.asyncio
 async def test_start_searxng_subprocess_timeout_dead():
     with (
-        patch("wet_mcp.searxng_runner._find_available_port", return_value=8080),
-        patch("wet_mcp.searxng_runner._kill_stale_port_process"),
+        patch("web_core.search.runner._find_available_port", return_value=8080),
+        patch("web_core.search.runner._kill_stale_port_process"),
         patch(
-            "wet_mcp.searxng_runner._get_settings_path",
+            "web_core.search.runner._get_settings_path",
             return_value=Path("/tmp/settings.yml"),
         ),
         patch("subprocess.Popen") as mock_popen,
-        patch("wet_mcp.searxng_runner._wait_for_service", return_value=False),
-        patch("wet_mcp.searxng_runner._force_kill_process"),
+        patch("web_core.search.runner._wait_for_service", return_value=False),
+        patch("web_core.search.runner._force_kill_process"),
     ):
         mock_proc = MagicMock()
         mock_proc.poll.return_value = 1  # Dead
         mock_proc.stderr.read.return_value = b"stderr output"
         mock_popen.return_value = mock_proc
 
-        url = await _start_searxng_subprocess()
+        url = await _start_searxng_subprocess(8080)
         assert url is None
 
 
 @pytest.mark.asyncio
 async def test_start_searxng_subprocess_timeout_alive():
     with (
-        patch("wet_mcp.searxng_runner._find_available_port", return_value=8080),
-        patch("wet_mcp.searxng_runner._kill_stale_port_process"),
+        patch("web_core.search.runner._find_available_port", return_value=8080),
+        patch("web_core.search.runner._kill_stale_port_process"),
         patch(
-            "wet_mcp.searxng_runner._get_settings_path",
+            "web_core.search.runner._get_settings_path",
             return_value=Path("/tmp/settings.yml"),
         ),
         patch("subprocess.Popen") as mock_popen,
-        patch("wet_mcp.searxng_runner._wait_for_service", return_value=False),
-        patch("wet_mcp.searxng_runner._force_kill_process") as mock_force_kill,
+        patch("web_core.search.runner._wait_for_service", return_value=False),
+        patch("web_core.search.runner._force_kill_process") as mock_force_kill,
     ):
         mock_proc = MagicMock()
         mock_proc.poll.return_value = None  # Alive
         mock_proc.pid = 999
         mock_popen.return_value = mock_proc
 
-        url = await _start_searxng_subprocess()
+        url = await _start_searxng_subprocess(8080)
         assert url is None
         mock_force_kill.assert_called_with(mock_proc)
 
@@ -450,16 +458,16 @@ async def test_start_searxng_subprocess_timeout_alive():
 @pytest.mark.asyncio
 async def test_start_searxng_subprocess_exception():
     with patch(
-        "wet_mcp.searxng_runner._find_available_port",
+        "web_core.search.runner._find_available_port",
         side_effect=RuntimeError("Test error"),
     ):
-        import wet_mcp.searxng_runner as module
+        import web_core.search.runner as module
 
         mock_proc = MagicMock()
         module._searxng_process = mock_proc
 
-        with patch("wet_mcp.searxng_runner._force_kill_process") as mock_force_kill:
-            url = await _start_searxng_subprocess()
+        with patch("web_core.search.runner._force_kill_process") as mock_force_kill:
+            url = await _start_searxng_subprocess(8080)
             assert url is None
 
             # Since _start_searxng_subprocess kills existing processes BEFORE doing anything
@@ -471,26 +479,26 @@ async def test_start_searxng_subprocess_exception():
 @pytest.mark.asyncio
 async def test_start_searxng_subprocess_exception_after_start():
     with (
-        patch("wet_mcp.searxng_runner._find_available_port", return_value=8080),
-        patch("wet_mcp.searxng_runner._kill_stale_port_process"),
+        patch("web_core.search.runner._find_available_port", return_value=8080),
+        patch("web_core.search.runner._kill_stale_port_process"),
         patch(
-            "wet_mcp.searxng_runner._get_settings_path",
+            "web_core.search.runner._get_settings_path",
             return_value=Path("/tmp/settings.yml"),
         ),
         patch("subprocess.Popen") as mock_popen,
         patch(
-            "wet_mcp.searxng_runner._wait_for_service",
+            "web_core.search.runner._wait_for_service",
             side_effect=RuntimeError("Test error"),
         ),
-        patch("wet_mcp.searxng_runner._force_kill_process") as mock_force_kill,
+        patch("web_core.search.runner._force_kill_process") as mock_force_kill,
     ):
         mock_proc = MagicMock()
         mock_proc.pid = 1234
         mock_popen.return_value = mock_proc
 
-        import wet_mcp.searxng_runner as module
+        import web_core.search.runner as module
 
-        url = await _start_searxng_subprocess()
+        url = await _start_searxng_subprocess(8080)
         assert url is None
 
         # It should kill the newly created process because of the exception
@@ -507,20 +515,20 @@ async def test_ensure_searxng_disabled():
 
 @pytest.mark.asyncio
 async def test_ensure_searxng_locked_reuse():
-    import wet_mcp.searxng_runner as module
+    import web_core.search.runner as module
 
     module._searxng_process = MagicMock()
     module._searxng_process.poll.return_value = None
     module._searxng_port = 8080
 
-    with patch("wet_mcp.searxng_runner._quick_health_check", return_value=True):
-        url = await _ensure_searxng_locked()
+    with patch("web_core.search.runner._quick_health_check", return_value=True):
+        url = await _ensure_searxng_locked(auto_start=True, start_port=8080)
         assert url == "http://127.0.0.1:8080"
 
 
 @pytest.mark.asyncio
 async def test_ensure_searxng_locked_alive_but_unhealthy():
-    import wet_mcp.searxng_runner as module
+    import web_core.search.runner as module
 
     mock_proc = MagicMock()
     mock_proc.poll.return_value = None
@@ -528,16 +536,16 @@ async def test_ensure_searxng_locked_alive_but_unhealthy():
     module._searxng_port = 8080
 
     with (
-        patch("wet_mcp.searxng_runner._quick_health_check", return_value=False),
-        patch("wet_mcp.searxng_runner._force_kill_process") as mock_force_kill,
-        patch("wet_mcp.searxng_runner._try_reuse_existing", return_value=None),
-        patch("wet_mcp.searxng_runner._is_searxng_installed", return_value=True),
+        patch("web_core.search.runner._quick_health_check", return_value=False),
+        patch("web_core.search.runner._force_kill_process") as mock_force_kill,
+        patch("web_core.search.runner._try_reuse_existing", return_value=None),
+        patch("web_core.search.runner._is_searxng_installed", return_value=True),
         patch(
-            "wet_mcp.searxng_runner._start_searxng_subprocess",
+            "web_core.search.runner._start_searxng_subprocess",
             return_value="http://127.0.0.1:8085",
         ),
     ):
-        url = await _ensure_searxng_locked()
+        url = await _ensure_searxng_locked(auto_start=True, start_port=8080)
         assert url == "http://127.0.0.1:8085"
 
         # It should kill the unhealthy process
@@ -548,45 +556,45 @@ async def test_ensure_searxng_locked_alive_but_unhealthy():
 @pytest.mark.asyncio
 async def test_ensure_searxng_locked_reuse_existing():
     with patch(
-        "wet_mcp.searxng_runner._try_reuse_existing",
+        "web_core.search.runner._try_reuse_existing",
         return_value="http://127.0.0.1:8081",
     ):
-        url = await _ensure_searxng_locked()
+        url = await _ensure_searxng_locked(auto_start=True, start_port=8080)
         assert url == "http://127.0.0.1:8081"
 
 
 @pytest.mark.asyncio
 async def test_ensure_searxng_locked_start():
     with (
-        patch("wet_mcp.searxng_runner._try_reuse_existing", return_value=None),
-        patch("wet_mcp.searxng_runner._is_searxng_installed", return_value=True),
+        patch("web_core.search.runner._try_reuse_existing", return_value=None),
+        patch("web_core.search.runner._is_searxng_installed", return_value=True),
         patch(
-            "wet_mcp.searxng_runner._start_searxng_subprocess",
+            "web_core.search.runner._start_searxng_subprocess",
             return_value="http://127.0.0.1:8082",
         ),
     ):
-        url = await _ensure_searxng_locked()
+        url = await _ensure_searxng_locked(auto_start=True, start_port=8080)
         assert url == "http://127.0.0.1:8082"
 
 
 @pytest.mark.asyncio
 async def test_ensure_searxng_locked_max_restarts():
-    import wet_mcp.searxng_runner as module
+    import web_core.search.runner as module
 
     module._restart_count = 3
     module._last_restart_time = 0.0
 
     with (
-        patch("wet_mcp.searxng_runner._try_reuse_existing", return_value=None),
+        patch("web_core.search.runner._try_reuse_existing", return_value=None),
         patch("time.time", return_value=1.0),
     ):
-        url = await _ensure_searxng_locked()
-        assert url == settings.searxng_url
+        with pytest.raises(RuntimeError, match="restart limit reached"):
+            await _ensure_searxng_locked(auto_start=True, start_port=8080)
 
 
 @pytest.mark.asyncio
 async def test_ensure_searxng_locked_crash_cleanup():
-    import wet_mcp.searxng_runner as module
+    import web_core.search.runner as module
 
     module._searxng_process = MagicMock()
     module._searxng_process.poll.return_value = 1
@@ -594,26 +602,26 @@ async def test_ensure_searxng_locked_crash_cleanup():
     module._searxng_port = 8080
 
     with (
-        patch("wet_mcp.searxng_runner._try_reuse_existing", return_value=None),
-        patch("wet_mcp.searxng_runner._is_searxng_installed", return_value=True),
+        patch("web_core.search.runner._try_reuse_existing", return_value=None),
+        patch("web_core.search.runner._is_searxng_installed", return_value=True),
         patch(
-            "wet_mcp.searxng_runner._start_searxng_subprocess",
+            "web_core.search.runner._start_searxng_subprocess",
             return_value="http://127.0.0.1:8083",
         ),
     ):
-        url = await _ensure_searxng_locked()
+        url = await _ensure_searxng_locked(auto_start=True, start_port=8080)
         assert url == "http://127.0.0.1:8083"
 
 
 @pytest.mark.asyncio
 async def test_ensure_searxng_locked_install_fails():
     with (
-        patch("wet_mcp.searxng_runner._try_reuse_existing", return_value=None),
-        patch("wet_mcp.searxng_runner._is_searxng_installed", return_value=False),
-        patch("wet_mcp.searxng_runner._install_searxng", return_value=False),
+        patch("web_core.search.runner._try_reuse_existing", return_value=None),
+        patch("web_core.search.runner._is_searxng_installed", return_value=False),
+        patch("web_core.search.runner._install_searxng", return_value=False),
     ):
-        url = await _ensure_searxng_locked()
-        assert url == settings.searxng_url
+        with pytest.raises(RuntimeError, match="installation failed"):
+            await _ensure_searxng_locked(auto_start=True, start_port=8080)
 
 
 def test_get_startup_lock():
@@ -624,7 +632,7 @@ def test_get_startup_lock():
 
 
 def test_cleanup_process():
-    import wet_mcp.searxng_runner as module
+    import web_core.search.runner as module
 
     mock_proc = MagicMock()
     module._searxng_process = mock_proc
@@ -632,8 +640,8 @@ def test_cleanup_process():
     module._searxng_port = 8080
 
     with (
-        patch("wet_mcp.searxng_runner._force_kill_process") as mock_kill,
-        patch("wet_mcp.searxng_runner._remove_discovery") as mock_remove,
+        patch("web_core.search.runner._force_kill_process") as mock_kill,
+        patch("web_core.search.runner._remove_discovery") as mock_remove,
     ):
         stop_searxng()
 
@@ -646,15 +654,15 @@ def test_cleanup_process():
 
 
 def test_cleanup_process_not_owner():
-    import wet_mcp.searxng_runner as module
+    import web_core.search.runner as module
 
     mock_proc = MagicMock()
     module._searxng_process = mock_proc
     module._is_owner = False
 
     with (
-        patch("wet_mcp.searxng_runner._force_kill_process") as mock_kill,
-        patch("wet_mcp.searxng_runner._remove_discovery") as mock_remove,
+        patch("web_core.search.runner._force_kill_process") as mock_kill,
+        patch("web_core.search.runner._remove_discovery") as mock_remove,
     ):
         _cleanup_process()
 
@@ -663,7 +671,8 @@ def test_cleanup_process_not_owner():
 
 
 def test_get_process_kwargs():
-    with patch("sys.platform", "linux"):
+    mock_setsid = MagicMock()
+    with patch("sys.platform", "linux"), patch("os.setsid", mock_setsid, create=True):
         kwargs = _get_process_kwargs()
         assert "preexec_fn" in kwargs
 

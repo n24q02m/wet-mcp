@@ -1,63 +1,16 @@
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+"""Tests for SearXNG runner wrapper (delegates to web-core).
+
+Tests the wet-mcp wrapper layer that bridges settings to web-core's API.
+Internal SearXNG process management is tested in web-core's test suite.
+"""
+
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from wet_mcp.searxng_runner import _get_settings_path, ensure_searxng
+from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 
 
-def test_get_settings_path():
-    # Mock Path.home()
-    mock_home = MagicMock(spec=Path)
-
-    # Mock file operations
-    mock_config_dir = MagicMock(spec=Path)
-    mock_settings_file = MagicMock(spec=Path)
-
-    # Chain the mocks: Path.home() / ".wet-mcp" -> mock_config_dir
-    mock_home.__truediv__.return_value = mock_config_dir
-
-    # Chain the mocks: mock_config_dir / filename -> mock_settings_file
-    mock_config_dir.__truediv__.return_value = mock_settings_file
-
-    # Mock files("wet_mcp")
-    mock_files = MagicMock()
-    mock_bundled_file = MagicMock()
-    mock_files.joinpath.return_value = mock_bundled_file
-    mock_bundled_file.read_text.return_value = "server:\n  port: 41592\n"
-
-    with (
-        patch("wet_mcp.searxng_runner.Path") as mock_path_cls,
-        patch("wet_mcp.searxng_runner.os.getpid") as mock_getpid,
-        patch("wet_mcp.searxng_runner.files", return_value=mock_files),
-    ):
-        # Setup mock returns
-        mock_path_cls.home.return_value = mock_home
-        mock_getpid.return_value = 12345
-
-        # Call the function
-        port = 9090
-        result = _get_settings_path(port)
-
-        # Verify result
-        assert result == mock_settings_file
-
-        # Verify mkdir called
-        mock_config_dir.mkdir.assert_called_once_with(parents=True, exist_ok=True)
-
-        # Verify file path construction
-        mock_home.__truediv__.assert_called_with(".wet-mcp")
-        mock_config_dir.__truediv__.assert_called_with("searxng_settings_12345.yml")
-
-        # Verify read_text called
-        mock_bundled_file.read_text.assert_called_once()
-
-        # Verify write_text called with correct content
-        expected_content = "server:\n  port: 9090\n"
-        mock_settings_file.write_text.assert_called_once_with(expected_content)
-
-
-# Mock the settings object
 @pytest.fixture
 def mock_settings():
     with patch("wet_mcp.searxng_runner.settings") as mock:
@@ -67,212 +20,89 @@ def mock_settings():
         yield mock
 
 
-# Mock the lock
 @pytest.fixture
-def mock_lock():
-    lock = AsyncMock()
-    lock.__aenter__.return_value = None
-    lock.__aexit__.return_value = None
-    with patch("wet_mcp.searxng_runner._get_startup_lock", return_value=lock):
-        yield lock
-
-
-# Mock time
-@pytest.fixture
-def mock_time():
-    with patch("wet_mcp.searxng_runner.time") as mock:
-        mock.time.return_value = 1000.0
+def mock_wc_ensure():
+    """Mock web-core's ensure_searxng at the delegation boundary."""
+    with patch(
+        "wet_mcp.searxng_runner._wc_runner.ensure_searxng",
+        new_callable=AsyncMock,
+    ) as mock:
         yield mock
 
 
-# Mock asyncio.sleep
-@pytest.fixture
-def mock_sleep():
-    with patch("wet_mcp.searxng_runner.asyncio.sleep", new_callable=AsyncMock) as mock:
-        yield mock
-
-
-@pytest.mark.asyncio
-async def test_ensure_searxng_auto_disabled(mock_settings, mock_lock):
-    """Test ensure_searxng returns external URL when auto-start is disabled."""
+async def test_ensure_searxng_auto_disabled(mock_settings):
+    """When auto-start disabled, return external URL without calling web-core."""
     mock_settings.wet_auto_searxng = False
 
     url = await ensure_searxng()
 
     assert url == "http://external:8080"
-    mock_lock.__aenter__.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_ensure_searxng_already_running_healthy(mock_settings, mock_lock):
-    """Test ensure_searxng returns localhost URL when process is already running and healthy."""
+async def test_ensure_searxng_delegates_to_web_core(mock_settings, mock_wc_ensure):
+    """When auto-start enabled, delegate to web-core with correct params."""
+    mock_settings.wet_searxng_port = 9090
+    mock_wc_ensure.return_value = "http://127.0.0.1:9090"
+
+    url = await ensure_searxng()
+
+    assert url == "http://127.0.0.1:9090"
+    mock_wc_ensure.assert_called_once_with(start_port=9090)
+
+
+async def test_ensure_searxng_fallback_on_error(mock_settings, mock_wc_ensure):
+    """When web-core raises RuntimeError, fall back to external URL."""
+    mock_wc_ensure.side_effect = RuntimeError("SearXNG start failed")
+
+    url = await ensure_searxng()
+
+    assert url == "http://external:8080"
+
+
+async def test_ensure_searxng_passes_configured_port(mock_settings, mock_wc_ensure):
+    """Verify wet_searxng_port setting is forwarded as start_port."""
+    mock_settings.wet_searxng_port = 12345
+    mock_wc_ensure.return_value = "http://127.0.0.1:12345"
+
+    await ensure_searxng()
+
+    mock_wc_ensure.assert_called_once_with(start_port=12345)
+
+
+def test_stop_searxng_delegates():
+    """stop_searxng should call web-core's shutdown_searxng."""
+    with patch("wet_mcp.searxng_runner.shutdown_searxng") as mock_shutdown:
+        stop_searxng()
+        mock_shutdown.assert_called_once()
+
+
+def test_patched_installer_calls_patches():
+    """Verify monkey-patched installer applies wet-mcp patches after install."""
     with (
-        patch("wet_mcp.searxng_runner._is_process_alive", return_value=True),
-        patch("wet_mcp.searxng_runner._searxng_port", 8080),
-        patch("wet_mcp.searxng_runner._searxng_process", MagicMock()),
-        patch(
-            "wet_mcp.searxng_runner._quick_health_check", new_callable=AsyncMock
-        ) as mock_health,
+        patch("wet_mcp.searxng_runner._wc_original_install", return_value=True),
+        patch("wet_mcp.setup.patch_searxng_version") as mock_version,
+        patch("wet_mcp.setup.patch_searxng_windows") as mock_windows,
     ):
-        mock_health.return_value = True
+        from wet_mcp.searxng_runner import _patched_install_searxng
 
-        url = await ensure_searxng()
+        result = _patched_install_searxng()
 
-        assert url == "http://127.0.0.1:8080"
-        mock_health.assert_called_once_with("http://127.0.0.1:8080", retries=1)
+        assert result is True
+        mock_version.assert_called_once()
+        mock_windows.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_ensure_searxng_already_running_unhealthy(
-    mock_settings, mock_lock, mock_time
-):
-    """Test ensure_searxng kills unhealthy process and restarts."""
-    mock_process = MagicMock()
-    mock_process.pid = 12345
-
+def test_patched_installer_skips_patches_on_failure():
+    """If web-core install fails, patches are not applied."""
     with (
-        patch("wet_mcp.searxng_runner._is_process_alive", return_value=True),
-        patch("wet_mcp.searxng_runner._searxng_port", 8080),
-        patch("wet_mcp.searxng_runner._searxng_process", mock_process),
-        patch(
-            "wet_mcp.searxng_runner._quick_health_check", new_callable=AsyncMock
-        ) as mock_health,
-        patch("wet_mcp.searxng_runner._force_kill_process") as mock_kill,
-        patch(
-            "wet_mcp.searxng_runner._try_reuse_existing", new_callable=AsyncMock
-        ) as mock_reuse,
-        patch("wet_mcp.searxng_runner._is_searxng_installed", return_value=True),
-        patch(
-            "wet_mcp.searxng_runner._start_searxng_subprocess", new_callable=AsyncMock
-        ) as mock_start,
+        patch("wet_mcp.searxng_runner._wc_original_install", return_value=False),
+        patch("wet_mcp.setup.patch_searxng_version") as mock_version,
+        patch("wet_mcp.setup.patch_searxng_windows") as mock_windows,
     ):
-        mock_health.return_value = False
-        mock_reuse.return_value = None
-        mock_start.return_value = "http://127.0.0.1:9090"
+        from wet_mcp.searxng_runner import _patched_install_searxng
 
-        # We need to handle the global variable update flow.
-        # The function reads globals at start.
-        # Then it kills process and sets globals to None.
-        # Then it proceeds to start new process.
+        result = _patched_install_searxng()
 
-        url = await ensure_searxng()
-
-        assert url == "http://127.0.0.1:9090"
-        mock_kill.assert_called_once_with(mock_process)
-        mock_start.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_ensure_searxng_reuse_existing(mock_settings, mock_lock):
-    """Test ensure_searxng reuses existing shared instance."""
-    with (
-        patch("wet_mcp.searxng_runner._is_process_alive", return_value=False),
-        patch(
-            "wet_mcp.searxng_runner._try_reuse_existing", new_callable=AsyncMock
-        ) as mock_reuse,
-    ):
-        mock_reuse.return_value = "http://127.0.0.1:7777"
-
-        url = await ensure_searxng()
-
-        assert url == "http://127.0.0.1:7777"
-
-
-@pytest.mark.asyncio
-async def test_ensure_searxng_restart_limit(mock_settings, mock_lock, mock_time):
-    """Test ensure_searxng gives up after max restarts."""
-    # Simulate restart count >= limit (limit is 3)
-    # _MAX_RESTART_ATTEMPTS is 3
-
-    with (
-        patch("wet_mcp.searxng_runner._is_process_alive", return_value=False),
-        patch(
-            "wet_mcp.searxng_runner._try_reuse_existing", new_callable=AsyncMock
-        ) as mock_reuse,
-        patch("wet_mcp.searxng_runner._restart_count", 3),
-        patch("wet_mcp.searxng_runner._last_restart_time", 1000.0),
-    ):
-        mock_reuse.return_value = None
-
-        url = await ensure_searxng()
-
-        assert url == "http://external:8080"
-
-
-@pytest.mark.asyncio
-async def test_ensure_searxng_install_fail(mock_settings, mock_lock, mock_time):
-    """Test ensure_searxng falls back if installation fails."""
-    with (
-        patch("wet_mcp.searxng_runner._is_process_alive", return_value=False),
-        patch(
-            "wet_mcp.searxng_runner._try_reuse_existing", new_callable=AsyncMock
-        ) as mock_reuse,
-        patch("wet_mcp.searxng_runner._restart_count", 0),
-        patch("wet_mcp.searxng_runner._is_searxng_installed", return_value=False),
-        patch(
-            "wet_mcp.searxng_runner._install_searxng", return_value=False
-        ) as mock_install,
-    ):
-        mock_reuse.return_value = None
-
-        url = await ensure_searxng()
-
-        assert url == "http://external:8080"
-        mock_install.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_ensure_searxng_start_success(
-    mock_settings, mock_lock, mock_time, mock_sleep
-):
-    """Test ensure_searxng successfully starts new process."""
-    with (
-        patch("wet_mcp.searxng_runner._is_process_alive", return_value=False),
-        patch(
-            "wet_mcp.searxng_runner._try_reuse_existing", new_callable=AsyncMock
-        ) as mock_reuse,
-        patch("wet_mcp.searxng_runner._restart_count", 1),
-        patch("wet_mcp.searxng_runner._last_restart_time", 1000.0),
-        patch("wet_mcp.searxng_runner._is_searxng_installed", return_value=True),
-        patch(
-            "wet_mcp.searxng_runner._start_searxng_subprocess", new_callable=AsyncMock
-        ) as mock_start,
-    ):
-        mock_reuse.return_value = None
-        mock_start.return_value = "http://127.0.0.1:5555"
-
-        url = await ensure_searxng()
-
-        assert url == "http://127.0.0.1:5555"
-        # Should invoke cooldown sleep since restart_count > 0
-        mock_sleep.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_ensure_searxng_start_fail(mock_settings, mock_lock, mock_time):
-    """Test ensure_searxng falls back if start fails."""
-    with (
-        patch("wet_mcp.searxng_runner._is_process_alive", return_value=False),
-        patch(
-            "wet_mcp.searxng_runner._try_reuse_existing", new_callable=AsyncMock
-        ) as mock_reuse,
-        patch("wet_mcp.searxng_runner._restart_count", 0),
-        patch("wet_mcp.searxng_runner._is_searxng_installed", return_value=True),
-        patch(
-            "wet_mcp.searxng_runner._start_searxng_subprocess", new_callable=AsyncMock
-        ) as mock_start,
-    ):
-        mock_reuse.return_value = None
-        mock_start.return_value = None
-
-        url = await ensure_searxng()
-
-        assert url == "http://external:8080"
-
-
-@patch("wet_mcp.searxng_runner._cleanup_process")
-def test_stop_searxng(mock_cleanup):
-    from wet_mcp.searxng_runner import stop_searxng
-
-    stop_searxng()
-    mock_cleanup.assert_called_once()
+        assert result is False
+        mock_version.assert_not_called()
+        mock_windows.assert_not_called()
