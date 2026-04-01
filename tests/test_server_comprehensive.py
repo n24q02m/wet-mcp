@@ -276,7 +276,6 @@ async def test_fetch_and_chunk_docs():
 
 
 @pytest.mark.asyncio
-@_skip_win_iocp
 async def test_do_docs_search_cached():
     server._docs_db.get_library.return_value = {"id": 1, "discovery_version": 999}
     server._docs_db.get_best_version.return_value = {
@@ -306,14 +305,7 @@ async def test_do_docs_search_new():
         patch(
             "wet_mcp.sources.docs.discover_library", new_callable=AsyncMock
         ) as mock_discover,
-        patch(
-            "wet_mcp.server._fetch_and_chunk_docs", new_callable=AsyncMock
-        ) as mock_fetch,
-        patch(
-            "wet_mcp.server._embed_batch", new_callable=AsyncMock
-        ) as mock_embed_batch,
-        patch("wet_mcp.server._embed", new_callable=AsyncMock) as mock_embed,
-        patch("wet_mcp.server._rerank_results", new_callable=AsyncMock) as mock_rerank,
+        patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
     ):
         mock_discover.return_value = {
             "homepage": "http://docs",
@@ -321,10 +313,6 @@ async def test_do_docs_search_new():
             "registry": "npm",
             "description": "desc",
         }
-        mock_fetch.return_value = ([{"content": "chunk1"}], 1)
-        mock_embed_batch.return_value = [[0.1]]
-        mock_embed.return_value = [0.1]
-        mock_rerank.return_value = [{"content": "res"}]
 
         res = await server._do_docs_search("newlib", "query")
         data = json.loads(res)
@@ -431,7 +419,6 @@ async def test_fetch_and_chunk_docs_crawl_fallback_to_gh():
 
 
 @pytest.mark.asyncio
-@_skip_win_iocp
 async def test_do_docs_search_db_not_init():
     with patch("wet_mcp.server._docs_db", None):
         res = await server._do_docs_search("test", "test")
@@ -453,18 +440,14 @@ async def test_do_docs_search_force_reindex():
         patch(
             "wet_mcp.sources.docs.discover_library", new_callable=AsyncMock
         ) as mock_discover,
-        patch(
-            "wet_mcp.server._fetch_and_chunk_docs", new_callable=AsyncMock
-        ) as mock_fetch,
+        patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
     ):
         mock_discover.return_value = {"homepage": "http"}
-        mock_fetch.return_value = ([], 0)
         res = await server._do_docs_search("test", "test")
         assert "indexing_in_progress" in res
 
 
 @pytest.mark.asyncio
-@_skip_win_iocp
 async def test_do_docs_search_discovery_timeout():
     server._docs_db.get_library.return_value = None
     with patch("wet_mcp.server.asyncio.wait_for", side_effect=TimeoutError):
@@ -480,15 +463,12 @@ async def test_do_docs_search_no_docs_but_repo():
         patch(
             "wet_mcp.sources.docs.discover_library", new_callable=AsyncMock
         ) as mock_discover,
-        patch(
-            "wet_mcp.server._fetch_and_chunk_docs", new_callable=AsyncMock
-        ) as mock_fetch,
+        patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
     ):
         mock_discover.return_value = {
             "homepage": "",
             "repository": "http://github.com/test",
         }
-        mock_fetch.return_value = ([], 0)
         res = await server._do_docs_search("test", "test")
         assert "indexing_in_progress" in res
 
@@ -503,15 +483,11 @@ async def test_do_docs_search_fallback_searxng():
         ) as mock_discover,
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
         patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
-        patch(
-            "wet_mcp.server._fetch_and_chunk_docs", new_callable=AsyncMock
-        ) as mock_fetch,
+        patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
     ):
         mock_discover.return_value = None
         mock_ensure.return_value = "url"
         mock_search.return_value = json.dumps({"results": [{"url": "http://docs.alt"}]})
-        # Mock fetch to return some chunks on first call
-        mock_fetch.return_value = ([{"content": "chunk"}], 1)
 
         res = await server._do_docs_search("test", "test")
         assert "indexing_in_progress" in res
@@ -525,14 +501,9 @@ async def test_do_docs_search_fetch_timeout():
         patch(
             "wet_mcp.sources.docs.discover_library", new_callable=AsyncMock
         ) as mock_discover,
-        patch("wet_mcp.server._fetch_and_chunk_docs", side_effect=TimeoutError),
-        patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
-        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+        patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
     ):
         mock_discover.return_value = {"homepage": "http://docs"}
-        mock_ensure.return_value = "url"
-        # The first fetch times out. It then falls back to searxng for alternatives.
-        mock_search.return_value = json.dumps({"results": []})
 
         res = await server._do_docs_search("test", "test")
         assert "indexing_in_progress" in res
@@ -2027,9 +1998,8 @@ async def test_do_docs_search_fallback_exception():
             return_value=("http://docs", "", "", ""),
         ),
         patch(
-            "wet_mcp.server.ensure_searxng",
+            "wet_mcp.server._background_index_and_search",
             new_callable=AsyncMock,
-            side_effect=Exception("searxng down"),
         ),
     ):
         res = await server._do_docs_search("testlib", "query")
