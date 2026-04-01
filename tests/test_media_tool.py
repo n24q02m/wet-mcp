@@ -84,9 +84,10 @@ async def test_media_download_default_dir(mock_settings):
             action="download", media_urls=["http://example.com/img.jpg"]
         )
 
+        expected_dir = str(Path(mock_settings.download_dir).expanduser().resolve())
         mock_download_media.assert_called_once_with(
             media_urls=["http://example.com/img.jpg"],
-            output_dir=mock_settings.download_dir,
+            output_dir=expected_dir,
         )
         assert '["file1.jpg"]' in result
         assert "<untrusted_media_content>" in result
