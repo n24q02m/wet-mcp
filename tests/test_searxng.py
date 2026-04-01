@@ -1,4 +1,11 @@
-"""Tests for URL normalization and per-domain result cap in SearXNG search."""
+"""Tests for SearXNG search wrapper (delegates to web-core).
+
+Tests the wet-mcp wrapper layer:
+- URL normalization (re-exported from web-core)
+- Per-domain result cap (re-exported from web-core)
+- Query filtering (re-exported from web-core)
+- JSON conversion + health check wrapper
+"""
 
 import json
 import unittest.mock
@@ -12,7 +19,7 @@ from wet_mcp.sources.searxng import (
     search,
 )
 
-# --- _normalize_url tests ---
+# --- _normalize_url tests (web-core's normalize_url) ---
 
 
 class TestNormalizeUrl:
@@ -71,11 +78,6 @@ class TestNormalizeUrl:
         result = _normalize_url("https://example.com?ref=twitter")
         assert "ref" not in result
 
-    def test_remove_ga_gl(self):
-        result = _normalize_url("https://example.com?_ga=123&_gl=456")
-        assert "_ga" not in result
-        assert "_gl" not in result
-
     def test_remove_mc_params(self):
         result = _normalize_url("https://example.com?mc_cid=abc&mc_eid=def")
         assert "mc_cid" not in result
@@ -109,9 +111,18 @@ class TestNormalizeUrl:
         assert _normalize_url("") == ""
 
     def test_url_without_scheme(self):
-        # Should handle gracefully even if urlparse gives odd results
         result = _normalize_url("example.com/page")
         assert isinstance(result, str)
+
+    def test_remove_twclid(self):
+        """web-core also strips Twitter click IDs."""
+        result = _normalize_url("https://example.com?twclid=abc")
+        assert "twclid" not in result
+
+    def test_remove_igshid(self):
+        """web-core also strips Instagram share IDs."""
+        result = _normalize_url("https://example.com?igshid=abc")
+        assert "igshid" not in result
 
 
 # --- _apply_domain_cap tests ---
@@ -137,7 +148,6 @@ class TestApplyDomainCap:
             {"url": "https://b.com/2", "title": "B2"},
         ]
         result = _apply_domain_cap(items)
-        # A has 4, capped to 3; B has 2; C has 1 => total 6
         assert len(result) == 6
         a_count = sum(1 for r in result if "a.com" in r["url"])
         assert a_count == 3
@@ -173,7 +183,7 @@ class TestApplyDomainCap:
         assert [r["title"] for r in result] == ["A1", "B1", "A2"]
 
 
-# --- Integration: search() uses normalization + domain cap ---
+# --- Integration: search() wraps web-core ---
 
 
 @pytest.fixture(autouse=True)
@@ -187,122 +197,117 @@ def mock_health_check():
 
 
 @pytest.fixture
-def mock_httpx_client():
+def mock_wc_search():
+    """Mock web-core's search function at the delegation boundary."""
     with unittest.mock.patch(
-        "wet_mcp.sources.searxng.httpx.AsyncClient"
-    ) as mock_client:
-        yield mock_client
+        "wet_mcp.sources.searxng._wc_search",
+        new_callable=unittest.mock.AsyncMock,
+    ) as mock_search:
+        yield mock_search
 
 
-def _make_mock_response(results):
-    mock_response = unittest.mock.Mock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"results": results}
-    return mock_response
+def _make_search_results(count=1):
+    """Create mock SearchResult objects (from web-core)."""
+    from web_core.search.models import SearchResult
 
-
-def _make_mock_client(mock_httpx_client, mock_response):
-    mock_context = unittest.mock.AsyncMock()
-    mock_context.get.return_value = mock_response
-    mock_context.__aenter__.return_value = mock_context
-    mock_httpx_client.return_value = mock_context
-    return mock_context
-
-
-async def test_search_dedup_normalizes_urls(mock_httpx_client):
-    """URLs differing only by www/trailing slash/tracking params should be deduped."""
-    results = [
-        {
-            "url": "https://www.example.com/page/?utm_source=google",
-            "title": "Page Title",
-            "content": "Short snippet",
-            "engine": "google",
-        },
-        {
-            "url": "https://example.com/page",
-            "title": "Page Title",
-            "content": "Longer snippet with more detail here",
-            "engine": "bing",
-        },
+    return [
+        SearchResult(
+            url=f"https://example.com/page{i}",
+            title=f"Page {i}",
+            snippet=f"Content for page {i}",
+            source="google",
+        )
+        for i in range(count)
     ]
-    mock_response = _make_mock_response(results)
-    _make_mock_client(mock_httpx_client, mock_response)
+
+
+async def test_search_returns_json_string(mock_wc_search):
+    """search() should convert web-core SearchResults to JSON string."""
+    mock_wc_search.return_value = _make_search_results(2)
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="normalize_test",
+        query="test query",
         max_results=10,
     )
 
     data = json.loads(result)
-    assert data["total"] == 1
-    # Should keep longer snippet
-    assert "more detail" in data["results"][0]["snippet"]
-    # Sources merged
-    assert "google" in data["results"][0]["source"]
-    assert "bing" in data["results"][0]["source"]
+    assert data["total"] == 2
+    assert data["query"] == "test query"
+    assert len(data["results"]) == 2
+    assert data["results"][0]["url"] == "https://example.com/page0"
+    assert data["results"][0]["title"] == "Page 0"
+    assert data["results"][0]["snippet"] == "Content for page 0"
 
 
-async def test_search_domain_cap_applied(mock_httpx_client):
-    """More than 3 results from the same domain should be capped."""
-    results = [
-        {
-            "url": f"https://example.com/page{i}",
-            "title": f"Page {i}",
-            "content": f"Content {i}",
-            "engine": "google",
-        }
-        for i in range(6)
-    ]
-    mock_response = _make_mock_response(results)
-    _make_mock_client(mock_httpx_client, mock_response)
+async def test_search_passes_params_to_web_core(mock_wc_search):
+    """search() should pass all params through to web-core."""
+    mock_wc_search.return_value = _make_search_results(1)
+
+    await search(
+        searxng_url="http://localhost:8080",
+        query="python tutorial",
+        categories="images",
+        max_results=5,
+        time_range="week",
+        language="vi",
+        include_domains=["docs.python.org"],
+        exclude_domains=["pinterest.com"],
+    )
+
+    mock_wc_search.assert_called_once_with(
+        "http://localhost:8080",
+        "python tutorial",
+        categories="images",
+        max_results=5,
+        time_range="week",
+        language="vi",
+        include_domains=["docs.python.org"],
+        exclude_domains=["pinterest.com"],
+    )
+
+
+async def test_search_error_returns_json_error(mock_wc_search):
+    """SearchError should be caught and returned as JSON error string."""
+    from web_core.search import SearchError
+
+    mock_wc_search.side_effect = SearchError("test", "HTTP 500")
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="domain_cap_test",
-        max_results=10,
+        query="test",
     )
 
     data = json.loads(result)
-    assert data["total"] == 3
+    assert "error" in data
 
 
-async def test_search_domain_cap_preserves_diversity(mock_httpx_client):
-    """Domain cap should not affect results from different domains."""
-    results = [
-        {
-            "url": f"https://a.com/{i}",
-            "title": f"A{i}",
-            "content": f"Content A{i}",
-            "engine": "google",
-        }
-        for i in range(5)
-    ] + [
-        {
-            "url": f"https://b.com/{i}",
-            "title": f"B{i}",
-            "content": f"Content B{i}",
-            "engine": "bing",
-        }
-        for i in range(2)
-    ]
-    mock_response = _make_mock_response(results)
-    _make_mock_client(mock_httpx_client, mock_response)
+async def test_search_preserves_original_query(mock_wc_search):
+    """Output JSON should contain the original query."""
+    mock_wc_search.return_value = _make_search_results(1)
 
     result = await search(
         searxng_url="http://localhost:8080",
-        query="diversity_test",
-        max_results=10,
+        query="python tutorial",
+        include_domains=["docs.python.org"],
     )
 
     data = json.loads(result)
-    # a.com capped to 3, b.com keeps 2 = 5 total
-    assert data["total"] == 5
-    urls = [r["url"] for r in data["results"]]
-    a_count = sum(1 for u in urls if "a.com" in u)
-    b_count = sum(1 for u in urls if "b.com" in u)
-    assert a_count == 3
-    assert b_count == 2
+    assert data["query"] == "python tutorial"
+
+
+async def test_search_empty_results(mock_wc_search):
+    """Empty results from web-core should produce valid JSON."""
+    mock_wc_search.return_value = []
+
+    result = await search(
+        searxng_url="http://localhost:8080",
+        query="obscure query",
+    )
+
+    data = json.loads(result)
+    assert data["total"] == 0
+    assert data["results"] == []
 
 
 # --- _build_filtered_query tests ---
@@ -355,128 +360,3 @@ class TestBuildFilteredQuery:
             _build_filtered_query("test", include_domains=[], exclude_domains=[])
             == "test"
         )
-
-
-# --- search() with time_range and language ---
-
-
-async def test_search_with_time_range(mock_httpx_client):
-    """time_range param should be passed to SearXNG."""
-    results = [
-        {
-            "url": "https://example.com/recent",
-            "title": "Recent",
-            "content": "Recent content",
-            "engine": "google",
-        },
-    ]
-    mock_response = _make_mock_response(results)
-    mock_client = _make_mock_client(mock_httpx_client, mock_response)
-
-    await search(
-        searxng_url="http://localhost:8080",
-        query="recent news",
-        time_range="week",
-    )
-
-    # Verify the params passed to httpx include time_range
-    call_kwargs = mock_client.get.call_args
-    params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
-    assert params["time_range"] == "week"
-
-
-async def test_search_with_language(mock_httpx_client):
-    """language param should be passed to SearXNG."""
-    results = [
-        {
-            "url": "https://example.com/vi",
-            "title": "Vietnamese",
-            "content": "Noi dung",
-            "engine": "google",
-        },
-    ]
-    mock_response = _make_mock_response(results)
-    mock_client = _make_mock_client(mock_httpx_client, mock_response)
-
-    await search(
-        searxng_url="http://localhost:8080",
-        query="tin tuc",
-        language="vi",
-    )
-
-    call_kwargs = mock_client.get.call_args
-    params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
-    assert params["language"] == "vi"
-
-
-async def test_search_invalid_time_range_ignored(mock_httpx_client):
-    """Invalid time_range should not be passed to SearXNG."""
-    results = [
-        {
-            "url": "https://example.com/page",
-            "title": "Page",
-            "content": "Content",
-            "engine": "google",
-        },
-    ]
-    mock_response = _make_mock_response(results)
-    mock_client = _make_mock_client(mock_httpx_client, mock_response)
-
-    await search(
-        searxng_url="http://localhost:8080",
-        query="test",
-        time_range="invalid",
-    )
-
-    call_kwargs = mock_client.get.call_args
-    params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
-    assert "time_range" not in params
-
-
-async def test_search_with_domain_filters(mock_httpx_client):
-    """include/exclude domains should modify the query sent to SearXNG."""
-    results = [
-        {
-            "url": "https://docs.python.org/page",
-            "title": "Docs",
-            "content": "Python docs",
-            "engine": "google",
-        },
-    ]
-    mock_response = _make_mock_response(results)
-    mock_client = _make_mock_client(mock_httpx_client, mock_response)
-
-    await search(
-        searxng_url="http://localhost:8080",
-        query="python tutorial",
-        include_domains=["docs.python.org"],
-        exclude_domains=["pinterest.com"],
-    )
-
-    call_kwargs = mock_client.get.call_args
-    params = call_kwargs.kwargs.get("params") or call_kwargs[1].get("params")
-    assert "site:docs.python.org" in params["q"]
-    assert "-site:pinterest.com" in params["q"]
-
-
-async def test_search_preserves_original_query_in_output(mock_httpx_client):
-    """Output JSON should contain the original query, not the filtered one."""
-    results = [
-        {
-            "url": "https://example.com/page",
-            "title": "Page",
-            "content": "Content",
-            "engine": "google",
-        },
-    ]
-    mock_response = _make_mock_response(results)
-    _make_mock_client(mock_httpx_client, mock_response)
-
-    result = await search(
-        searxng_url="http://localhost:8080",
-        query="python tutorial",
-        include_domains=["docs.python.org"],
-    )
-
-    data = json.loads(result)
-    assert data["query"] == "python tutorial"

@@ -11,8 +11,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from web_core.http.client import _ssrf_event_hook
 
-from wet_mcp.security import _ssrf_event_hook
 from wet_mcp.sources.docs import (
     _apply_version_to_url,
     _clean_doc_content,

@@ -3,9 +3,9 @@ from unittest.mock import patch
 
 from wet_mcp.security import is_safe_local_path, is_safe_url
 
-# Tests mock ``wet_mcp.security._original_getaddrinfo`` because
-# ``is_safe_url`` calls the saved reference (not ``socket.getaddrinfo``
-# directly) to avoid being affected by its own DNS-pinning monkey-patch.
+# Tests mock ``web_core.http.client._original_getaddrinfo`` because
+# ``is_safe_url`` (now in web-core) calls the saved reference (not
+# ``socket.getaddrinfo`` directly) to avoid DNS-pinning monkey-patch.
 
 
 def test_ssrf_basic():
@@ -33,7 +33,7 @@ def test_ssrf_basic():
 
 def test_ssrf_dns_rebinding_simulation():
     # Simulate a domain resolving to 127.0.0.1
-    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
+    with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
         # Mock return value structure: list of (family, type, proto, canonname, sockaddr)
         # sockaddr is (address, port) for AF_INET
         mock_dns.return_value = [
@@ -45,7 +45,7 @@ def test_ssrf_dns_rebinding_simulation():
 
 def test_safe_urls():
     # Should allow normal domains (mocking DNS to public IP)
-    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
+    with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
         mock_dns.return_value = [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 80))
         ]
@@ -55,7 +55,9 @@ def test_safe_urls():
 
 def test_dns_failure_blocked():
     # DNS failure blocks the URL to prevent SSRF bypass via selective resolution
-    with patch("wet_mcp.security._original_getaddrinfo", side_effect=socket.gaierror):
+    with patch(
+        "web_core.http.client._original_getaddrinfo", side_effect=socket.gaierror
+    ):
         assert not is_safe_url("http://non-existent-domain.com")
 
 
@@ -64,7 +66,7 @@ def test_extended_ssrf_scenarios():
 
     # 1. IPv6 Unique Local Address (ULA) - fc00::/7
     # Mock getaddrinfo to return a ULA address
-    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
+    with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
         # Mock IPv6 return: (family, type, proto, canonname, sockaddr)
         # sockaddr for AF_INET6 is (address, port, flowinfo, scopeid)
         mock_dns.return_value = [
@@ -77,7 +79,7 @@ def test_extended_ssrf_scenarios():
 
     # 2. 0.0.0.0 (Reserved / Current Network)
     # Mock getaddrinfo to return 0.0.0.0
-    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
+    with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
         mock_dns.return_value = [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("0.0.0.0", 80))
         ]
@@ -88,7 +90,7 @@ def test_extended_ssrf_scenarios():
     # urlparse converts scheme to lowercase, so "HtTp" becomes "http".
     # We need to verify if is_safe_url handles this correctly.
     # We'll mock getaddrinfo to return a safe IP so only the scheme check matters.
-    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
+    with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
         mock_dns.return_value = [
             (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 80))
         ]
@@ -98,7 +100,7 @@ def test_extended_ssrf_scenarios():
     # 4. Link-local with scope ID
     # Mock getaddrinfo to return an IPv6 link-local address with scope ID
     # The code splits by '%' so it should handle it.
-    with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
+    with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
         mock_dns.return_value = [
             (
                 socket.AF_INET6,
@@ -140,7 +142,7 @@ def test_pinned_getaddrinfo_cache_hit_and_expiry():
             _dns_cache["expired-host.example"] = (cached_results, time.monotonic() - 60)
 
         # Should fall through to _original_getaddrinfo (cache expired + entry deleted)
-        with patch("wet_mcp.security._original_getaddrinfo") as mock_dns:
+        with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
             mock_dns.return_value = [
                 (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.2.3.4", 443))
             ]
@@ -192,7 +194,8 @@ def test_is_safe_url_malformed_urlparse_exception():
 def test_is_safe_url_general_exception():
     """Test is_safe_url returns False when _original_getaddrinfo raises unexpected exception."""
     with patch(
-        "wet_mcp.security._original_getaddrinfo", side_effect=RuntimeError("unexpected")
+        "web_core.http.client._original_getaddrinfo",
+        side_effect=RuntimeError("unexpected"),
     ):
         assert not is_safe_url("http://some-domain.com")
 
