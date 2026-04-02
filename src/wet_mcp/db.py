@@ -398,19 +398,6 @@ class DocsDB:
         ).fetchone()
         return dict(row) if row else None
 
-    def list_libraries(self) -> list[dict]:
-        """List all libraries with chunk counts."""
-        rows = self._conn.execute("""
-            SELECT l.*,
-                   COALESCE(SUM(v.chunk_count), 0) as total_chunks,
-                   COUNT(v.id) as version_count
-            FROM libraries l
-            LEFT JOIN versions v ON v.library_id = l.id AND v.status = 'indexed'
-            GROUP BY l.id
-            ORDER BY l.name
-        """).fetchall()
-        return [dict(r) for r in rows]
-
     def remove_library(self, name: str) -> bool:
         """Remove a library and all its chunks."""
         lib = self.get_library(name)

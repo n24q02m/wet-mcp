@@ -612,16 +612,7 @@ class TestCombineScoresRRF:
 # ---------------------------------------------------------------------------
 
 
-class TestListLibrariesAndStats:
-    def test_list_libraries(self, populated_db):
-        """list_libraries returns all libs with chunk counts."""
-        db, _, _ = populated_db
-        libs = db.list_libraries()
-        assert len(libs) >= 1
-        lib = libs[0]
-        assert "total_chunks" in lib
-        assert "version_count" in lib
-
+class TestStats:
     def test_stats(self, populated_db):
         """stats returns correct counts."""
         db, _, _ = populated_db

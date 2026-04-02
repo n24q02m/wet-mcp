@@ -142,21 +142,10 @@ class TestLibraryCRUD:
     def test_get_nonexistent_library(self, db):
         assert db.get_library("nonexistent") is None
 
-    def test_list_libraries_empty(self, db):
-        assert db.list_libraries() == []
-
-    def test_list_libraries_with_data(self, db_with_data):
-        db = db_with_data[0]
-        libs = db.list_libraries()
-        assert len(libs) == 1
-        assert libs[0]["name"] == "fastapi"
-        assert libs[0]["total_chunks"] == 4
-
     def test_remove_library(self, db_with_data):
         db = db_with_data[0]
         assert db.remove_library("fastapi") is True
         assert db.get_library("fastapi") is None
-        assert db.list_libraries() == []
 
     def test_remove_nonexistent(self, db):
         assert db.remove_library("ghost") is False
