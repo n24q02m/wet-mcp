@@ -1467,7 +1467,7 @@ async def _background_index_and_search(
                 if tasks:
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     for i, res in enumerate(results):
-                        if isinstance(res, (Exception, asyncio.TimeoutError)):
+                        if isinstance(res, BaseException):
                             continue
                         alt_chunks, alt_pages = res
                         if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
