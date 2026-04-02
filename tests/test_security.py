@@ -308,3 +308,35 @@ def test_safe_local_path_symlink_escape(tmp_path):
     link = allowed / "link.txt"
     link.symlink_to(secret)
     assert is_safe_local_path(str(link), allowed_dirs=[allowed]) is None
+
+
+def test_safe_local_path_stat_oserror(tmp_path):
+    """Test that is_safe_local_path returns None if stat() raises OSError."""
+    f = tmp_path / "error.txt"
+    f.write_text("hello")
+    with patch("pathlib.Path.stat", side_effect=OSError("Permission denied")):
+        assert is_safe_local_path(str(f)) is None
+
+
+def test_safe_local_path_accepts_path_object(tmp_path):
+    """Test that is_safe_local_path correctly handles Path objects as input."""
+    f = tmp_path / "test.txt"
+    f.write_text("hello")
+    # type: ignore (testing runtime support for Path even if hint says str)
+    assert is_safe_local_path(f) == f.resolve()
+
+
+def test_safe_local_path_resolve_value_error():
+    """Test that is_safe_local_path returns None if resolve() raises ValueError."""
+    with patch("pathlib.Path.resolve", side_effect=ValueError("Invalid path")):
+        assert is_safe_local_path("/invalid/path") is None
+
+
+def test_safe_local_path_size_stat_oserror(tmp_path):
+    """Test that is_safe_local_path returns None if stat() for size check raises OSError."""
+    f = tmp_path / "error_size.txt"
+    f.write_text("hello")
+    # Mock is_file to succeed so we reach the size check
+    with patch("pathlib.Path.is_file", return_value=True):
+        with patch("pathlib.Path.stat", side_effect=OSError("Permission denied")):
+            assert is_safe_local_path(str(f)) is None
