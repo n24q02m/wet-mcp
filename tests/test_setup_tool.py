@@ -178,6 +178,22 @@ class TestRunSetupSync:
         assert "status" in result
         assert result["status"] == "ok"
 
+    async def test_setup_sync_success_details(self):
+        """run_setup_sync() returns detailed success info and calls auth."""
+        with patch(
+            "wet_mcp.sync.setup_google_auth", new_callable=AsyncMock, return_value=True
+        ) as mock_auth:
+            from wet_mcp.setup_tool import run_setup_sync
+
+            result = await run_setup_sync("drive")
+
+        assert result == {
+            "status": "ok",
+            "provider": "google_drive",
+            "message": "Google Drive sync setup complete. Token saved locally.",
+        }
+        mock_auth.assert_called_once()
+
     async def test_setup_sync_auth_fails(self):
         """Returns error when auth fails."""
         with patch("wet_mcp.sync.setup_google_auth", return_value=False):
@@ -256,3 +272,181 @@ class TestSetupMcpTool:
 
             await config(action="setup_sync")
             mock_sync.assert_called_once_with("drive")
+
+
+class TestSetupToolCoverage:
+    """Extra tests to fill coverage gaps in setup_tool.py."""
+
+    def test_clear_model_cache(self, tmp_path):
+        """clear_model_cache() removes the correct directory."""
+        import os
+
+        from wet_mcp.setup_tool import clear_model_cache
+
+        # Mock cache path via env var
+        cache_root = tmp_path / "cache"
+        cache_root.mkdir()
+
+        with patch.dict(os.environ, {"QWEN3_EMBED_CACHE_PATH": str(cache_root)}):
+            model_name = "test/model"
+            safe_name = "test--model"
+            model_dir = cache_root / f"models--{safe_name}"
+            model_dir.mkdir()
+
+            assert model_dir.exists()
+            result = clear_model_cache(model_name)
+            assert result == str(model_dir)
+            assert not model_dir.exists()
+
+            # Call again when it doesn't exist
+            assert clear_model_cache(model_name) is None
+
+    def test_validate_cloud_models_no_embedding(self):
+        """_validate_cloud_models returns cloud_ready=False if no embedding models found."""
+        from wet_mcp.setup_tool import _validate_cloud_models
+
+        mock_settings = MagicMock()
+        mock_settings.resolve_embedding_model.return_value = None
+
+        with patch(
+            "wet_mcp.embedder.init_backend", side_effect=Exception("no backend")
+        ):
+            result = _validate_cloud_models(mock_settings)
+
+        assert result["cloud_ready"] is False
+
+    def test_validate_cloud_models_reranker_fail(self):
+        """_validate_cloud_models handles reranker initialization failure gracefully."""
+        from wet_mcp.setup_tool import _validate_cloud_models
+
+        mock_settings = MagicMock()
+        mock_settings.resolve_embedding_model.return_value = "emb"
+        mock_settings.resolve_rerank_model.return_value = "reranker"
+
+        mock_backend = MagicMock()
+        mock_backend.check_available.return_value = 768
+
+        with (
+            patch("wet_mcp.embedder.init_backend", return_value=mock_backend),
+            patch(
+                "wet_mcp.reranker.init_reranker", side_effect=Exception("rerank fail")
+            ),
+        ):
+            result = _validate_cloud_models(mock_settings)
+
+        assert result["cloud_ready"] is True
+        assert result["reranker"] is None
+
+    def test_download_local_embedding_empty_result(self):
+        """_download_local_embedding handles empty embedding result."""
+        from wet_mcp.setup_tool import _download_local_embedding
+
+        mock_settings = MagicMock()
+        mock_settings.resolve_local_embedding_model.return_value = "model"
+
+        mock_embed = MagicMock()
+        mock_embed.embed.return_value = []
+
+        with patch("qwen3_embed.TextEmbedding", return_value=mock_embed):
+            result = _download_local_embedding(mock_settings)
+
+        assert result["status"] == "warning"
+        assert "empty result" in result["message"]
+
+    def test_download_local_embedding_retry_fail(self):
+        """_download_local_embedding handles failure after cache clear."""
+        from wet_mcp.setup_tool import _download_local_embedding
+
+        mock_settings = MagicMock()
+        mock_settings.resolve_local_embedding_model.return_value = "model"
+
+        # First call raises NO_SUCHFILE, second call returns empty list
+        def side_effect(*args, **kwargs):
+            if side_effect.called:
+                m = MagicMock()
+                m.embed.return_value = []
+                return m
+            side_effect.called = True
+            raise RuntimeError("NO_SUCHFILE")
+
+        side_effect.called = False
+
+        with (
+            patch("qwen3_embed.TextEmbedding", side_effect=side_effect),
+            patch("wet_mcp.setup_tool.clear_model_cache"),
+        ):
+            result = _download_local_embedding(mock_settings)
+
+        assert result["status"] == "warning"
+        assert "failed after cache clear" in result["message"]
+
+    def test_download_local_reranker_empty_result(self):
+        """_download_local_reranker handles empty scores."""
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "model"
+
+        mock_reranker = MagicMock()
+        mock_reranker.rerank.return_value = []
+
+        with patch("qwen3_embed.TextCrossEncoder", return_value=mock_reranker):
+            result = _download_local_reranker(mock_settings)
+
+        assert result["status"] == "warning"
+        assert "empty result" in result["message"]
+
+    def test_download_local_reranker_retry_success(self):
+        """_download_local_reranker retries successfully after NO_SUCHFILE."""
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "model"
+
+        def side_effect(*args, **kwargs):
+            if side_effect.called:
+                m = MagicMock()
+                m.rerank.return_value = [0.9]
+                return m
+            side_effect.called = True
+            raise RuntimeError("NO_SUCHFILE")
+
+        side_effect.called = False
+
+        with (
+            patch("qwen3_embed.TextCrossEncoder", side_effect=side_effect),
+            patch("wet_mcp.setup_tool.clear_model_cache"),
+        ):
+            result = _download_local_reranker(mock_settings)
+
+        assert result["status"] == "ok"
+        assert result.get("retried") is True
+
+    def test_download_local_reranker_retry_fail(self):
+        """_download_local_reranker handles failure after cache clear."""
+        from wet_mcp.setup_tool import _download_local_reranker
+
+        mock_settings = MagicMock()
+        mock_settings.rerank_enabled = True
+        mock_settings.resolve_local_rerank_model.return_value = "model"
+
+        def side_effect(*args, **kwargs):
+            if side_effect.called:
+                m = MagicMock()
+                m.rerank.return_value = []
+                return m
+            side_effect.called = True
+            raise RuntimeError("NO_SUCHFILE")
+
+        side_effect.called = False
+
+        with (
+            patch("qwen3_embed.TextCrossEncoder", side_effect=side_effect),
+            patch("wet_mcp.setup_tool.clear_model_cache"),
+        ):
+            result = _download_local_reranker(mock_settings)
+
+        assert result["status"] == "warning"
+        assert "failed after cache clear" in result["message"]
