@@ -284,54 +284,64 @@ async def extract(
         run_config_kwargs["page_timeout"] = page_timeout
     run_config = CrawlerRunConfig(**run_config_kwargs)
 
-    async def process_url(url: str):
-        async with sem:
-            if not is_safe_url(url):
-                logger.warning(f"Skipping unsafe URL: {url}")
-                return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
-
-            # Route document URLs (PDF, DOCX, etc.) through markitdown
-            if _is_document_url(url):
-                logger.info(f"Document URL detected, using markitdown: {url}")
-                return await _extract_with_markitdown(url)
-
-            try:
-                result = await crawler.arun(  # ty: ignore[missing-argument]
-                    url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
-                    config=run_config,
-                )
-
-                if result.success:
-                    content = (
-                        result.markdown if format == "markdown" else result.cleaned_html
-                    )
-                    return {
-                        "url": url,
-                        "title": result.metadata.get("title", ""),
-                        "content": content,
-                        "links": {
-                            "internal": result.links.get("internal", [])[:20],
-                            "external": result.links.get("external", [])[:20],
-                        },
-                    }
-                else:
-                    return {
-                        "url": url,
-                        "error": result.error_message or "Failed to extract",
-                    }
-
-            except Exception as e:
-                logger.error(f"Error extracting {url}: {e}")
-                return {
-                    "url": url,
-                    "error": str(e),
-                }
-
-    tasks = [process_url(url) for url in urls]
+    tasks = [_process_url(url, crawler, run_config, sem, format) for url in urls]
     results = await asyncio.gather(*tasks)
 
     logger.info(f"Extracted {len(results)} pages")
     return json.dumps(results, ensure_ascii=False, indent=2)
+
+
+async def _process_url(
+    url: str,
+    crawler: AsyncWebCrawler,
+    run_config: CrawlerRunConfig,
+    sem: asyncio.Semaphore,
+    format: str = "markdown",
+    depth: int = 0,
+) -> dict:
+    """Process a single URL for extraction."""
+    async with sem:
+        if not is_safe_url(url):
+            logger.warning(f"Skipping unsafe URL: {url}")
+            return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+
+        # Route document URLs (PDF, DOCX, etc.) through markitdown
+        if _is_document_url(url):
+            logger.info(f"Document URL detected, using markitdown: {url}")
+            return await _extract_with_markitdown(url)
+
+        try:
+            result = await crawler.arun(  # ty: ignore[missing-argument]
+                url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+                config=run_config,
+            )
+
+            if result.success:
+                content = (
+                    result.markdown if format == "markdown" else result.cleaned_html
+                )
+                return {
+                    "url": url,
+                    "depth": depth,
+                    "title": result.metadata.get("title", ""),
+                    "content": content,
+                    "links": {
+                        "internal": result.links.get("internal", [])[:20],
+                        "external": result.links.get("external", [])[:20],
+                    },
+                }
+            else:
+                return {
+                    "url": url,
+                    "error": result.error_message or "Failed to extract",
+                }
+
+        except Exception as e:
+            logger.error(f"Error extracting {url}: {e}")
+            return {
+                "url": url,
+                "error": str(e),
+            }
 
 
 async def crawl(

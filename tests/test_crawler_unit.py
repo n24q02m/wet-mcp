@@ -1,11 +1,109 @@
 """Unit tests for crawl functionality with singleton browser pool."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from crawl4ai import CrawlerRunConfig
 
-from wet_mcp.sources.crawler import crawl
+from wet_mcp.sources.crawler import _process_url, crawl
+
+
+@pytest.mark.asyncio
+async def test_process_url_success(mock_crawler_instance):
+    """Test successful _process_url."""
+    mock_result = MagicMock()
+    mock_result.success = True
+    mock_result.markdown = "Content"
+    mock_result.cleaned_html = "<p>Content</p>"
+    mock_result.metadata = {"title": "Title"}
+    mock_result.links = {"internal": [], "external": []}
+
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+    run_config = CrawlerRunConfig()
+    sem = asyncio.Semaphore(1)
+
+    result = await _process_url(
+        "https://example.com",
+        mock_crawler_instance,
+        run_config,
+        sem,
+        format="markdown",
+        depth=1,
+    )
+
+    assert result["url"] == "https://example.com"
+    assert result["depth"] == 1
+    assert result["title"] == "Title"
+    assert result["content"] == "Content"
+
+
+@pytest.mark.asyncio
+async def test_process_url_unsafe(mock_crawler_instance):
+    """Test _process_url with unsafe URL."""
+    run_config = CrawlerRunConfig()
+    sem = asyncio.Semaphore(1)
+
+    with patch("wet_mcp.sources.crawler.is_safe_url", return_value=False):
+        result = await _process_url(
+            "http://127.0.0.1", mock_crawler_instance, run_config, sem
+        )
+
+    assert "Security Alert" in result["error"]
+    mock_crawler_instance.arun.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_url_document(mock_crawler_instance):
+    """Test _process_url with a document URL."""
+    run_config = CrawlerRunConfig()
+    sem = asyncio.Semaphore(1)
+    mock_doc_result = {"url": "https://example.com/test.pdf", "content": "PDF Content"}
+
+    with patch(
+        "wet_mcp.sources.crawler._extract_with_markitdown",
+        new_callable=AsyncMock,
+        return_value=mock_doc_result,
+    ):
+        result = await _process_url(
+            "https://example.com/test.pdf", mock_crawler_instance, run_config, sem
+        )
+
+    assert result["content"] == "PDF Content"
+    mock_crawler_instance.arun.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_url_failure_result(mock_crawler_instance):
+    """Test _process_url when crawler returns success=False."""
+    mock_result = MagicMock()
+    mock_result.success = False
+    mock_result.error_message = "404 Not Found"
+
+    mock_crawler_instance.arun = AsyncMock(return_value=mock_result)
+    run_config = CrawlerRunConfig()
+    sem = asyncio.Semaphore(1)
+
+    result = await _process_url(
+        "https://example.com", mock_crawler_instance, run_config, sem
+    )
+
+    assert result["error"] == "404 Not Found"
+
+
+@pytest.mark.asyncio
+async def test_process_url_exception(mock_crawler_instance):
+    """Test _process_url when crawler raises an exception."""
+    mock_crawler_instance.arun = AsyncMock(side_effect=Exception("Network error"))
+    run_config = CrawlerRunConfig()
+    sem = asyncio.Semaphore(1)
+
+    result = await _process_url(
+        "https://example.com", mock_crawler_instance, run_config, sem
+    )
+
+    assert result["error"] == "Network error"
 
 
 @pytest.mark.asyncio
