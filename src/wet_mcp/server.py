@@ -1072,6 +1072,7 @@ async def config(
                 },
                 "sync": {
                     "enabled": settings.sync_enabled,
+                    "provider": "google_drive",
                     "folder": settings.sync_folder,
                     "interval": settings.sync_interval,
                     "google_drive_client_id": bool(settings.google_drive_client_id),
@@ -1145,15 +1146,58 @@ async def config(
                 )
             return json.dumps({"error": f"Library '{key}' not found in index"})
 
-        case "warmup":
-            from wet_mcp.setup_tool import run_warmup
+        case _:
+            import difflib
 
+            valid_actions = ["cache_clear", "docs_reindex", "set", "status"]
+            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
+            return json.dumps(
+                {
+                    "error": f"Unknown action '{action}'.{suggestion}",
+                    "valid_actions": valid_actions,
+                }
+            )
+
+
+# ---------------------------------------------------------------------------
+# Setup (warmup + setup-sync as MCP tool)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(
+    description=(
+        "Server setup and warmup. Actions: "
+        "warmup|setup_sync. "
+        "warmup: Pre-download models and install dependencies. "
+        "setup_sync: Configure Google Drive sync (OAuth Device Code)."
+    ),
+    annotations=ToolAnnotations(
+        title="Setup",
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    ),
+)
+async def setup(
+    action: str,
+    remote_type: str | None = None,
+) -> str:
+    """Server setup and warmup operations.
+
+    Actions:
+    - warmup: Pre-download models and run first-time setup
+    - setup_sync: Configure cloud sync (remote_type defaults to 'drive')
+    """
+    from wet_mcp.setup_tool import run_setup_sync, run_warmup
+
+    match action:
+        case "warmup":
             result = await run_warmup()
             return json.dumps(result, indent=2, default=str)
 
         case "setup_sync":
-            from wet_mcp.setup_tool import run_setup_sync
-
             result = await run_setup_sync(remote_type or "drive")
             return json.dumps(result, indent=2, default=str)
 
@@ -1161,11 +1205,7 @@ async def config(
             import difflib
 
             valid_actions = [
-                "cache_clear",
-                "docs_reindex",
-                "set",
                 "setup_sync",
-                "status",
                 "warmup",
             ]
             closest = difflib.get_close_matches(action, valid_actions, n=1)

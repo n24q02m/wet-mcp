@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+pytest_plugins = ["conftest_e2e"]
+
 
 @pytest.fixture
 def sample_url():
