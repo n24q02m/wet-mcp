@@ -866,7 +866,7 @@ class DocsDB:
     # Export / Import (JSONL for sync)
     # -----------------------------------------------------------------------
 
-    def export_jsonl(self) -> str:
+    def export_jsonl(self, output_path: str | None = None) -> str | None:
         """Export all docs data as JSONL for sync."""
         lines = []
 
@@ -911,7 +911,11 @@ class DocsDB:
         ).fetchall():
             lines.append(row[0])
 
-        return "\n".join(lines)
+        data = "\n".join(lines)
+        if output_path:
+            Path(output_path).write_text(data, encoding="utf-8")
+            return None
+        return data
 
     def import_jsonl(self, data: str, mode: str = "merge") -> dict:
         """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""

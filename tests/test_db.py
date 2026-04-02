@@ -681,6 +681,27 @@ class TestSqliteVecLoading:
         finally:
             db.close()
 
+
+class TestExportJsonlFile:
+    """Cover export_jsonl with output_path."""
+
+    def test_export_jsonl_to_file(self, db, tmp_path):
+        """Export data to a file and verify content."""
+        lib_id = db.upsert_library(name="exportlib")
+        ver_id = db.upsert_version(lib_id)
+        db.add_chunks(ver_id, lib_id, [{"content": "export test content"}])
+
+        out_file = tmp_path / "export.jsonl"
+        result = db.export_jsonl(output_path=str(out_file))
+
+        assert result is None
+        assert out_file.exists()
+        content = out_file.read_text(encoding="utf-8")
+        assert "export test content" in content
+        assert '"_type":"library"' in content
+        assert '"_type":"version"' in content
+        assert '"_type":"chunk"' in content
+
     def test_vec_disabled_when_dims_zero(self, tmp_path):
         """When embedding_dims=0, vec should not be enabled."""
         db = DocsDB(tmp_path / "no_vec.db", embedding_dims=0)
