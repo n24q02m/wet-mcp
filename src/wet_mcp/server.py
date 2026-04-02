@@ -1446,6 +1446,8 @@ async def _background_index_and_search(
                 import json
 
                 fallback_data = json.loads(fallback_result)
+                tasks = []
+                alt_urls = []
                 for fr in fallback_data.get("results", []):
                     alt_url = fr.get("url", "")
                     if not alt_url or not alt_url.startswith("http"):
@@ -1454,18 +1456,26 @@ async def _background_index_and_search(
                     orig_parsed = urlparse(docs_url)
                     if alt_parsed.netloc == orig_parsed.netloc:
                         continue
-                    try:
-                        alt_chunks, alt_pages = await asyncio.wait_for(
+                    alt_urls.append(alt_url)
+                    tasks.append(
+                        asyncio.wait_for(
                             _fetch_and_chunk_docs(alt_url, "", query),
                             timeout=_FALLBACK_TIMEOUT,
                         )
-                    except TimeoutError:
-                        continue
-                    if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
-                        docs_url = alt_url
-                        all_chunks = alt_chunks
-                        page_count = alt_pages
-                        break
+                    )
+
+                if tasks:
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for i, res in enumerate(results):
+                        if isinstance(res, (Exception, asyncio.TimeoutError)):
+                            continue
+                        alt_chunks, alt_pages = res
+                        if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
+                            docs_url = alt_urls[i]
+                            all_chunks = alt_chunks
+                            page_count = alt_pages
+                            # Select first better result
+                            break
             except Exception as e:
                 logger.debug(f"SearXNG fallback failed: {e}")
 
