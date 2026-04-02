@@ -145,13 +145,9 @@ def _install_searxng() -> bool:
     Returns:
         True if installation succeeded or already installed.
     """
-    try:
-        import searx  # noqa: F401
-
+    if _find_searx_package_dir():
         logger.debug("SearXNG already installed")
         return True
-    except ImportError:
-        pass
 
     logger.info("Installing SearXNG from GitHub...")
     try:
