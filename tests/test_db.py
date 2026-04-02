@@ -1626,6 +1626,49 @@ class TestSearchLimitBreak:
         assert all(r["content"] != "" for r in results)
 
 
+class TestImportSecurity:
+    """Test security aspects of JSONL import."""
+
+    def test_import_jsonl_merge_mode_skips_existing(self, db_with_data):
+        """Test that import_jsonl in merge mode correctly identifies existing records."""
+        db, lib_id, ver_id = db_with_data
+
+        # Create JSONL with one existing library and one new one
+        import json
+
+        data = (
+            json.dumps(
+                {
+                    "_type": "library",
+                    "id": lib_id,
+                    "name": "Existing",
+                    "created_at": 100.0,
+                    "updated_at": 100.0,
+                }
+            )
+            + "\n"
+            + json.dumps(
+                {
+                    "_type": "library",
+                    "id": "new-lib",
+                    "name": "New Lib",
+                    "created_at": 200.0,
+                    "updated_at": 200.0,
+                }
+            )
+        )
+
+        stats = db.import_jsonl(data, mode="merge")
+        assert stats["libraries"] == 1
+        assert stats["skipped"] == 1
+
+        # Verify new lib exists
+        res = db._conn.execute(
+            'SELECT name FROM libraries WHERE id = "new-lib"'
+        ).fetchone()
+        assert res[0] == "New Lib"
+
+
 class TestImportBlankLines:
     """Cover line 889: blank lines in JSONL import."""
 
