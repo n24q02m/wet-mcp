@@ -661,3 +661,133 @@ class TestRemoveNonexistent:
     def test_remove_nonexistent_returns_false(self, db):
         """remove_library returns False for unknown library."""
         assert db.remove_library("no_such_lib") is False
+
+
+# ---------------------------------------------------------------------------
+# remove_library with vec error mock (lines 430-433)
+# ---------------------------------------------------------------------------
+
+
+class TestRemoveLibraryVecErrorMock:
+    def test_remove_library_vec_error_handled_mock(self, tmp_path):
+        """remove_library handles vec deletion errors via mocking (line 431)."""
+        import sqlite3
+
+        from wet_mcp.db import DocsDB
+
+        d = DocsDB(tmp_path / "rm_vec_mock.db", embedding_dims=0)
+        d.upsert_library(name="mocklib")
+        d._vec_enabled = True
+
+        real_conn = d._conn
+
+        class WrappedConn:
+            def __init__(self, conn):
+                self._conn = conn
+
+            def execute(self, sql, params=None):
+                if "DELETE FROM doc_chunks_vec" in sql:
+                    raise sqlite3.OperationalError("Mocked vec delete error")
+                if params is not None:
+                    return self._conn.execute(sql, params)
+                return self._conn.execute(sql)
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+        d._conn = WrappedConn(real_conn)
+        try:
+            # Should not raise
+            result = d.remove_library("mocklib")
+            assert result is True
+        finally:
+            d._conn = real_conn
+            d.close()
+
+    def test_clear_version_chunks_vec_error_handled_mock(self, tmp_path):
+        """clear_version_chunks handles vec deletion errors via mocking (line 586)."""
+        import sqlite3
+
+        from wet_mcp.db import DocsDB
+
+        d = DocsDB(tmp_path / "clr_vec_mock.db", embedding_dims=0)
+        lib_id = d.upsert_library(name="mocklib2")
+        ver_id = d.upsert_version(lib_id)
+        d._vec_enabled = True
+
+        real_conn = d._conn
+
+        class WrappedConn:
+            def __init__(self, conn):
+                self._conn = conn
+
+            def execute(self, sql, params=None):
+                if "DELETE FROM doc_chunks_vec" in sql:
+                    raise sqlite3.OperationalError("Mocked vec delete error")
+                if params is not None:
+                    return self._conn.execute(sql, params)
+                return self._conn.execute(sql)
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+        d._conn = WrappedConn(real_conn)
+        try:
+            # Should not raise
+            d.clear_version_chunks(ver_id)
+        finally:
+            d._conn = real_conn
+            d.close()
+
+    def test_add_chunks_vec_insert_error_handled_mock(self, tmp_path):
+        """add_chunks handles vec insert errors via mocking (line 570)."""
+        import sqlite3
+
+        from wet_mcp.db import DocsDB
+
+        d = DocsDB(tmp_path / "add_vec_mock.db", embedding_dims=0)
+        lib_id = d.upsert_library(name="mocklib3")
+        ver_id = d.upsert_version(lib_id)
+        d._vec_enabled = True
+
+        real_conn = d._conn
+
+        class WrappedConn:
+            def __init__(self, conn):
+                self._conn = conn
+
+            def executemany(self, sql, params):
+                if "INSERT INTO doc_chunks_vec" in sql:
+                    raise sqlite3.OperationalError("Mocked vec insert error")
+                return self._conn.executemany(sql, params)
+
+            def execute(self, sql, params=None):
+                if params is not None:
+                    return self._conn.execute(sql, params)
+                return self._conn.execute(sql)
+
+            def commit(self):
+                return self._conn.commit()
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+        d._conn = WrappedConn(real_conn)
+        try:
+            # Should not raise
+            d.add_chunks(ver_id, lib_id, [{"content": "test", "embedding": [0.1, 0.2]}])
+        finally:
+            d._conn = real_conn
+            d.close()
+
+    def test_add_chunks_vec_enabled_no_embeddings(self, tmp_path):
+        """add_chunks with vec enabled but no embeddings (line 563 branch)."""
+        from wet_mcp.db import DocsDB
+
+        d = DocsDB(tmp_path / "add_no_emb.db", embedding_dims=0)
+        lib_id = d.upsert_library(name="noemb")
+        ver_id = d.upsert_version(lib_id)
+        d._vec_enabled = True
+        # No embeddings in chunks
+        d.add_chunks(ver_id, lib_id, [{"content": "no embedding"}])
+        d.close()
