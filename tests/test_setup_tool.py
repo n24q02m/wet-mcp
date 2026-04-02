@@ -256,3 +256,44 @@ class TestSetupMcpTool:
 
             await config(action="setup_sync")
             mock_sync.assert_called_once_with("drive")
+
+
+class TestClearModelCache:
+    """Tests for clear_model_cache utility."""
+
+    def test_clear_model_cache_exists(self):
+        """When cache exists, rmtree is called and path returned."""
+        with (
+            patch("wet_mcp.setup_tool.Path") as mock_path,
+            patch("wet_mcp.setup_tool.shutil.rmtree") as mock_rmtree,
+        ):
+            mock_instance = mock_path.return_value
+            mock_model_cache = MagicMock()
+            mock_instance.__truediv__.return_value = mock_model_cache
+            mock_model_cache.exists.return_value = True
+            mock_model_cache.__str__.return_value = "/tmp/cache/models--test"
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            result = clear_model_cache("test/model")
+
+            assert result == "/tmp/cache/models--test"
+            mock_rmtree.assert_called_once_with(mock_model_cache)
+
+    def test_clear_model_cache_not_exists(self):
+        """When cache does not exist, return None."""
+        with (
+            patch("wet_mcp.setup_tool.Path") as mock_path,
+            patch("wet_mcp.setup_tool.shutil.rmtree") as mock_rmtree,
+        ):
+            mock_instance = mock_path.return_value
+            mock_model_cache = MagicMock()
+            mock_instance.__truediv__.return_value = mock_model_cache
+            mock_model_cache.exists.return_value = False
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            result = clear_model_cache("test/model")
+
+            assert result is None
+            mock_rmtree.assert_not_called()
