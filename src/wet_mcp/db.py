@@ -296,14 +296,19 @@ class DocsDB:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
             ).fetchone()
             if not row:
+                dims = int(self._embedding_dims)
+                # DDL statements like CREATE VIRTUAL TABLE do not support parameter binding.
+                # Since dims is strictly validated as an integer (0-65536) in __init__,
+                # using it in a formatted string for DDL is safe.
                 # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(f"""
+                sql = f"""
                     CREATE VIRTUAL TABLE doc_chunks_vec
                     USING vec0(
                         id TEXT PRIMARY KEY,
-                        embedding float[{int(self._embedding_dims)}]
+                        embedding float[{dims}]
                     )
-                """)
+                """
+                self._conn.execute(sql)
 
     # -----------------------------------------------------------------------
     # Stats
