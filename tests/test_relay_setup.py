@@ -5,8 +5,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from wet_mcp.relay_schema import RELAY_SCHEMA
 from wet_mcp.relay_setup import (
+    CLOUD_KEYS,
     DEFAULT_RELAY_URL,
+    SERVER_NAME,
     apply_config,
+    ensure_config,
     load_config_from_file,
     trigger_relay_setup,
 )
@@ -64,6 +67,20 @@ class TestLoadConfigFromFile:
         result = load_config_from_file()
         # Should not raise, returns None if module missing or config not found
         assert result is None or isinstance(result, dict)
+
+    def test_returns_config_when_valid(self):
+        valid_config = {"GEMINI_API_KEY": "test"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config", return_value=valid_config
+        ):
+            assert load_config_from_file() == valid_config
+
+    def test_returns_none_on_exception(self):
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            side_effect=Exception("error"),
+        ):
+            assert load_config_from_file() is None
 
 
 class TestApplyConfig:
@@ -138,3 +155,250 @@ class TestTriggerRelaySetup:
         ):
             result = await trigger_relay_setup()
             assert result is None
+
+    async def test_trigger_relay_setup_runtime_errors(self):
+        with (
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("RELAY_SKIPPED"),
+            ),
+        ):
+            assert await trigger_relay_setup() is None
+        with (
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("other"),
+            ),
+        ):
+            assert await trigger_relay_setup() is None
+
+    async def test_trigger_relay_setup_httpx_fail(self):
+        mock_session = MagicMock(
+            relay_url="https://relay.test/123", session_id="sess-123"
+        )
+        mock_config = {"GEMINI_API_KEY": "ai-test"}
+        with (
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                new_callable=AsyncMock,
+                return_value=mock_session,
+            ),
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=mock_config,
+            ),
+            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("httpx.AsyncClient") as mock_httpx,
+        ):
+            mock_httpx.return_value.__aenter__.return_value.post = AsyncMock(
+                side_effect=Exception("httpx fail")
+            )
+            assert await trigger_relay_setup() == mock_config
+
+
+class TestEnsureConfig:
+    """Tests for ensure_config."""
+
+    async def test_skips_when_env_vars_present(self, monkeypatch):
+        """Should skip relay if cloud keys are already in environment."""
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        with patch("wet_mcp.relay_setup.load_config_from_file") as mock_load:
+            result = await ensure_config()
+            assert result is None
+            mock_load.assert_not_called()
+
+    async def test_returns_saved_config(self, monkeypatch):
+        """Should return saved config from file if found."""
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+
+        saved_config = {"OPENAI_API_KEY": "sk-test"}
+        with (
+            patch(
+                "wet_mcp.relay_setup.load_config_from_file", return_value=saved_config
+            ),
+            patch("wet_mcp.relay_setup.apply_config") as mock_apply,
+        ):
+            result = await ensure_config()
+            assert result == saved_config
+            mock_apply.assert_called_once_with(saved_config)
+
+    async def test_successful_relay_setup_no_gdrive(self, monkeypatch):
+        """Should complete relay setup when no local credentials exist."""
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+
+        mock_session = MagicMock(
+            relay_url="https://relay.test/123", session_id="sess-123"
+        )
+        mock_config = {"COHERE_API_KEY": "co-test"}
+
+        with (
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                new_callable=AsyncMock,
+                return_value=mock_session,
+            ),
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=mock_config,
+            ),
+            patch("mcp_relay_core.storage.config_file.write_config") as mock_write,
+            patch("wet_mcp.relay_setup.apply_config") as mock_apply,
+            patch("httpx.AsyncClient") as mock_httpx,
+            patch("wet_mcp.config.settings", MagicMock(google_drive_client_id=None)),
+        ):
+            mock_httpx.return_value.__aenter__.return_value.post = AsyncMock()
+
+            result = await ensure_config()
+
+            assert result == mock_config
+            mock_write.assert_called_once_with(SERVER_NAME, mock_config)
+            mock_apply.assert_called_once_with(mock_config)
+
+    async def test_relay_setup_with_gdrive_success(self, monkeypatch):
+        """Should handle successful Google Drive OAuth during relay setup."""
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+
+        mock_session = MagicMock(
+            relay_url="https://relay.test/123", session_id="sess-123"
+        )
+        mock_config = {"GEMINI_API_KEY": "ai-test"}
+
+        with (
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                new_callable=AsyncMock,
+                return_value=mock_session,
+            ),
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=mock_config,
+            ),
+            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("httpx.AsyncClient") as mock_httpx,
+            patch(
+                "wet_mcp.config.settings", MagicMock(google_drive_client_id="test-id")
+            ),
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_gauth,
+        ):
+            mock_post = AsyncMock()
+            mock_httpx.return_value.__aenter__.return_value.post = mock_post
+
+            result = await ensure_config()
+
+            assert result == mock_config
+            mock_gauth.assert_called_once()
+            # Verify the "Setup complete!" message was sent
+            last_call = mock_post.call_args_list[-1]
+            assert last_call.kwargs["json"]["text"] == "Setup complete!"
+
+    async def test_relay_setup_skipped(self, monkeypatch):
+        """Should return None if relay setup is skipped by the user."""
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+
+        with (
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
+            patch("mcp_relay_core.relay.client.create_session", new_callable=AsyncMock),
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                side_effect=RuntimeError("RELAY_SKIPPED"),
+            ),
+        ):
+            result = await ensure_config()
+            assert result is None
+
+    async def test_relay_setup_timeout(self, monkeypatch):
+        """Should return None if relay setup times out."""
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+
+        with (
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
+            patch("mcp_relay_core.relay.client.create_session", new_callable=AsyncMock),
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                side_effect=RuntimeError("Relay timed out"),
+            ),
+        ):
+            result = await ensure_config()
+            assert result is None
+
+    async def test_relay_setup_general_exception(self, monkeypatch):
+        """Should return None if relay setup encounters a general exception."""
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+
+        with (
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                side_effect=Exception("Network error"),
+            ),
+        ):
+            result = await ensure_config()
+            assert result is None
+
+    async def test_relay_setup_runtime_error_other(self, monkeypatch):
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+        with (
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                side_effect=RuntimeError("other error"),
+            ),
+        ):
+            result = await ensure_config()
+            assert result is None
+
+    async def test_relay_setup_httpx_exceptions(self, monkeypatch):
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+        mock_session = MagicMock(
+            relay_url="https://relay.test/123", session_id="sess-123"
+        )
+        mock_config = {"GEMINI_API_KEY": "ai-test"}
+        with (
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
+            patch(
+                "mcp_relay_core.relay.client.create_session",
+                new_callable=AsyncMock,
+                return_value=mock_session,
+            ),
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=mock_config,
+            ),
+            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("httpx.AsyncClient") as mock_httpx,
+            patch(
+                "wet_mcp.config.settings", MagicMock(google_drive_client_id="test-id")
+            ),
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                side_effect=Exception("gdrive fail"),
+            ),
+        ):
+            mock_httpx.return_value.__aenter__.return_value.post = AsyncMock(
+                side_effect=Exception("httpx fail")
+            )
+            result = await ensure_config()
+            assert result == mock_config
