@@ -17,8 +17,62 @@ from wet_mcp.sources.docs import (
     chunk_llms_txt,
     chunk_markdown,
     discover_library,
+    score_url,
     try_llms_txt,
 )
+
+# -----------------------------------------------------------------------
+# score_url
+# -----------------------------------------------------------------------
+
+
+class TestScoreUrl:
+    def test_exact_path_match(self):
+        """Score is increased for exact path word match."""
+        query_words = frozenset(["installation"])
+        url = "https://docs.test/installation"
+        assert score_url(url, query_words) == 1
+
+    def test_multiple_path_matches(self):
+        """Score counts multiple overlapping words in path."""
+        query_words = frozenset(["api", "reference"])
+        url = "https://docs.test/api-reference"
+        assert score_url(url, query_words) == 2
+
+    def test_case_insensitivity(self):
+        """Scoring is case-insensitive."""
+        query_words = frozenset(["install"])
+        url = "https://docs.test/INSTALL"
+        assert score_url(url, query_words) == 1
+
+    def test_delimiters(self):
+        """Path is split by various delimiters."""
+        query_words = frozenset(["user", "guide", "v1"])
+        url = "https://docs.test/user_guide.v1"
+        assert score_url(url, query_words) == 3
+
+    def test_title_scoring(self):
+        """Title words also contribute to score."""
+        query_words = frozenset(["setup", "guide"])
+        url = "https://docs.test/getting-started"
+        title = "Initial Setup Guide"
+        # 0 from path + 2 from title
+        assert score_url(url, query_words, title=title) == 2
+
+    def test_combined_scoring(self):
+        """Score combines path and title matches."""
+        query_words = frozenset(["api", "auth"])
+        url = "https://docs.test/api/security"
+        title = "Auth API"
+        # 1 from path (api) + 2 from title (api, auth) = 3
+        assert score_url(url, query_words, title=title) == 3
+
+    def test_no_match(self):
+        """Score is 0 when no words overlap."""
+        query_words = frozenset(["missing"])
+        url = "https://docs.test/about"
+        assert score_url(url, query_words) == 0
+
 
 # -----------------------------------------------------------------------
 # chunk_markdown

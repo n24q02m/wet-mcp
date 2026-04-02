@@ -3393,6 +3393,32 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def score_url(url: str, query_words: frozenset[str], title: str = "") -> int:
+    """Score a URL and optional title by query term overlap."""
+    path = urlparse(url).path.lower()
+    path_words = set(
+        path.replace("-", " ")
+        .replace("_", " ")
+        .replace("/", " ")
+        .replace(".", " ")
+        .split()
+    )
+    score = len(query_words & path_words)
+
+    if title:
+        title_words = set(
+            title.lower()
+            .replace("-", " ")
+            .replace("_", " ")
+            .replace("/", " ")
+            .replace(".", " ")
+            .split()
+        )
+        score += len(query_words & title_words)
+
+    return score
+
+
 async def fetch_docs_pages(
     docs_url: str,
     query: str = "",
@@ -3533,18 +3559,7 @@ async def fetch_docs_pages(
             return urls
         query_words = frozenset(query.lower().split())
 
-        def score_url(url: str) -> int:
-            path = urlparse(url).path.lower()
-            path_words = set(
-                path.replace("-", " ")
-                .replace("_", " ")
-                .replace("/", " ")
-                .replace(".", " ")
-                .split()
-            )
-            return len(query_words & path_words)
-
-        return sorted(urls, key=score_url, reverse=True)
+        return sorted(urls, key=lambda u: score_url(u, query_words), reverse=True)
 
     # Process root page results
     blocked_count = 0
