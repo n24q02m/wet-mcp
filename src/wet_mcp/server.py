@@ -589,40 +589,55 @@ async def search(  # noqa: PLR0913
                 ),
                 "search",
             )
-            # Rerank by semantic relevance (same as research/docs)
             if not result.startswith("Error"):
                 try:
+                    # ⚡ Bolt Optimization: Parse JSON once for both reranking and enrichment
                     data = json.loads(result)
-                    results_list = data.get("results", [])
-                    if results_list:
-                        # Map snippet -> content for reranker (fallback to title)
-                        for r in results_list:
-                            if "content" not in r:
-                                r["content"] = r.get("snippet", r.get("title", ""))
-                        reranked = await _rerank_results(
-                            query, results_list, top_n=max_results
-                        )
-                        if reranked:
-                            data["results"] = [
-                                r for r in reranked if r.get("score", 1.0) > 0.2
-                            ]
-                            data["total"] = len(data["results"])
-                            result = json.dumps(data, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    logger.debug(f"Search reranking failed, using original: {e}")
-            # Optional snippet enrichment
-            if enrich and not result.startswith("Error"):
-                try:
-                    data = json.loads(result)
-                    results_list = data.get("results", [])
-                    if results_list:
-                        from wet_mcp.sources.search_strategies import enrich_snippets
+                    modified = False
 
-                        enriched = await enrich_snippets(results_list, query, top_n=5)
-                        data["results"] = enriched
+                    # 1. Rerank by semantic relevance
+                    try:
+                        results_list = data.get("results", [])
+                        if results_list:
+                            # Map snippet -> content for reranker (fallback to title)
+                            for r in results_list:
+                                if "content" not in r:
+                                    r["content"] = r.get("snippet", r.get("title", ""))
+                            reranked = await _rerank_results(
+                                query, results_list, top_n=max_results
+                            )
+                            if reranked:
+                                data["results"] = [
+                                    r for r in reranked if r.get("score", 1.0) > 0.2
+                                ]
+                                data["total"] = len(data["results"])
+                                modified = True
+                    except Exception as e:
+                        logger.debug(f"Search reranking failed, using original: {e}")
+
+                    # 2. Optional snippet enrichment
+                    if enrich:
+                        try:
+                            results_list = data.get("results", [])
+                            if results_list:
+                                from wet_mcp.sources.search_strategies import (
+                                    enrich_snippets,
+                                )
+
+                                enriched = await enrich_snippets(
+                                    results_list, query, top_n=5
+                                )
+                                data["results"] = enriched
+                                modified = True
+                        except Exception as e:
+                            logger.debug(f"Snippet enrichment failed: {e}")
+
+                    # Serialize once at the end if any modifications were made
+                    if modified:
                         result = json.dumps(data, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    logger.debug(f"Snippet enrichment failed: {e}")
+                except json.JSONDecodeError:
+                    pass
+
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
             return result
@@ -1210,18 +1225,21 @@ async def _do_research(
         exclude_domains=exclude_domains,
     )
     try:
+        # ⚡ Bolt Optimization: Parse JSON once for both reranking and metadata tagging
         data = json.loads(result_str)
-        if "results" in data and data["results"]:
-            reranked = await _rerank_results(query, data["results"], top_n=max_results)
-            data["results"] = [r for r in reranked if r.get("score", 1.0) > 0.3]
-            data["total"] = len(data["results"])
-            result_str = json.dumps(data, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"Reranking failed: {e}")
 
-    # Re-format results for academic context
-    try:
-        data = json.loads(result_str)
+        # 1. Rerank
+        try:
+            if "results" in data and data["results"]:
+                reranked = await _rerank_results(
+                    query, data["results"], top_n=max_results
+                )
+                data["results"] = [r for r in reranked if r.get("score", 1.0) > 0.3]
+                data["total"] = len(data["results"])
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}")
+
+        # 2. Re-format results for academic context
         results = data.get("results", [])
 
         # Enrich with academic metadata hints
