@@ -1171,6 +1171,8 @@ class TestDriveRequest:
         mock_client = AsyncMock()
         mock_client.request = AsyncMock(return_value=mock_response)
 
+        from wet_mcp.sync import DriveRequestOptions
+
         with patch("wet_mcp.sync.httpx.AsyncClient") as mock_httpx:
             mock_httpx.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_httpx.return_value.__aexit__ = AsyncMock(return_value=None)
@@ -1179,11 +1181,13 @@ class TestDriveRequest:
                 "POST",
                 "https://api.example.com/files",
                 {"access_token": "test-token"},
-                params={"q": "test"},
-                json_data={"name": "file.db"},
-                content=b"binary-data",
-                headers={"X-Custom": "header"},
-                timeout=60.0,
+                DriveRequestOptions(
+                    params={"q": "test"},
+                    json_data={"name": "file.db"},
+                    content=b"binary-data",
+                    headers={"X-Custom": "header"},
+                    timeout=60.0,
+                ),
             )
             assert result.status_code == 200
             mock_client.request.assert_called_once()

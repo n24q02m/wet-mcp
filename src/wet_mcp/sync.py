@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -51,6 +52,17 @@ _sync_task: asyncio.Task | None = None
 
 # Token provider name for token_store
 _TOKEN_PROVIDER = "google_drive"
+
+
+@dataclass
+class DriveRequestOptions:
+    """Options for Google Drive API requests."""
+
+    params: dict | None = None
+    json_data: dict | None = None
+    content: bytes | None = None
+    headers: dict | None = None
+    timeout: float = 120.0
 
 
 # ---------------------------------------------------------------------------
@@ -153,28 +165,24 @@ async def _drive_request(
     method: str,
     url: str,
     token: dict,
-    *,
-    params: dict | None = None,
-    json_data: dict | None = None,
-    content: bytes | None = None,
-    headers: dict | None = None,
-    timeout: float = 120.0,
+    options: DriveRequestOptions | None = None,
 ) -> httpx.Response:
     """Make an authenticated Google Drive API request."""
+    opts = options or DriveRequestOptions()
     req_headers = {
         "Authorization": f"Bearer {token['access_token']}",
-        **(headers or {}),
+        **(opts.headers or {}),
     }
 
     async with httpx.AsyncClient() as client:
         response = await client.request(
             method,
             url,
-            params=params,
-            json=json_data,
-            content=content,
+            params=opts.params,
+            json=opts.json_data,
+            content=opts.content,
             headers=req_headers,
-            timeout=timeout,
+            timeout=opts.timeout,
         )
 
     return response
@@ -194,7 +202,9 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
         "GET",
         f"{_DRIVE_API_BASE}/files",
         token,
-        params={"q": query, "fields": "files(id,name)", "spaces": "drive"},
+        DriveRequestOptions(
+            params={"q": query, "fields": "files(id,name)", "spaces": "drive"}
+        ),
     )
 
     if response.status_code == 200:
@@ -211,8 +221,7 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
         "POST",
         f"{_DRIVE_API_BASE}/files",
         token,
-        json_data=metadata,
-        params={"fields": "id"},
+        DriveRequestOptions(json_data=metadata, params={"fields": "id"}),
     )
 
     if response.status_code == 200:
@@ -234,11 +243,13 @@ async def _find_file_in_folder(
         "GET",
         f"{_DRIVE_API_BASE}/files",
         token,
-        params={
-            "q": query,
-            "fields": "files(id,name,modifiedTime)",
-            "spaces": "drive",
-        },
+        DriveRequestOptions(
+            params={
+                "q": query,
+                "fields": "files(id,name,modifiedTime)",
+                "spaces": "drive",
+            }
+        ),
     )
 
     if response.status_code == 200:
@@ -268,9 +279,11 @@ async def _upload_file(
             "PATCH",
             f"{_DRIVE_UPLOAD_BASE}/files/{existing_file_id}",
             token,
-            content=file_content,
-            params={"uploadType": "media"},
-            headers={"Content-Type": "application/x-sqlite3"},
+            DriveRequestOptions(
+                content=file_content,
+                params={"uploadType": "media"},
+                headers={"Content-Type": "application/x-sqlite3"},
+            ),
         )
     else:
         # Create new file with multipart upload (metadata + content)
@@ -300,11 +313,13 @@ async def _upload_file(
             "POST",
             f"{_DRIVE_UPLOAD_BASE}/files",
             token,
-            content=body,
-            params={"uploadType": "multipart", "fields": "id"},
-            headers={
-                "Content-Type": f"multipart/related; boundary={boundary}",
-            },
+            DriveRequestOptions(
+                content=body,
+                params={"uploadType": "multipart", "fields": "id"},
+                headers={
+                    "Content-Type": f"multipart/related; boundary={boundary}",
+                },
+            ),
         )
 
     if response.status_code in (200, 201):
@@ -320,8 +335,7 @@ async def _download_file(token: dict, file_id: str, dest_path: Path) -> bool:
         "GET",
         f"{_DRIVE_API_BASE}/files/{file_id}",
         token,
-        params={"alt": "media"},
-        timeout=300.0,
+        DriveRequestOptions(params={"alt": "media"}, timeout=300.0),
     )
 
     if response.status_code == 200:
@@ -502,7 +516,7 @@ async def check_health() -> bool:
             "GET",
             f"{_DRIVE_API_BASE}/files",
             token,
-            params={"pageSize": 1, "fields": "files(id)"},
+            DriveRequestOptions(params={"pageSize": 1, "fields": "files(id)"}),
         )
         return response.status_code == 200
     except Exception:
