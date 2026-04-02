@@ -345,16 +345,27 @@ def get_model_capabilities(model: str) -> dict:
     }
 
 
-def encode_image(image_path: str) -> str:
-    """Encode image to base64."""
-    with open(image_path, "rb") as image_file:
-        return base64.b64encode(image_file.read()).decode("utf-8")
+async def encode_image(image_path: str) -> str:
+    """Encode image to base64.
+
+    ⚡ Bolt: Offload blocking I/O to thread pool to prevent event loop lag.
+    """
+    data = await asyncio.to_thread(Path(image_path).read_bytes)
+    return base64.b64encode(data).decode("utf-8")
 
 
-def _read_and_truncate(path: str) -> str:
-    """Read file and truncate if too long."""
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
+async def _read_and_truncate(path: str) -> str:
+    """Read file and truncate if too long.
+
+    ⚡ Bolt: Use asyncio.to_thread and partial read for memory efficiency.
+    """
+
+    def _read():
+        # Path().read_text doesn't support partial reads, so we stick with open()
+        with open(path, encoding="utf-8") as f:
+            return f.read(100001)
+
+    text = await asyncio.to_thread(_read)
     if len(text) > 100000:
         text = text[:100000] + "\n...[truncated]"
     return text
@@ -387,7 +398,7 @@ async def analyze_media(
         "application/xml",
     ]:
         try:
-            content = await asyncio.to_thread(_read_and_truncate, media_path)
+            content = await _read_and_truncate(media_path)
             logger.info(f"Analyzing text file with model: {config['model']}")
 
             messages = [
@@ -425,7 +436,7 @@ async def analyze_media(
     try:
         logger.info(f"Analyzing media with model: {config['model']}")
 
-        base64_image = await asyncio.to_thread(encode_image, media_path)
+        base64_image = await encode_image(media_path)
         data_url = f"data:{mime_type};base64,{base64_image}"
 
         messages = [
