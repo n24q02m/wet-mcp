@@ -913,6 +913,24 @@ class DocsDB:
 
         return "\n".join(lines)
 
+    def _get_existing_ids(self, table: str, items: list[dict]) -> set[str]:
+        """Internal helper to get existing IDs for a table to avoid SQL IN limit."""
+        if table not in {"libraries", "versions", "doc_chunks"}:
+            raise ValueError(f"Invalid table name: {table}")
+        if not items:
+            return set()
+        ids = [obj["id"] for obj in items]
+        existing = set()
+        for i in range(0, len(ids), 999):
+            batch = ids[i : i + 999]
+            placeholders = ",".join("?" * len(batch))
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            res = self._conn.execute(
+                f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
+            ).fetchall()
+            existing.update(r[0] for r in res)
+        return existing
+
     def import_jsonl(self, data: str, mode: str = "merge") -> dict:
         """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""
         stats = {"libraries": 0, "versions": 0, "chunks": 0, "skipped": 0}
@@ -949,25 +967,8 @@ class DocsDB:
             elif obj_type == "chunk":
                 chunks.append(obj)
 
-        def _get_existing(table: str, items: list) -> set:
-            if table not in {"libraries", "versions", "doc_chunks"}:
-                raise ValueError(f"Invalid table name: {table}")
-            if not items:
-                return set()
-            ids = [obj["id"] for obj in items]
-            existing = set()
-            for i in range(0, len(ids), 999):
-                batch = ids[i : i + 999]
-                placeholders = ",".join("?" * len(batch))
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
-                ).fetchall()
-                existing.update(r[0] for r in res)
-            return existing
-
         existing_libs = (
-            _get_existing("libraries", libraries) if mode == "merge" else set()
+            self._get_existing_ids("libraries", libraries) if mode == "merge" else set()
         )
         to_insert_libs = []
         for obj in libraries:
@@ -997,7 +998,7 @@ class DocsDB:
             stats["libraries"] += len(to_insert_libs)
 
         existing_vers = (
-            _get_existing("versions", versions) if mode == "merge" else set()
+            self._get_existing_ids("versions", versions) if mode == "merge" else set()
         )
         to_insert_vers = []
         for obj in versions:
@@ -1028,7 +1029,7 @@ class DocsDB:
             stats["versions"] += len(to_insert_vers)
 
         existing_chunks = (
-            _get_existing("doc_chunks", chunks) if mode == "merge" else set()
+            self._get_existing_ids("doc_chunks", chunks) if mode == "merge" else set()
         )
         to_insert_chunks = []
         for obj in chunks:

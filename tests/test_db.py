@@ -1752,3 +1752,41 @@ class TestVecSearchChunkLoading:
             assert any("different topic" in c for c in all_contents)
         finally:
             db.close()
+
+
+class TestImportJsonlComprehensive:
+    def test_import_unknown_type(self, db):
+        """Import ignores unknown object types (line 943-950)."""
+        data = json.dumps({"_type": "unknown", "id": "1"})
+        stats = db.import_jsonl(data, mode="merge")
+        assert stats["libraries"] == 0
+        assert stats["versions"] == 0
+        assert stats["chunks"] == 0
+
+    def test_get_existing_ids_invalid_table(self, db):
+        """_get_existing_ids raises ValueError for invalid table (line 954)."""
+        with pytest.raises(ValueError, match="Invalid table name"):
+            db._get_existing_ids("invalid_table", [])
+
+    def test_get_existing_ids_batching(self, db):
+        """_get_existing_ids handles more than 999 items via batching (line 959)."""
+        lib_id = db.upsert_library(name="batchlib")
+        ver_id = db.upsert_version(lib_id)
+        # Create 1001 items
+        items = [{"id": f"chk_{i}"} for i in range(1001)]
+        # Add some chunks
+        db.add_chunks(ver_id, lib_id, [{"content": "c1"}, {"content": "c2"}])
+        # Get their IDs
+        res = db._conn.execute(
+            "SELECT id FROM doc_chunks WHERE library_id = ?", (lib_id,)
+        ).fetchall()
+        real_ids = [r[0] for r in res]
+
+        # Mix them into our items
+        items[0]["id"] = real_ids[0]
+        items[1000]["id"] = real_ids[1]
+
+        existing = db._get_existing_ids("doc_chunks", items)
+        assert real_ids[0] in existing
+        assert real_ids[1] in existing
+        assert len(existing) == 2
