@@ -726,31 +726,28 @@ async def extract(
     action: str,
     urls: list[str] | None = None,
     paths: list[str] | None = None,
-    depth: int = 2,
-    max_pages: int = 20,
     format: str = "markdown",
     stealth: bool = False,
-    schema: dict | None = None,
-    prompt: str | None = None,
+    crawl_options: dict | None = None,
+    structured_options: dict | None = None,
 ) -> str:
     """Read and return full page content from URLs or local files. Use this when you have a specific URL and need its content. For finding URLs first, use the `search` tool instead.
 
     Actions:
     - extract: Get clean content from URLs. Example: extract(action="extract", urls=["https://example.com/article"])
     - batch: Batch extract with per-domain rate limiting (max 50 URLs). Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])
-    - crawl: Deep crawl following links from root URLs. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)
+    - crawl: Deep crawl following links from root URLs. Example: extract(action="crawl", urls=["https://docs.example.com"], crawl_options={"depth": 2})
     - map: Discover site URL structure without extracting content. Example: extract(action="map", urls=["https://example.com"])
     - convert: Convert local files (PDF, DOCX, PPTX, XLSX) to Markdown. Example: extract(action="convert", paths=["/home/user/report.pdf"])
-    - extract_structured: Extract structured data using JSON Schema + LLM. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})
+    - extract_structured: Extract structured data using JSON Schema + LLM. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], structured_options={"schema": {"type": "object", "properties": {"price": {"type": "string"}}}})
 
     Key parameters:
     - urls (required for extract/batch/crawl/map/extract_structured): List of URLs
     - paths (required for convert): List of local file paths
     - format: Output format -- "markdown" (default), "text", "html"
-    - depth: Crawl depth (default: 2, max: 5)
-    - max_pages: Max pages for crawl/map (default: 20, max: 100)
     - stealth: Enable anti-bot bypass for protected sites (default: false)
-    - schema: JSON Schema dict for extract_structured
+    - crawl_options: dict with 'depth' (1-5, default 2) and 'max_pages' (1-100, default 20)
+    - structured_options: dict with 'schema' (JSON Schema) and 'prompt' (extraction context)
 
     Use `help` tool with tool_name="extract" for full parameter documentation.
     """
@@ -759,8 +756,14 @@ async def extract(
     _MAX_CRAWL_PAGES = 100
     _MAX_DEPTH = 5
 
-    max_pages = min(max_pages, _MAX_CRAWL_PAGES)
-    depth = min(depth, _MAX_DEPTH)
+    # Extract options with defaults
+    crawl_opts = crawl_options or {}
+    depth = min(crawl_opts.get("depth", 2), _MAX_DEPTH)
+    max_pages = min(crawl_opts.get("max_pages", 20), _MAX_CRAWL_PAGES)
+
+    structured_opts = structured_options or {}
+    schema = structured_opts.get("schema")
+    prompt = structured_opts.get("prompt")
 
     match action:
         case "extract":
@@ -794,7 +797,7 @@ async def extract(
 
         case "crawl":
             if not urls:
-                return 'Error: urls is required for crawl action. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)'
+                return 'Error: urls is required for crawl action. Example: extract(action="crawl", urls=["https://docs.example.com"], crawl_options={"depth": 2})'
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -852,9 +855,9 @@ async def extract(
 
         case "extract_structured":
             if not urls:
-                return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
+                return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], structured_options={"schema": {"type": "object", "properties": {"price": {"type": "string"}}})'
             if not schema:
-                return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
+                return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: structured_options={"schema": {"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}}'
             from wet_mcp.sources.structured import extract_structured
 
             return await _with_timeout(

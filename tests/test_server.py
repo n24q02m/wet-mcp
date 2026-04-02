@@ -99,8 +99,7 @@ async def test_crawl_success():
         result = await extract(
             action="crawl",
             urls=["https://example.com"],
-            depth=3,
-            max_pages=50,
+            crawl_options={"depth": 3, "max_pages": 50},
             format="json",
             stealth=False,
         )
@@ -149,7 +148,9 @@ async def test_map_success():
         mock_sitemap.return_value = "Sitemap Content"
 
         result = await extract(
-            action="map", urls=["https://example.com"], depth=3, max_pages=50
+            action="map",
+            urls=["https://example.com"],
+            crawl_options={"depth": 3, "max_pages": 50},
         )
 
         assert "Sitemap Content" in result
@@ -332,8 +333,13 @@ async def test_extract_structured_action():
         result = await extract(
             action="extract_structured",
             urls=["https://example.com"],
-            schema={"type": "object", "properties": {"name": {"type": "string"}}},
-            prompt="Extract the name",
+            structured_options={
+                "schema": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                },
+                "prompt": "Extract the name",
+            },
         )
 
         assert '{"name": "Test"}' in result
@@ -350,7 +356,7 @@ async def test_extract_structured_requires_urls():
     """Test extract_structured requires urls."""
     result = await extract(
         action="extract_structured",
-        schema={"type": "object"},
+        structured_options={"schema": {"type": "object"}},
     )
     assert "Error" in result
     assert "urls" in result
