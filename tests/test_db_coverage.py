@@ -520,10 +520,21 @@ class TestImportJsonlEdgeCases:
 
 class TestCloseException:
     def test_close_handles_error(self, tmp_path):
-        """close() silently handles exceptions (lines 972-973)."""
+        """close() silently handles exceptions (lines 1069-1070)."""
         d = DocsDB(tmp_path / "cls.db", embedding_dims=0)
-        # Close the underlying connection to force an error on second close
-        d._conn.close()
+
+        # Create a wrapper that raises on close
+        class BadConn:
+            def __init__(self, real_conn):
+                self._conn = real_conn
+
+            def close(self):
+                raise Exception("mock error")
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+        d._conn = BadConn(d._conn)
         # Should not raise
         d.close()
 
