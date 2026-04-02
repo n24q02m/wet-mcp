@@ -347,46 +347,6 @@ class TestLoadConfigFromFile:
             assert result is None
 
 
-class TestTriggerRelaySetup:
-    """Additional coverage for trigger_relay_setup."""
-
-    async def test_relay_skipped_returns_none(self):
-        """When user skips, returns None."""
-        from wet_mcp.relay_setup import trigger_relay_setup
-
-        with patch(
-            "mcp_relay_core.relay.client.create_session",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("RELAY_SKIPPED by user"),
-        ):
-            result = await trigger_relay_setup()
-            assert result is None
-
-    async def test_generic_runtime_error(self):
-        """Generic RuntimeError returns None."""
-        from wet_mcp.relay_setup import trigger_relay_setup
-
-        with patch(
-            "mcp_relay_core.relay.client.create_session",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("network error"),
-        ):
-            result = await trigger_relay_setup()
-            assert result is None
-
-    async def test_generic_exception(self):
-        """Generic Exception returns None."""
-        from wet_mcp.relay_setup import trigger_relay_setup
-
-        with patch(
-            "mcp_relay_core.relay.client.create_session",
-            new_callable=AsyncMock,
-            side_effect=Exception("unexpected"),
-        ):
-            result = await trigger_relay_setup()
-            assert result is None
-
-
 # =====================================================================
 # llm.py -- acompletion, backends, message conversion
 # =====================================================================

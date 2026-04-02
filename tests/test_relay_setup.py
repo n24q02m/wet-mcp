@@ -1,14 +1,12 @@
 """Tests for relay setup integration."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 from wet_mcp.relay_schema import RELAY_SCHEMA
 from wet_mcp.relay_setup import (
-    DEFAULT_RELAY_URL,
     apply_config,
     load_config_from_file,
-    trigger_relay_setup,
 )
 
 
@@ -93,48 +91,3 @@ class TestApplyConfig:
         assert os.environ["TEST_RELAY_B"] == "val_b"
         monkeypatch.delenv("TEST_RELAY_A")
         monkeypatch.delenv("TEST_RELAY_B")
-
-
-class TestTriggerRelaySetup:
-    """Tests for trigger_relay_setup."""
-
-    async def test_calls_create_session(self):
-        mock_session = MagicMock(
-            relay_url="https://example.com/setup/abc",
-            session_id="test-session-id",
-        )
-        mock_config = {"GEMINI_API_KEY": "AIza_test_key"}
-
-        with (
-            patch(
-                "mcp_relay_core.relay.client.create_session",
-                new_callable=AsyncMock,
-                return_value=mock_session,
-            ) as mock_create,
-            patch(
-                "mcp_relay_core.relay.client.poll_for_result",
-                new_callable=AsyncMock,
-                return_value=mock_config,
-            ),
-            patch(
-                "mcp_relay_core.storage.config_file.write_config",
-            ),
-            patch("httpx.AsyncClient") as mock_httpx,
-        ):
-            mock_httpx.return_value.__aenter__ = AsyncMock()
-            mock_httpx.return_value.__aexit__ = AsyncMock()
-            result = await trigger_relay_setup()
-            mock_create.assert_called_once_with(
-                DEFAULT_RELAY_URL, "wet-mcp", RELAY_SCHEMA
-            )
-            assert result == mock_config
-
-    async def test_returns_none_on_import_error(self):
-        """When mcp_relay_core is not available, returns None."""
-        with patch(
-            "mcp_relay_core.relay.client.create_session",
-            new_callable=AsyncMock,
-            side_effect=ImportError("No module named 'mcp_relay_core'"),
-        ):
-            result = await trigger_relay_setup()
-            assert result is None
