@@ -59,11 +59,42 @@ class TestLoadConfigFromFile:
             result = load_config_from_file()
         assert result is None
 
+    def test_returns_config_when_valid_file_exists(self):
+        """Returns config when file exists and contains at least one cloud key."""
+        valid_config = {"GEMINI_API_KEY": "test-key", "OTHER_VAR": "value"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=valid_config,
+        ):
+            result = load_config_from_file()
+        assert result == valid_config
+
+    def test_returns_none_when_config_has_no_cloud_keys(self):
+        """Returns None if config exists but lacks all cloud keys."""
+        invalid_config = {"OTHER_VAR": "value"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=invalid_config,
+        ):
+            result = load_config_from_file()
+        assert result is None
+
+    def test_returns_none_on_exception(self):
+        """Returns None if read_config raises an exception."""
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            side_effect=RuntimeError("File corrupted"),
+        ):
+            result = load_config_from_file()
+        assert result is None
+
     def test_returns_none_on_import_error(self):
         """When mcp_relay_core is not installed, returns None gracefully."""
-        result = load_config_from_file()
-        # Should not raise, returns None if module missing or config not found
-        assert result is None or isinstance(result, dict)
+        with patch.dict("sys.modules", {"mcp_relay_core": None}):
+            # We need to reload or ensure the import inside the function fails
+            # Since the import is inside the function, patching sys.modules works.
+            result = load_config_from_file()
+        assert result is None
 
 
 class TestApplyConfig:
