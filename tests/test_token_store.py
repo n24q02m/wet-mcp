@@ -105,3 +105,24 @@ def test_save_token_windows_permissions(token_dir):
         mock_settings.get_data_dir.return_value = token_dir.parent
         save_token("drive", {"access_token": "test"})
         assert load_token("drive") == {"access_token": "test"}
+
+
+def test_delete_token_oserror(token_dir):
+    """delete_token returns False if unlink fails with OSError."""
+    with patch("wet_mcp.token_store.settings") as mock_settings:
+        mock_settings.get_data_dir.return_value = token_dir.parent
+        save_token("drive", {"access_token": "test"})
+        with patch.object(Path, "unlink", side_effect=OSError("permission denied")):
+            assert delete_token("drive") is False
+
+
+def test_save_token_chmod_error(token_dir):
+    """save_token catches OSError from chmod."""
+    with (
+        patch("wet_mcp.token_store.settings") as mock_settings,
+        patch.object(Path, "chmod", side_effect=OSError("permission denied")),
+    ):
+        mock_settings.get_data_dir.return_value = token_dir.parent
+        # Should not raise
+        save_token("drive", {"access_token": "test"})
+        assert load_token("drive") == {"access_token": "test"}

@@ -84,8 +84,11 @@ def save_token(provider: str, token: dict) -> None:
 def delete_token(provider: str) -> bool:
     """Delete a stored token. Returns True if deleted."""
     path = get_token_path(provider)
-    if path.exists():
-        path.unlink()
-        logger.info(f"Token deleted: {path}")
-        return True
+    try:
+        if path.exists():
+            path.unlink()
+            logger.info(f"Token deleted: {path}")
+            return True
+    except OSError as e:
+        logger.warning(f"Failed to delete token at {path}: {e}")
     return False
