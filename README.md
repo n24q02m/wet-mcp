@@ -122,7 +122,6 @@ Configure env vars in `~/.claude/settings.local.json` or your shell profile. See
 
 | Prompt | Parameters | Description |
 |:-------|:-----------|:------------|
-| `research_topic` | `topic` | Research a topic using academic search |
 | `library_docs` | `library`, `question` | Find library documentation |
 
 ## Zero-Config Setup
