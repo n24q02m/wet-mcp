@@ -295,5 +295,3 @@ def run_auto_setup() -> bool:
         logger.info("Auto-setup complete!")
 
     return success
-
-

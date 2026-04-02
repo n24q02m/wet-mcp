@@ -354,5 +354,3 @@ def test_run_auto_setup_crawl4ai_fail(
 ):
     assert run_auto_setup() is False
     mock_marker.touch.assert_not_called()
-
-
