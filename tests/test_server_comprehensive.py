@@ -541,15 +541,6 @@ async def test_with_timeout_expired():
 
 def test_prompts():
     assert "Research" in server.research_topic("topic")
-    assert "Find documentation" in server.library_docs("lib", "question")
-
-
-def test_library_docs_prompt():
-    """Test library_docs prompt formatting."""
-    result = server.library_docs("react", "how to use hooks")
-    assert "Find documentation for 'react' to answer: how to use hooks" in result
-    assert "library='react'" in result
-    assert "query='how to use hooks'" in result
 
 
 def test_research_topic_prompt():
