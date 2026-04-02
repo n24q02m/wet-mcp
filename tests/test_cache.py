@@ -1,7 +1,7 @@
 """Tests for src/wet_mcp/cache.py — WebCache with TTL-based expiry.
 
 Covers cache hit/miss, TTL expiry, hit counting, purge mechanics,
-deterministic cache keys, get_extract cross-action lookup, and stats.
+deterministic cache keys, and stats.
 """
 
 import time
@@ -185,42 +185,6 @@ class TestPurge:
         # Even without time mock, the entry should be gone from DB
         stats = short_ttl_cache.stats()
         assert stats.get("search", {}).get("total", 0) == 0
-
-
-# -----------------------------------------------------------------------
-# get_extract cross-action lookup
-# -----------------------------------------------------------------------
-
-
-class TestGetExtract:
-    def test_get_extract_from_extract_cache(self, cache):
-        """get_extract finds URL in extract cache."""
-        cache.set(
-            "extract",
-            {
-                "urls": ["https://example.com/docs"],
-                "format": "markdown",
-                "stealth": True,
-            },
-            '[{"url": "https://example.com/docs", "content": "doc content"}]',
-        )
-        result = cache.get_extract("https://example.com/docs")
-        assert result is not None
-        assert "doc content" in result
-
-    def test_get_extract_from_crawl_cache(self, cache):
-        """get_extract also searches crawl cache."""
-        cache.set(
-            "crawl",
-            {"urls": ["https://example.com"], "depth": 2, "max_pages": 20},
-            '[{"url": "https://example.com", "content": "crawled"}]',
-        )
-        result = cache.get_extract("https://example.com")
-        assert result is not None
-
-    def test_get_extract_miss(self, cache):
-        """get_extract returns None when URL not in any cache."""
-        assert cache.get_extract("https://nowhere.com") is None
 
 
 # -----------------------------------------------------------------------
