@@ -168,6 +168,31 @@ class TestLibraryCRUD:
         assert lib is not None
         assert lib["name"] == "pytorch"
 
+    def test_upsert_library_full_path(self, db):
+        """Exercise both INSERT and UPDATE paths for upsert_library."""
+        # INSERT path
+        lib_id = db.upsert_library(
+            name="NewLib",
+            docs_url="https://newlib.io",
+            registry="pypi",
+            description="A new library",
+        )
+        assert lib_id
+        lib = db.get_library("newlib")
+        assert lib["name"] == "newlib"
+        assert lib["docs_url"] == "https://newlib.io"
+
+        # UPDATE path with partial parameters
+        lib_id2 = db.upsert_library(name="NewLib", description="Updated description")
+        assert lib_id == lib_id2
+        lib = db.get_library("newlib")
+        assert lib["description"] == "Updated description"
+        assert lib["docs_url"] == "https://newlib.io"  # Should remain same
+
+        # UPDATE path with minimal parameters (only name)
+        lib_id3 = db.upsert_library(name="NewLib")
+        assert lib_id == lib_id3
+
 
 # -----------------------------------------------------------------------
 # Version management

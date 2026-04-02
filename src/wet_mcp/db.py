@@ -362,13 +362,12 @@ class DocsDB:
             updates.append("updated_at = ?")
             params.append(now)
             params.append(lib_id)
-            if updates:
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(
-                    f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
-                    params,
-                )
-                self._conn.commit()
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            self._conn.execute(
+                f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            self._conn.commit()
             return lib_id
 
         lib_id = uuid.uuid4().hex[:12]
