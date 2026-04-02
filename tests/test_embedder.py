@@ -613,6 +613,15 @@ class TestQwen3EmbedBackend:
 
 
 class TestBackendFactory:
+    def test_get_backend(self):
+        """get_backend() returns the current singleton."""
+        # Use patch to avoid messing with global state for other tests
+        with patch("wet_mcp.embedder._backend", None):
+            assert get_backend() is None
+            mock_backend = MagicMock()
+            with patch("wet_mcp.embedder._backend", mock_backend):
+                assert get_backend() is mock_backend
+
     def test_init_cloud_backend(self):
         """init_backend('cloud') creates CloudEmbeddingBackend."""
         backend = init_backend("cloud", "test-model")
