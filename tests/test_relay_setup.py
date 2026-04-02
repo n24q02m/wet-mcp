@@ -65,6 +65,35 @@ class TestLoadConfigFromFile:
         # Should not raise, returns None if module missing or config not found
         assert result is None or isinstance(result, dict)
 
+    def test_returns_config_when_valid_file_exists(self):
+        """Returns config when it contains at least one cloud key."""
+        mock_config = {"OPENAI_API_KEY": "sk-test"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=mock_config,
+        ):
+            result = load_config_from_file()
+        assert result == mock_config
+
+    def test_returns_none_when_no_cloud_keys(self):
+        """Returns None if config exists but has no cloud keys."""
+        mock_config = {"OTHER_VAR": "some_value"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=mock_config,
+        ):
+            result = load_config_from_file()
+        assert result is None
+
+    def test_returns_none_on_exception(self):
+        """Returns None if an exception occurs during loading."""
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            side_effect=RuntimeError("Load failed"),
+        ):
+            result = load_config_from_file()
+        assert result is None
+
 
 class TestApplyConfig:
     """Tests for apply_config."""

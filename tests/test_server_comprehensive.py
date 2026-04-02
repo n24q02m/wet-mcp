@@ -81,6 +81,7 @@ async def test_lifespan():
     with (
         patch("wet_mcp.server.WebCache"),
         patch("wet_mcp.server.DocsDB"),
+        patch("wet_mcp.relay_setup.ensure_config", new_callable=AsyncMock),
         patch(
             "wet_mcp.server.shutdown_crawler", new_callable=AsyncMock
         ) as mock_shutdown,
