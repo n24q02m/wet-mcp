@@ -10,7 +10,6 @@ from wet_mcp.setup import (
     needs_setup,
     patch_searxng_version,
     patch_searxng_windows,
-    reset_setup,
     run_auto_setup,
 )
 
@@ -357,18 +356,3 @@ def test_run_auto_setup_crawl4ai_fail(
     mock_marker.touch.assert_not_called()
 
 
-# Test reset_setup
-
-
-@patch("wet_mcp.setup.SETUP_MARKER")
-def test_reset_setup_exists(mock_marker):
-    mock_marker.exists.return_value = True
-    reset_setup()
-    mock_marker.unlink.assert_called_once()
-
-
-@patch("wet_mcp.setup.SETUP_MARKER")
-def test_reset_setup_not_exists(mock_marker):
-    mock_marker.exists.return_value = False
-    reset_setup()
-    mock_marker.unlink.assert_not_called()

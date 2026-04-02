@@ -297,8 +297,3 @@ def run_auto_setup() -> bool:
     return success
 
 
-def reset_setup() -> None:
-    """Reset setup marker to force re-run on next start."""
-    if SETUP_MARKER.exists():
-        SETUP_MARKER.unlink()
-        logger.info("Setup marker removed, will re-run on next start")

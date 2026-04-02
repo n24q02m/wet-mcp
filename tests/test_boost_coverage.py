@@ -2571,17 +2571,6 @@ class TestSetup:
         assert setup.needs_setup() is True
         setup.SETUP_MARKER = old
 
-    def test_reset_setup(self, tmp_path):
-        """reset_setup removes marker."""
-        from wet_mcp import setup
-
-        old = setup.SETUP_MARKER
-        setup.SETUP_MARKER = tmp_path / ".setup-complete"
-        setup.SETUP_MARKER.touch()
-        setup.reset_setup()
-        assert not setup.SETUP_MARKER.exists()
-        setup.SETUP_MARKER = old
-
     def test_find_searx_package_dir_found(self):
         """Returns path when searx found."""
         from wet_mcp.setup import _find_searx_package_dir
