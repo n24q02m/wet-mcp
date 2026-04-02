@@ -815,10 +815,11 @@ class DocsDB:
 
                     # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                     rows = self._conn.execute(
-                        f"""SELECT url, version_id, chunk_index, content
-                            FROM doc_chunks
-                            WHERE url = ? AND version_id = ? AND chunk_index IN ({_placeholders})""",
-                        [_url, _ver] + _chunk_indices,
+                        "SELECT url, version_id, chunk_index, content FROM doc_chunks "
+                        "WHERE url = ? AND version_id = ? AND chunk_index IN ("
+                        + _placeholders
+                        + ")",
+                        [_url, _ver, *_chunk_indices],
                     ).fetchall()
                     for r in rows:
                         _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
