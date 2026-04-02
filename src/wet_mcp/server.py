@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from urllib.parse import urlparse
@@ -1387,48 +1388,55 @@ async def _fetch_and_chunk_docs(
 # ---------------------------------------------------------------------------
 
 
-async def _background_index_and_search(
-    library: str,
-    lib_key: str,
-    language: str | None,
-    docs_url: str,
-    repo_url: str,
-    query: str,
-    version: str | None,
-    lib_id: str,
-    ver_id: str,
-):
+@dataclass
+class IndexingTask:
+    """Context for background indexing and search."""
+
+    library: str
+    lib_key: str
+    language: str | None
+    docs_url: str
+    repo_url: str
+    query: str
+    version: str | None
+    lib_id: str
+    ver_id: str
+
+
+async def _background_index_and_search(task: IndexingTask):
     """Background task to fetch, chunk, embed, and store docs."""
     try:
         from urllib.parse import urlparse
 
         from wet_mcp.sources.docs import _normalize_docs_url
 
-        docs_url = _normalize_docs_url(docs_url)
-        logger.info(f"Background indexing started for '{library}' from {docs_url}...")
+        docs_url = _normalize_docs_url(task.docs_url)
+        logger.info(
+            f"Background indexing started for '{task.library}' from {docs_url}..."
+        )
 
         try:
             all_chunks, page_count = await asyncio.wait_for(
                 _fetch_and_chunk_docs(
                     docs_url=docs_url,
-                    repo_url=repo_url,
-                    query=query,
-                    library_hint=library,
+                    repo_url=task.repo_url,
+                    query=task.query,
+                    library_hint=task.library,
                 ),
                 timeout=_FETCH_TIMEOUT,
             )
         except TimeoutError:
             logger.warning(
-                f"Docs fetch timed out after {_FETCH_TIMEOUT}s for '{library}'"
+                f"Docs fetch timed out after {_FETCH_TIMEOUT}s for '{task.library}'"
             )
             all_chunks, page_count = [], 0
 
         # Fallback SearXNG
         if page_count <= 2 and len(all_chunks) < 100:
             fallback_query = (
-                f"{library} {language} documentation"
-                if language
-                else f"{library} documentation"
+                f"{task.library} {task.language} documentation"
+                if task.language
+                else f"{task.library} documentation"
             )
             try:
                 searxng_url = await asyncio.wait_for(
@@ -1456,7 +1464,7 @@ async def _background_index_and_search(
                         continue
                     try:
                         alt_chunks, alt_pages = await asyncio.wait_for(
-                            _fetch_and_chunk_docs(alt_url, "", query),
+                            _fetch_and_chunk_docs(alt_url, "", task.query),
                             timeout=_FALLBACK_TIMEOUT,
                         )
                     except TimeoutError:
@@ -1501,18 +1509,18 @@ async def _background_index_and_search(
 
         # Store chunks
         _docs_db.add_chunks(
-            version_id=ver_id,
-            library_id=lib_id,
+            version_id=task.ver_id,
+            library_id=task.lib_id,
             chunks=all_chunks,
             embeddings=embeddings,
         )
-        _docs_db.mark_version_indexed(ver_id, page_count, len(all_chunks))
+        _docs_db.mark_version_indexed(task.ver_id, page_count, len(all_chunks))
         logger.info(
-            f"Background indexing complete for '{library}'. Pages: {page_count}, Chunks: {len(all_chunks)}"
+            f"Background indexing complete for '{task.library}'. Pages: {page_count}, Chunks: {len(all_chunks)}"
         )
 
     except Exception as e:
-        logger.error(f"Background indexing failed for {library}: {e}")
+        logger.error(f"Background indexing failed for {task.library}: {e}")
 
 
 async def _search_cached_index(
@@ -1744,19 +1752,18 @@ async def _do_docs_search(
     _docs_db.clear_version_chunks(ver_id)
 
     # Step 3: Launch background indexer
-    asyncio.create_task(
-        _background_index_and_search(
-            library=library,
-            lib_key=lib_key,
-            language=language,
-            docs_url=docs_url,
-            repo_url=repo_url,
-            query=query,
-            version=version,
-            lib_id=lib_id,
-            ver_id=ver_id,
-        )
+    task = IndexingTask(
+        library=library,
+        lib_key=lib_key,
+        language=language,
+        docs_url=docs_url,
+        repo_url=repo_url,
+        query=query,
+        version=version,
+        lib_id=lib_id,
+        ver_id=ver_id,
     )
+    asyncio.create_task(_background_index_and_search(task))
 
     fallback_data = await _do_immediate_fallback_search(
         docs_url=docs_url,
