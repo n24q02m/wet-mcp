@@ -1,7 +1,10 @@
 import socket
 from unittest.mock import patch
 
-from wet_mcp.security import is_safe_local_path, is_safe_url
+import httpx
+import pytest
+
+from wet_mcp.security import is_safe_local_path, is_safe_url, safe_httpx_client
 
 # Tests mock ``web_core.http.client._original_getaddrinfo`` because
 # ``is_safe_url`` (now in web-core) calls the saved reference (not
@@ -308,3 +311,45 @@ def test_safe_local_path_symlink_escape(tmp_path):
     link = allowed / "link.txt"
     link.symlink_to(secret)
     assert is_safe_local_path(str(link), allowed_dirs=[allowed]) is None
+
+
+async def test_safe_httpx_client_ssrf_blocking():
+    """Test that safe_httpx_client blocks SSRF attempts via its event hook."""
+    async with safe_httpx_client() as client:
+        # Loopback should be blocked by the hook
+        with pytest.raises(httpx.RequestError, match="SSRF blocked"):
+            await client.get("http://127.0.0.1")
+
+        # Private IP should be blocked
+        with pytest.raises(httpx.RequestError, match="SSRF blocked"):
+            await client.get("http://192.168.1.1")
+
+
+async def test_safe_httpx_client_custom_hooks():
+    """Test that safe_httpx_client preserves custom event hooks."""
+    called = []
+
+    async def custom_hook(request):
+        called.append(request.url)
+
+    async def handler(request):
+        return httpx.Response(200, content=b"ok")
+
+    transport = httpx.MockTransport(handler)
+
+    async with safe_httpx_client(
+        transport=transport, event_hooks={"request": [custom_hook]}
+    ) as client:
+        # Check that it still blocks SSRF
+        with pytest.raises(httpx.RequestError, match="SSRF blocked"):
+            await client.get("http://localhost")
+
+        # Check that it allows safe URLs and calls our hook
+        with patch("wet_mcp.security.is_safe_url", return_value=True):
+            resp = await client.get("https://example.com")
+            assert resp.status_code == 200
+
+        # Robust URL matching (checking host and scheme)
+        assert any(
+            url.scheme == "https" and url.host == "example.com" for url in called
+        )
