@@ -76,7 +76,8 @@ async def test_warmup_searxng_exception():
 
 
 @pytest.mark.asyncio
-async def test_lifespan():
+@patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock)
+async def test_lifespan(mock_warmup):
     mock_fastmcp = MagicMock()
     with (
         patch("wet_mcp.server.WebCache"),
@@ -730,8 +731,9 @@ async def test_help_tool_config():
 
 
 @pytest.mark.asyncio
+@patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock)
 @_skip_win_iocp
-async def test_lifespan_startup_no_github_token():
+async def test_lifespan_startup_no_github_token(mock_warmup):
     """Test lifespan warns when GITHUB_TOKEN is not set (line 106)."""
     mock_fastmcp = MagicMock()
     with (
@@ -776,7 +778,8 @@ async def test_lifespan_startup_backend_init_error(mock_warmup):
 
 
 @pytest.mark.asyncio
-async def test_lifespan_startup_sync_enabled():
+@patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock)
+async def test_lifespan_startup_sync_enabled(mock_warmup):
     """Test lifespan starts auto-sync when sync_enabled (lines 147-149)."""
     mock_fastmcp = MagicMock()
     # The lifespan function re-imports settings from wet_mcp.config,
@@ -806,7 +809,8 @@ async def test_lifespan_startup_sync_enabled():
 
 
 @pytest.mark.asyncio
-async def test_lifespan_shutdown_sync_enabled():
+@patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock)
+async def test_lifespan_shutdown_sync_enabled(mock_warmup):
     """Test lifespan shutdown stops auto-sync (lines 172-174)."""
     mock_fastmcp = MagicMock()
     with (
@@ -833,7 +837,8 @@ async def test_lifespan_shutdown_sync_enabled():
 
 
 @pytest.mark.asyncio
-async def test_lifespan_shutdown_crawler_error():
+@patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock)
+async def test_lifespan_shutdown_crawler_error(mock_warmup):
     """Test lifespan handles crawler shutdown error (lines 187-188)."""
     mock_fastmcp = MagicMock()
     with (
