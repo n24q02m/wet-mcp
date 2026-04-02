@@ -1752,3 +1752,21 @@ class TestVecSearchChunkLoading:
             assert any("different topic" in c for c in all_contents)
         finally:
             db.close()
+
+
+class TestMigration:
+    """Cover lines 201-207: column migration error handled."""
+
+    def test_migration_column_exists(self, tmp_path):
+        """Re-initializing DocsDB on existing DB handles already-added column."""
+        db_file = tmp_path / "migration.db"
+        from wet_mcp.db import DocsDB
+
+        # First init creates table and column
+        db1 = DocsDB(db_file)
+        db1.close()
+
+        # Second init should trigger OperationalError (column already exists)
+        # and it should be caught silently.
+        db2 = DocsDB(db_file)
+        db2.close()
