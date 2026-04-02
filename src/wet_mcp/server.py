@@ -1168,9 +1168,10 @@ async def config(
 @mcp.tool(
     description=(
         "Server setup and warmup. Actions: "
-        "warmup|setup_sync. "
+        "warmup|setup_sync|setup_relay. "
         "warmup: Pre-download models and install dependencies. "
-        "setup_sync: Configure Google Drive sync (OAuth Device Code)."
+        "setup_sync: Configure Google Drive sync (OAuth Device Code). "
+        "setup_relay: Start relay setup to configure API keys via browser."
     ),
     annotations=ToolAnnotations(
         title="Setup",
@@ -1189,6 +1190,7 @@ async def setup(
     Actions:
     - warmup: Pre-download models and run first-time setup
     - setup_sync: Configure cloud sync (remote_type defaults to 'drive')
+    - setup_relay: Start relay setup to configure API keys via browser
     """
     from wet_mcp.setup_tool import run_setup_sync, run_warmup
 
@@ -1201,13 +1203,22 @@ async def setup(
             result = await run_setup_sync(remote_type or "drive")
             return json.dumps(result, indent=2, default=str)
 
+        case "setup_relay":
+            from wet_mcp.relay_setup import apply_config, trigger_relay_setup
+
+            config = await trigger_relay_setup()
+            if config:
+                apply_config(config)
+                settings.setup_providers()
+                return json.dumps({"status": "ok", "message": "Relay config applied."})
+            return json.dumps(
+                {"status": "error", "message": "Relay setup failed or timed out."}
+            )
+
         case _:
             import difflib
 
-            valid_actions = [
-                "setup_sync",
-                "warmup",
-            ]
+            valid_actions = ["setup_relay", "setup_sync", "warmup"]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return json.dumps(

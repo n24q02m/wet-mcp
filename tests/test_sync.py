@@ -11,11 +11,15 @@ from pathlib import Path
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
+import wet_mcp.sync
 from wet_mcp import sync
 from wet_mcp.sync import (
     _has_token_available,
+    check_health,
+    setup_sync,
     start_auto_sync,
     stop_auto_sync,
 )
@@ -614,3 +618,192 @@ class TestSetupGoogleAuth:
             mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
 
             assert await sync.setup_google_auth() is False
+
+    async def test_exception(self):
+        token = {"access_token": "valid"}
+
+        with (
+            patch(
+                "wet_mcp.sync._get_valid_token",
+                new_callable=AsyncMock,
+                return_value=token,
+            ),
+            patch(
+                "wet_mcp.sync._drive_request",
+                new_callable=AsyncMock,
+                side_effect=Exception("Connection error"),
+            ),
+        ):
+            assert await check_health() is False
+
+
+class TestSetupSync:
+    def test_no_client_id(self):
+        """setup_sync exits when GOOGLE_DRIVE_CLIENT_ID is not set."""
+        import pytest
+
+        with patch("wet_mcp.sync.settings") as mock_settings:
+            mock_settings.google_drive_client_id = ""
+            with pytest.raises(SystemExit, match="1"):
+                setup_sync()
+
+    def test_success(self, capsys):
+        """setup_sync prints success on successful auth."""
+        with (
+            patch("wet_mcp.sync.settings") as mock_settings,
+            patch("wet_mcp.sync.asyncio.run", return_value=True),
+        ):
+            mock_settings.google_drive_client_id = "client123"
+            setup_sync()
+            captured = capsys.readouterr()
+            assert "SUCCESS" in captured.out
+            assert "SYNC_ENABLED" in captured.out
+
+    def test_failure(self):
+        """setup_sync exits on auth failure."""
+        import pytest
+
+        with (
+            patch("wet_mcp.sync.settings") as mock_settings,
+            patch("wet_mcp.sync.asyncio.run", return_value=False),
+        ):
+            mock_settings.google_drive_client_id = "client123"
+            with pytest.raises(SystemExit, match="1"):
+                setup_sync()
+
+
+class TestStartAutoSync:
+    def teardown_method(self):
+        """Ensure _sync_task is reset after each test."""
+        if wet_mcp.sync._sync_task and not wet_mcp.sync._sync_task.done():
+            wet_mcp.sync._sync_task.cancel()
+        wet_mcp.sync._sync_task = None
+
+    def test_sync_disabled(self):
+        """Task is not started if sync is disabled."""
+        mock_db = MagicMock()
+        with (
+            patch("wet_mcp.sync.settings") as mock_settings,
+            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
+        ):
+            mock_settings.sync_enabled = False
+            start_auto_sync(mock_db)
+            mock_create_task.assert_not_called()
+
+    def test_no_client_id_still_starts(self):
+        """Task is started even if client ID is empty (sync_enabled=True)."""
+        mock_db = MagicMock()
+        with (
+            patch("wet_mcp.sync.settings") as mock_settings,
+            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
+            patch("wet_mcp.sync._auto_sync_loop"),
+        ):
+            mock_settings.sync_enabled = True
+            mock_settings.google_drive_client_id = ""
+            mock_settings.sync_interval = 60
+            start_auto_sync(mock_db)
+            mock_create_task.assert_called_once()
+
+    def test_invalid_interval(self):
+        """Task is not started if interval is <= 0."""
+        mock_db = MagicMock()
+        with (
+            patch("wet_mcp.sync.settings") as mock_settings,
+            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
+        ):
+            mock_settings.sync_enabled = True
+            mock_settings.google_drive_client_id = "client123"
+            mock_settings.sync_interval = 0
+            start_auto_sync(mock_db)
+            mock_create_task.assert_not_called()
+
+    def test_already_running(self):
+        """Task is not started if already running."""
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        wet_mcp.sync._sync_task = mock_task
+
+        mock_db = MagicMock()
+        with (
+            patch("wet_mcp.sync.settings") as mock_settings,
+            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
+        ):
+            mock_settings.sync_enabled = True
+            mock_settings.google_drive_client_id = "client123"
+            mock_settings.sync_interval = 60
+
+            start_auto_sync(mock_db)
+            mock_create_task.assert_not_called()
+
+    def test_starts_task(self):
+        """Task is started correctly when conditions are met."""
+        wet_mcp.sync._sync_task = None
+
+        mock_db = MagicMock()
+        with (
+            patch("wet_mcp.sync.settings") as mock_settings,
+            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
+            patch("wet_mcp.sync._auto_sync_loop") as mock_loop,
+        ):
+            mock_settings.sync_enabled = True
+            mock_settings.google_drive_client_id = "client123"
+            mock_settings.sync_interval = 60
+
+            dummy_task = MagicMock()
+            mock_create_task.return_value = dummy_task
+
+            start_auto_sync(mock_db)
+
+            mock_create_task.assert_called_once()
+            assert wet_mcp.sync._sync_task == dummy_task
+            mock_loop.assert_called_once_with(mock_db)
+
+
+class TestStopAutoSync:
+    def test_no_task(self):
+        wet_mcp.sync._sync_task = None
+        stop_auto_sync()
+        assert wet_mcp.sync._sync_task is None
+
+    def test_task_already_done(self):
+        import asyncio
+
+        future = asyncio.Future()
+        future.set_result(None)
+        wet_mcp.sync._sync_task = future  # ty: ignore[invalid-assignment]
+        stop_auto_sync()
+        # Task is done, should not be cancelled or cleared
+        assert wet_mcp.sync._sync_task is future
+
+    def test_running_task_cancelled(self):
+        mock_task = MagicMock()
+        mock_task.done.return_value = False
+        wet_mcp.sync._sync_task = mock_task
+        stop_auto_sync()
+        mock_task.cancel.assert_called_once()
+        assert wet_mcp.sync._sync_task is None
+
+
+class TestDriveRequest:
+    async def test_authenticated_request(self):
+        from wet_mcp.sync import _drive_request
+
+        token = {"access_token": "test_token"}
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            result = await _drive_request("GET", "https://example.com", token)
+
+        assert result.status_code == 200
+        # Verify auth header was set
+        call_kwargs = mock_client.request.call_args
+        assert "Authorization" in call_kwargs.kwargs.get(
+            "headers", {}
+        ) or "Authorization" in call_kwargs[1].get("headers", {})

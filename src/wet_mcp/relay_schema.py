@@ -15,7 +15,7 @@ RELAY_SCHEMA: dict[str, Any] = {
             "type": "password",
             "placeholder": "jina_...",
             "helpUrl": "https://jina.ai/api-key",
-            "helpText": "Embedding + Reranking (highest priority for both).",
+            "helpText": "Search + Extraction + Embedding + Reranking (highest priority).",
             "required": False,
         },
         {
@@ -24,7 +24,7 @@ RELAY_SCHEMA: dict[str, Any] = {
             "type": "password",
             "placeholder": "AIza...",
             "helpUrl": "https://aistudio.google.com/apikey",
-            "helpText": "Embedding + LLM/Vision. Free tier available.",
+            "helpText": "LLM (structured extraction, media analysis) + Embedding. Free tier available.",
             "required": False,
         },
         {
@@ -33,7 +33,7 @@ RELAY_SCHEMA: dict[str, Any] = {
             "type": "password",
             "placeholder": "sk-...",
             "helpUrl": "https://platform.openai.com/api-keys",
-            "helpText": "Embedding + LLM/Vision (lower priority than Gemini).",
+            "helpText": "LLM + Embedding (lower priority than Gemini).",
             "required": False,
         },
         {
@@ -48,6 +48,11 @@ RELAY_SCHEMA: dict[str, Any] = {
     ],
     "capabilityInfo": [
         {
+            "label": "Search & Extraction",
+            "priority": "Jina > SearXNG (local)",
+            "description": "Web search, content extraction, and site crawling.",
+        },
+        {
             "label": "Embedding",
             "priority": "Jina > Gemini > OpenAI > Cohere > Local ONNX",
             "description": "Vector embeddings for docs search. Local mode uses Qwen3-Embedding (0.6B ONNX).",
@@ -60,7 +65,7 @@ RELAY_SCHEMA: dict[str, Any] = {
         {
             "label": "LLM / Vision",
             "priority": "Gemini > OpenAI",
-            "description": "Image analysis and keyword extraction. Without a key, the MCP client/agent handles images directly.",
+            "description": "Used for structured extraction and media analysis. Without a key, these features are limited.",
         },
     ],
 }

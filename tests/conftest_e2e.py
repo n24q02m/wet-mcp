@@ -12,12 +12,10 @@ Copy this file to each MCP server's tests/ directory unchanged.
 
 from __future__ import annotations
 
-import io
 import os
 import re
 import subprocess
 import sys
-import threading
 import time
 from typing import TextIO
 
@@ -27,7 +25,7 @@ BROWSER_PATHS: dict[str, str] = {
     "edge": r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
 }
 
-RELAY_URL_PATTERN = re.compile(r"https?://\S+#k=[A-Za-z0-9+/=]+&p=\S+")
+RELAY_URL_PATTERN = re.compile(r"https?://\S+#k=[A-Za-z0-9+/=_-]+&p=\S+")
 
 
 def pytest_addoption(parser):
@@ -47,43 +45,70 @@ def pytest_addoption(parser):
 
 
 class StderrCapture:
-    """Tee stderr to both a buffer and real stderr.
+    """Capture subprocess stderr to a temp file for relay URL detection.
 
-    Allows relay URL detection while still showing server logs to user.
+    On Windows, subprocess connects directly to a file descriptor,
+    bypassing any Python-level write(). We use a real temp file
+    and poll it for the relay URL.
     """
 
     def __init__(self, real_stderr: TextIO | None = None):
-        self._buffer = io.StringIO()
+        import tempfile
+
         self._real_stderr = real_stderr or sys.stderr
-        self._lock = threading.Lock()
+        # Use a real temp file so subprocess can write via fd
+        self._file = tempfile.NamedTemporaryFile(
+            mode="w+", suffix=".log", delete=False, encoding="utf-8"
+        )
+        self._path = self._file.name
 
     def write(self, text: str) -> int:
-        with self._lock:
-            self._buffer.write(text)
+        """Write to temp file (called on non-Windows or pipe mode)."""
+        self._file.write(text)
+        self._file.flush()
         return self._real_stderr.write(text)
 
     def flush(self) -> None:
+        self._file.flush()
         self._real_stderr.flush()
 
-    @property
     def fileno(self):
-        """Delegate fileno to real stderr for compatibility."""
-        return self._real_stderr.fileno
+        """Return temp file fd for subprocess stderr redirection."""
+        return self._file.fileno()
 
     def get_relay_url(self, timeout: float = 30.0) -> str | None:
-        """Wait for relay URL to appear in captured stderr."""
+        """Wait for relay URL to appear in captured stderr file."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            with self._lock:
-                match = RELAY_URL_PATTERN.search(self._buffer.getvalue())
-            if match:
-                return match.group(0)
+            try:
+                with open(self._path, encoding="utf-8", errors="replace") as f:
+                    content = f.read()
+                match = RELAY_URL_PATTERN.search(content)
+                if match:
+                    return match.group(0)
+            except (OSError, PermissionError):
+                pass
             time.sleep(0.5)
         return None
 
     def get_output(self) -> str:
-        with self._lock:
-            return self._buffer.getvalue()
+        """Read all captured stderr output."""
+        try:
+            with open(self._path, encoding="utf-8", errors="replace") as f:
+                return f.read()
+        except (OSError, PermissionError):
+            return ""
+
+    def close(self):
+        """Clean up temp file."""
+        try:
+            self._file.close()
+        except Exception:
+            pass
+        try:
+            os.unlink(self._path)
+        except Exception:
+            pass
 
 
 def open_browser(url: str, browser: str = "chrome") -> None:

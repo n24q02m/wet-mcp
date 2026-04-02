@@ -43,8 +43,14 @@ EXPECTED_TOOLS = {"search", "extract", "media", "config", "help", "setup"}
 # -- Fixtures ----------------------------------------------------------------
 
 
-def _build_server_env(tmp_path, setup_mode: str) -> dict[str, str]:
-    """Build env vars for server, stripping credentials in relay mode."""
+def _build_server_env(
+    tmp_path, setup_mode: str, *, allow_gdrive: bool = False
+) -> dict[str, str]:
+    """Build env vars for server, stripping credentials in relay mode.
+
+    allow_gdrive: if False (default), blanks GOOGLE_DRIVE_CLIENT_ID/SECRET
+    to prevent real OAuth Device Code flow in automated tests.
+    """
     base_env = {
         **os.environ,
         "LOG_LEVEL": "WARNING",
@@ -54,6 +60,9 @@ def _build_server_env(tmp_path, setup_mode: str) -> dict[str, str]:
         "EMBEDDING_BACKEND": "local",
         "RERANK_BACKEND": "local",
     }
+    if not allow_gdrive:
+        base_env["GOOGLE_DRIVE_CLIENT_ID"] = ""
+        base_env["GOOGLE_DRIVE_CLIENT_SECRET"] = ""
     if setup_mode == "relay":
         return {k: v for k, v in base_env.items() if k not in CREDENTIAL_ENV_VARS}
     return base_env
@@ -84,31 +93,23 @@ async def session(request, tmp_path):
     errlog_kwargs = {"errlog": capture} if capture else {}
 
     try:
-        async with stdio_client(params, **errlog_kwargs) as (read_stream, write_stream):
+        async with stdio_client(params, **errlog_kwargs) as (read_stream, write_stream):  # ty: ignore[invalid-argument-type]
             async with ClientSession(read_stream, write_stream) as s:
                 await s.initialize()
 
                 if setup_mode == "relay" and capture:
-                    relay_url = capture.get_relay_url(timeout=15)
+                    # wet-mcp relay is manual: call setup_relay action
+                    print("\n>>> Triggering relay via setup_relay...", flush=True)
+                    relay_task = asyncio.create_task(
+                        s.call_tool("setup", {"action": "setup_relay"})
+                    )
+                    relay_url = await asyncio.to_thread(capture.get_relay_url, 90)
                     if relay_url:
-                        print(f"\n>>> Open relay in browser: {relay_url}", flush=True)
+                        print(f">>> Open relay in browser: {relay_url}", flush=True)
                         open_browser(relay_url, browser_name)
-
-                    # Poll config status until configured
-                    deadline = asyncio.get_event_loop().time() + 120
-                    while asyncio.get_event_loop().time() < deadline:
-                        try:
-                            r = await s.call_tool("config", {"action": "status"})
-                            text = parse_result_allow_error(r)
-                            if any(
-                                k in text.lower()
-                                for k in ["jina", "gemini", "openai", "cohere", "cloud"]
-                            ):
-                                print("\n>>> Relay config received.", flush=True)
-                                break
-                        except Exception:
-                            pass
-                        await asyncio.sleep(2)
+                    # Wait for user to submit credentials
+                    await asyncio.wait_for(relay_task, timeout=180)
+                    print(">>> Relay config received.", flush=True)
 
                 yield s
     except (RuntimeError, ExceptionGroup) as exc:
@@ -378,7 +379,11 @@ class TestErrorHandling:
 @pytest.mark.e2e
 @pytest.mark.timeout(300)
 async def test_relay_all_tools(request, tmp_path):
-    """Relay mode: start server without API keys, user enters via browser.
+    """Relay mode: start server without API keys, trigger relay via setup tool.
+
+    wet-mcp relay is MANUAL (trigger_relay_setup), not auto like mnemo/telegram.
+    Flow: initialize (local mode) -> call setup_relay -> browser opens -> user enters
+    credentials -> poll config status -> run all tools with cloud credentials.
 
     Run with: uv run pytest tests/test_e2e.py -m e2e -k relay --setup=relay --browser=chrome -v -s
     """
@@ -392,61 +397,63 @@ async def test_relay_all_tools(request, tmp_path):
     capture = StderrCapture()
 
     try:
-        async with stdio_client(params, errlog=capture) as (read_stream, write_stream):
+        async with stdio_client(params, errlog=capture) as (read_stream, write_stream):  # ty: ignore[invalid-argument-type]
             async with ClientSession(read_stream, write_stream) as s:
                 await s.initialize()
 
-                # Wait for relay URL
-                relay_url = capture.get_relay_url(timeout=15)
-                assert relay_url, "No relay URL detected in stderr"
-                print(f"\n>>> RELAY URL: {relay_url}", flush=True)
+                # wet-mcp does NOT auto-trigger relay at startup.
+                # Trigger it manually via setup_relay action.
+                print("\n>>> Triggering relay via setup_relay action...", flush=True)
+
+                # Call setup_relay in background (it blocks until user submits)
+                relay_task = asyncio.create_task(
+                    s.call_tool("setup", {"action": "setup_relay"})
+                )
+
+                # Wait for relay URL to appear in stderr.
+                # Use asyncio.to_thread to avoid blocking the event loop
+                # (server needs event loop for model loading + relay session).
+                relay_url = await asyncio.to_thread(capture.get_relay_url, 90)
+                assert relay_url, "No relay URL detected in stderr after setup_relay"
+                print(f">>> RELAY URL: {relay_url}", flush=True)
                 open_browser(relay_url, browser_name)
 
-                # Poll until configured (user enters credentials in browser)
                 print(
-                    ">>> Waiting for credentials (enter API keys in browser)...",
+                    ">>> Enter API keys in browser, then submit...",
                     flush=True,
                 )
-                deadline = asyncio.get_event_loop().time() + 180
-                while asyncio.get_event_loop().time() < deadline:
-                    try:
-                        r = await s.call_tool("config", {"action": "status"})
-                        text = parse_result_allow_error(r)
-                        if any(
-                            k in text.lower()
-                            for k in ["jina", "gemini", "openai", "cohere", "cloud"]
-                        ):
-                            print(
-                                ">>> Credentials received! Running tests...", flush=True
-                            )
-                            break
-                    except Exception:
-                        pass
-                    await asyncio.sleep(2)
+
+                # Wait for setup_relay to complete (user submits in browser)
+                r = await asyncio.wait_for(relay_task, timeout=300)
+                text = parse_result_allow_error(r)
+                print(f">>> setup_relay result: {text[:200]}", flush=True)
+
+                # Verify relay succeeded
+                assert '"ok"' in text, f"Relay setup failed: {text[:200]}"
+                print(">>> Relay config applied! Running tool tests...", flush=True)
 
                 # === ALL TOOLS in this single session ===
-                # search
                 r = await s.call_tool(
                     "search", {"action": "search", "query": "python asyncio"}
                 )
                 print(f"  search.search: {len(parse_result(r))} chars")
-                # extract
+
                 r = await s.call_tool(
                     "extract", {"action": "extract", "urls": ["https://example.com"]}
                 )
                 print(f"  extract.extract: {len(parse_result(r))} chars")
-                # media
+
                 r = await s.call_tool(
                     "media", {"action": "list", "url": "https://example.com"}
                 )
                 print("  media.list: OK")
-                # config
+
                 r = await s.call_tool("config", {"action": "status"})
                 print("  config.status: OK")
-                # setup
+
                 r = await s.call_tool("setup", {"action": "warmup"})
                 print("  setup.warmup: OK")
-                # help
+
                 r = await s.call_tool("help", {"tool_name": "search"})
                 print("  help: OK")
 
@@ -465,6 +472,7 @@ async def test_relay_all_tools(request, tmp_path):
 
 
 @pytest.mark.e2e
+@pytest.mark.slow
 @pytest.mark.timeout(300)
 async def test_gdrive_oauth(request, tmp_path):
     """GDrive OAuth Device Code: call setup_sync, user authorizes via Google.
@@ -472,7 +480,7 @@ async def test_gdrive_oauth(request, tmp_path):
     Run with: uv run pytest tests/test_e2e.py -m e2e -k gdrive --setup=env -v -s
     Requires GOOGLE_DRIVE_CLIENT_ID (hardcoded in config defaults).
     """
-    env = _build_server_env(tmp_path, "env")
+    env = _build_server_env(tmp_path, "env", allow_gdrive=True)
     params = _build_server_params("env", env)
 
     try:

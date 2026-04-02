@@ -282,6 +282,10 @@ class TestSigtermThenKill:
             result = _sigterm_then_kill(1234)
             assert result is True
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Unix-only: requires SIGKILL/killpg/getpgid",
+    )
     def test_sigterm_force_kill_needed(self):
         """Cover lines 424-430: needs SIGKILL after timeout."""
         from web_core.search.runner import _sigterm_then_kill
@@ -298,6 +302,10 @@ class TestSigtermThenKill:
             result = _sigterm_then_kill(1234, "test-proc")
             assert result is True
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Unix-only: requires SIGKILL/killpg/getpgid",
+    )
     def test_sigterm_force_kill_already_dead(self):
         """Cover line 429-430: ProcessLookupError on SIGKILL."""
         from web_core.search.runner import _sigterm_then_kill
@@ -329,6 +337,10 @@ class TestForceKillProcess:
         proc.poll.return_value = 0  # Already dead
         _force_kill_process(proc)  # Should return immediately
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Unix-only: requires SIGKILL/killpg/getpgid",
+    )
     def test_force_kill_unix_killpg_fails_falls_back(self):
         """Cover lines 450-451: killpg fails, falls back to proc.terminate."""
         from web_core.search.runner import _force_kill_process
@@ -347,6 +359,10 @@ class TestForceKillProcess:
             _force_kill_process(proc)
             proc.terminate.assert_called_once()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Unix-only: requires SIGKILL/killpg/getpgid",
+    )
     def test_force_kill_unix_sigkill_fallback(self):
         """Cover lines 462-463: SIGKILL killpg fails, falls back to proc.kill."""
         from web_core.search.runner import _force_kill_process
@@ -376,6 +392,10 @@ class TestForceKillProcess:
                 _force_kill_process(proc)
                 proc.kill.assert_called_once()
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Unix-only: requires SIGKILL/killpg/getpgid",
+    )
     def test_force_kill_unix_cannot_kill(self):
         """Cover lines 467-468: process cannot be killed."""
         from web_core.search.runner import _force_kill_process
@@ -409,6 +429,10 @@ class TestForceKillProcess:
             mock_sys.platform = "win32"
             _force_kill_process(proc)
 
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="Unix-only: requires SIGKILL/killpg/getpgid",
+    )
     def test_force_kill_general_exception(self):
         """Cover lines 475-476: general exception in force kill."""
         from web_core.search.runner import _force_kill_process

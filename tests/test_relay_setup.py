@@ -24,18 +24,18 @@ class TestRelaySchema:
         fields = RELAY_SCHEMA["fields"]
         assert len(fields) == 4
 
-    def test_schema_server_name(self):
-        assert RELAY_SCHEMA["server"] == "wet-mcp"
-
-    def test_schema_display_name(self):
-        assert RELAY_SCHEMA["displayName"] == "Web Extended Toolkit"
-
-    def test_schema_provider_keys(self):
+    def test_schema_field_keys(self):
         field_keys = [f["key"] for f in RELAY_SCHEMA["fields"]]
         assert "JINA_AI_API_KEY" in field_keys
         assert "GEMINI_API_KEY" in field_keys
         assert "OPENAI_API_KEY" in field_keys
         assert "COHERE_API_KEY" in field_keys
+
+    def test_schema_server_name(self):
+        assert RELAY_SCHEMA["server"] == "wet-mcp"
+
+    def test_schema_display_name(self):
+        assert RELAY_SCHEMA["displayName"] == "Web Extended Toolkit"
 
     def test_all_fields_optional(self):
         for f in RELAY_SCHEMA["fields"]:
@@ -43,9 +43,12 @@ class TestRelaySchema:
 
     def test_capability_info_present(self):
         assert "capabilityInfo" in RELAY_SCHEMA
+        assert len(RELAY_SCHEMA["capabilityInfo"]) == 4
         labels = [c["label"] for c in RELAY_SCHEMA["capabilityInfo"]]
+        assert "Search & Extraction" in labels
         assert "Embedding" in labels
         assert "Reranking" in labels
+        assert "LLM / Vision" in labels
 
 
 class TestLoadConfigFromFile:
@@ -129,12 +132,12 @@ class TestTriggerRelaySetup:
             )
             assert result == mock_config
 
-    async def test_returns_none_on_import_error(self):
-        """When mcp_relay_core is not available, returns None."""
+    async def test_returns_none_on_exception(self):
+        """When relay server is unreachable, returns None."""
         with patch(
             "mcp_relay_core.relay.client.create_session",
             new_callable=AsyncMock,
-            side_effect=ImportError("No module named 'mcp_relay_core'"),
+            side_effect=ConnectionError("unreachable"),
         ):
             result = await trigger_relay_setup()
             assert result is None

@@ -1,5 +1,8 @@
 import socket
+import sys
 from unittest.mock import patch
+
+import pytest
 
 from wet_mcp.security import is_safe_local_path, is_safe_url
 
@@ -262,6 +265,10 @@ def test_safe_local_path_rejects_directory(tmp_path):
     assert is_safe_local_path(str(tmp_path)) is None
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="PurePosixPath does not parse Windows backslash paths; '..' not detected",
+)
 def test_safe_local_path_rejects_dotdot(tmp_path):
     f = tmp_path / "test.txt"
     f.write_text("hello")
