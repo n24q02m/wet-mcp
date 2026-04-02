@@ -152,15 +152,6 @@ class TestLibraryCRUD:
         assert libs[0]["name"] == "fastapi"
         assert libs[0]["total_chunks"] == 4
 
-    def test_remove_library(self, db_with_data):
-        db = db_with_data[0]
-        assert db.remove_library("fastapi") is True
-        assert db.get_library("fastapi") is None
-        assert db.list_libraries() == []
-
-    def test_remove_nonexistent(self, db):
-        assert db.remove_library("ghost") is False
-
     def test_library_name_normalization(self, db):
         """Names are lowercased and stripped."""
         db.upsert_library(name="  PyTorch  ")
@@ -640,25 +631,6 @@ class TestEdgeCases:
         assert all(r["library"] == "lib-a" for r in results_a)
         assert all(r["library"] == "lib-b" for r in results_b)
 
-    def test_remove_library_cascades(self, db):
-        """Removing a library deletes all versions and chunks."""
-        lib_id = db.upsert_library(name="cascade")
-        ver_id = db.upsert_version(lib_id)
-        db.add_chunks(
-            ver_id,
-            lib_id,
-            [
-                {"content": "cascade test chunk"},
-            ],
-        )
-        db.mark_version_indexed(ver_id, 1, 1)
-
-        db.remove_library("cascade")
-
-        # Chunks should be gone
-        results = db.search(query="cascade", library_name="cascade")
-        assert results == []
-
 
 # -----------------------------------------------------------------------
 # sqlite-vec extension loading and vector table creation (lines 141-151, 266-271)
@@ -783,60 +755,6 @@ class TestUpsertLibraryPaths:
         assert lib["docs_url"] == "https://new.dev"
         assert lib["registry"] == "crates"
         assert lib["description"] == "A Rust library"
-
-
-# -----------------------------------------------------------------------
-# remove_library() bulk vector deletion (lines 396-403)
-# -----------------------------------------------------------------------
-
-
-class TestRemoveLibraryVec:
-    def test_remove_library_with_vec_enabled(self, tmp_path):
-        """remove_library deletes vector entries when vec is enabled."""
-        db = DocsDB(tmp_path / "rm_vec.db", embedding_dims=4)
-        try:
-            lib_id = db.upsert_library(name="veclib")
-            ver_id = db.upsert_version(lib_id)
-            embeddings = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0]]
-            db.add_chunks(
-                ver_id,
-                lib_id,
-                [{"content": "vec chunk 1"}, {"content": "vec chunk 2"}],
-                embeddings=embeddings,
-            )
-            # Verify vec entries exist
-            vec_count = db._conn.execute(
-                "SELECT COUNT(*) FROM doc_chunks_vec"
-            ).fetchone()[0]
-            assert vec_count == 2
-
-            db.remove_library("veclib")
-
-            # Vec entries should be gone
-            vec_count = db._conn.execute(
-                "SELECT COUNT(*) FROM doc_chunks_vec"
-            ).fetchone()[0]
-            assert vec_count == 0
-        finally:
-            db.close()
-
-    def test_remove_library_vec_error_handled(self, tmp_path):
-        """remove_library handles vec deletion errors gracefully."""
-        db = DocsDB(tmp_path / "rm_vec_err.db", embedding_dims=4)
-        try:
-            lib_id = db.upsert_library(name="veclib2")
-            ver_id = db.upsert_version(lib_id)
-            db.add_chunks(ver_id, lib_id, [{"content": "test chunk"}])
-
-            # Simulate vec table error by dropping it
-            db._conn.execute("DROP TABLE doc_chunks_vec")
-            db._conn.commit()
-
-            # Should not raise
-            result = db.remove_library("veclib2")
-            assert result is True
-        finally:
-            db.close()
 
 
 # -----------------------------------------------------------------------

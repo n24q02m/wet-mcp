@@ -411,34 +411,6 @@ class DocsDB:
         """).fetchall()
         return [dict(r) for r in rows]
 
-    def remove_library(self, name: str) -> bool:
-        """Remove a library and all its chunks."""
-        lib = self.get_library(name)
-        if not lib:
-            return False
-
-        lib_id = lib["id"]
-
-        # Remove vector entries in a single bulk query
-        if self._vec_enabled:
-            try:
-                self._conn.execute(
-                    "DELETE FROM doc_chunks_vec WHERE id IN "
-                    "(SELECT id FROM doc_chunks WHERE library_id = ?)",
-                    (lib_id,),
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to delete vector chunks: {e}",
-                )
-
-        # Cascade deletes chunks and versions
-        self._conn.execute("DELETE FROM doc_chunks WHERE library_id = ?", (lib_id,))
-        self._conn.execute("DELETE FROM versions WHERE library_id = ?", (lib_id,))
-        self._conn.execute("DELETE FROM libraries WHERE id = ?", (lib_id,))
-        self._conn.commit()
-        return True
-
     # -----------------------------------------------------------------------
     # Version management
     # -----------------------------------------------------------------------
