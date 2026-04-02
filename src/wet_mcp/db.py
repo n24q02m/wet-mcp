@@ -363,6 +363,18 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                # Validate update fragments against a whitelist to prevent SQL injection
+                allowed = {
+                    "docs_url = ?",
+                    "registry = ?",
+                    "description = ?",
+                    "discovery_version = ?",
+                    "updated_at = ?",
+                }
+                for update in updates:
+                    if update not in allowed:
+                        raise ValueError(f"Invalid update fragment: {update}")
+
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
                     f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
