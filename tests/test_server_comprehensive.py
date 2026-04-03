@@ -85,6 +85,11 @@ async def test_lifespan():
             "wet_mcp.server.shutdown_crawler", new_callable=AsyncMock
         ) as mock_shutdown,
         patch("wet_mcp.server.stop_searxng") as mock_stop,
+        patch(
+            "wet_mcp.relay_setup.ensure_config",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         async with server._lifespan(mock_fastmcp):
             pass
@@ -742,21 +747,24 @@ async def test_help_tool_config():
 @_skip_win_iocp
 async def test_lifespan_startup_no_github_token():
     """Test lifespan warns when GITHUB_TOKEN is not set (line 106)."""
+    # Preserve home-directory env vars so Path.home() works on Windows
+    _home_vars = {
+        k: v
+        for k, v in os.environ.items()
+        if k in ("HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "SYSTEMROOT")
+    }
     mock_fastmcp = MagicMock()
     with (
         patch("wet_mcp.server.WebCache"),
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
-        patch.dict(
-            "os.environ",
-            {
-                k: v
-                for k, v in os.environ.items()
-                if k in ("USERPROFILE", "HOMEDRIVE", "HOMEPATH", "HOME", "SYSTEMROOT")
-            },
-            clear=True,
+        patch(
+            "wet_mcp.relay_setup.ensure_config",
+            new_callable=AsyncMock,
+            return_value=None,
         ),
+        patch.dict("os.environ", _home_vars, clear=True),
     ):
         async with server._lifespan(mock_fastmcp):
             pass
@@ -772,6 +780,11 @@ async def test_lifespan_startup_backend_init_error(mock_warmup):
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
+        patch(
+            "wet_mcp.relay_setup.ensure_config",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
         patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch(
             "wet_mcp.server._init_embedding_backend",
@@ -795,6 +808,11 @@ async def test_lifespan_startup_sync_enabled():
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
+        patch(
+            "wet_mcp.relay_setup.ensure_config",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
         patch("wet_mcp.config.settings") as ms,
         patch("wet_mcp.sync.start_auto_sync") as mock_start_sync,
         patch("wet_mcp.sync.stop_auto_sync") as mock_stop_sync,
@@ -823,6 +841,11 @@ async def test_lifespan_shutdown_sync_enabled():
         patch("wet_mcp.server.DocsDB"),
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
+        patch(
+            "wet_mcp.relay_setup.ensure_config",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
         patch("wet_mcp.config.settings") as ms,
         patch("wet_mcp.sync.start_auto_sync"),
         patch("wet_mcp.sync.stop_auto_sync") as mock_stop,
@@ -854,6 +877,11 @@ async def test_lifespan_shutdown_crawler_error():
             side_effect=Exception("browser crash"),
         ),
         patch("wet_mcp.server.stop_searxng"),
+        patch(
+            "wet_mcp.relay_setup.ensure_config",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         async with server._lifespan(mock_fastmcp):
             pass

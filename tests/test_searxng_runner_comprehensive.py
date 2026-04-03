@@ -275,7 +275,8 @@ def test_get_settings_path(tmp_path):
 
 
 @pytest.mark.skipif(
-    sys.platform == "win32", reason="Unix process group APIs unavailable on Windows"
+    sys.platform == "win32",
+    reason="Unix-only: requires SIGKILL/killpg/getpgid",
 )
 def test_force_kill_process():
     proc = MagicMock(spec=subprocess.Popen)
@@ -670,12 +671,17 @@ def test_cleanup_process_not_owner():
         mock_remove.assert_not_called()
 
 
-def test_get_process_kwargs():
-    mock_setsid = MagicMock()
-    with patch("sys.platform", "linux"), patch("os.setsid", mock_setsid, create=True):
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Unix-only: os.setsid not available on Windows",
+)
+def test_get_process_kwargs_unix():
+    with patch("sys.platform", "linux"):
         kwargs = _get_process_kwargs()
         assert "preexec_fn" in kwargs
 
+
+def test_get_process_kwargs_win32():
     with patch("sys.platform", "win32"):
         if not hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
             subprocess.CREATE_NEW_PROCESS_GROUP = 512

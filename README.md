@@ -32,7 +32,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 - **Media** -- List, download, and analyze images, videos, audio files
 - **Anti-bot** -- Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter
 - **Zero Config** -- Built-in local Qwen3 embedding + reranking, no API keys needed. Optional cloud providers (Jina AI, Gemini, OpenAI, Cohere)
-- **Sync** -- Cross-machine sync of indexed docs via rclone (Google Drive, S3, Dropbox)
+- **Sync** -- Cross-machine sync of indexed docs via Google Drive (OAuth Device Code, no browser redirect)
 
 ## Quick Start
 
@@ -156,19 +156,18 @@ The warmup action pre-downloads SearXNG, Playwright, and embedding/reranker mode
 
 ### Sync setup
 
-Sync is fully automatic. Just set `SYNC_ENABLED=true` and the server handles everything:
+Sync uses Google Drive with OAuth Device Code flow (no browser redirect needed):
 
-1. **First sync**: rclone is auto-downloaded, a browser opens for OAuth authentication
-2. **Token saved**: OAuth token is stored locally at `~/.wet-mcp/tokens/` (600 permissions)
-3. **Subsequent runs**: Token is loaded automatically -- no manual steps needed
-
-For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
+1. **Configure**: Set `SYNC_ENABLED=true`, `GOOGLE_DRIVE_CLIENT_ID`, and `GOOGLE_DRIVE_CLIENT_SECRET`
+2. **First sync**: Run `setup(action="setup_sync")` -- visit URL and enter code
+3. **Token saved**: OAuth token is stored locally at `~/.wet-mcp/tokens/` (600 permissions)
+4. **Subsequent runs**: Token is loaded automatically, auto-refreshed when expired
 
 ```jsonc
 {
   "SYNC_ENABLED": "true",
-  "SYNC_PROVIDER": "dropbox",
-  "SYNC_REMOTE": "dropbox"
+  "GOOGLE_DRIVE_CLIENT_ID": "your-client-id.apps.googleusercontent.com",
+  "GOOGLE_DRIVE_CLIENT_SECRET": "your-client-secret"
 }
 ```
 
@@ -201,10 +200,10 @@ For non-Google Drive providers, set `SYNC_PROVIDER` and `SYNC_REMOTE`:
 | `DOWNLOAD_DIR` | No | `~/.wet-mcp/downloads` | Media download directory |
 | `TOOL_TIMEOUT` | No | `120` | Tool execution timeout in seconds (0=no timeout) |
 | `WET_CACHE` | No | `true` | Enable/disable web cache |
-| `SYNC_ENABLED` | No | `false` | Enable rclone sync |
-| `SYNC_PROVIDER` | No | `drive` | rclone provider type (drive, dropbox, s3, etc.) |
-| `SYNC_REMOTE` | No | `gdrive` | rclone remote name |
-| `SYNC_FOLDER` | No | `wet-mcp` | Remote folder name |
+| `SYNC_ENABLED` | No | `false` | Enable Google Drive sync |
+| `GOOGLE_DRIVE_CLIENT_ID` | No | -- | OAuth client ID (required for sync) |
+| `GOOGLE_DRIVE_CLIENT_SECRET` | No | -- | OAuth client secret (required for sync) |
+| `SYNC_FOLDER` | No | `wet-mcp` | Google Drive folder name |
 | `SYNC_INTERVAL` | No | `300` | Auto-sync interval in seconds (0=manual) |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 

@@ -1707,31 +1707,23 @@ class TestServerConfigTool:
         data = json.loads(result)
         assert "error" in data
 
-    async def test_config_warmup(self):
-        """Warmup action delegates to run_warmup."""
+    async def test_config_warmup_unknown(self):
+        """Warmup action is no longer in config tool (moved to setup)."""
         from wet_mcp.server import config
 
-        with patch(
-            "wet_mcp.setup_tool.run_warmup",
-            new_callable=AsyncMock,
-            return_value={"status": "ok", "mode": "local", "steps": []},
-        ):
-            result = await config(action="warmup")
-            data = json.loads(result)
-            assert data["status"] == "ok"
+        result = await config(action="warmup")
+        data = json.loads(result)
+        assert "error" in data
+        assert "Unknown action" in data["error"]
 
-    async def test_config_setup_sync(self):
-        """setup_sync action delegates to run_setup_sync."""
+    async def test_config_setup_sync_unknown(self):
+        """setup_sync action is no longer in config tool (moved to setup)."""
         from wet_mcp.server import config
 
-        with patch(
-            "wet_mcp.setup_tool.run_setup_sync",
-            new_callable=AsyncMock,
-            return_value={"status": "ok", "provider": "google_drive"},
-        ):
-            result = await config(action="setup_sync")
-            data = json.loads(result)
-            assert data["status"] == "ok"
+        result = await config(action="setup_sync")
+        data = json.loads(result)
+        assert "error" in data
+        assert "Unknown action" in data["error"]
 
     async def test_config_invalid_action(self):
         """Invalid config action returns error."""
@@ -1776,6 +1768,77 @@ class TestServerConfigTool:
 
         server._docs_db = old_db
         server._web_cache = old_cache
+
+
+class TestServerSetupTool:
+    """Cover setup tool branches (warmup, setup_sync, setup_relay)."""
+
+    async def test_setup_warmup(self):
+        """Warmup action delegates to run_warmup."""
+        from wet_mcp.server import setup
+
+        with patch(
+            "wet_mcp.setup_tool.run_warmup",
+            new_callable=AsyncMock,
+            return_value={"status": "ok", "mode": "local", "steps": []},
+        ):
+            result = await setup(action="warmup")
+            data = json.loads(result)
+            assert data["status"] == "ok"
+
+    async def test_setup_sync(self):
+        """setup_sync action delegates to run_setup_sync."""
+        from wet_mcp.server import setup
+
+        with patch(
+            "wet_mcp.setup_tool.run_setup_sync",
+            new_callable=AsyncMock,
+            return_value={"status": "ok", "provider": "google_drive"},
+        ):
+            result = await setup(action="setup_sync")
+            data = json.loads(result)
+            assert data["status"] == "ok"
+
+    async def test_setup_relay(self):
+        """setup_relay action delegates to trigger_relay_setup."""
+        from wet_mcp.server import setup
+
+        mock_config = {"GEMINI_API_KEY": "AIza_test"}
+        with (
+            patch(
+                "wet_mcp.relay_setup.trigger_relay_setup",
+                new_callable=AsyncMock,
+                return_value=mock_config,
+            ),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("wet_mcp.server.settings") as mock_settings,
+        ):
+            mock_settings.setup_providers = MagicMock()
+            result = await setup(action="setup_relay")
+            data = json.loads(result)
+            assert data["status"] == "ok"
+
+    async def test_setup_relay_failure(self):
+        """setup_relay returns error when relay setup fails."""
+        from wet_mcp.server import setup
+
+        with patch(
+            "wet_mcp.relay_setup.trigger_relay_setup",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            result = await setup(action="setup_relay")
+            data = json.loads(result)
+            assert data["status"] == "error"
+
+    async def test_setup_invalid_action(self):
+        """Invalid setup action returns error with suggestions."""
+        from wet_mcp.server import setup
+
+        result = await setup(action="invalid_action")
+        data = json.loads(result)
+        assert "error" in data
+        assert "Unknown action" in data["error"]
 
 
 class TestServerHelpTool:
