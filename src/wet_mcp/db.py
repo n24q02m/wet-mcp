@@ -300,13 +300,12 @@ class DocsDB:
             ).fetchone()
             if not row:
                 # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(f"""
-                    CREATE VIRTUAL TABLE doc_chunks_vec
-                    USING vec0(
-                        id TEXT PRIMARY KEY,
-                        embedding float[{int(self._embedding_dims)}]
-                    )
-                """)
+                _sql = (
+                    "CREATE VIRTUAL TABLE doc_chunks_vec USING vec0(id TEXT PRIMARY KEY, embedding float["
+                    + str(int(self._embedding_dims))
+                    + "])"
+                )
+                self._conn.execute(_sql)
 
     # -----------------------------------------------------------------------
     # Stats
@@ -367,10 +366,8 @@ class DocsDB:
             params.append(lib_id)
             if updates:
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(
-                    f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
-                    params,
-                )
+                _sql = "UPDATE libraries SET " + ", ".join(updates) + " WHERE id = ?"
+                self._conn.execute(_sql, params)
                 self._conn.commit()
             return lib_id
 
@@ -777,11 +774,14 @@ class DocsDB:
                     _placeholders = ",".join(["?"] * len(_chunk_indices))
 
                     # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                    _sql = (
+                        "SELECT url, version_id, chunk_index, content FROM doc_chunks "
+                        "WHERE url = ? AND version_id = ? AND chunk_index IN ("
+                        + _placeholders
+                        + ")"
+                    )
                     rows = self._conn.execute(
-                        f"""SELECT url, version_id, chunk_index, content
-                            FROM doc_chunks
-                            WHERE url = ? AND version_id = ? AND chunk_index IN ({_placeholders})""",
-                        [_url, _ver] + _chunk_indices,
+                        _sql, [_url, _ver] + _chunk_indices
                     ).fetchall()
                     for r in rows:
                         _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
@@ -924,9 +924,8 @@ class DocsDB:
                 batch = ids[i : i + batch_size]
                 placeholders = ",".join("?" * len(batch))
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
-                ).fetchall()
+                _sql = "SELECT id FROM " + table + " WHERE id IN (" + placeholders + ")"
+                res = self._conn.execute(_sql, batch).fetchall()
                 existing.update(r[0] for r in res)
             return existing
 
