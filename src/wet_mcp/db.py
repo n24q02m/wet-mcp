@@ -348,6 +348,13 @@ class DocsDB:
         ).fetchone()
 
         if row:
+            _ALLOWED_UPDATES = {
+                "docs_url = ?",
+                "registry = ?",
+                "description = ?",
+                "discovery_version = ?",
+                "updated_at = ?",
+            }
             lib_id = row["id"]
             updates = []
             params: list = []
@@ -366,6 +373,9 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                for u in updates:
+                    if u not in _ALLOWED_UPDATES:
+                        raise ValueError(f"Unauthorized update: {u}")
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
                     f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
