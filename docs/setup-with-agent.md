@@ -121,7 +121,7 @@ All environment variables are **optional**. The server works in local mode (ONNX
 
 | Variable | Required | Default | Description |
 |:---------|:---------|:--------|:------------|
-| `LLM_MODELS` | No | `gemini-3-flash-preview` | LLM model for media analysis (google-genai or openai format) |
+| `LLM_MODELS` | No | auto-detect | LLM model for media analysis (LiteLLM format) |
 
 ### SearXNG
 
