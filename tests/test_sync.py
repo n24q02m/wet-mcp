@@ -18,7 +18,6 @@ import wet_mcp.sync
 from wet_mcp import sync
 from wet_mcp.sync import (
     _has_token_available,
-    check_health,
     setup_sync,
     start_auto_sync,
     stop_auto_sync,
@@ -619,22 +618,193 @@ class TestSetupGoogleAuth:
 
             assert await sync.setup_google_auth() is False
 
-    async def test_exception(self):
-        token = {"access_token": "valid"}
+    @pytest.mark.asyncio
+    async def test_setup_google_auth_success(self):
+        """Success case: device code request succeeds, polling succeeds, token saved."""
+        device_response = MagicMock()
+        device_response.status_code = 200
+        device_response.json.return_value = {
+            "device_code": "dc123",
+            "user_code": "uc123",
+            "verification_url": "https://v.url",
+            "interval": 1,
+            "expires_in": 10,
+        }
+
+        poll_response = MagicMock()
+        poll_response.status_code = 200
+        poll_response.json.return_value = {
+            "access_token": "at123",
+            "refresh_token": "rt123",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        }
 
         with (
-            patch(
-                "wet_mcp.sync._get_valid_token",
-                new_callable=AsyncMock,
-                return_value=token,
-            ),
-            patch(
-                "wet_mcp.sync._drive_request",
-                new_callable=AsyncMock,
-                side_effect=Exception("Connection error"),
-            ),
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
+            patch("wet_mcp.sync.settings.google_drive_client_secret", "secret123"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+            patch("wet_mcp.sync._save_token") as mock_save,
+            patch("wet_mcp.sync.asyncio.sleep", new_callable=AsyncMock),
         ):
-            assert await check_health() is False
+            mock_instance = AsyncMock()
+            # First call for device code, subsequent for polling
+            mock_instance.post = AsyncMock(side_effect=[device_response, poll_response])
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+
+            assert await sync.setup_google_auth() is True
+            mock_save.assert_called_once()
+            assert mock_save.call_args[0][0]["access_token"] == "at123"
+
+    @pytest.mark.asyncio
+    async def test_setup_google_auth_relay_success(self):
+        """Device code is sent via relay successfully."""
+        device_response = MagicMock()
+        device_response.status_code = 200
+        device_response.json.return_value = {
+            "device_code": "dc123",
+            "user_code": "uc123",
+            "verification_url": "https://v.url",
+            "interval": 1,
+            "expires_in": 10,
+        }
+
+        relay_response = MagicMock()
+        relay_response.status_code = 200
+
+        poll_response = MagicMock()
+        poll_response.status_code = 200
+        poll_response.json.return_value = {"access_token": "at123", "expires_in": 3600}
+
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
+            patch("wet_mcp.sync.settings.google_drive_client_secret", "secret123"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+            patch("wet_mcp.sync._save_token"),
+            patch("wet_mcp.sync.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_instance = AsyncMock()
+            # 1. Device code, 2. Relay message, 3. Token poll
+            mock_instance.post = AsyncMock(
+                side_effect=[device_response, relay_response, poll_response]
+            )
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+
+            assert (
+                await sync.setup_google_auth(
+                    relay_url="https://relay", session_id="sess1"
+                )
+                is True
+            )
+
+            # Check relay post call
+            relay_call = mock_instance.post.call_args_list[1]
+            assert "https://relay/api/sessions/sess1/messages" in relay_call.args[0]
+            assert relay_call.kwargs["json"]["type"] == "oauth_device_code"
+
+    @pytest.mark.asyncio
+    async def test_setup_google_auth_polling_variations(self):
+        """Tests authorization_pending, slow_down, and access_denied."""
+        device_response = MagicMock()
+        device_response.status_code = 200
+        device_response.json.return_value = {
+            "device_code": "dc123",
+            "user_code": "uc123",
+            "verification_url": "https://v.url",
+            "interval": 1,
+            "expires_in": 10,
+        }
+
+        resp_pending = MagicMock()
+        resp_pending.status_code = 400
+        resp_pending.json.return_value = {"error": "authorization_pending"}
+
+        resp_slow = MagicMock()
+        resp_slow.status_code = 400
+        resp_slow.json.return_value = {"error": "slow_down"}
+
+        resp_denied = MagicMock()
+        resp_denied.status_code = 400
+        resp_denied.json.return_value = {"error": "access_denied"}
+
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
+            patch("wet_mcp.sync.settings.google_drive_client_secret", "secret123"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+            patch("wet_mcp.sync.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_instance = AsyncMock()
+            # 1. Device code, 2. Pending, 3. Slow down, 4. Access denied
+            mock_instance.post = AsyncMock(
+                side_effect=[device_response, resp_pending, resp_slow, resp_denied]
+            )
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+
+            assert await sync.setup_google_auth() is False
+            assert mock_instance.post.call_count == 4
+
+    @pytest.mark.asyncio
+    async def test_setup_google_auth_poll_exception(self):
+        """Tests exception during token polling."""
+        device_response = MagicMock()
+        device_response.status_code = 200
+        device_response.json.return_value = {
+            "device_code": "dc123",
+            "user_code": "uc123",
+            "verification_url": "https://v.url",
+            "interval": 1,
+            "expires_in": 10,
+        }
+
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
+            patch("wet_mcp.sync.settings.google_drive_client_secret", "secret123"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+            patch("wet_mcp.sync.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_instance = AsyncMock()
+            mock_instance.post = AsyncMock(
+                side_effect=[device_response, Exception("Poll error")]
+            )
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+
+            assert await sync.setup_google_auth() is False
+
+    @pytest.mark.asyncio
+    async def test_setup_google_auth_timeout(self):
+        """Tests device code expiration (timeout)."""
+        device_response = MagicMock()
+        device_response.status_code = 200
+        device_response.json.return_value = {
+            "device_code": "dc123",
+            "user_code": "uc123",
+            "verification_url": "https://v.url",
+            "interval": 1,
+            "expires_in": 5,
+        }
+
+        resp_pending = MagicMock()
+        resp_pending.status_code = 400
+        resp_pending.json.return_value = {"error": "authorization_pending"}
+
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
+            patch("wet_mcp.sync.settings.google_drive_client_secret", "secret123"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+            patch("wet_mcp.sync.time.time") as mock_time,
+            patch("wet_mcp.sync.asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_instance = AsyncMock()
+            mock_instance.post = AsyncMock(
+                side_effect=[device_response, resp_pending, resp_pending]
+            )
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
+
+            # Start at 100, expires at 105.
+            # First poll at 100, second poll at 106 (expired)
+            mock_time.side_effect = [100.0, 100.0, 101.0, 106.0, 107.0]
+
+            assert await sync.setup_google_auth() is False
 
 
 class TestSetupSync:
