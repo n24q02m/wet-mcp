@@ -91,7 +91,7 @@ async def ensure_config(
             flush=True,
         )
 
-        config = await poll_for_result(relay_url, session, timeout_s=timeout)
+        config = await poll_for_result(relay_url, session, timeout_s=timeout)  # ty: ignore[invalid-argument-type]
 
         # Save to config file for future use
         from mcp_relay_core.storage.config_file import write_config
