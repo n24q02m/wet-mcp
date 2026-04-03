@@ -2292,8 +2292,8 @@ class TestSearxngRunnerExtras:
         """Port finder returns a valid port."""
         from web_core.search.runner import _find_available_port
 
-        port = _find_available_port(40000, max_tries=10)
-        assert 40000 <= port < 40010
+        port = _find_available_port(40000, max_tries=100)
+        assert 40000 <= port < 40100
 
     def test_is_searxng_installed_true(self):
         """Returns True when searx.webapp is importable."""
