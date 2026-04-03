@@ -44,6 +44,36 @@ def _patched_install_searxng() -> bool:
 
 _wc_runner._install_searxng = _patched_install_searxng  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
 
+
+# ---------------------------------------------------------------------------
+# Randomize port discovery to avoid TOCTOU race when multiple instances
+# start concurrently (e.g. wet, wet-nokey, wet-sync).
+# ---------------------------------------------------------------------------
+
+
+def _find_available_port(start_port: int, max_tries: int = 100) -> int:
+    """Find an available port, randomizing offset to avoid collisions."""
+    import random
+    import socket
+
+    offsets = list(range(max_tries))
+    random.shuffle(offsets)
+
+    for offset in offsets:
+        port = start_port + offset
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(("127.0.0.1", port))
+                return port
+        except OSError:
+            continue
+
+    msg = f"No available port found in range {start_port}-{start_port + max_tries - 1}"
+    raise RuntimeError(msg)
+
+
+_wc_runner._find_available_port = _find_available_port  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+
 # ---------------------------------------------------------------------------
 # Re-export internal functions from web-core for backward compatibility.
 # Tests and other modules import these from wet_mcp.searxng_runner.

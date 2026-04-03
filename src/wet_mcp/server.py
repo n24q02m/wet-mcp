@@ -589,40 +589,52 @@ async def search(  # noqa: PLR0913
                 ),
                 "search",
             )
-            # Rerank by semantic relevance (same as research/docs)
             if not result.startswith("Error"):
                 try:
                     data = json.loads(result)
-                    results_list = data.get("results", [])
-                    if results_list:
-                        # Map snippet -> content for reranker (fallback to title)
-                        for r in results_list:
-                            if "content" not in r:
-                                r["content"] = r.get("snippet", r.get("title", ""))
-                        reranked = await _rerank_results(
-                            query, results_list, top_n=max_results
-                        )
-                        if reranked:
-                            data["results"] = [
-                                r for r in reranked if r.get("score", 1.0) > 0.2
-                            ]
-                            data["total"] = len(data["results"])
-                            result = json.dumps(data, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    logger.debug(f"Search reranking failed, using original: {e}")
-            # Optional snippet enrichment
-            if enrich and not result.startswith("Error"):
-                try:
-                    data = json.loads(result)
-                    results_list = data.get("results", [])
-                    if results_list:
-                        from wet_mcp.sources.search_strategies import enrich_snippets
+                    modified = False
 
-                        enriched = await enrich_snippets(results_list, query, top_n=5)
-                        data["results"] = enriched
+                    # Rerank by semantic relevance (same as research/docs)
+                    try:
+                        results_list = data.get("results", [])
+                        if results_list:
+                            # Map snippet -> content for reranker (fallback to title)
+                            for r in results_list:
+                                if "content" not in r:
+                                    r["content"] = r.get("snippet", r.get("title", ""))
+                            reranked = await _rerank_results(
+                                query, results_list, top_n=max_results
+                            )
+                            if reranked:
+                                data["results"] = [
+                                    r for r in reranked if r.get("score", 1.0) > 0.2
+                                ]
+                                data["total"] = len(data["results"])
+                                modified = True
+                    except Exception as e:
+                        logger.debug(f"Search reranking failed, using original: {e}")
+
+                    # Optional snippet enrichment
+                    if enrich:
+                        try:
+                            results_list = data.get("results", [])
+                            if results_list:
+                                from wet_mcp.sources.search_strategies import (
+                                    enrich_snippets,
+                                )
+
+                                enriched = await enrich_snippets(
+                                    results_list, query, top_n=5
+                                )
+                                data["results"] = enriched
+                                modified = True
+                        except Exception as e:
+                            logger.debug(f"Snippet enrichment failed: {e}")
+
+                    if modified:
                         result = json.dumps(data, ensure_ascii=False, indent=2)
-                except Exception as e:
-                    logger.debug(f"Snippet enrichment failed: {e}")
+                except json.JSONDecodeError:
+                    pass
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
             return result
@@ -1262,17 +1274,19 @@ async def _do_research(
     )
     try:
         data = json.loads(result_str)
-        if "results" in data and data["results"]:
-            reranked = await _rerank_results(query, data["results"], top_n=max_results)
-            data["results"] = [r for r in reranked if r.get("score", 1.0) > 0.3]
-            data["total"] = len(data["results"])
-            result_str = json.dumps(data, ensure_ascii=False, indent=2)
-    except Exception as e:
-        logger.error(f"Reranking failed: {e}")
 
-    # Re-format results for academic context
-    try:
-        data = json.loads(result_str)
+        # Rerank
+        try:
+            if "results" in data and data["results"]:
+                reranked = await _rerank_results(
+                    query, data["results"], top_n=max_results
+                )
+                data["results"] = [r for r in reranked if r.get("score", 1.0) > 0.3]
+                data["total"] = len(data["results"])
+        except Exception as e:
+            logger.error(f"Reranking failed: {e}")
+
+        # Re-format results for academic context
         results = data.get("results", [])
 
         # Enrich with academic metadata hints
@@ -1497,6 +1511,8 @@ async def _background_index_and_search(
                 import json
 
                 fallback_data = json.loads(fallback_result)
+                tasks = []
+                alt_urls = []
                 for fr in fallback_data.get("results", []):
                     alt_url = fr.get("url", "")
                     if not alt_url or not alt_url.startswith("http"):
@@ -1505,18 +1521,25 @@ async def _background_index_and_search(
                     orig_parsed = urlparse(docs_url)
                     if alt_parsed.netloc == orig_parsed.netloc:
                         continue
-                    try:
-                        alt_chunks, alt_pages = await asyncio.wait_for(
+                    alt_urls.append(alt_url)
+                    tasks.append(
+                        asyncio.wait_for(
                             _fetch_and_chunk_docs(alt_url, "", query),
                             timeout=_FALLBACK_TIMEOUT,
                         )
-                    except TimeoutError:
-                        continue
-                    if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
-                        docs_url = alt_url
-                        all_chunks = alt_chunks
-                        page_count = alt_pages
-                        break
+                    )
+
+                if tasks:
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for i, res in enumerate(results):
+                        if isinstance(res, BaseException):
+                            continue
+                        alt_chunks, alt_pages = res
+                        if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
+                            docs_url = alt_urls[i]
+                            all_chunks = alt_chunks
+                            page_count = alt_pages
+                            break
             except Exception as e:
                 logger.debug(f"SearXNG fallback failed: {e}")
 
@@ -1881,21 +1904,10 @@ def research_topic(topic: str) -> str:
     )
 
 
-@mcp.prompt()
-def library_docs(library: str, question: str) -> str:
-    """Generate a prompt to find library documentation."""
-    return (
-        f"Find documentation for '{library}' to answer: {question}\n\n"
-        f"Use the search tool with action='docs', library='{library}', "
-        f"query='{question}'. If results are insufficient, use extract tool "
-        "to get more content from the documentation URLs."
-    )
-
-
 def main() -> None:
     """Entry point for the MCP server."""
     mcp.run()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

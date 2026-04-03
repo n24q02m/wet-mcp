@@ -315,3 +315,18 @@ def test_safe_local_path_symlink_escape(tmp_path):
     link = allowed / "link.txt"
     link.symlink_to(secret)
     assert is_safe_local_path(str(link), allowed_dirs=[allowed]) is None
+
+
+def test_safe_local_path_dotdot_traversal(tmp_path):
+    """Paths containing '..' components are blocked before resolution."""
+    f = tmp_path / "test.txt"
+    f.write_text("hello")
+    evil_path = str(tmp_path / "sub" / ".." / "test.txt")
+    assert is_safe_local_path(evil_path) is None
+
+
+def test_safe_local_path_oversized_file(tmp_path):
+    """Returns None when file exceeds max_size."""
+    f = tmp_path / "big.txt"
+    f.write_text("x" * 200)
+    assert is_safe_local_path(str(f), max_size=100) is None

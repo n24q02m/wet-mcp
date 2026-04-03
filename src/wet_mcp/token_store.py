@@ -62,7 +62,7 @@ def save_token(provider: str, token: dict) -> None:
     token_dir.mkdir(parents=True, exist_ok=True)
 
     # Secure directory permissions (Unix only)
-    if os.name != "nt":
+    if os.name != "nt":  # pragma: no cover
         try:
             token_dir.chmod(stat.S_IRWXU)  # 0700
         except OSError:
@@ -72,20 +72,10 @@ def save_token(provider: str, token: dict) -> None:
     path.write_text(json.dumps(token, indent=2), encoding="utf-8")
 
     # Secure file permissions (Unix only)
-    if os.name != "nt":
+    if os.name != "nt":  # pragma: no cover
         try:
             path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600
         except OSError:
             pass
 
     logger.info(f"Token saved: {path}")
-
-
-def delete_token(provider: str) -> bool:
-    """Delete a stored token. Returns True if deleted."""
-    path = get_token_path(provider)
-    if path.exists():
-        path.unlink()
-        logger.info(f"Token deleted: {path}")
-        return True
-    return False

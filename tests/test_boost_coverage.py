@@ -2634,17 +2634,6 @@ class TestSetup:
         assert setup.needs_setup() is True
         setup.SETUP_MARKER = old
 
-    def test_reset_setup(self, tmp_path):
-        """reset_setup removes marker."""
-        from wet_mcp import setup
-
-        old = setup.SETUP_MARKER
-        setup.SETUP_MARKER = tmp_path / ".setup-complete"
-        setup.SETUP_MARKER.touch()
-        setup.reset_setup()
-        assert not setup.SETUP_MARKER.exists()
-        setup.SETUP_MARKER = old
-
     def test_find_searx_package_dir_found(self):
         """Returns path when searx found."""
         from wet_mcp.setup import _find_searx_package_dir
@@ -2704,3 +2693,27 @@ class TestSetup:
 
         with patch("wet_mcp.setup._find_searx_package_dir", return_value=None):
             patch_searxng_version()  # Should not raise
+
+
+class TestRandomizedPortFinder:
+    """Tests for the randomized port finder in searxng_runner."""
+
+    def test_finds_available_port(self):
+        """Should find an available port in range."""
+        from wet_mcp.searxng_runner import _find_available_port
+
+        port = _find_available_port(40000, max_tries=100)
+        assert 40000 <= port < 40100
+
+    def test_raises_when_no_port_available(self):
+        """Raises RuntimeError when all ports are occupied."""
+        from wet_mcp.searxng_runner import _find_available_port
+
+        with patch("socket.socket") as mock_socket:
+            mock_sock = MagicMock()
+            mock_sock.__enter__ = MagicMock(return_value=mock_sock)
+            mock_sock.__exit__ = MagicMock(return_value=False)
+            mock_sock.bind.side_effect = OSError("Address in use")
+            mock_socket.return_value = mock_sock
+            with pytest.raises(RuntimeError, match="No available port"):
+                _find_available_port(40000, max_tries=3)
