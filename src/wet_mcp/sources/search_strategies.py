@@ -228,12 +228,19 @@ async def enrich_snippets(
 
 
 def _extract_passage(content: str, query_terms: list[str], max_chars: int = 500) -> str:
-    """Extract most relevant passage from content around query terms."""
+    """Extract most relevant passage from content around query terms.
+
+    ⚡ Bolt Optimization:
+    Added an early exit condition `if best_score == len(query_terms): break`.
+    Once a window contains all the query terms, it's impossible to get a higher score.
+    This saves CPU time by halting the sliding window search early, especially on long documents.
+    """
     content_lower = content.lower()
 
     # Find best position (most query terms nearby)
     best_pos = 0
     best_score = 0
+    max_possible_score = len(query_terms)
 
     for i in range(0, len(content_lower) - 100, 50):
         window = content_lower[i : i + max_chars]
@@ -241,6 +248,9 @@ def _extract_passage(content: str, query_terms: list[str], max_chars: int = 500)
         if score > best_score:
             best_score = score
             best_pos = i
+
+            if best_score == max_possible_score:
+                break  # Maximum possible score achieved, halt search
 
     if best_score == 0:
         # No query terms found, return beginning
