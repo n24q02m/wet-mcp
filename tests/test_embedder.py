@@ -608,6 +608,22 @@ class TestQwen3EmbedBackend:
 
 
 # -----------------------------------------------------------------------
+
+
+class TestGetBackend:
+    def test_get_backend_none(self):
+        """get_backend() returns None when no backend is initialized."""
+        with patch("wet_mcp.embedder._backend", None):
+            assert get_backend() is None
+
+    def test_get_backend_set(self):
+        """get_backend() returns the singleton instance."""
+        mock_backend = MagicMock()
+        with patch("wet_mcp.embedder._backend", mock_backend):
+            assert get_backend() is mock_backend
+
+
+# -----------------------------------------------------------------------
 # Factory functions
 # -----------------------------------------------------------------------
 
