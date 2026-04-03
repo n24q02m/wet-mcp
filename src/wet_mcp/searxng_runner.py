@@ -9,6 +9,10 @@ All internal functions are re-exported from web-core for backward
 compatibility with existing tests and consumers.
 """
 
+import asyncio
+import time
+
+import httpx
 import web_core.search.runner as _wc_runner
 from loguru import logger
 from web_core.search.runner import shutdown_searxng
@@ -100,7 +104,6 @@ from web_core.search.runner import (  # noqa: F401, E402
     _is_searxng_installed,
     _kill_stale_port_process,
     _last_restart_time,
-    _quick_health_check,
     _read_discovery,
     _remove_discovery,
     _restart_count,
@@ -145,3 +148,39 @@ async def ensure_searxng() -> str:
 def stop_searxng() -> None:
     """Stop SearXNG subprocess if running."""
     shutdown_searxng()
+
+
+# ---------------------------------------------------------------------------
+# Caching for SearXNG Quick Health Checks
+# ---------------------------------------------------------------------------
+
+_health_cache: dict[str, tuple[bool, float]] = {}
+_HEALTH_CACHE_TTL = 10.0
+
+
+async def _quick_health_check(url: str, retries: int = 3) -> bool:
+    """Do a fast GET to see if it responds at all, with TTL caching."""
+    now = time.time()
+    if url in _health_cache:
+        result, timestamp = _health_cache[url]
+        if now - timestamp < _HEALTH_CACHE_TTL:
+            return result
+
+    for attempt in range(retries):
+        try:
+            async with httpx.AsyncClient(timeout=0.5, verify=False) as client:
+                r = await client.get(url)
+                result = r.status_code in (200, 302, 403)
+                _health_cache[url] = (result, time.time())
+                return result
+        except Exception:
+            if attempt < retries - 1:
+                await asyncio.sleep(0.1)
+            continue
+
+    _health_cache[url] = (False, time.time())
+    return False
+
+
+# Apply monkey-patch to web-core
+_wc_runner._quick_health_check = _quick_health_check  # type: ignore[assignment] # ty: ignore[invalid-assignment]
