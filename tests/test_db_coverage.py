@@ -136,6 +136,18 @@ class TestSerializeF32:
 # ---------------------------------------------------------------------------
 
 
+class TestMigrationError:
+    def test_create_libraries_migration_already_exists(self, tmp_path):
+        """Initializing twice should trigger and catch the OperationalError migration path."""
+        db_path = tmp_path / "migration.db"
+        # First initialization creates the table and column
+        d1 = DocsDB(db_path, embedding_dims=0)
+        d1.close()
+        # Second initialization triggers the except block because the column exists
+        d2 = DocsDB(db_path, embedding_dims=0)
+        d2.close()
+
+
 class TestChunkQualityScoreEdgeCases:
     def test_moderate_link_ratio(self):
         """Link ratio between 0.3-0.5 triggers -2.0 penalty (line 112)."""
