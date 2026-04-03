@@ -273,30 +273,6 @@ class TestUpsertVersionUpdate:
 
 
 # ---------------------------------------------------------------------------
-# remove_library with vec enabled (lines 396-403)
-# ---------------------------------------------------------------------------
-
-
-class TestRemoveLibraryVec:
-    def test_remove_library_vec_path(self, tmp_path):
-        """remove_library deletes vec entries when vec is enabled (lines 396-403)."""
-        # Simulate vec-enabled DB by monkey-patching
-        d = DocsDB(tmp_path / "rvec.db", embedding_dims=0)
-        lib_id = d.upsert_library(name="veclib")
-        ver_id = d.upsert_version(lib_id)
-        d.add_chunks(ver_id, lib_id, [{"content": "test chunk"}])
-
-        # Force vec_enabled to trigger the DELETE path
-        d._vec_enabled = True
-        # The DELETE will fail silently because doc_chunks_vec table doesn't exist
-        # but the code path is exercised (lines 396-403)
-        result = d.remove_library("veclib")
-        assert result is True
-        assert d.get_library("veclib") is None
-        d.close()
-
-
-# ---------------------------------------------------------------------------
 # clear_version_chunks with vec (lines 550-557)
 # ---------------------------------------------------------------------------
 
@@ -608,20 +584,11 @@ class TestCombineScoresRRF:
 
 
 # ---------------------------------------------------------------------------
-# list_libraries and stats
+# stats
 # ---------------------------------------------------------------------------
 
 
-class TestListLibrariesAndStats:
-    def test_list_libraries(self, populated_db):
-        """list_libraries returns all libs with chunk counts."""
-        db, _, _ = populated_db
-        libs = db.list_libraries()
-        assert len(libs) >= 1
-        lib = libs[0]
-        assert "total_chunks" in lib
-        assert "version_count" in lib
-
+class TestStats:
     def test_stats(self, populated_db):
         """stats returns correct counts."""
         db, _, _ = populated_db
@@ -650,14 +617,3 @@ class TestExportJsonlRoundtrip:
         assert "library" in types_found
         assert "version" in types_found
         assert "chunk" in types_found
-
-
-# ---------------------------------------------------------------------------
-# remove_library for nonexistent
-# ---------------------------------------------------------------------------
-
-
-class TestRemoveNonexistent:
-    def test_remove_nonexistent_returns_false(self, db):
-        """remove_library returns False for unknown library."""
-        assert db.remove_library("no_such_lib") is False

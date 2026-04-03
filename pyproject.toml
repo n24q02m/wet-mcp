@@ -20,7 +20,7 @@ classifiers = [
 requires-python = "==3.13.*"
 dependencies = [
     # Shared web infrastructure (SSRF, SearXNG, URL utils)
-    "n24q02m-web-core>=1.0.0",
+    "n24q02m-web-core>=1.0.1",
     # MCP Server
     "mcp[cli]",
     # Web Crawling
@@ -40,7 +40,7 @@ dependencies = [
     # Vector search for docs
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
-    "qwen3-embed>=1.5.1",
+    "qwen3-embed>=1.6.0",
 
     "pillow>=12.1.1",
     "diskcache>=5.6.3",
@@ -52,7 +52,7 @@ dependencies = [
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
     # Relay setup (zero-env-config)
-    "mcp-relay-core>=1.0.5",
+    "mcp-relay-core>=1.2.0",
     # Google Drive sync
     "google-api-python-client>=2.193.0",
     "google-auth>=2.49.1",

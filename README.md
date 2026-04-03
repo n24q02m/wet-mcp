@@ -109,7 +109,7 @@ Configure env vars in `~/.claude/settings.local.json` or your shell profile. See
 | `extract` | `extract`, `batch`, `crawl`, `map`, `convert`, `extract_structured` | Content extraction, batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema) |
 | `media` | `list`, `download`, `analyze` | Media discovery, download, and analysis |
 | `config` | `status`, `set`, `cache_clear`, `docs_reindex` | Server configuration and cache management |
-| `setup` | `warmup`, `setup_sync` | Pre-download models, configure cloud sync |
+| `setup` | `warmup`, `setup_sync`, `setup_relay` | Pre-download models, configure cloud sync, relay setup |
 | `help` | -- | Full documentation for any tool |
 
 ### MCP Prompts
@@ -117,7 +117,6 @@ Configure env vars in `~/.claude/settings.local.json` or your shell profile. See
 | Prompt | Parameters | Description |
 |:-------|:-----------|:------------|
 | `research_topic` | `topic` | Research a topic using academic search |
-| `library_docs` | `library`, `question` | Find library documentation |
 
 ## Zero-Config Setup
 

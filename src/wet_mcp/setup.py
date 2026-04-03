@@ -145,13 +145,9 @@ def _install_searxng() -> bool:
     Returns:
         True if installation succeeded or already installed.
     """
-    try:
-        import searx  # noqa: F401
-
+    if _find_searx_package_dir():
         logger.debug("SearXNG already installed")
         return True
-    except ImportError:
-        pass
 
     logger.info("Installing SearXNG from GitHub...")
     try:
@@ -295,10 +291,3 @@ def run_auto_setup() -> bool:
         logger.info("Auto-setup complete!")
 
     return success
-
-
-def reset_setup() -> None:
-    """Reset setup marker to force re-run on next start."""
-    if SETUP_MARKER.exists():
-        SETUP_MARKER.unlink()
-        logger.info("Setup marker removed, will re-run on next start")

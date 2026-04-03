@@ -7,7 +7,6 @@ from unittest.mock import patch
 import pytest
 
 from wet_mcp.token_store import (
-    delete_token,
     get_token_path,
     load_token,
     save_token,
@@ -72,20 +71,6 @@ def test_load_oserror(token_dir):
         mock_settings.get_data_dir.return_value = token_dir.parent
         with patch.object(Path, "exists", side_effect=OSError("disk error")):
             assert load_token("drive") is None
-
-
-def test_delete_existing(token_dir):
-    with patch("wet_mcp.token_store.settings") as mock_settings:
-        mock_settings.get_data_dir.return_value = token_dir.parent
-        save_token("drive", {"access_token": "test"})
-        assert delete_token("drive") is True
-        assert not get_token_path("drive").exists()
-
-
-def test_delete_nonexistent(token_dir):
-    with patch("wet_mcp.token_store.settings") as mock_settings:
-        mock_settings.get_data_dir.return_value = token_dir.parent
-        assert delete_token("drive") is False
 
 
 def test_save_token_creates_dir(tmp_path):

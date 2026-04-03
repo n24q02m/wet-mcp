@@ -10,7 +10,6 @@ from wet_mcp.setup import (
     needs_setup,
     patch_searxng_version,
     patch_searxng_windows,
-    reset_setup,
     run_auto_setup,
 )
 
@@ -235,19 +234,19 @@ def test_get_pip_command_sys_executable(mock_which):
 # Test _install_searxng
 
 
-@patch.dict("sys.modules", {"searx": MagicMock()})
-def test_install_searxng_already_installed():
-    # If import searx succeeds, should return True immediately
+@patch("wet_mcp.setup._find_searx_package_dir", return_value=Path("/mock/searx"))
+def test_install_searxng_already_installed(_mock_find):
+    # If _find_searx_package_dir returns a path, should return True immediately
     assert _install_searxng() is True
 
 
-@patch.dict("sys.modules", {"searx": None})
+@patch("wet_mcp.setup._find_searx_package_dir", return_value=None)
 @patch("wet_mcp.setup._get_pip_command", return_value=["pip", "install"])
 @patch("subprocess.run")
 @patch("wet_mcp.setup.patch_searxng_version")
 @patch("wet_mcp.setup.patch_searxng_windows")
 def test_install_searxng_success(
-    mock_patch_win, mock_patch_ver, mock_run, mock_get_pip
+    mock_patch_win, mock_patch_ver, mock_run, mock_get_pip, _mock_find
 ):
     # Simulate both subprocesses returning 0
     mock_run.return_value = MagicMock(returncode=0)
@@ -258,20 +257,20 @@ def test_install_searxng_success(
     mock_patch_win.assert_called_once()
 
 
-@patch.dict("sys.modules", {"searx": None})
+@patch("wet_mcp.setup._find_searx_package_dir", return_value=None)
 @patch("wet_mcp.setup._get_pip_command", return_value=["pip", "install"])
 @patch("subprocess.run")
-def test_install_searxng_deps_fail(mock_run, mock_get_pip):
+def test_install_searxng_deps_fail(mock_run, mock_get_pip, _mock_find):
     mock_run.return_value = MagicMock(returncode=1, stderr="deps failed")
 
     assert _install_searxng() is False
     assert mock_run.call_count == 1
 
 
-@patch.dict("sys.modules", {"searx": None})
+@patch("wet_mcp.setup._find_searx_package_dir", return_value=None)
 @patch("wet_mcp.setup._get_pip_command", return_value=["pip", "install"])
 @patch("subprocess.run")
-def test_install_searxng_main_fail(mock_run, mock_get_pip):
+def test_install_searxng_main_fail(mock_run, mock_get_pip, _mock_find):
     # First call (deps) succeeds, second call (main) fails
     mock_run.side_effect = [
         MagicMock(returncode=0),
@@ -282,16 +281,16 @@ def test_install_searxng_main_fail(mock_run, mock_get_pip):
     assert mock_run.call_count == 2
 
 
-@patch.dict("sys.modules", {"searx": None})
+@patch("wet_mcp.setup._find_searx_package_dir", return_value=None)
 @patch("wet_mcp.setup._get_pip_command", return_value=["pip", "install"])
 @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="pip", timeout=120))
-def test_install_searxng_timeout(mock_run, mock_get_pip):
+def test_install_searxng_timeout(mock_run, mock_get_pip, _mock_find):
     assert _install_searxng() is False
 
 
-@patch.dict("sys.modules", {"searx": None})
+@patch("wet_mcp.setup._find_searx_package_dir", return_value=None)
 @patch("wet_mcp.setup._get_pip_command", side_effect=Exception("Test error"))
-def test_install_searxng_exception(mock_get_pip):
+def test_install_searxng_exception(mock_get_pip, _mock_find):
     assert _install_searxng() is False
 
 
@@ -355,20 +354,3 @@ def test_run_auto_setup_crawl4ai_fail(
 ):
     assert run_auto_setup() is False
     mock_marker.touch.assert_not_called()
-
-
-# Test reset_setup
-
-
-@patch("wet_mcp.setup.SETUP_MARKER")
-def test_reset_setup_exists(mock_marker):
-    mock_marker.exists.return_value = True
-    reset_setup()
-    mock_marker.unlink.assert_called_once()
-
-
-@patch("wet_mcp.setup.SETUP_MARKER")
-def test_reset_setup_not_exists(mock_marker):
-    mock_marker.exists.return_value = False
-    reset_setup()
-    mock_marker.unlink.assert_not_called()

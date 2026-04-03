@@ -84,7 +84,7 @@ class EmbeddingBackend(Protocol):
         dimensions: int | None = None,
     ) -> list[list[float]]:
         """Embed a batch of texts. Returns list of embedding vectors."""
-        ...
+        ...  # pragma: no cover
 
     def embed_single(
         self,
@@ -92,7 +92,7 @@ class EmbeddingBackend(Protocol):
         dimensions: int | None = None,
     ) -> list[float]:
         """Embed a single text. Returns embedding vector."""
-        ...
+        ...  # pragma: no cover
 
     def check_available(self) -> int:
         """Check if backend is available.
@@ -100,7 +100,7 @@ class EmbeddingBackend(Protocol):
         Returns:
             Embedding dimensions if available, 0 if not.
         """
-        ...
+        ...  # pragma: no cover
 
 
 # ---------------------------------------------------------------------------

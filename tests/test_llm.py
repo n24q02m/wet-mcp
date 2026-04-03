@@ -219,13 +219,13 @@ def test_analyze_media_path_traversal(mock_settings, tmp_path):
     assert "download directory" in result
 
 
-def test_encode_image_valid(tmp_path):
+async def test_encode_image_valid(tmp_path):
     """Test encode_image with a valid image file."""
     from wet_mcp.llm import encode_image
 
     img_path = tmp_path / "test.png"
     img_path.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00")
-    result = encode_image(str(img_path))
+    result = await encode_image(str(img_path))
     # base64 of above bytes
     import base64
 
@@ -233,38 +233,38 @@ def test_encode_image_valid(tmp_path):
     assert result == expected
 
 
-def test_encode_image_not_found(tmp_path):
+async def test_encode_image_not_found(tmp_path):
     """Test encode_image with a non-existent file raises FileNotFoundError."""
     from wet_mcp.llm import encode_image
 
     with pytest.raises(FileNotFoundError):
-        encode_image(str(tmp_path / "nonexistent.png"))
+        await encode_image(str(tmp_path / "nonexistent.png"))
 
 
-def test_encode_image_empty(tmp_path):
+async def test_encode_image_empty(tmp_path):
     """Test encode_image with an empty file."""
     from wet_mcp.llm import encode_image
 
     img_path = tmp_path / "empty.png"
     img_path.write_bytes(b"")
-    result = encode_image(str(img_path))
+    result = await encode_image(str(img_path))
     assert result == ""
 
 
-def test_read_and_truncate(tmp_path):
+async def test_read_and_truncate(tmp_path):
     """Test _read_and_truncate reads and truncates properly."""
     from wet_mcp.llm import _read_and_truncate
 
     # Test small file
     txt_path = tmp_path / "small.txt"
     txt_path.write_text("hello", encoding="utf-8")
-    assert _read_and_truncate(str(txt_path)) == "hello"
+    assert await _read_and_truncate(str(txt_path)) == "hello"
 
     # Test large file
     txt_path = tmp_path / "large.txt"
     large_content = "a" * 100005
     txt_path.write_text(large_content, encoding="utf-8")
-    result = _read_and_truncate(str(txt_path))
+    result = await _read_and_truncate(str(txt_path))
     assert len(result) == 100000 + len("\n...[truncated]")
     assert result.endswith("\n...[truncated]")
 

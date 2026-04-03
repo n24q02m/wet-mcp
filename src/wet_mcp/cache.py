@@ -49,6 +49,9 @@ class WebCache:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
+        self._conn.execute("PRAGMA mmap_size = 268435456")  # 256MB mmap
+        self._conn.execute("PRAGMA temp_store = MEMORY")
+        self._conn.execute("PRAGMA cache_size = -64000")  # 64MB cache (KB)
 
         self._create_tables()
         logger.debug(f"WebCache initialized at {db_path}")
@@ -115,25 +118,6 @@ class WebCache:
         if self._op_count >= _PURGE_INTERVAL:
             self._purge_expired()
             self._op_count = 0
-
-    def get_extract(self, url: str) -> str | None:
-        """Get cached extract result for a single URL.
-
-        This enables docs action to reuse already-extracted content
-        without re-crawling.
-        """
-        row = self._conn.execute(
-            """SELECT content FROM web_cache
-               WHERE action IN ('extract', 'crawl') AND expires_at > ?
-               AND params LIKE ?
-               ORDER BY CASE action WHEN 'extract' THEN 0 ELSE 1 END
-               LIMIT 1""",
-            (time.time(), f'%"{url}"%'),
-        ).fetchone()
-        if row:
-            logger.debug(f"Extract cache HIT for URL: {url[:60]}...")
-            return row["content"]
-        return None
 
     def _purge_expired(self) -> None:
         """Remove expired cache entries."""

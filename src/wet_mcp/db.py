@@ -152,6 +152,9 @@ class DocsDB:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.execute("PRAGMA busy_timeout = 5000")
+        self._conn.execute("PRAGMA mmap_size = 268435456")  # 256MB mmap
+        self._conn.execute("PRAGMA temp_store = MEMORY")
+        self._conn.execute("PRAGMA cache_size = -64000")  # 64MB cache (KB)
 
         # Try loading sqlite-vec extension
         if embedding_dims > 0:
@@ -397,47 +400,6 @@ class DocsDB:
             "SELECT * FROM libraries WHERE name = ?", (name.lower().strip(),)
         ).fetchone()
         return dict(row) if row else None
-
-    def list_libraries(self) -> list[dict]:
-        """List all libraries with chunk counts."""
-        rows = self._conn.execute("""
-            SELECT l.*,
-                   COALESCE(SUM(v.chunk_count), 0) as total_chunks,
-                   COUNT(v.id) as version_count
-            FROM libraries l
-            LEFT JOIN versions v ON v.library_id = l.id AND v.status = 'indexed'
-            GROUP BY l.id
-            ORDER BY l.name
-        """).fetchall()
-        return [dict(r) for r in rows]
-
-    def remove_library(self, name: str) -> bool:
-        """Remove a library and all its chunks."""
-        lib = self.get_library(name)
-        if not lib:
-            return False
-
-        lib_id = lib["id"]
-
-        # Remove vector entries in a single bulk query
-        if self._vec_enabled:
-            try:
-                self._conn.execute(
-                    "DELETE FROM doc_chunks_vec WHERE id IN "
-                    "(SELECT id FROM doc_chunks WHERE library_id = ?)",
-                    (lib_id,),
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to delete vector chunks: {e}",
-                )
-
-        # Cascade deletes chunks and versions
-        self._conn.execute("DELETE FROM doc_chunks WHERE library_id = ?", (lib_id,))
-        self._conn.execute("DELETE FROM versions WHERE library_id = ?", (lib_id,))
-        self._conn.execute("DELETE FROM libraries WHERE id = ?", (lib_id,))
-        self._conn.commit()
-        return True
 
     # -----------------------------------------------------------------------
     # Version management
@@ -807,10 +769,11 @@ class DocsDB:
             for _url, _ver, _idx in _adj_keys:
                 _groups.setdefault((_url, _ver), set()).add(_idx)
 
+            _batch_size = 32764 if sqlite3.sqlite_version_info >= (3, 32, 0) else 900
             for (_url, _ver), _indices in _groups.items():
                 _indices_list = list(_indices)
-                for i in range(0, len(_indices_list), 900):
-                    _chunk_indices = _indices_list[i : i + 900]
+                for i in range(0, len(_indices_list), _batch_size):
+                    _chunk_indices = _indices_list[i : i + _batch_size]
                     _placeholders = ",".join(["?"] * len(_chunk_indices))
 
                     # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
@@ -956,8 +919,9 @@ class DocsDB:
                 return set()
             ids = [obj["id"] for obj in items]
             existing = set()
-            for i in range(0, len(ids), 999):
-                batch = ids[i : i + 999]
+            batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
+            for i in range(0, len(ids), batch_size):
+                batch = ids[i : i + batch_size]
                 placeholders = ",".join("?" * len(batch))
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 res = self._conn.execute(

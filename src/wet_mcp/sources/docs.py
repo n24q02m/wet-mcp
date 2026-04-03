@@ -3209,16 +3209,23 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                 if "<sitemapindex" in text:
                     sub_urls = re.findall(r"<loc>\s*(.*?)\s*</loc>", text)
                     all_page_urls: list[str] = []
-                    for sub_url in sub_urls[:5]:
+
+                    async def _fetch_sub(sub_url: str) -> list[str]:
                         try:
                             sub_resp = await client.get(sub_url)
                             if sub_resp.status_code == 200:
-                                sub_locs = re.findall(
+                                return re.findall(
                                     r"<loc>\s*(.*?)\s*</loc>", sub_resp.text
                                 )
-                                all_page_urls.extend(sub_locs)
                         except Exception:
-                            continue
+                            pass
+                        return []
+
+                    sub_results = await asyncio.gather(
+                        *[_fetch_sub(u) for u in sub_urls[:5]]
+                    )
+                    for sub_locs in sub_results:
+                        all_page_urls.extend(sub_locs)
                     urls = all_page_urls
                 else:
                     urls = re.findall(r"<loc>\s*(.*?)\s*</loc>", text)
