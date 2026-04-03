@@ -60,4 +60,7 @@ JULES.md
 
 # Code review knowledge graph
 .code-review-graph/
-docs/
+
+# Generated files
+*_e2e_result.json
+docs/superpowers/
