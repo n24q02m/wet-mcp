@@ -35,6 +35,8 @@ from wet_mcp.sources.docs import (
     _parse_objects_inv,
     _probe_docs_url,
     _safe_httpx_client,
+    _score_url,
+    _sort_by_query,
     _strip_nav_blocks,
     _strip_nav_heading_blocks,
     _try_github_raw_docs,
@@ -3343,3 +3345,68 @@ def test_apply_version_to_url_other_site():
     url = "https://docs.python.org/3/library/json.html"
     result = _apply_version_to_url(url, "3.12")
     assert result == url
+
+
+# ---------------------------------------------------------------------------
+# _score_url
+# ---------------------------------------------------------------------------
+
+
+def test_score_url_basic():
+    """Score increases with query term overlap in URL path."""
+    query_words = frozenset(["api", "reference"])
+    # Overlap: "api"
+    assert _score_url("https://docs.test/api/main", query_words) == 1
+    # Overlap: "api", "reference"
+    assert _score_url("https://docs.test/api/reference", query_words) == 2
+    # No overlap
+    assert _score_url("https://docs.test/guide/intro", query_words) == 0
+
+
+def test_score_url_separators():
+    """Different separators (-, _, ., /) are handled correctly."""
+    query_words = frozenset(["user", "guide"])
+    assert _score_url("https://docs.test/user-guide", query_words) == 2
+    assert _score_url("https://docs.test/user_guide", query_words) == 2
+    assert _score_url("https://docs.test/user.guide", query_words) == 2
+    assert _score_url("https://docs.test/user/guide", query_words) == 2
+
+
+def test_score_url_case_insensitive():
+    """Scoring is case-insensitive."""
+    assert _score_url("https://docs.test/API", frozenset(["api"])) == 1
+
+
+def test_score_url_title():
+    """Title contributes to the total score."""
+    query_words = frozenset(["installation"])
+    url = "https://docs.test/setup"
+    # No match in URL
+    assert _score_url(url, query_words) == 0
+    # Match in title
+    assert _score_url(url, query_words, title="Installation Guide") == 1
+    # Match in both URL and title
+    url_match = "https://docs.test/installation"
+    assert _score_url(url_match, query_words, title="Installation Guide") == 2
+
+
+def test_score_url_empty_query():
+    """Empty query results in 0 score."""
+    assert _score_url("https://docs.test/api", frozenset()) == 0
+
+
+def test_sort_by_query_integration():
+    """_sort_by_query correctly sorts list of URLs."""
+
+    urls = [
+        "https://docs.test/guide",
+        "https://docs.test/api/reference",
+        "https://docs.test/api",
+    ]
+    query = "api reference"
+    sorted_urls = _sort_by_query(urls, query)
+
+    # Expected order: reference (2), api (1), guide (0)
+    assert sorted_urls[0] == "https://docs.test/api/reference"
+    assert sorted_urls[1] == "https://docs.test/api"
+    assert sorted_urls[2] == "https://docs.test/guide"
