@@ -117,7 +117,7 @@ async def _refresh_token(token: dict) -> dict | None:
                 "client_id": client_id,
                 "token_type": data.get("token_type", "Bearer"),
             }
-            _save_token(updated)
+            await asyncio.to_thread(_save_token, updated)
             logger.debug("Token refreshed successfully")
             return updated
 
@@ -131,7 +131,7 @@ async def _get_valid_token() -> dict | None:
 
     Returns token dict with valid access_token, or None.
     """
-    token = _load_token()
+    token = await asyncio.to_thread(_load_token)
     if not token:
         return None
 
@@ -423,7 +423,7 @@ async def sync_full(db: DocsDB) -> dict:
         }
 
     # Check for valid token
-    if not _has_token_available():
+    if not await asyncio.to_thread(_has_token_available):
         return {
             "status": "error",
             "message": "No Google Drive token available. "
@@ -618,7 +618,7 @@ async def setup_google_auth(
                         "client_id": client_id,
                         "token_type": data.get("token_type", "Bearer"),
                     }
-                    _save_token(token)
+                    await asyncio.to_thread(_save_token, token)
                     logger.info("Google Drive authentication successful!")
                     return True
 
