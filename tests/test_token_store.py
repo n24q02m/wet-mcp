@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from wet_mcp.token_store import (
+    delete_token,
     get_token_path,
     load_token,
     save_token,
@@ -90,3 +91,32 @@ def test_save_token_windows_permissions(token_dir):
         mock_settings.get_data_dir.return_value = token_dir.parent
         save_token("drive", {"access_token": "test"})
         assert load_token("drive") == {"access_token": "test"}
+
+
+def test_delete_token_success(token_dir):
+    """delete_token returns True if file is successfully deleted."""
+    with patch("wet_mcp.token_store.settings") as mock_settings:
+        mock_settings.get_data_dir.return_value = token_dir.parent
+        save_token("drive", {"access_token": "test"})
+        path = get_token_path("drive")
+        assert path.exists()
+
+        assert delete_token("drive") is True
+        assert not path.exists()
+
+
+def test_delete_token_missing(token_dir):
+    """delete_token returns True if file does not exist."""
+    with patch("wet_mcp.token_store.settings") as mock_settings:
+        mock_settings.get_data_dir.return_value = token_dir.parent
+        assert delete_token("nonexistent") is True
+
+
+def test_delete_token_error(token_dir):
+    """delete_token returns False on OSError."""
+    with patch("wet_mcp.token_store.settings") as mock_settings:
+        mock_settings.get_data_dir.return_value = token_dir.parent
+        save_token("drive", {"access_token": "test"})
+
+        with patch.object(Path, "unlink", side_effect=OSError("permission denied")):
+            assert delete_token("drive") is False
