@@ -7,8 +7,8 @@ from wet_mcp.relay_schema import RELAY_SCHEMA
 from wet_mcp.relay_setup import (
     DEFAULT_RELAY_URL,
     apply_config,
-    load_config_from_file,
     ensure_config,
+    load_config_from_file,
 )
 
 

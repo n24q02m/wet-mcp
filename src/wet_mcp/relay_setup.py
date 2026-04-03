@@ -50,7 +50,9 @@ def apply_config(config: dict[str, str]) -> None:
             logger.debug("Applied relay config: {}", key)
 
 
-async def ensure_config(force: bool = False, timeout: float | None = RELAY_TIMEOUT_S) -> dict[str, str] | None:
+async def ensure_config(
+    force: bool = False, timeout: float | None = RELAY_TIMEOUT_S
+) -> dict[str, str] | None:
     """Resolve config: env vars -> config file -> relay setup -> local fallback.
 
     Relay is ONLY triggered when steps 1-2 are ALL empty, unless force=True.
