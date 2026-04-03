@@ -829,8 +829,12 @@ class DocsDB:
     # Export / Import (JSONL for sync)
     # -----------------------------------------------------------------------
 
-    def export_jsonl(self) -> str:
-        """Export all docs data as JSONL for sync."""
+    def export_jsonl(self, output_path: str | None = None) -> str | None:
+        """Export all docs data as JSONL for sync.
+
+        If output_path is provided, writes to file and returns None.
+        Otherwise returns JSONL string.
+        """
         lines = []
 
         # Export libraries (using SQLite native JSON serialization for performance)
@@ -874,7 +878,13 @@ class DocsDB:
         ).fetchall():
             lines.append(row[0])
 
-        return "\n".join(lines)
+        data = "\n".join(lines)
+        if output_path:
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(data)
+            return None
+
+        return data
 
     def import_jsonl(self, data: str, mode: str = "merge") -> dict:
         """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""

@@ -497,6 +497,29 @@ class TestJSONLSync:
         """Exporting empty DB returns empty string."""
         assert db.export_jsonl() == ""
 
+    def test_export_jsonl_to_file(self, db_with_data, tmp_path):
+        """Exporting to a file works correctly."""
+        src_db = db_with_data[0]
+        export_file = tmp_path / "export.jsonl"
+
+        # Call with output_path
+        res = src_db.export_jsonl(output_path=str(export_file))
+
+        # Should return None
+        assert res is None
+
+        # File should exist and have content
+        assert export_file.exists()
+        content = export_file.read_text(encoding="utf-8")
+        assert content.strip()
+
+        # Verify it's valid JSONL and contains expected data
+        lines = [json.loads(line) for line in content.strip().split("\n")]
+        types = [item["_type"] for item in lines]
+        assert "library" in types
+        assert "version" in types
+        assert "chunk" in types
+
     def test_export_roundtrip(self, db_with_data, tmp_path):
         """Export from one DB, import into another — same data."""
         src_db = db_with_data[0]
