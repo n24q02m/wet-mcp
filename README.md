@@ -49,12 +49,6 @@ Via marketplace (includes skills: /fact-check, /compare):
 
 Configure env vars in `~/.claude/settings.local.json` or shell profile. See [Environment Variables](#environment-variables).
 
-### Gemini CLI Extension
-
-```bash
-gemini extensions install https://github.com/n24q02m/wet-mcp
-```
-
 ### Codex CLI
 
 Add to `~/.codex/config.toml`:

@@ -5,7 +5,7 @@ description = "Open-source MCP Server for web search, extract, crawl, academic r
 readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "n24q02m", email = "quangminh2422004@gmail.com" }]
-keywords = ["mcp", "mcp-server", "model-context-protocol", "web-scraping", "searxng", "crawl4ai", "library-docs", "claude", "cursor", "copilot", "antigravity", "codex", "opencode", "gemini-cli"]
+keywords = ["mcp", "mcp-server", "model-context-protocol", "web-scraping", "searxng", "crawl4ai", "library-docs", "claude", "cursor", "copilot", "antigravity", "codex", "opencode"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -121,7 +121,7 @@ rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibl
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-version_variables = [".claude-plugin/plugin.json:version", "gemini-extension.json:version", "server.json:version"]
+version_variables = [".claude-plugin/plugin.json:version", "server.json:version"]
 tag_format = "v{version}"
 commit_message = "chore(release): v{version}"
 major_on_zero = false
