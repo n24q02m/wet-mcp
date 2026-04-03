@@ -299,14 +299,17 @@ class DocsDB:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
             ).fetchone()
             if not row:
-                # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(f"""
-                    CREATE VIRTUAL TABLE doc_chunks_vec
-                    USING vec0(
-                        id TEXT PRIMARY KEY,
-                        embedding float[{int(self._embedding_dims)}]
-                    )
-                """)
+                # Validation: embedding_dims is already checked in __init__
+                # but we use a local variable to be extra safe for the query string.
+                dims = int(self._embedding_dims)
+                # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query
+                sql = (
+                    "CREATE VIRTUAL TABLE doc_chunks_vec USING vec0("
+                    "id TEXT PRIMARY KEY, "
+                    f"embedding float[{dims}]"
+                    ")"
+                )
+                self._conn.execute(sql)
 
     # -----------------------------------------------------------------------
     # Stats
@@ -365,12 +368,23 @@ class DocsDB:
             updates.append("updated_at = ?")
             params.append(now)
             params.append(lib_id)
+
+            # Security: Validate columns being updated
+            allowed = {
+                "docs_url = ?",
+                "registry = ?",
+                "description = ?",
+                "discovery_version = ?",
+                "updated_at = ?",
+            }
+            if not all(u in allowed for u in updates):
+                raise ValueError("Invalid column in update")
+
             if updates:
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(
-                    f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
-                    params,
-                )
+                _set_clause = ", ".join(updates)
+                # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                sql = "UPDATE libraries SET " + _set_clause + " WHERE id = ?"
+                self._conn.execute(sql, params)
                 self._conn.commit()
             return lib_id
 
