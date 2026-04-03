@@ -330,3 +330,91 @@ def test_safe_local_path_oversized_file(tmp_path):
     f = tmp_path / "big.txt"
     f.write_text("x" * 200)
     assert is_safe_local_path(str(f), max_size=100) is None
+
+
+async def test_safe_httpx_client_instantiation():
+    """Verify safe_httpx_client returns an AsyncClient and includes the SSRF hook."""
+    import httpx
+
+    from wet_mcp.security import _ssrf_event_hook, safe_httpx_client
+
+    client = safe_httpx_client()
+    try:
+        assert isinstance(client, httpx.AsyncClient)
+        # Verify SSRF hook is in the client's event hooks
+        assert _ssrf_event_hook in client.event_hooks["request"]
+    finally:
+        await client.aclose()
+
+
+async def test_safe_httpx_client_ssrf_blocked():
+    """Verify safe_httpx_client blocks SSRF attempts via MockTransport."""
+    import httpx
+
+    from wet_mcp.security import safe_httpx_client
+
+    # Mock transport to prevent actual network calls
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"ok"))
+
+    # Localhost should be blocked
+    async with safe_httpx_client(transport=transport) as client:
+        with pytest.raises(httpx.RequestError, match="SSRF blocked"):
+            await client.get("http://localhost")
+
+
+async def test_safe_httpx_client_safe_url():
+    """Verify safe_httpx_client allows requests to safe URLs."""
+    import httpx
+
+    from wet_mcp.security import safe_httpx_client
+
+    # Mock DNS so example.com resolves to a safe IP
+    with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
+        mock_dns.return_value = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 80))
+        ]
+
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(200, content=b"safe-content")
+        )
+        async with safe_httpx_client(transport=transport) as client:
+            resp = await client.get("http://example.com")
+            assert resp.status_code == 200
+            assert resp.text == "safe-content"
+
+
+async def test_safe_httpx_client_preserves_hooks():
+    """Verify safe_httpx_client preserves custom event hooks and prepends SSRF hook."""
+    import httpx
+
+    from wet_mcp.security import _ssrf_event_hook, safe_httpx_client
+
+    hook_called = False
+
+    async def custom_hook(request):
+        nonlocal hook_called
+        hook_called = True
+
+    # Pass a custom hook via event_hooks
+    client = safe_httpx_client(event_hooks={"request": [custom_hook]})
+    try:
+        request_hooks = client.event_hooks["request"]
+        # SSRF hook should be first, custom hook second
+        assert request_hooks[0] == _ssrf_event_hook
+        assert request_hooks[1] == custom_hook
+
+        # Verify custom hook still works
+        transport = httpx.MockTransport(
+            lambda request: httpx.Response(200, content=b"ok")
+        )
+        with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
+            mock_dns.return_value = [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 80))
+            ]
+            async with httpx.AsyncClient(
+                transport=transport, event_hooks=client.event_hooks
+            ) as test_client:
+                await test_client.get("http://example.com")
+            assert hook_called is True
+    finally:
+        await client.aclose()
