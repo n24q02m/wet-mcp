@@ -256,3 +256,77 @@ class TestSetupMcpTool:
 
             await setup(action="setup_sync")
             mock_sync.assert_called_once_with("drive")
+
+
+class TestClearModelCache:
+    """Tests for clear_model_cache() helper."""
+
+    def test_clear_model_cache_exists(self):
+        """Returns path and calls rmtree if cache exists."""
+        with (
+            patch("wet_mcp.setup_tool.os.getenv") as mock_getenv,
+            patch("wet_mcp.setup_tool.Path") as mock_path_cls,
+            patch("wet_mcp.setup_tool.shutil.rmtree") as mock_rmtree,
+        ):
+            mock_getenv.return_value = "/tmp/cache"
+            mock_cache_dir = MagicMock()
+            mock_model_cache = MagicMock()
+            mock_path_cls.return_value = mock_cache_dir
+            mock_cache_dir.__truediv__.return_value = mock_model_cache
+            mock_model_cache.exists.return_value = True
+            mock_model_cache.__str__.return_value = "/tmp/cache/models--test"
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            result = clear_model_cache("test")
+
+            assert result == "/tmp/cache/models--test"
+            mock_rmtree.assert_called_once_with(mock_model_cache)
+
+    def test_clear_model_cache_not_exists(self):
+        """Returns None if cache does not exist."""
+        with (
+            patch("wet_mcp.setup_tool.os.getenv") as mock_getenv,
+            patch("wet_mcp.setup_tool.Path") as mock_path_cls,
+            patch("wet_mcp.setup_tool.shutil.rmtree") as mock_rmtree,
+        ):
+            mock_getenv.return_value = "/tmp/cache"
+            mock_cache_dir = MagicMock()
+            mock_model_cache = MagicMock()
+            mock_path_cls.return_value = mock_cache_dir
+            mock_cache_dir.__truediv__.return_value = mock_model_cache
+            mock_model_cache.exists.return_value = False
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            result = clear_model_cache("test")
+
+            assert result is None
+            mock_rmtree.assert_not_called()
+
+    def test_clear_model_cache_default_path(self):
+        """Uses tempfile.gettempdir() if env var is missing."""
+
+        def side_effect(key, default=None):
+            return default
+
+        with (
+            patch("wet_mcp.setup_tool.os.getenv", side_effect=side_effect),
+            patch("wet_mcp.setup_tool.os.path.join") as mock_join,
+            patch("wet_mcp.setup_tool.tempfile.gettempdir", return_value="/tmp"),
+            patch("wet_mcp.setup_tool.Path") as mock_path_cls,
+            patch("wet_mcp.setup_tool.shutil.rmtree"),
+        ):
+            mock_join.return_value = "/tmp/qwen3_embed_cache"
+            mock_cache_dir = MagicMock()
+            mock_model_cache = MagicMock()
+            mock_path_cls.return_value = mock_cache_dir
+            mock_cache_dir.__truediv__.return_value = mock_model_cache
+            mock_model_cache.exists.return_value = False
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            clear_model_cache("test")
+
+            mock_join.assert_called_once_with("/tmp", "qwen3_embed_cache")
+            mock_path_cls.assert_called_once_with("/tmp/qwen3_embed_cache")
