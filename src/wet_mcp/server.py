@@ -1888,22 +1888,6 @@ async def _do_immediate_fallback_search(
     return fallback_data
 
 
-# ---------------------------------------------------------------------------
-# Prompts (aligned with mnemo-mcp pattern)
-# ---------------------------------------------------------------------------
-
-
-@mcp.prompt()
-def research_topic(topic: str) -> str:
-    """Generate a prompt to research a topic using academic search."""
-    return (
-        f"Research the following topic thoroughly: {topic}\n\n"
-        "1. Use the search tool with action='research' to find academic papers.\n"
-        "2. Use the extract tool with action='extract' on the most relevant URLs.\n"
-        "3. Synthesize findings into a comprehensive summary with citations."
-    )
-
-
 def main() -> None:
     """Entry point for the MCP server."""
     mcp.run()

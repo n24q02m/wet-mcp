@@ -54,11 +54,6 @@ mcp-name: io.github.n24q02m/wet-mcp
 | `setup` | `warmup`, `setup_sync`, `setup_relay` | Pre-download models, configure cloud sync, relay setup |
 | `help` | -- | Full documentation for any tool |
 
-### MCP Prompts
-
-| Prompt | Parameters | Description |
-|:-------|:-----------|:------------|
-| `research_topic` | `topic` | Research a topic using academic search |
 
 ## Security
 
