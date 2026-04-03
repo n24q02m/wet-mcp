@@ -8,7 +8,7 @@ from wet_mcp.relay_setup import (
     DEFAULT_RELAY_URL,
     apply_config,
     load_config_from_file,
-    trigger_relay_setup,
+    ensure_config,
 )
 
 
@@ -98,10 +98,10 @@ class TestApplyConfig:
         monkeypatch.delenv("TEST_RELAY_B")
 
 
-class TestTriggerRelaySetup:
-    """Tests for trigger_relay_setup."""
+class TestEnsureConfig:
+    """Tests for ensure_config."""
 
-    async def test_calls_create_session(self):
+    async def test_force_calls_create_session(self):
         mock_session = MagicMock(
             relay_url="https://example.com/setup/abc",
             session_id="test-session-id",
@@ -123,10 +123,11 @@ class TestTriggerRelaySetup:
                 "mcp_relay_core.storage.config_file.write_config",
             ),
             patch("httpx.AsyncClient") as mock_httpx,
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
         ):
             mock_httpx.return_value.__aenter__ = AsyncMock()
             mock_httpx.return_value.__aexit__ = AsyncMock()
-            result = await trigger_relay_setup()
+            result = await ensure_config(force=True, timeout=None)
             mock_create.assert_called_once_with(
                 DEFAULT_RELAY_URL, "wet-mcp", RELAY_SCHEMA
             )
@@ -139,5 +140,5 @@ class TestTriggerRelaySetup:
             new_callable=AsyncMock,
             side_effect=ConnectionError("unreachable"),
         ):
-            result = await trigger_relay_setup()
+            result = await ensure_config(force=True)
             assert result is None
