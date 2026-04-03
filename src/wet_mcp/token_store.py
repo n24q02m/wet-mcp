@@ -8,7 +8,7 @@ first interactive OAuth flow.
 Token lifecycle:
 1. First run: no token -> Device Code OAuth flow -> token saved
 2. Subsequent runs: token loaded from disk -> auto-refreshed when expired
-3. Re-auth: delete token file -> next run triggers new OAuth flow
+3. Re-auth: delete the token file manually to trigger a new OAuth flow
 """
 
 from __future__ import annotations
