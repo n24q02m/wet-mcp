@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
 from urllib.parse import urlparse
@@ -897,6 +898,78 @@ async def extract(
             )
 
 
+@dataclass
+class MediaParams:
+    action: str
+    url: str | None = None
+    media_type: str = "all"
+    media_urls: list[str] | None = None
+    output_dir: str | None = None
+    max_items: int = 10
+    prompt: str = "Describe this image in detail."
+
+
+async def _do_media(params: MediaParams) -> str:
+    """Internal implementation of media tool."""
+    from wet_mcp.sources.crawler import download_media
+
+    match params.action:
+        case "list":
+            if not params.url:
+                return 'Error: url is required for list action. Example: media(action="list", url="https://example.com/gallery", media_type="images")'
+            return await _with_timeout(
+                list_media(
+                    url=params.url,
+                    media_type=params.media_type,
+                    max_items=params.max_items,
+                ),
+                "media.list",
+            )
+
+        case "download":
+            if not params.media_urls:
+                return 'Error: media_urls is required for download action. Example: media(action="download", media_urls=["https://example.com/image.jpg"]). Use media(action="list", url="...") first to discover media URLs.'
+
+            # Security: validate output_dir is within the configured
+            # download directory to prevent arbitrary file writes.
+            resolved_download_dir = Path(settings.download_dir).expanduser().resolve()
+            target_dir = (
+                Path(params.output_dir or settings.download_dir).expanduser().resolve()
+            )
+            if not target_dir.is_relative_to(resolved_download_dir):
+                return (
+                    "Error: Security Alert — output_dir must be within "
+                    f"the configured download directory ({resolved_download_dir})"
+                )
+
+            return await _with_timeout(
+                download_media(
+                    media_urls=params.media_urls,
+                    output_dir=str(target_dir),
+                ),
+                "media.download",
+            )
+
+        case "analyze":
+            if not params.url:
+                return 'Error: url (local file path) is required for analyze action. Example: media(action="analyze", url="/path/to/image.jpg", prompt="Describe this image"). Download a file first with media(action="download", ...).'
+
+            from wet_mcp.llm import analyze_media
+
+            return await _with_timeout(
+                analyze_media(media_path=params.url, prompt=params.prompt),
+                "media.analyze",
+            )
+
+        case _:
+            import difflib
+
+            actions = ["list", "download", "analyze"]
+            matches = difflib.get_close_matches(params.action, actions)
+            suggestion = f". Did you mean '{matches[0]}'?" if matches else ""
+            return f"Error: Unknown action '{params.action}'{suggestion}. Supported: {actions}"
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=False,
@@ -917,81 +990,20 @@ async def media(  # noqa: PLR0913
 
     Actions:
     - list: Scan a page and return media URLs with metadata. Example: media(action="list", url="https://example.com/gallery", media_type="images")
-    - download: Download media files to local storage. Example: media(action="download", media_urls=["https://example.com/photo.jpg"])
-    - analyze: Analyze a local file using LLM vision (requires API_KEYS). Example: media(action="analyze", url="/path/to/image.jpg", prompt="What objects are in this image?")
-
-    Key parameters:
-    - url (required for list/analyze): Page URL to scan, or local file path for analyze
-    - media_urls (required for download): List of media URLs to download
-    - media_type: Filter for list -- "images", "videos", "audio", "files", "all" (default: "all")
-    - output_dir: Download directory (default: ~/.wet-mcp/downloads)
-    - prompt: Analysis prompt for analyze action
-
-    Typical workflow: list (discover) -> download (save locally) -> analyze (LLM insights).
     Use `help` tool with tool_name="media" for full documentation.
     """
-    from wet_mcp.sources.crawler import download_media
-
-    match action:
-        case "list":
-            if not url:
-                return 'Error: url is required for list action. Example: media(action="list", url="https://example.com/gallery", media_type="images")'
-            return await _with_timeout(
-                list_media(url=url, media_type=media_type, max_items=max_items),
-                "media.list",
-            )
-
-        case "download":
-            if not media_urls:
-                return 'Error: media_urls is required for download action. Example: media(action="download", media_urls=["https://example.com/image.jpg"]). Use media(action="list", url="...") first to discover media URLs.'
-
-            # Security: validate output_dir is within the configured
-            # download directory to prevent arbitrary file writes.
-            resolved_download_dir = Path(settings.download_dir).expanduser().resolve()
-            target_dir = (
-                Path(output_dir or settings.download_dir).expanduser().resolve()
-            )
-            if not target_dir.is_relative_to(resolved_download_dir):
-                return (
-                    "Error: Security Alert — output_dir must be within "
-                    f"the configured download directory ({resolved_download_dir})"
-                )
-
-            return await _with_timeout(
-                download_media(
-                    media_urls=media_urls,
-                    output_dir=str(target_dir),
-                ),
-                "media.download",
-            )
-
-        case "analyze":
-            if not url:
-                return 'Error: url (local file path) is required for analyze action. Example: media(action="analyze", url="/path/to/image.jpg", prompt="Describe this image"). Download a file first with media(action="download", ...).'
-
-            from wet_mcp.llm import analyze_media
-
-            return await _with_timeout(
-                analyze_media(media_path=url, prompt=prompt),
-                "media.analyze",
-            )
-
-        case _:
-            import difflib
-
-            valid_actions = ["analyze", "download", "list"]
-            closest = difflib.get_close_matches(action, valid_actions, n=1)
-            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-            return f"Error: Unknown action '{action}'.{suggestion} Valid actions: list (discover media on page), download (save to local), analyze (LLM vision analysis)."
+    params = MediaParams(
+        action=action,
+        url=url,
+        media_type=media_type,
+        media_urls=media_urls,
+        output_dir=output_dir,
+        max_items=max_items,
+        prompt=prompt,
+    )
+    return await _do_media(params)
 
 
-@mcp.tool(
-    annotations=ToolAnnotations(
-        readOnlyHint=True,
-        openWorldHint=False,
-        idempotentHint=True,
-    ),
-)
 async def help(tool_name: str = "search") -> str:
     """Get detailed documentation for any tool. Call this when you need full parameter reference or usage examples.
 
