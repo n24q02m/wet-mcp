@@ -68,6 +68,32 @@ class TestLoadConfigFromFile:
         # Should not raise, returns None if module missing or config not found
         assert result is None or isinstance(result, dict)
 
+    def test_returns_config_when_valid_file_exists(self):
+        valid_config = {"OPENAI_API_KEY": "test-key"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=valid_config,
+        ):
+            result = load_config_from_file()
+        assert result == valid_config
+
+    def test_returns_none_when_config_has_no_cloud_keys(self):
+        invalid_config = {"OTHER_KEY": "some-value"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=invalid_config,
+        ):
+            result = load_config_from_file()
+        assert result is None
+
+    def test_returns_none_on_exception(self):
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            side_effect=Exception("Read error"),
+        ):
+            result = load_config_from_file()
+        assert result is None
+
 
 class TestApplyConfig:
     """Tests for apply_config."""
