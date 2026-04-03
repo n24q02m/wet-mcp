@@ -913,8 +913,14 @@ class DocsDB:
                 chunks.append(obj)
 
         def _get_existing(table: str, items: list) -> set:
-            if table not in {"libraries", "versions", "doc_chunks"}:
+            _allowed = {
+                "libraries": "libraries",
+                "versions": "versions",
+                "doc_chunks": "doc_chunks",
+            }
+            if table not in _allowed:
                 raise ValueError(f"Invalid table name: {table}")
+            safe_table = _allowed[table]
             if not items:
                 return set()
             ids = [obj["id"] for obj in items]
@@ -925,7 +931,7 @@ class DocsDB:
                 placeholders = ",".join("?" * len(batch))
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 res = self._conn.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
+                    f"SELECT id FROM {safe_table} WHERE id IN ({placeholders})", batch
                 ).fetchall()
                 existing.update(r[0] for r in res)
             return existing
