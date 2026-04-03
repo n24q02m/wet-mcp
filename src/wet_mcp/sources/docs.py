@@ -3194,25 +3194,33 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
     parsed = urlparse(base_url)
     origin = f"{parsed.scheme}://{parsed.netloc}"
 
-    for path in ("/sitemap.xml", "/sitemap_index.xml"):
-        url = f"{origin}{path}"
-        try:
-            async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
+    async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
+        # Try common sitemap paths concurrently
+        paths = ("/sitemap.xml", "/sitemap_index.xml")
+        candidate_urls = [f"{origin}{p}" for p in paths]
+
+        async def _try_single_sitemap(url: str) -> list[str]:
+            try:
                 resp = await client.get(url)
                 if resp.status_code != 200:
-                    continue
+                    return []
                 text = resp.text
                 if "<urlset" not in text and "<sitemapindex" not in text:
-                    continue
+                    return []
 
                 # Handle sitemap index (links to sub-sitemaps)
                 if "<sitemapindex" in text:
                     sub_urls = re.findall(r"<loc>\s*(.*?)\s*</loc>", text)
                     all_page_urls: list[str] = []
 
+                    # ⚡ Bolt Optimization: Use a semaphore to fetch sub-sitemaps concurrently
+                    # while respecting host limits.
+                    sub_sem = asyncio.Semaphore(5)
+
                     async def _fetch_sub(sub_url: str) -> list[str]:
                         try:
-                            sub_resp = await client.get(sub_url)
+                            async with sub_sem:
+                                sub_resp = await client.get(sub_url)
                             if sub_resp.status_code == 200:
                                 return re.findall(
                                     r"<loc>\s*(.*?)\s*</loc>", sub_resp.text
@@ -3221,8 +3229,9 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                             pass
                         return []
 
+                    # Fetch sub-sitemaps in parallel (limited to first 10 to cover more of site)
                     sub_results = await asyncio.gather(
-                        *[_fetch_sub(u) for u in sub_urls[:5]]
+                        *[_fetch_sub(u) for u in sub_urls[:10]]
                     )
                     for sub_locs in sub_results:
                         all_page_urls.extend(sub_locs)
@@ -3252,12 +3261,22 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     if parsed.netloc in u
                     and not any(skip in u.lower() for skip in skip_patterns)
                 ]
+                return filtered
+            except Exception:
+                return []
 
-                if filtered:
-                    logger.info(f"Found {len(filtered)} URLs from sitemap at {url}")
-                    return filtered[:max_urls]
-        except Exception:
-            continue
+        # Run both candidates in parallel
+        results = await asyncio.gather(
+            *[_try_single_sitemap(u) for u in candidate_urls]
+        )
+
+        # Return first non-empty result (preferring sitemap.xml if both succeed)
+        for i, res in enumerate(results):
+            if res:
+                logger.info(
+                    f"Found {len(res)} URLs from sitemap at {candidate_urls[i]}"
+                )
+                return res[:max_urls]
 
     return []
 
@@ -3300,27 +3319,37 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
 
     try:
         async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
-            for inv_url in unique_candidates:
+
+            async def _try_inv(inv_url: str) -> list[str] | None:
                 try:
                     resp = await client.get(inv_url)
+                    if resp.status_code != 200:
+                        return None
+                    data = resp.content
+                    if not data.startswith(b"# Sphinx inventory version"):
+                        return None
+
+                    # Determine the base URL for constructing page URLs:
+                    # objects.inv path minus "objects.inv" = doc root
+                    inv_base = inv_url.rsplit("objects.inv", 1)[0]
+
+                    result = _parse_objects_inv(data, inv_base)
+                    if result:
+                        logger.info(
+                            f"Found {len(result)} URLs from objects.inv at {inv_url}"
+                        )
+                        return result[:max_urls]
                 except Exception:
-                    continue
-                if resp.status_code != 200:
-                    continue
-                data = resp.content
-                if not data.startswith(b"# Sphinx inventory version"):
-                    continue
+                    pass
+                return None
 
-                # Determine the base URL for constructing page URLs:
-                # objects.inv path minus "objects.inv" = doc root
-                inv_base = inv_url.rsplit("objects.inv", 1)[0]
-
-                result = _parse_objects_inv(data, inv_base)
-                if result:
-                    logger.info(
-                        f"Found {len(result)} URLs from objects.inv at {inv_url}"
-                    )
-                    return result[:max_urls]
+            # ⚡ Bolt Optimization: Try all inventory candidates concurrently
+            inv_results = await asyncio.gather(
+                *[_try_inv(u) for u in unique_candidates]
+            )
+            for res in inv_results:
+                if res:
+                    return res
     except Exception:
         pass
 

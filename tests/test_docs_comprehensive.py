@@ -353,7 +353,14 @@ async def test_try_sitemap_index():
             """<urlset><url><loc>https://docs.test/guide</loc></url></urlset>"""
         )
 
-        mock_instance.get.side_effect = [mock_resp_idx, mock_resp_sub]
+        # Now that it tries both sitemap.xml and sitemap_index.xml in parallel,
+        # the side_effect should return something for at least one of them.
+        # Let's mock both candidates.
+        mock_instance.get.side_effect = [
+            mock_resp_idx,  # sitemap.xml
+            MagicMock(status_code=404),  # sitemap_index.xml
+            mock_resp_sub,  # sub.xml
+        ]
 
         res = await _try_sitemap("https://docs.test")
         assert "https://docs.test/guide" in res
