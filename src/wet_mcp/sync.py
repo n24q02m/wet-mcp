@@ -453,7 +453,7 @@ async def sync_full(db: DocsDB) -> dict:
             remote_db.close()
 
             # Import into local DB (merge mode - skip existing)
-            if remote_jsonl.strip():
+            if remote_jsonl and remote_jsonl.strip():
                 import_result = db.import_jsonl(remote_jsonl, mode="merge")
                 result["pull"] = import_result
                 logger.info(f"Merged remote docs: {import_result}")
