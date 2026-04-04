@@ -22,6 +22,15 @@ from loguru import logger
 # Bump this when discovery scoring changes to invalidate stale caches.
 from wet_mcp.sources.docs import DISCOVERY_VERSION
 
+_ALLOWED_UPDATES = frozenset(
+    {
+        "docs_url = ?",
+        "registry = ?",
+        "description = ?",
+        "discovery_version = ?",
+        "updated_at = ?",
+    }
+)
 
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize float vector for sqlite-vec."""
@@ -366,6 +375,10 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                for update in updates:
+                    if update not in _ALLOWED_UPDATES:
+                        raise ValueError(f"Invalid update field: {update}")
+
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
                     f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
