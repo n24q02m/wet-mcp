@@ -1216,11 +1216,10 @@ async def setup(
             return json.dumps(result, indent=2, default=str)
 
         case "setup_relay":
-            from wet_mcp.relay_setup import apply_config, trigger_relay_setup
+            from wet_mcp.relay_setup import ensure_config
 
-            config = await trigger_relay_setup()
+            config = await ensure_config(force=True, timeout=None)
             if config:
-                apply_config(config)
                 settings.setup_providers()
                 return json.dumps({"status": "ok", "message": "Relay config applied."})
             return json.dumps(
@@ -1886,22 +1885,6 @@ async def _do_immediate_fallback_search(
     except Exception as e:
         logger.debug(f"Immediate fallback search failed: {e}")
     return fallback_data
-
-
-# ---------------------------------------------------------------------------
-# Prompts (aligned with mnemo-mcp pattern)
-# ---------------------------------------------------------------------------
-
-
-@mcp.prompt()
-def research_topic(topic: str) -> str:
-    """Generate a prompt to research a topic using academic search."""
-    return (
-        f"Research the following topic thoroughly: {topic}\n\n"
-        "1. Use the search tool with action='research' to find academic papers.\n"
-        "2. Use the extract tool with action='extract' on the most relevant URLs.\n"
-        "3. Synthesize findings into a comprehensive summary with citations."
-    )
 
 
 def main() -> None:

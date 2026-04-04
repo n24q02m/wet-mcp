@@ -381,7 +381,7 @@ class TestErrorHandling:
 async def test_relay_all_tools(request, tmp_path):
     """Relay mode: start server without API keys, trigger relay via setup tool.
 
-    wet-mcp relay is MANUAL (trigger_relay_setup), not auto like mnemo/telegram.
+    wet-mcp relay is MANUAL (ensure_config(force=True)), not auto like mnemo/telegram.
     Flow: initialize (local mode) -> call setup_relay -> browser opens -> user enters
     credentials -> poll config status -> run all tools with cloud credentials.
 

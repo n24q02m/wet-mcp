@@ -347,43 +347,43 @@ class TestLoadConfigFromFile:
             assert result is None
 
 
-class TestTriggerRelaySetup:
-    """Additional coverage for trigger_relay_setup."""
+class TestEnsureConfigForced:
+    """Coverage for ensure_config(force=True) -- manual relay setup."""
 
     async def test_relay_skipped_returns_none(self):
         """When user skips, returns None."""
-        from wet_mcp.relay_setup import trigger_relay_setup
+        from wet_mcp.relay_setup import ensure_config
 
         with patch(
             "mcp_relay_core.relay.client.create_session",
             new_callable=AsyncMock,
             side_effect=RuntimeError("RELAY_SKIPPED by user"),
         ):
-            result = await trigger_relay_setup()
+            result = await ensure_config(force=True, timeout=None)
             assert result is None
 
     async def test_generic_runtime_error(self):
         """Generic RuntimeError returns None."""
-        from wet_mcp.relay_setup import trigger_relay_setup
+        from wet_mcp.relay_setup import ensure_config
 
         with patch(
             "mcp_relay_core.relay.client.create_session",
             new_callable=AsyncMock,
             side_effect=RuntimeError("network error"),
         ):
-            result = await trigger_relay_setup()
+            result = await ensure_config(force=True, timeout=None)
             assert result is None
 
     async def test_generic_exception(self):
         """Generic Exception returns None."""
-        from wet_mcp.relay_setup import trigger_relay_setup
+        from wet_mcp.relay_setup import ensure_config
 
         with patch(
             "mcp_relay_core.relay.client.create_session",
             new_callable=AsyncMock,
             side_effect=Exception("unexpected"),
         ):
-            result = await trigger_relay_setup()
+            result = await ensure_config(force=True, timeout=None)
             assert result is None
 
 
@@ -1800,17 +1800,16 @@ class TestServerSetupTool:
             assert data["status"] == "ok"
 
     async def test_setup_relay(self):
-        """setup_relay action delegates to trigger_relay_setup."""
+        """setup_relay action delegates to ensure_config(force=True)."""
         from wet_mcp.server import setup
 
         mock_config = {"GEMINI_API_KEY": "AIza_test"}
         with (
             patch(
-                "wet_mcp.relay_setup.trigger_relay_setup",
+                "wet_mcp.relay_setup.ensure_config",
                 new_callable=AsyncMock,
                 return_value=mock_config,
             ),
-            patch("wet_mcp.relay_setup.apply_config"),
             patch("wet_mcp.server.settings") as mock_settings,
         ):
             mock_settings.setup_providers = MagicMock()
@@ -1823,7 +1822,7 @@ class TestServerSetupTool:
         from wet_mcp.server import setup
 
         with patch(
-            "wet_mcp.relay_setup.trigger_relay_setup",
+            "wet_mcp.relay_setup.ensure_config",
             new_callable=AsyncMock,
             return_value=None,
         ):
