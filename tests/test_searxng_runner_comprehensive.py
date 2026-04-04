@@ -200,7 +200,7 @@ def test_find_available_port():
 
         # Success on first try
         mock_sock_instance.bind.return_value = None
-        port = _find_available_port(8080)
+        port = _find_available_port(8080, max_tries=50)
         assert 8080 <= port < 8080 + 50
 
         # Bind fails — web-core raises RuntimeError
