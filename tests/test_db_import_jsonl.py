@@ -1,5 +1,4 @@
 import json
-import sqlite3
 from unittest.mock import patch
 
 from wet_mcp.db import DocsDB
