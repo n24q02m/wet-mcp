@@ -131,6 +131,13 @@ def _chunk_quality_score(content: str) -> float:
 
 
 class DocsDB:
+    _ALLOWED_LIBRARY_UPDATES = {
+        "docs_url = ?",
+        "registry = ?",
+        "description = ?",
+        "discovery_version = ?",
+        "updated_at = ?",
+    }
     """SQLite-backed docs storage with FTS5 hybrid search."""
 
     def __init__(self, db_path: Path, embedding_dims: int = 0):
@@ -348,13 +355,6 @@ class DocsDB:
         ).fetchone()
 
         if row:
-            _ALLOWED_UPDATES = {
-                "docs_url = ?",
-                "registry = ?",
-                "description = ?",
-                "discovery_version = ?",
-                "updated_at = ?",
-            }
             lib_id = row["id"]
             updates = []
             params: list = []
@@ -374,7 +374,7 @@ class DocsDB:
             params.append(lib_id)
             if updates:
                 for u in updates:
-                    if u not in _ALLOWED_UPDATES:
+                    if u not in self._ALLOWED_LIBRARY_UPDATES:
                         raise ValueError(f"Unauthorized update: {u}")
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
