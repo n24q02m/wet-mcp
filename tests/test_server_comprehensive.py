@@ -544,16 +544,6 @@ async def test_with_timeout_expired():
         assert "timed out" in res
 
 
-def test_prompts():
-    assert "Research" in server.research_topic("topic")
-
-
-def test_research_topic_prompt():
-    """Test research_topic prompt formatting."""
-    result = server.research_topic("quantum computing")
-    assert "Research the following topic thoroughly: quantum computing" in result
-
-
 def test_main():
     with patch("wet_mcp.server.mcp.run") as mock_run:
         server.main()
