@@ -13,7 +13,7 @@ def test_db_update_allowlist(tmp_path):
         name="test-lib",
         docs_url="https://test.com/docs",
         registry="pypi",
-        description="test desc"
+        description="test desc",
     )
     assert lib_id is not None
 

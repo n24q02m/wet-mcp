@@ -32,6 +32,7 @@ _ALLOWED_UPDATES = frozenset(
     }
 )
 
+
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize float vector for sqlite-vec."""
     return struct.pack(f"{len(vec)}f", *vec)
