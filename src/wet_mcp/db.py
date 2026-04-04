@@ -36,6 +36,14 @@ def _now_ts() -> float:
 # Patterns for chunk quality scoring
 _CODE_BLOCK_RE = re.compile(r"```")
 _LINK_LINE_RE = re.compile(r"^\s*[-*]?\s*\[.+?\]\(.+?\)\s*$|^\s*https?://\S+\s*$")
+_ALLOWED_UPDATES = frozenset({
+    "docs_url = ?",
+    "registry = ?",
+    "description = ?",
+    "discovery_version = ?",
+    "updated_at = ?"
+})
+
 # Function/class/type definitions (common across languages)
 _DEF_RE = re.compile(
     r"^\s*(?:def |class |fn |func |function |interface |type |struct |enum |const |let |var |export )",
@@ -366,6 +374,9 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                for u in updates:
+                    if u not in _ALLOWED_UPDATES:
+                        raise ValueError(f"Invalid column update: {u}")
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
                     f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
