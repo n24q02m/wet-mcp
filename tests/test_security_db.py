@@ -1,6 +1,9 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from wet_mcp.db import DocsDB
+
 
 def test_db_update_allowlist(tmp_path):
     db = DocsDB(tmp_path / "test.db")
