@@ -36,13 +36,15 @@ def _now_ts() -> float:
 # Patterns for chunk quality scoring
 _CODE_BLOCK_RE = re.compile(r"```")
 _LINK_LINE_RE = re.compile(r"^\s*[-*]?\s*\[.+?\]\(.+?\)\s*$|^\s*https?://\S+\s*$")
-_ALLOWED_UPDATES = frozenset({
-    "docs_url = ?",
-    "registry = ?",
-    "description = ?",
-    "discovery_version = ?",
-    "updated_at = ?"
-})
+_ALLOWED_UPDATES = frozenset(
+    {
+        "docs_url = ?",
+        "registry = ?",
+        "description = ?",
+        "discovery_version = ?",
+        "updated_at = ?",
+    }
+)
 
 # Function/class/type definitions (common across languages)
 _DEF_RE = re.compile(
