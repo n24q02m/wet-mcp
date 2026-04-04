@@ -1,9 +1,9 @@
-import sqlite3
 from unittest.mock import patch
 
 import pytest
 
 from wet_mcp.db import DocsDB
+
 
 def test_upsert_library_security_allowlist(tmp_path):
     """Test that upsert_library validates dynamic UPDATE column names against the allowlist."""
