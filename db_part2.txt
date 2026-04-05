@@ -1,0 +1,300 @@
+            if not row:
+                # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                self._conn.execute(f"""
+                    CREATE VIRTUAL TABLE doc_chunks_vec
+                    USING vec0(
+                        id TEXT PRIMARY KEY,
+                        embedding float[{int(self._embedding_dims)}]
+                    )
+                """)
+
+    # -----------------------------------------------------------------------
+    # Stats
+    # -----------------------------------------------------------------------
+
+    def stats(self) -> dict:
+        """Return database statistics."""
+        lib_count = self._conn.execute("SELECT COUNT(*) FROM libraries").fetchone()[0]
+        chunk_count = self._conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()[
+            0
+        ]
+        return {
+            "libraries": lib_count,
+            "chunks": chunk_count,
+            "vec_enabled": self._vec_enabled,
+        }
+
+    # -----------------------------------------------------------------------
+    # Library CRUD
+    # -----------------------------------------------------------------------
+
+    def upsert_library(
+        self,
+        name: str,
+        docs_url: str | None = None,
+        registry: str | None = None,
+        description: str | None = None,
+    ) -> str:
+        """Create or update a library. Returns library ID.
+
+        Automatically stamps the current ``DISCOVERY_VERSION``.
+        """
+        now = _now_ts()
+        # Normalize name to lowercase
+        norm_name = name.lower().strip()
+
+        row = self._conn.execute(
+            "SELECT id FROM libraries WHERE name = ?", (norm_name,)
+        ).fetchone()
+
+        if row:
+            lib_id = row["id"]
+            updates = []
+            params: list = []
+            if docs_url is not None:
+                updates.append("docs_url = ?")
+                params.append(docs_url)
+            if registry is not None:
+                updates.append("registry = ?")
+                params.append(registry)
+            if description is not None:
+                updates.append("description = ?")
+                params.append(description)
+            updates.append("discovery_version = ?")
+            params.append(DISCOVERY_VERSION)
+            updates.append("updated_at = ?")
+            params.append(now)
+            params.append(lib_id)
+            if updates:
+                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                self._conn.execute(
+                    f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
+                    params,
+                )
+                self._conn.commit()
+            return lib_id
+
+        lib_id = uuid.uuid4().hex[:12]
+        self._conn.execute(
+            """INSERT INTO libraries
+               (id, name, docs_url, registry, description, discovery_version,
+                created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                lib_id,
+                norm_name,
+                docs_url,
+                registry,
+                description,
+                DISCOVERY_VERSION,
+                now,
+                now,
+            ),
+        )
+        self._conn.commit()
+        return lib_id
+
+    def get_library(self, name: str) -> dict | None:
+        """Get library by name."""
+        row = self._conn.execute(
+            "SELECT * FROM libraries WHERE name = ?", (name.lower().strip(),)
+        ).fetchone()
+        return dict(row) if row else None
+
+    # -----------------------------------------------------------------------
+    # Version management
+    # -----------------------------------------------------------------------
+
+    def upsert_version(
+        self,
+        library_id: str,
+        version: str = "latest",
+        docs_url: str | None = None,
+    ) -> str:
+        """Create or get version. Returns version ID."""
+        row = self._conn.execute(
+            "SELECT id FROM versions WHERE library_id = ? AND version = ?",
+            (library_id, version),
+        ).fetchone()
+
+        if row:
+            ver_id = row["id"]
+            if docs_url:
+                self._conn.execute(
+                    "UPDATE versions SET docs_url = ? WHERE id = ?",
+                    (docs_url, ver_id),
+                )
+                self._conn.commit()
+            return ver_id
+
+        ver_id = uuid.uuid4().hex[:12]
+        self._conn.execute(
+            """INSERT INTO versions (id, library_id, version, docs_url, status)
+               VALUES (?, ?, ?, ?, 'pending')""",
+            (ver_id, library_id, version, docs_url),
+        )
+        self._conn.commit()
+        return ver_id
+
+    def mark_version_indexed(
+        self, version_id: str, page_count: int, chunk_count: int
+    ) -> None:
+        """Mark version as indexed with counts."""
+        self._conn.execute(
+            """UPDATE versions
+               SET status = 'indexed', indexed_at = ?, page_count = ?, chunk_count = ?
+               WHERE id = ?""",
+            (_now_ts(), page_count, chunk_count, version_id),
+        )
+        self._conn.commit()
+
+    def get_best_version(
+        self, library_id: str, target: str | None = None
+    ) -> dict | None:
+        """Get best matching version for library."""
+        if target:
+            # Try exact match first
+            row = self._conn.execute(
+                """SELECT * FROM versions
+                   WHERE library_id = ? AND version = ? AND status = 'indexed'""",
+                (library_id, target),
+            ).fetchone()
+            if row:
+                return dict(row)
+
+        # Fallback to latest indexed
+        row = self._conn.execute(
+            """SELECT * FROM versions
+               WHERE library_id = ? AND status = 'indexed'
+               ORDER BY indexed_at DESC LIMIT 1""",
+            (library_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    # -----------------------------------------------------------------------
+    # Chunks CRUD
+    # -----------------------------------------------------------------------
+
+    def add_chunks(
+        self,
+        version_id: str,
+        library_id: str,
+        chunks: list[dict],
+        embeddings: list[list[float]] | None = None,
+    ) -> int:
+        """Add document chunks with optional embeddings.
+
+        Each chunk dict: {url, title, content, heading_path, chunk_index}
+        """
+        now = _now_ts()
+
+        # Pre-generate IDs for all chunks
+        chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
+
+        # Batch insert all doc chunks
+        chunk_rows = [
+            (
+                chunk_ids[i],
+                version_id,
+                library_id,
+                chunk.get("url", ""),
+                chunk.get("title", ""),
+                chunk.get("chunk_index", i),
+                chunk["content"],
+                chunk.get("heading_path", ""),
+                now,
+            )
+            for i, chunk in enumerate(chunks)
+        ]
+        self._conn.executemany(
+            """INSERT INTO doc_chunks
+               (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            chunk_rows,
+        )
+
+        # Batch insert vector embeddings if available
+        if self._vec_enabled and embeddings:
+            vec_rows = []
+            for i, emb in enumerate(embeddings):
+                if i < len(chunk_ids) and emb:
+                    try:
+                        vec_rows.append((chunk_ids[i], _serialize_f32(emb)))
+                    except Exception as e:
+                        logger.debug(f"Failed to serialize embedding: {e}")
+            if vec_rows:
+                try:
+                    self._conn.executemany(
+                        "INSERT INTO doc_chunks_vec (id, embedding) VALUES (?, ?)",
+                        vec_rows,
+                    )
+                except Exception as e:
+                    logger.debug(f"Failed to batch-insert embeddings: {e}")
+
+        self._conn.commit()
+        return len(chunks)
+
+    def clear_version_chunks(self, version_id: str) -> int:
+        """Remove all chunks for a version (before re-indexing)."""
+        if self._vec_enabled:
+            # Bulk delete vector entries in a single query instead of N
+            # individual DELETEs (eliminates N+1 pattern).
+            try:
+                self._conn.execute(
+                    "DELETE FROM doc_chunks_vec WHERE id IN "
+                    "(SELECT id FROM doc_chunks WHERE version_id = ?)",
+                    (version_id,),
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete vector chunks: {e}",
+                )
+
+        cursor = self._conn.execute(
+            "DELETE FROM doc_chunks WHERE version_id = ?", (version_id,)
+        )
+        self._conn.commit()
+        return cursor.rowcount
+
+    # -----------------------------------------------------------------------
+    # Search
+    # -----------------------------------------------------------------------
+
+    def _combine_scores(
+        self,
+        fts_scores: dict[str, float],
+        vec_scores: dict[str, float],
+        fts_chunks: dict[str, dict],
+    ) -> list[tuple[str, float]]:
+        """Combine FTS and vector scores using RRF or FTS-only scoring."""
+        all_ids = set(fts_scores.keys()) | set(vec_scores.keys())
+        scored: list[tuple[str, float]] = []
+
+        if vec_scores:
+            # RRF fusion when both FTS and vector signals available
+            k = 60
+            # ⚡ Bolt Optimization: Sort only the specific score dictionaries directly
+            # instead of sorting all_ids with a lambda.
+            fts_ranked = sorted(fts_scores, key=lambda x: fts_scores[x], reverse=True)
+            vec_ranked = sorted(vec_scores, key=lambda x: vec_scores[x], reverse=True)
+            fts_rank = {cid: i + 1 for i, cid in enumerate(fts_ranked)}
+            vec_rank = {cid: i + 1 for i, cid in enumerate(vec_ranked)}
+
+            default_rank = len(all_ids)
+
+            for cid in all_ids:
+                fr = fts_rank.get(cid, default_rank)
+                vr = vec_rank.get(cid, default_rank)
+                rrf = 1.0 / (k + fr) + 1.0 / (k + vr)
+                # Small quality boost
+                chunk = fts_chunks.get(cid)
+                quality = _chunk_quality_score(chunk["content"]) if chunk else 0.0
+                scored.append((cid, rrf + quality * 0.005))
+        else:
+            # FTS-only: normalized score + quality boost
+            for cid in fts_scores:
+                fts = fts_scores[cid]
+                chunk = fts_chunks.get(cid)
+                quality = _chunk_quality_score(chunk["content"]) if chunk else 0.0
+                score = fts * 0.85 + quality * 0.15
+                scored.append((cid, score))

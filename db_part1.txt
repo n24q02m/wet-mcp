@@ -1,0 +1,300 @@
+"""Persistent docs storage with hybrid search (FTS5 + optional sqlite-vec).
+
+Stores library documentation chunks in SQLite with full-text search.
+When an embedding model is configured, also stores vector embeddings
+for semantic search with hybrid scoring.
+
+Schema follows mnemo-mcp patterns: FTS5 content-sync mode with triggers,
+sqlite-vec for vectors, JSONL export/import for sync.
+"""
+
+import json
+import re
+import sqlite3
+import struct
+import time
+import uuid
+from functools import lru_cache
+from pathlib import Path
+
+from loguru import logger
+
+# Bump this when discovery scoring changes to invalidate stale caches.
+from wet_mcp.sources.docs import DISCOVERY_VERSION
+
+
+def _serialize_f32(vec: list[float]) -> bytes:
+    """Serialize float vector for sqlite-vec."""
+    return struct.pack(f"{len(vec)}f", *vec)
+
+
+def _now_ts() -> float:
+    """Current timestamp as float."""
+    return time.time()
+
+
+# Patterns for chunk quality scoring
+_CODE_BLOCK_RE = re.compile(r"```")
+_LINK_LINE_RE = re.compile(r"^\s*[-*]?\s*\[.+?\]\(.+?\)\s*$|^\s*https?://\S+\s*$")
+# Function/class/type definitions (common across languages)
+_DEF_RE = re.compile(
+    r"^\s*(?:def |class |fn |func |function |interface |type |struct |enum |const |let |var |export )",
+    re.MULTILINE,
+)
+# Docstring / doc comment patterns
+_DOCSTRING_RE = re.compile(
+    r'"""|\'\'\'|/\*\*|///|#\s+(?:Args|Returns|Raises|Example|Usage|Parameters|Note)'
+)
+# Directive-heavy content (mkdocs leftover, rst directives)
+_DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
+
+
+def _build_fts_queries(query: str) -> list[str]:
+    """Build tiered FTS5 queries: PHRASE -> AND -> OR.
+
+    No stop-word filtering — BM25's IDF naturally down-weights common
+    words (any language) and the PHRASE->AND->OR fallback ensures precision
+    first, then recall.
+    """
+    words = [w.strip() for w in query.split() if w.strip()]
+    safe = [w.replace('"', '""') for w in words]
+
+    if not safe:
+        return []
+    if len(safe) == 1:
+        return [f'"{safe[0]}"*']
+
+    return [
+        # Tier 0: PHRASE — exact phrase match (highest precision)
+        '"' + " ".join(safe) + '"',
+        # Tier 1: AND — all terms must appear
+        " AND ".join(f'"{w}"*' for w in safe),
+        # Tier 2: OR — any term matches (broadest fallback)
+        " OR ".join(f'"{w}"*' for w in safe),
+    ]
+
+
+@lru_cache(maxsize=1024)
+def _chunk_quality_score(content: str) -> float:
+    """Score chunk content quality for docs ranking (0.0 to 1.0).
+
+    Boosts chunks with code examples, function/class definitions, and
+    docstrings. Penalizes link-heavy TOC chunks, directive-heavy content,
+    and very short chunks.
+    """
+    score = 0.0
+
+    # ⚡ Bolt Optimization: Use str.count instead of re.findall for ~5x faster block counting
+    code_blocks = content.count("```") // 2
+    score += min(code_blocks, 3) * 2.0  # up to +6
+
+    # Function/class definitions signal API documentation
+    defs = len(_DEF_RE.findall(content))
+    score += min(defs, 4) * 1.5  # up to +6
+
+    # Docstrings/doc comments signal well-documented code
+    docstrings = len(_DOCSTRING_RE.findall(content))
+    score += min(docstrings, 3) * 1.0  # up to +3
+
+    # Longer content tends to be more informative
+    length = len(content)
+    if length > 500:
+        score += 2.0
+    elif length > 200:
+        score += 1.0
+
+    # ⚡ Bolt Optimization: Single-pass loop avoids allocating two temporary lists
+    # Link-heavy content is usually navigation/TOC, not docs
+    lines_count = 0
+    link_lines = 0
+    for ln in content.splitlines():
+        if ln.strip():
+            lines_count += 1
+            if _LINK_LINE_RE.match(ln):
+                link_lines += 1
+    if lines_count:
+        ratio = link_lines / lines_count
+        if ratio > 0.5:
+            score -= 4.0
+        elif ratio > 0.3:
+            score -= 2.0
+
+    # Directive-heavy content (leftover mkdocs/rst noise)
+    directives = len(_DIRECTIVE_RE.findall(content))
+    if directives > 3:
+        score -= 2.0
+    elif directives > 1:
+        score -= 1.0
+
+    # Normalize to 0-1 range (wider range due to more signals)
+    return max(0.0, min(score / 12.0, 1.0))
+
+
+class DocsDB:
+    """SQLite-backed docs storage with FTS5 hybrid search."""
+
+    def __init__(self, db_path: Path, embedding_dims: int = 0):
+        self._db_path = db_path
+        if (
+            type(embedding_dims) is not int
+            or embedding_dims < 0
+            or embedding_dims > 65536
+        ):
+            raise ValueError(
+                f"embedding_dims must be an integer 0-65536, got {embedding_dims!r}"
+            )
+        self._embedding_dims = embedding_dims
+        self._vec_enabled = False
+
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(db_path))
+        self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA journal_mode = WAL")
+        self._conn.execute("PRAGMA synchronous = NORMAL")
+        self._conn.execute("PRAGMA busy_timeout = 5000")
+        self._conn.execute("PRAGMA mmap_size = 268435456")  # 256MB mmap
+        self._conn.execute("PRAGMA temp_store = MEMORY")
+        self._conn.execute("PRAGMA cache_size = -64000")  # 64MB cache (KB)
+
+        # Try loading sqlite-vec extension
+        if embedding_dims > 0:
+            try:
+                import sqlite_vec
+
+                self._conn.enable_load_extension(True)
+                sqlite_vec.load(self._conn)
+                self._conn.enable_load_extension(False)
+                self._vec_enabled = True
+                logger.debug("sqlite-vec extension loaded")
+            except Exception as e:
+                logger.debug(f"sqlite-vec not available, FTS-only mode: {e}")
+
+        self._create_tables()
+        logger.debug(f"DocsDB initialized at {db_path} (vec={self._vec_enabled})")
+
+    def _create_tables(self) -> None:
+        self._create_libraries_table()
+        self._create_versions_table()
+        self._create_doc_chunks_table()
+        self._create_fts_table()
+        self._create_vector_table()
+        self._conn.commit()
+
+    def _create_libraries_table(self) -> None:
+        # Libraries metadata
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS libraries (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                docs_url TEXT,
+                registry TEXT,
+                description TEXT,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            )
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_libraries_name
+            ON libraries(name)
+        """)
+
+        # Migration: add discovery_version column if missing
+        try:
+            self._conn.execute(
+                "ALTER TABLE libraries ADD COLUMN discovery_version INTEGER DEFAULT 0"
+            )
+            self._conn.commit()
+            logger.debug("Migrated libraries table: added discovery_version")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+    def _create_versions_table(self) -> None:
+        # Versions
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS versions (
+                id TEXT PRIMARY KEY,
+                library_id TEXT NOT NULL,
+                version TEXT NOT NULL DEFAULT 'latest',
+                docs_url TEXT,
+                indexed_at REAL,
+                page_count INTEGER DEFAULT 0,
+                chunk_count INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
+                FOREIGN KEY (library_id) REFERENCES libraries(id) ON DELETE CASCADE,
+                UNIQUE(library_id, version)
+            )
+        """)
+
+    def _create_doc_chunks_table(self) -> None:
+        # Document chunks
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS doc_chunks (
+                id TEXT PRIMARY KEY,
+                version_id TEXT NOT NULL,
+                library_id TEXT NOT NULL,
+                url TEXT,
+                title TEXT,
+                chunk_index INTEGER NOT NULL DEFAULT 0,
+                content TEXT NOT NULL,
+                heading_path TEXT,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (version_id) REFERENCES versions(id) ON DELETE CASCADE,
+                FOREIGN KEY (library_id) REFERENCES libraries(id) ON DELETE CASCADE
+            )
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_chunks_version
+            ON doc_chunks(version_id)
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_chunks_library
+            ON doc_chunks(library_id)
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_chunks_url_order
+            ON doc_chunks(url, version_id, chunk_index)
+        """)
+
+    def _create_fts_table(self) -> None:
+        # FTS5 (content-sync mode)
+        self._conn.execute("""
+            CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks_fts
+            USING fts5(
+                id UNINDEXED,
+                content,
+                title,
+                heading_path,
+                content=doc_chunks,
+                content_rowid=rowid,
+                tokenize='porter unicode61'
+            )
+        """)
+
+        # FTS5 sync triggers
+        self._conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON doc_chunks BEGIN
+                INSERT INTO doc_chunks_fts(rowid, id, content, title, heading_path)
+                VALUES (new.rowid, new.id, new.content, new.title, new.heading_path);
+            END
+        """)
+        self._conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_ad AFTER DELETE ON doc_chunks BEGIN
+                INSERT INTO doc_chunks_fts(doc_chunks_fts, rowid, id, content, title, heading_path)
+                VALUES ('delete', old.rowid, old.id, old.content, old.title, old.heading_path);
+            END
+        """)
+        self._conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS chunks_au AFTER UPDATE ON doc_chunks BEGIN
+                INSERT INTO doc_chunks_fts(doc_chunks_fts, rowid, id, content, title, heading_path)
+                VALUES ('delete', old.rowid, old.id, old.content, old.title, old.heading_path);
+                INSERT INTO doc_chunks_fts(rowid, id, content, title, heading_path)
+                VALUES (new.rowid, new.id, new.content, new.title, new.heading_path);
+            END
+        """)
+
+    def _create_vector_table(self) -> None:
+        # Vector table (optional)
+        if self._vec_enabled and self._embedding_dims > 0:
+            row = self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
+            ).fetchone()

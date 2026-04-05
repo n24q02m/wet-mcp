@@ -1,0 +1,300 @@
+
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored
+
+    def search(
+        self,
+        query: str,
+        library_name: str | None = None,
+        version: str | None = None,
+        limit: int = 10,
+        query_embedding: list[float] | None = None,
+    ) -> list[dict]:
+        """Hybrid search: FTS5 + optional vector + quality scoring.
+
+        Uses tiered FTS5 queries (AND -> OR fallback), BM25 column weights
+        (boosting title/heading matches), min-max score normalization,
+        and RRF fusion when vector search is available.
+        Recency is intentionally excluded -- all doc chunks share the same
+        indexing timestamp, making recency meaningless for static docs.
+
+        Args:
+            query: Search query text
+            library_name: Filter by library name
+            version: Filter by version
+            limit: Max results
+            query_embedding: Optional embedding vector for semantic search
+
+        Returns:
+            List of chunk dicts sorted by relevance score
+        """
+        # Resolve library/version filters
+        library_id = None
+        version_id = None
+        if library_name:
+            lib = self.get_library(library_name)
+            if not lib:
+                return []
+            library_id = lib["id"]
+            if version:
+                ver = self.get_best_version(library_id, version)
+                if ver:
+                    version_id = ver["id"]
+
+        candidate_limit = limit * 3
+
+        # --- FTS5 search with tiered queries + BM25 column weights ---
+        # Weights: id(0), content(2), title(3), heading_path(2)
+        # Flattened: content is the primary signal, title gets a moderate
+        # boost, heading_path gets minimal boost (BM25 already naturally
+        # up-weights matches in short fields via tf-idf).
+        fts_queries = _build_fts_queries(query)
+        fts_scores: dict[str, float] = {}
+        fts_chunks: dict[str, dict] = {}
+
+        for fts_query in fts_queries:
+            try:
+                fts_sql = """
+                    SELECT c.*,
+                           l.name AS _library_name,
+                           bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
+                    FROM doc_chunks_fts f
+                    JOIN doc_chunks c ON f.id = c.id
+                    LEFT JOIN libraries l ON c.library_id = l.id
+                    WHERE doc_chunks_fts MATCH ?
+                """
+                fts_params: list = [fts_query]
+
+                if library_id:
+                    fts_sql += " AND c.library_id = ?"
+                    fts_params.append(library_id)
+                if version_id:
+                    fts_sql += " AND c.version_id = ?"
+                    fts_params.append(version_id)
+
+                fts_sql += " ORDER BY bm25_score LIMIT ?"
+                fts_params.append(candidate_limit)
+
+                rows = self._conn.execute(fts_sql, fts_params).fetchall()
+                for row in rows:
+                    chunk = dict(row)
+                    cid = chunk["id"]
+                    score = -chunk.pop("bm25_score", 0)
+                    # Keep the best score across tiers (PHRASE > AND > OR)
+                    if cid not in fts_scores or score > fts_scores[cid]:
+                        fts_scores[cid] = score
+                        fts_chunks[cid] = chunk
+                # Stop once we have enough candidates across all tiers
+                if len(fts_scores) >= candidate_limit:
+                    break
+            except Exception as e:
+                logger.debug(f"FTS search error: {e}")
+                continue
+
+        # Min-max normalize FTS scores to 0-1
+        if fts_scores:
+            min_f = min(fts_scores.values())
+            max_f = max(fts_scores.values())
+            rng = max_f - min_f
+            if rng > 0:
+                fts_scores = {k: (v - min_f) / rng for k, v in fts_scores.items()}
+            else:
+                fts_scores = dict.fromkeys(fts_scores, 1.0)
+
+        # --- Vector search ---
+        vec_scores: dict[str, float] = {}
+        if self._vec_enabled and query_embedding:
+            try:
+                vec_sql = """
+                    SELECT v.id, v.distance, c.*, l.name AS _library_name
+                    FROM doc_chunks_vec v
+                    JOIN doc_chunks c ON v.id = c.id
+                    LEFT JOIN libraries l ON c.library_id = l.id
+                    WHERE v.embedding MATCH ?
+                """
+                vec_params: list = [_serialize_f32(query_embedding)]
+
+                if library_id:
+                    vec_sql += " AND c.library_id = ?"
+                    vec_params.append(library_id)
+                if version_id:
+                    vec_sql += " AND c.version_id = ?"
+                    vec_params.append(version_id)
+
+                vec_sql += " ORDER BY v.distance LIMIT ?"
+                vec_params.append(candidate_limit)
+
+                vec_rows = self._conn.execute(vec_sql, vec_params).fetchall()
+                for vr in vec_rows:
+                    chunk_id = vr["id"]
+                    vec_scores[chunk_id] = max(0.0, 1.0 - vr["distance"])
+
+                    # ⚡ Bolt Optimization: Use pre-fetched chunk data from the JOIN
+                    # instead of executing a SELECT query per row (fixes N+1 query problem).
+                    if chunk_id not in fts_chunks:
+                        chunk_data = dict(vr)
+                        chunk_data.pop("distance", None)
+                        fts_chunks[chunk_id] = chunk_data
+            except Exception as e:
+                logger.debug(f"Vector search error: {e}")
+
+        # --- Combine scores ---
+        scored = self._combine_scores(fts_scores, vec_scores, fts_chunks)
+
+        # Build results with cross-chunk context + URL diversity limit
+        # Cap results per URL to avoid returning 4-5 chunks from the same page
+        max_per_url = 2
+        url_counts: dict[str, int] = {}
+        results = []
+
+        # ---- Prefetch adjacent chunks in one batch query ----
+        _adj_keys: list[tuple[str, str, int]] = []
+        for _cid, _sc in scored:
+            _ch = fts_chunks.get(_cid)
+            if not _ch:
+                continue
+            _url = _ch.get("url", "")
+            _ver = _ch.get("version_id", "")
+            _idx = _ch.get("chunk_index", -1)
+            if _url and _ver and _idx >= 0:
+                _adj_keys.append((_url, _ver, _idx - 1))
+                _adj_keys.append((_url, _ver, _idx + 1))
+
+        _adj_map: dict[tuple[str, str, int], str] = {}
+        if _adj_keys:
+            # ⚡ Bolt Optimization: Group by prefix columns (url, version_id) and use standard IN
+            # on the suffix column (chunk_index) to guarantee efficient composite index seeks,
+            # avoiding table/index scans that can occur with row-value IN (VALUES ...).
+            _groups: dict[tuple[str, str], set[int]] = {}
+            for _url, _ver, _idx in _adj_keys:
+                _groups.setdefault((_url, _ver), set()).add(_idx)
+
+            _batch_size = 32764 if sqlite3.sqlite_version_info >= (3, 32, 0) else 900
+            for (_url, _ver), _indices in _groups.items():
+                _indices_list = list(_indices)
+                for i in range(0, len(_indices_list), _batch_size):
+                    _chunk_indices = _indices_list[i : i + _batch_size]
+                    _placeholders = ",".join(["?"] * len(_chunk_indices))
+
+                    # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                    rows = self._conn.execute(
+                        f"""SELECT url, version_id, chunk_index, content
+                            FROM doc_chunks
+                            WHERE url = ? AND version_id = ? AND chunk_index IN ({_placeholders})""",
+                        [_url, _ver] + _chunk_indices,
+                    ).fetchall()
+                    for r in rows:
+                        _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
+                            "content"
+                        ]
+
+        for cid, score in scored:
+            if len(results) >= limit:
+                break
+            chunk = fts_chunks.get(cid)
+            if not chunk:
+                continue
+            chunk_url = chunk.get("url", "")
+            if chunk_url:
+                url_counts[chunk_url] = url_counts.get(chunk_url, 0) + 1
+                if url_counts[chunk_url] > max_per_url:
+                    continue
+
+            result: dict = {
+                "content": chunk["content"],
+                "title": chunk.get("title", ""),
+                "url": chunk.get("url", ""),
+                "heading_path": chunk.get("heading_path", ""),
+                "library": chunk.get("_library_name", ""),
+                "score": round(score, 4),
+            }
+
+            # Cross-chunk context: include adjacent chunks for better RAG
+            chunk_url = chunk.get("url", "")
+            chunk_idx = chunk.get("chunk_index", -1)
+            ver_id_val = chunk.get("version_id", "")
+            if chunk_url and ver_id_val and chunk_idx >= 0:
+                ctx_before = _adj_map.get((chunk_url, ver_id_val, chunk_idx - 1))
+                if ctx_before:
+                    result["context_before"] = ctx_before
+                ctx_after = _adj_map.get((chunk_url, ver_id_val, chunk_idx + 1))
+                if ctx_after:
+                    result["context_after"] = ctx_after
+
+            results.append(result)
+
+        return results
+
+    # -----------------------------------------------------------------------
+    # Export / Import (JSONL for sync)
+    # -----------------------------------------------------------------------
+
+    def export_jsonl(self) -> str:
+        """Export all docs data as JSONL for sync."""
+        lines = []
+
+        # Export libraries (using SQLite native JSON serialization for performance)
+        for row in self._conn.execute(
+            """
+            SELECT json_insert(json_object(
+                'id', id, 'name', name, 'docs_url', docs_url,
+                'registry', registry, 'description', description,
+                'created_at', created_at, 'updated_at', updated_at
+            ), '$._type', 'library')
+            FROM libraries ORDER BY name
+            """
+        ).fetchall():
+            lines.append(row[0])
+
+        # Export versions
+        for row in self._conn.execute(
+            """
+            SELECT json_insert(json_object(
+                'id', id, 'library_id', library_id, 'version', version,
+                'docs_url', docs_url, 'indexed_at', indexed_at,
+                'page_count', page_count, 'chunk_count', chunk_count,
+                'status', status
+            ), '$._type', 'version')
+            FROM versions ORDER BY library_id
+            """
+        ).fetchall():
+            lines.append(row[0])
+
+        # Export chunks (without embeddings — re-generate on target)
+        for row in self._conn.execute(
+            """
+            SELECT json_insert(json_object(
+                'id', id, 'version_id', version_id, 'library_id', library_id,
+                'url', url, 'title', title, 'chunk_index', chunk_index,
+                'content', content, 'heading_path', heading_path,
+                'created_at', created_at
+            ), '$._type', 'chunk')
+            FROM doc_chunks ORDER BY library_id, chunk_index
+            """
+        ).fetchall():
+            lines.append(row[0])
+
+        return "\n".join(lines)
+
+    def import_jsonl(self, data: str, mode: str = "merge") -> dict:
+        """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""
+        stats = {"libraries": 0, "versions": 0, "chunks": 0, "skipped": 0}
+
+        if mode == "replace":
+            if self._vec_enabled:
+                try:
+                    self._conn.execute("DELETE FROM doc_chunks_vec")
+                except Exception:
+                    logger.warning(
+                        "Failed to clear vector table during import replace",
+                        exc_info=True,
+                    )
+            self._conn.execute("DELETE FROM doc_chunks")
+            self._conn.execute("DELETE FROM versions")
+            self._conn.execute("DELETE FROM libraries")
+
+        lines = data.strip().split("\n")
+
+        libraries = []
+        versions = []
+        chunks = []
