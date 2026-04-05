@@ -29,7 +29,7 @@ from wet_mcp.security import safe_httpx_client as _safe_httpx_client
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
-DISCOVERY_VERSION = 27
+DISCOVERY_VERSION = 28
 
 
 def _github_headers() -> dict[str, str]:
@@ -3089,7 +3089,7 @@ async def _try_github_raw_docs(
         # from >10s down to ~1-2s. Uses a semaphore to respect GitHub limits.
         sem = asyncio.Semaphore(10)
 
-        async def _fetch_single_file(fpath: str) -> dict | None:
+        async def _fetch_single_file(fpath: str, sem=sem) -> dict | None:
             raw_url = f"{raw_base}/{default_branch}/{fpath}"
             try:
                 async with sem:
@@ -3210,9 +3210,13 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     sub_urls = re.findall(r"<loc>\s*(.*?)\s*</loc>", text)
                     all_page_urls: list[str] = []
 
-                    async def _fetch_sub(sub_url: str) -> list[str]:
+                    # Throttle concurrent requests to respect host limits
+                    sitemap_sem = asyncio.Semaphore(10)
+
+                    async def _fetch_sub(sub_url: str, sem=sitemap_sem) -> list[str]:
                         try:
-                            sub_resp = await client.get(sub_url)
+                            async with sem:
+                                sub_resp = await client.get(sub_url)
                             if sub_resp.status_code == 200:
                                 return re.findall(
                                     r"<loc>\s*(.*?)\s*</loc>", sub_resp.text
@@ -3299,28 +3303,39 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
             unique_candidates.append(c)
 
     try:
-        async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
-            for inv_url in unique_candidates:
-                try:
+        # Throttle concurrent requests to respect host limits
+        inv_sem = asyncio.Semaphore(10)
+
+        async def _fetch_inv(inv_url: str, sem=inv_sem) -> list[str]:
+            try:
+                async with sem:
                     resp = await client.get(inv_url)
-                except Exception:
-                    continue
                 if resp.status_code != 200:
-                    continue
+                    return []
                 data = resp.content
                 if not data.startswith(b"# Sphinx inventory version"):
-                    continue
+                    return []
 
                 # Determine the base URL for constructing page URLs:
                 # objects.inv path minus "objects.inv" = doc root
                 inv_base = inv_url.rsplit("objects.inv", 1)[0]
-
                 result = _parse_objects_inv(data, inv_base)
                 if result:
                     logger.info(
                         f"Found {len(result)} URLs from objects.inv at {inv_url}"
                     )
                     return result[:max_urls]
+            except Exception:
+                pass
+            return []
+
+        async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
+            tasks = [_fetch_inv(url) for url in unique_candidates]
+            results = await asyncio.gather(*tasks)
+            # Return first non-empty result (order preserved)
+            for res in results:
+                if res:
+                    return res
     except Exception:
         pass
 
