@@ -47,6 +47,11 @@ _DOCSTRING_RE = re.compile(
 )
 # Directive-heavy content (mkdocs leftover, rst directives)
 _DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
+# Security allowlists for dynamic SQL construction
+_ALLOWED_IMPORT_TABLES = frozenset({"libraries", "versions", "doc_chunks"})
+_ALLOWED_LIBRARY_UPDATES = frozenset(
+    {"docs_url = ?", "registry = ?", "description = ?", "discovery_version = ?", "updated_at = ?"}
+)
 
 
 def _build_fts_queries(query: str) -> list[str]:
@@ -299,16 +304,15 @@ class DocsDB:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
             ).fetchone()
             if not row:
-                # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(f"""
+                sql = f"""
                     CREATE VIRTUAL TABLE doc_chunks_vec
                     USING vec0(
                         id TEXT PRIMARY KEY,
                         embedding float[{int(self._embedding_dims)}]
                     )
-                """)
-
-    # -----------------------------------------------------------------------
+                """
+                # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                self._conn.execute(sql)
     # Stats
     # -----------------------------------------------------------------------
 
@@ -366,11 +370,14 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                # Validate updates against allowlist
+                for up in updates:
+                    if up not in _ALLOWED_LIBRARY_UPDATES:
+                        raise ValueError(f"Invalid update fragment: {up}")
+
+                sql = f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?"
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(
-                    f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
-                    params,
-                )
+                self._conn.execute(sql, params)
                 self._conn.commit()
             return lib_id
 
@@ -776,13 +783,11 @@ class DocsDB:
                     _chunk_indices = _indices_list[i : i + _batch_size]
                     _placeholders = ",".join(["?"] * len(_chunk_indices))
 
-                    # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                    rows = self._conn.execute(
-                        f"""SELECT url, version_id, chunk_index, content
+                    sql = f"""SELECT url, version_id, chunk_index, content
                             FROM doc_chunks
-                            WHERE url = ? AND version_id = ? AND chunk_index IN ({_placeholders})""",
-                        [_url, _ver] + _chunk_indices,
-                    ).fetchall()
+                            WHERE url = ? AND version_id = ? AND chunk_index IN ({_placeholders})"""
+                    # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                    rows = self._conn.execute(sql, [_url, _ver] + _chunk_indices).fetchall()
                     for r in rows:
                         _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
                             "content"
@@ -913,7 +918,7 @@ class DocsDB:
                 chunks.append(obj)
 
         def _get_existing(table: str, items: list) -> set:
-            if table not in {"libraries", "versions", "doc_chunks"}:
+            if table not in _ALLOWED_IMPORT_TABLES:
                 raise ValueError(f"Invalid table name: {table}")
             if not items:
                 return set()
@@ -923,10 +928,9 @@ class DocsDB:
             for i in range(0, len(ids), batch_size):
                 batch = ids[i : i + batch_size]
                 placeholders = ",".join("?" * len(batch))
+                sql = f"SELECT id FROM {table} WHERE id IN ({placeholders})"
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
-                ).fetchall()
+                res = self._conn.execute(sql, batch).fetchall()
                 existing.update(r[0] for r in res)
             return existing
 
