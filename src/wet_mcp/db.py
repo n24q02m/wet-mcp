@@ -833,46 +833,56 @@ class DocsDB:
         """Export all docs data as JSONL for sync."""
         lines = []
 
+        # ⚡ Bolt Optimization: Use generator expressions with extend() instead of
+        # fetchall() and a loop. This avoids allocating a large intermediate list
+        # of sqlite3.Row objects in memory for potentially millions of rows.
+
         # Export libraries (using SQLite native JSON serialization for performance)
-        for row in self._conn.execute(
-            """
-            SELECT json_insert(json_object(
-                'id', id, 'name', name, 'docs_url', docs_url,
-                'registry', registry, 'description', description,
-                'created_at', created_at, 'updated_at', updated_at
-            ), '$._type', 'library')
-            FROM libraries ORDER BY name
-            """
-        ).fetchall():
-            lines.append(row[0])
+        lines.extend(
+            row[0]
+            for row in self._conn.execute(
+                """
+                SELECT json_insert(json_object(
+                    'id', id, 'name', name, 'docs_url', docs_url,
+                    'registry', registry, 'description', description,
+                    'created_at', created_at, 'updated_at', updated_at
+                ), '$._type', 'library')
+                FROM libraries ORDER BY name
+                """
+            )
+        )
 
         # Export versions
-        for row in self._conn.execute(
-            """
-            SELECT json_insert(json_object(
-                'id', id, 'library_id', library_id, 'version', version,
-                'docs_url', docs_url, 'indexed_at', indexed_at,
-                'page_count', page_count, 'chunk_count', chunk_count,
-                'status', status
-            ), '$._type', 'version')
-            FROM versions ORDER BY library_id
-            """
-        ).fetchall():
-            lines.append(row[0])
+        lines.extend(
+            row[0]
+            for row in self._conn.execute(
+                """
+                SELECT json_insert(json_object(
+                    'id', id, 'library_id', library_id, 'version', version,
+                    'docs_url', docs_url, 'indexed_at', indexed_at,
+                    'page_count', page_count, 'chunk_count', chunk_count,
+                    'status', status
+                ), '$._type', 'version')
+                FROM versions ORDER BY library_id
+                """
+            )
+        )
 
         # Export chunks (without embeddings — re-generate on target)
-        for row in self._conn.execute(
-            """
-            SELECT json_insert(json_object(
-                'id', id, 'version_id', version_id, 'library_id', library_id,
-                'url', url, 'title', title, 'chunk_index', chunk_index,
-                'content', content, 'heading_path', heading_path,
-                'created_at', created_at
-            ), '$._type', 'chunk')
-            FROM doc_chunks ORDER BY library_id, chunk_index
-            """
-        ).fetchall():
-            lines.append(row[0])
+        lines.extend(
+            row[0]
+            for row in self._conn.execute(
+                """
+                SELECT json_insert(json_object(
+                    'id', id, 'version_id', version_id, 'library_id', library_id,
+                    'url', url, 'title', title, 'chunk_index', chunk_index,
+                    'content', content, 'heading_path', heading_path,
+                    'created_at', created_at
+                ), '$._type', 'chunk')
+                FROM doc_chunks ORDER BY library_id, chunk_index
+                """
+            )
+        )
 
         return "\n".join(lines)
 
