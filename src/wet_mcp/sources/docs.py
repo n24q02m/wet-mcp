@@ -3396,6 +3396,43 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Docs sorting and relevance scoring
+# ---------------------------------------------------------------------------
+
+
+def _score_url(url: str, query_words: frozenset[str], title: str = "") -> int:
+    """Score a URL based on query term overlap in path or title."""
+    score = 0
+    path = urlparse(url).path.lower()
+    path_words = set(
+        path.replace("-", " ")
+        .replace("_", " ")
+        .replace("/", " ")
+        .replace(".", " ")
+        .split()
+    )
+    score += len(query_words & path_words)
+
+    if title:
+        title_words = set(title.lower().split())
+        score += len(query_words & title_words)
+
+    return score
+
+
+def _sort_by_query(urls: list[str], query: str) -> list[str]:
+    """Sort URLs by query term overlap (highest first)."""
+    if not query or not urls:
+        return urls
+    query_words = frozenset(query.lower().split())
+
+    def score_url(url: str) -> int:
+        return _score_url(url, query_words)
+
+    return sorted(urls, key=score_url, reverse=True)
+
+
+# ---------------------------------------------------------------------------
 # Docs fetching with Crawl4AI
 # ---------------------------------------------------------------------------
 
@@ -3534,25 +3571,6 @@ async def fetch_docs_pages(
             seen_urls.add(full_url)
         return urls
 
-    def _sort_by_query(urls: list[str]) -> list[str]:
-        """Sort URLs by query term overlap (highest first)."""
-        if not query or not urls:
-            return urls
-        query_words = frozenset(query.lower().split())
-
-        def score_url(url: str) -> int:
-            path = urlparse(url).path.lower()
-            path_words = set(
-                path.replace("-", " ")
-                .replace("_", " ")
-                .replace("/", " ")
-                .replace(".", " ")
-                .split()
-            )
-            return len(query_words & path_words)
-
-        return sorted(urls, key=score_url, reverse=True)
-
     # Process root page results
     blocked_count = 0
     for r in root_results:
@@ -3613,7 +3631,7 @@ async def fetch_docs_pages(
         seen_urls.add(su)
 
     # Sort by query relevance
-    pending_urls = _sort_by_query(pending_urls)
+    pending_urls = _sort_by_query(pending_urls, query)
 
     # --- Fetch round 1 ---
     remaining = max_pages - len(pages)
@@ -3656,7 +3674,7 @@ async def fetch_docs_pages(
     # --- Fetch round 2 (depth-2 discovery) ---
     remaining = max_pages - len(pages)
     if remaining > 0 and pending_urls:
-        pending_urls = _sort_by_query(pending_urls)
+        pending_urls = _sort_by_query(pending_urls, query)
         batch2_urls = pending_urls[:remaining]
         if batch2_urls:
             logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
