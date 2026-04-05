@@ -52,10 +52,20 @@ _wc_runner._install_searxng = _patched_install_searxng  # type: ignore[assignmen
 
 
 def _find_available_port(start_port: int, max_tries: int = 100) -> int:
-    """Find an available port, randomizing offset to avoid collisions."""
+    """Find an available port, randomizing offset to avoid collisions.
+
+    When multiple WET MCP instances start concurrently (e.g. wet, wet-nokey,
+    wet-sync), they all call this function at roughly the same time.
+    A deterministic port scan (8080, 8081, ...) can hit a TOCTOU race:
+    two instances both see port 8081 as free, then one fails to bind.
+
+    Fix: randomize the starting offset within a wider range so concurrent
+    instances are unlikely to pick the same port.
+    """
     import random
     import socket
 
+    # Randomize starting offset to avoid concurrent collisions
     offsets = list(range(max_tries))
     random.shuffle(offsets)
 
@@ -86,7 +96,6 @@ from web_core.search.runner import (  # noqa: F401, E402
     _STARTUP_HEALTH_TIMEOUT,
     _cleanup_process,
     _ensure_searxng_locked,
-    _find_available_port,
     _force_kill_process,
     _get_pip_command,
     _get_process_kwargs,
