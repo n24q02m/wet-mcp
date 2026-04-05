@@ -9,6 +9,8 @@ All internal functions are re-exported from web-core for backward
 compatibility with existing tests and consumers.
 """
 
+import time
+
 import web_core.search.runner as _wc_runner
 from loguru import logger
 from web_core.search.runner import shutdown_searxng
@@ -78,6 +80,11 @@ _wc_runner._find_available_port = _find_available_port  # type: ignore[assignmen
 # Re-export internal functions from web-core for backward compatibility.
 # Tests and other modules import these from wet_mcp.searxng_runner.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Caching for SearXNG health checks (10s TTL) to reduce network overhead.
+# ---------------------------------------------------------------------------
+
 from web_core.search.runner import (  # noqa: F401, E402
     _DISCOVERY_FILE,
     _HEALTH_CHECK_TIMEOUT,
@@ -100,7 +107,6 @@ from web_core.search.runner import (  # noqa: F401, E402
     _is_searxng_installed,
     _kill_stale_port_process,
     _last_restart_time,
-    _quick_health_check,
     _read_discovery,
     _remove_discovery,
     _restart_count,
@@ -114,7 +120,26 @@ from web_core.search.runner import (  # noqa: F401, E402
     _write_discovery,
 )
 
-# ---------------------------------------------------------------------------
+_health_cache: dict[str, tuple[bool, float]] = {}  # URL -> (is_healthy, timestamp)
+
+_wc_original_health_check = _wc_runner._quick_health_check
+
+
+async def _quick_health_check(url: str, retries: int = 3) -> bool:
+    """Health check with 10s TTL cache."""
+    now = time.time()
+    if url in _health_cache:
+        result, ts = _health_cache[url]
+        if now - ts < 10:
+            return result
+
+    result = await _wc_original_health_check(url, retries)
+    _health_cache[url] = (result, now)
+    return result
+
+
+_wc_runner._quick_health_check = _quick_health_check  # type: ignore[assignment] # ty: ignore[invalid-assignment]
+
 # Public API — bridges wet-mcp settings to web-core
 # ---------------------------------------------------------------------------
 

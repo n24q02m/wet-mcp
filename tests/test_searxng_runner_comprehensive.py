@@ -156,6 +156,9 @@ async def test_quick_health_check():
 
     with patch("httpx.AsyncClient", return_value=MockClientContextManager()):
         assert await _quick_health_check("http://localhost:8080", retries=1) is True
+        import wet_mcp.searxng_runner as wet_runner
+
+        wet_runner._health_cache.clear()
 
         mock_client.get.side_effect = httpx.RequestError("error")
         assert await _quick_health_check("http://localhost:8080", retries=1) is False
