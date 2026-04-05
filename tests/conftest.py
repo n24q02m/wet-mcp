@@ -26,19 +26,24 @@ async def _reset_crawler_singleton():
     This ensures tests do not leak state between each other when the
     singleton browser pool is involved.
     """
-    import wet_mcp.sources.crawler as crawler_mod
+    try:
+        import wet_mcp.sources.crawler as crawler_mod
 
-    # Reset before test
-    crawler_mod._crawler_instance = None
-    crawler_mod._crawler_stealth = False
-    crawler_mod._browser_semaphore = None
+        # Reset before test
+        crawler_mod._crawler_instance = None
+        crawler_mod._crawler_stealth = False
+        crawler_mod._browser_semaphore = None
 
-    yield
+        yield
 
-    # Reset after test
-    crawler_mod._crawler_instance = None
-    crawler_mod._crawler_stealth = False
-    crawler_mod._browser_semaphore = None
+        # Reset after test
+        crawler_mod._crawler_instance = None
+        crawler_mod._crawler_stealth = False
+        crawler_mod._browser_semaphore = None
+    except (ImportError, KeyError):
+        # Fallback for environments where lazy loading is required to avoid
+        # pydantic.root_model errors during collection
+        yield
 
 
 @pytest.fixture
