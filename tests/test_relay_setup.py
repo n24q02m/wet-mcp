@@ -68,6 +68,32 @@ class TestLoadConfigFromFile:
         # Should not raise, returns None if module missing or config not found
         assert result is None or isinstance(result, dict)
 
+    def test_returns_config_when_valid_keys_present(self):
+        valid_config = {"GEMINI_API_KEY": "test-key"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=valid_config,
+        ):
+            result = load_config_from_file()
+        assert result == valid_config
+
+    def test_returns_none_when_no_cloud_keys_present(self):
+        invalid_config = {"OTHER_KEY": "some-value"}
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            return_value=invalid_config,
+        ):
+            result = load_config_from_file()
+        assert result is None
+
+    def test_returns_none_when_read_config_raises(self):
+        with patch(
+            "mcp_relay_core.storage.config_file.read_config",
+            side_effect=Exception("Disk error"),
+        ):
+            result = load_config_from_file()
+        assert result is None
+
 
 class TestApplyConfig:
     """Tests for apply_config."""
