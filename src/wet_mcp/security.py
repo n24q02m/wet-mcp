@@ -90,7 +90,10 @@ def is_safe_local_path(
         return None
 
     # 3. Must be a regular file
-    if not p.is_file():
+    try:
+        if not p.is_file():
+            return None
+    except OSError:
         return None
 
     # 4. Check against allowed directories
