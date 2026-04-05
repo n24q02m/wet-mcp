@@ -1,13 +1,12 @@
-import sqlite3
-import unittest.mock
-from unittest.mock import MagicMock, patch
-import pytest
-
 # Use the bootstrap logic from test_db.py to avoid crawl4ai dependency
 import importlib.util
+import sqlite3
 import sys
 import types
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 _src_root = Path(__file__).resolve().parent.parent / "src"
 
@@ -39,9 +38,11 @@ _db_spec.loader.exec_module(_db_mod)
 
 DocsDB = _db_mod.DocsDB
 
+
 @pytest.fixture
 def db(tmp_path):
     return DocsDB(tmp_path / "test_err.db", embedding_dims=0)
+
 
 class TestDbErrorPaths:
     def test_clear_version_chunks_vector_error_handled(self, db):
@@ -90,7 +91,9 @@ class TestDbErrorPaths:
         chunks = [{"content": "test chunk"}]
         embeddings = ["invalid"]
 
-        with patch("wet_mcp.db._serialize_f32", side_effect=ValueError("Bad embedding")):
+        with patch(
+            "wet_mcp.db._serialize_f32", side_effect=ValueError("Bad embedding")
+        ):
             db.add_chunks("ver_id", "lib_id", chunks, embeddings=embeddings)
 
     def test_search_fts_error_handled(self, db):
@@ -124,7 +127,7 @@ class TestDbErrorPaths:
         mock_conn.execute.side_effect = mocked_execute
         db._conn = mock_conn
 
-        results = db.search("test", query_embedding=[0.1]*1536)
+        results = db.search("test", query_embedding=[0.1] * 1536)
         assert isinstance(results, list)
 
     def test_close_error_handled(self, db):
