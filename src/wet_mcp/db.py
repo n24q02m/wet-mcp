@@ -50,7 +50,13 @@ _DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
 # Security allowlists for dynamic SQL construction
 _ALLOWED_IMPORT_TABLES = frozenset({"libraries", "versions", "doc_chunks"})
 _ALLOWED_LIBRARY_UPDATES = frozenset(
-    {"docs_url = ?", "registry = ?", "description = ?", "discovery_version = ?", "updated_at = ?"}
+    {
+        "docs_url = ?",
+        "registry = ?",
+        "description = ?",
+        "discovery_version = ?",
+        "updated_at = ?",
+    }
 )
 
 
@@ -313,6 +319,7 @@ class DocsDB:
                 """
                 # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(sql)
+
     # Stats
     # -----------------------------------------------------------------------
 
@@ -787,7 +794,9 @@ class DocsDB:
                             FROM doc_chunks
                             WHERE url = ? AND version_id = ? AND chunk_index IN ({_placeholders})"""
                     # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                    rows = self._conn.execute(sql, [_url, _ver] + _chunk_indices).fetchall()
+                    rows = self._conn.execute(
+                        sql, [_url, _ver] + _chunk_indices
+                    ).fetchall()
                     for r in rows:
                         _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
                             "content"
