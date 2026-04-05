@@ -1175,15 +1175,19 @@ class TestDriveRequest:
             mock_httpx.return_value.__aenter__ = AsyncMock(return_value=mock_client)
             mock_httpx.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            result = await _drive_request(
-                "POST",
-                "https://api.example.com/files",
-                {"access_token": "test-token"},
+            from wet_mcp.sync import DriveRequestOptions
+            options = DriveRequestOptions(
                 params={"q": "test"},
                 json_data={"name": "file.db"},
                 content=b"binary-data",
                 headers={"X-Custom": "header"},
                 timeout=60.0,
+            )
+            result = await _drive_request(
+                "POST",
+                "https://api.example.com/files",
+                {"access_token": "test-token"},
+                options=options,
             )
             assert result.status_code == 200
             mock_client.request.assert_called_once()
