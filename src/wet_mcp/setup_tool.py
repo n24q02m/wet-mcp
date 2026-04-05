@@ -219,17 +219,25 @@ async def run_warmup() -> dict:
         )
 
     # 3. Download local models
-    embed_result = await asyncio.to_thread(_download_local_embedding, settings)
-    steps.append(embed_result)
+    try:
+        embed_result = await asyncio.to_thread(_download_local_embedding, settings)
+        steps.append(embed_result)
 
-    reranker_result = await asyncio.to_thread(_download_local_reranker, settings)
-    steps.append(reranker_result)
+        reranker_result = await asyncio.to_thread(_download_local_reranker, settings)
+        steps.append(reranker_result)
 
-    return {
-        "status": "ok",
-        "mode": "local",
-        "steps": steps,
-    }
+        return {
+            "status": "ok",
+            "mode": "local",
+            "steps": steps,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "mode": "local",
+            "steps": steps,
+            "error": str(exc),
+        }
 
 
 async def run_setup_sync(remote_type: str = "drive") -> dict:
