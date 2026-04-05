@@ -2,9 +2,10 @@ import socket
 import sys
 from unittest.mock import patch
 
+import httpx
 import pytest
 
-from wet_mcp.security import is_safe_local_path, is_safe_url
+from wet_mcp.security import is_safe_local_path, is_safe_url, safe_httpx_client
 
 # Tests mock ``web_core.http.client._original_getaddrinfo`` because
 # ``is_safe_url`` (now in web-core) calls the saved reference (not
@@ -330,3 +331,56 @@ def test_safe_local_path_oversized_file(tmp_path):
     f = tmp_path / "big.txt"
     f.write_text("x" * 200)
     assert is_safe_local_path(str(f), max_size=100) is None
+
+def test_safe_httpx_client_configuration():
+    """Test that safe_httpx_client correctly configures the AsyncClient."""
+    from web_core.http.client import _ssrf_event_hook
+
+    # Test basic instantiation
+    client = safe_httpx_client()
+    assert isinstance(client, httpx.AsyncClient)
+    assert _ssrf_event_hook in client.event_hooks["request"]
+    assert client.event_hooks["request"][0] == _ssrf_event_hook
+
+    # Test preservation of other kwargs and hooks
+    def dummy_hook(request):
+        pass
+
+    client2 = safe_httpx_client(
+        timeout=30,
+        event_hooks={"request": [dummy_hook]},
+        follow_redirects=True
+    )
+    assert client2.timeout.read == 30
+    assert _ssrf_event_hook in client2.event_hooks["request"]
+    assert dummy_hook in client2.event_hooks["request"]
+    # SSRF hook must be first
+    assert client2.event_hooks["request"][0] == _ssrf_event_hook
+    assert client2.event_hooks["request"][1] == dummy_hook
+
+@pytest.mark.asyncio
+async def test_safe_httpx_client_ssrf_blocking():
+    """Test that safe_httpx_client actually blocks SSRF via the transport."""
+    # We use a transport that would succeed if the hook didn't stop it.
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=b"ok"))
+
+    async with safe_httpx_client(transport=transport) as client:
+        # 1. Blocked URL (loopback)
+        with pytest.raises(httpx.RequestError) as excinfo:
+            await client.get("http://127.0.0.1/evil")
+        assert "SSRF blocked" in str(excinfo.value)
+
+        # 2. Blocked URL (private)
+        with pytest.raises(httpx.RequestError) as excinfo:
+            await client.get("http://192.168.1.1/evil")
+        assert "SSRF blocked" in str(excinfo.value)
+
+        # 3. Safe URL
+        # Mock getaddrinfo for example.com to return a safe public IP
+        with patch("web_core.http.client._original_getaddrinfo") as mock_dns:
+            mock_dns.return_value = [
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 80))
+            ]
+            response = await client.get("http://example.com/safe")
+            assert response.status_code == 200
+            assert response.content == b"ok"
