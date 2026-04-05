@@ -33,6 +33,17 @@ def _now_ts() -> float:
     return time.time()
 
 
+_ALLOWED_UPDATES = frozenset(
+    {
+        "docs_url = ?",
+        "registry = ?",
+        "description = ?",
+        "discovery_version = ?",
+        "updated_at = ?",
+    }
+)
+
+
 # Patterns for chunk quality scoring
 _CODE_BLOCK_RE = re.compile(r"```")
 _LINK_LINE_RE = re.compile(r"^\s*[-*]?\s*\[.+?\]\(.+?\)\s*$|^\s*https?://\S+\s*$")
@@ -364,13 +375,18 @@ class DocsDB:
             params.append(DISCOVERY_VERSION)
             updates.append("updated_at = ?")
             params.append(now)
+
+            # Security: validate all updates against internal allowlist
+            for up in updates:
+                if up not in _ALLOWED_UPDATES:
+                    raise ValueError(f"Unauthorized library update: {up}")
+
             params.append(lib_id)
             if updates:
+                # Security: construct dynamic UPDATE with constant fragments
+                sql = "UPDATE libraries SET " + ", ".join(updates) + " WHERE id = ?"
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(
-                    f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
-                    params,
-                )
+                self._conn.execute(sql, params)
                 self._conn.commit()
             return lib_id
 
