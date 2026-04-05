@@ -22,5 +22,3 @@ class TestCli:
         with patch.object(sys, "argv", ["wet-mcp", "anything"]):
             _cli()
         mock_main.assert_called_once()
-
-
