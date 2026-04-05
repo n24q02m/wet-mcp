@@ -726,3 +726,21 @@ class TestQwen3GetModelWarning:
         mock_model.embed.return_value = iter([np.array([0.1, 0.2, 0.3])])
         with patch.object(backend, "_get_model", return_value=mock_model):
             assert backend.check_available() == 3
+
+
+# -----------------------------------------------------------------------
+# get_backend
+# -----------------------------------------------------------------------
+
+
+class TestGetBackend:
+    def test_get_backend_none(self):
+        """get_backend() returns None when _backend is not initialized."""
+        with patch("wet_mcp.embedder._backend", None):
+            assert get_backend() is None
+
+    def test_get_backend_set(self):
+        """get_backend() returns the initialized backend instance."""
+        mock_backend = MagicMock()
+        with patch("wet_mcp.embedder._backend", mock_backend):
+            assert get_backend() is mock_backend
