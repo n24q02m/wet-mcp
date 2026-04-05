@@ -912,26 +912,10 @@ class DocsDB:
             elif obj_type == "chunk":
                 chunks.append(obj)
 
-        def _get_existing(table: str, items: list) -> set:
-            if table not in {"libraries", "versions", "doc_chunks"}:
-                raise ValueError(f"Invalid table name: {table}")
-            if not items:
-                return set()
-            ids = [obj["id"] for obj in items]
-            existing = set()
-            batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
-            for i in range(0, len(ids), batch_size):
-                batch = ids[i : i + batch_size]
-                placeholders = ",".join("?" * len(batch))
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
-                ).fetchall()
-                existing.update(r[0] for r in res)
-            return existing
-
         existing_libs = (
-            _get_existing("libraries", libraries) if mode == "merge" else set()
+            self._get_existing_ids("libraries", [obj["id"] for obj in libraries])
+            if mode == "merge"
+            else set()
         )
         to_insert_libs = []
         for obj in libraries:
@@ -961,7 +945,9 @@ class DocsDB:
             stats["libraries"] += len(to_insert_libs)
 
         existing_vers = (
-            _get_existing("versions", versions) if mode == "merge" else set()
+            self._get_existing_ids("versions", [obj["id"] for obj in versions])
+            if mode == "merge"
+            else set()
         )
         to_insert_vers = []
         for obj in versions:
@@ -992,7 +978,9 @@ class DocsDB:
             stats["versions"] += len(to_insert_vers)
 
         existing_chunks = (
-            _get_existing("doc_chunks", chunks) if mode == "merge" else set()
+            self._get_existing_ids("doc_chunks", [obj["id"] for obj in chunks])
+            if mode == "merge"
+            else set()
         )
         to_insert_chunks = []
         for obj in chunks:
@@ -1025,6 +1013,24 @@ class DocsDB:
 
         self._conn.commit()
         return stats
+
+    def _get_existing_ids(self, table: str, ids: list[str]) -> set[str]:
+        """Get existing IDs from a table (helper for import_jsonl)."""
+        if table not in {"libraries", "versions", "doc_chunks"}:
+            raise ValueError(f"Invalid table name: {table}")
+        if not ids:
+            return set()
+        existing = set()
+        batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i : i + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            res = self._conn.execute(
+                f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
+            ).fetchall()
+            existing.update(r[0] for r in res)
+        return existing
 
     def close(self) -> None:
         """Close database connection."""
