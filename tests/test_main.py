@@ -1,9 +1,7 @@
 """Tests for wet_mcp.__main__ — CLI entry point and setup_tool functions."""
 
 import sys
-from unittest.mock import MagicMock, patch
-
-import numpy as np
+from unittest.mock import patch
 
 
 class TestCli:
