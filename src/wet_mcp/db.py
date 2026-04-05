@@ -28,6 +28,17 @@ def _serialize_f32(vec: list[float]) -> bytes:
     return struct.pack(f"{len(vec)}f", *vec)
 
 
+_ALLOWED_LIBRARY_UPDATES = frozenset(
+    {
+        "docs_url = ?",
+        "registry = ?",
+        "description = ?",
+        "discovery_version = ?",
+        "updated_at = ?",
+    }
+)
+
+
 def _now_ts() -> float:
     """Current timestamp as float."""
     return time.time()
@@ -366,6 +377,13 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                # Security: validate column fragments against allowlist
+                for upd in updates:
+                    if upd not in _ALLOWED_LIBRARY_UPDATES:
+                        raise ValueError(
+                            f"Unauthorized library update fragment: {upd!r}"
+                        )
+
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
                     f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
