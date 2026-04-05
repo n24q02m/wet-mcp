@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from wet_mcp.llm import LLMConfig
 from wet_mcp.sources.structured import extract_structured
 
 SAMPLE_SCHEMA = {
@@ -49,7 +50,7 @@ async def test_extract_structured_success():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.structured.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.structured.acompletion",
@@ -127,7 +128,7 @@ async def test_extract_structured_validation_warning():
         patch("wet_mcp.sources.structured.settings") as mock_settings,
         patch(
             "wet_mcp.sources.structured.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.structured.acompletion",
@@ -154,11 +155,10 @@ async def test_extract_structured_fallback_to_json_object():
 
     call_count = 0
 
-    async def mock_acompletion(**kwargs):
+    async def mock_acompletion(messages, config):
         nonlocal call_count
         call_count += 1
-        response_format = kwargs.get("response_format", {})
-        if response_format.get("type") == "json_schema":
+        if config.response_format and config.response_format.get("type") == "json_schema":
             raise Exception("json_schema not supported")
         return _mock_llm_response(llm_output)
 
@@ -171,7 +171,7 @@ async def test_extract_structured_fallback_to_json_object():
         patch("wet_mcp.sources.structured.settings") as mock_settings,
         patch(
             "wet_mcp.sources.structured.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.structured.acompletion",
@@ -206,7 +206,7 @@ async def test_extract_structured_llm_failure():
         patch("wet_mcp.sources.structured.settings") as mock_settings,
         patch(
             "wet_mcp.sources.structured.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.structured.acompletion",

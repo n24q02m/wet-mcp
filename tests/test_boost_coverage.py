@@ -397,22 +397,19 @@ class TestLLMACompletion:
 
     async def test_gemini_completion_routes(self):
         """acompletion routes to _gemini_completion for gemini models."""
-        from wet_mcp.llm import _Response, acompletion
+        from wet_mcp.llm import LLMConfig, _Response, acompletion
 
         with patch(
             "wet_mcp.llm._gemini_completion", new_callable=AsyncMock
         ) as mock_gemini:
             mock_gemini.return_value = _Response("Hello from Gemini")
-            result = await acompletion(
-                model="gemini/gemini-3-flash-preview",
-                messages=[{"role": "user", "content": "Hi"}],
-            )
+            result = await acompletion(messages=[{"role": "user", "content": "Hi"}], config=LLMConfig(model="gemini/gemini-3-flash-preview"))
             assert result.choices[0].message.content == "Hello from Gemini"
             mock_gemini.assert_called_once()
 
     async def test_openai_completion_routes(self):
         """acompletion routes to _openai_completion for openai models."""
-        from wet_mcp.llm import acompletion
+        from wet_mcp.llm import LLMConfig, acompletion
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -422,16 +419,13 @@ class TestLLMACompletion:
             "wet_mcp.llm._openai_completion", new_callable=AsyncMock
         ) as mock_openai:
             mock_openai.return_value = mock_response
-            result = await acompletion(
-                model="openai/gpt-4",
-                messages=[{"role": "user", "content": "Hi"}],
-            )
+            result = await acompletion(messages=[{"role": "user", "content": "Hi"}], config=LLMConfig(model="openai/gpt-4"))
             assert result.choices[0].message.content == "Hello from OpenAI"
             mock_openai.assert_called_once()
 
     async def test_xai_completion_routes(self):
         """acompletion routes to _openai_completion for xai models."""
-        from wet_mcp.llm import acompletion
+        from wet_mcp.llm import LLMConfig, acompletion
 
         mock_response = MagicMock()
         mock_response.choices = [MagicMock()]
@@ -441,15 +435,12 @@ class TestLLMACompletion:
             "wet_mcp.llm._openai_completion", new_callable=AsyncMock
         ) as mock_openai:
             mock_openai.return_value = mock_response
-            result = await acompletion(
-                model="xai/grok-4-1-fast-reasoning",
-                messages=[{"role": "user", "content": "Hi"}],
-            )
+            result = await acompletion(messages=[{"role": "user", "content": "Hi"}], config=LLMConfig(model="xai/grok-4-1-fast-reasoning"))
             assert result.choices[0].message.content == "Hello from Grok"
 
     async def test_fallback_on_primary_failure(self):
         """acompletion tries fallbacks when primary fails."""
-        from wet_mcp.llm import _Response, acompletion
+        from wet_mcp.llm import LLMConfig, _Response, acompletion
 
         call_count = 0
 
@@ -480,16 +471,12 @@ class TestLLMACompletion:
                 ),
             ),
         ):
-            result = await acompletion(
-                model="gemini/primary-model",
-                messages=[{"role": "user", "content": "Hi"}],
-                fallbacks=["openai/gpt-4"],
-            )
+            result = await acompletion(messages=[{"role": "user", "content": "Hi"}], config=LLMConfig(model="gemini/primary-model", fallbacks=["openai/gpt-4"]))
             assert result.choices[0].message.content == "fallback ok"
 
     async def test_fallback_all_fail_raises(self):
         """When all fallbacks fail, raises the original error."""
-        from wet_mcp.llm import acompletion
+        from wet_mcp.llm import LLMConfig, acompletion
 
         with (
             patch(
@@ -504,15 +491,11 @@ class TestLLMACompletion:
             ),
         ):
             with pytest.raises(Exception, match="gemini down"):
-                await acompletion(
-                    model="gemini/primary-model",
-                    messages=[{"role": "user", "content": "Hi"}],
-                    fallbacks=["openai/backup-model"],
-                )
+                await acompletion(messages=[{"role": "user", "content": "Hi"}], config=LLMConfig(model="gemini/primary-model", fallbacks=["openai/backup-model"]))
 
     async def test_no_fallbacks_raises(self):
         """When no fallbacks and primary fails, raises."""
-        from wet_mcp.llm import acompletion
+        from wet_mcp.llm import LLMConfig, acompletion
 
         with patch(
             "wet_mcp.llm._gemini_completion",
@@ -520,10 +503,7 @@ class TestLLMACompletion:
             side_effect=Exception("gemini down"),
         ):
             with pytest.raises(Exception, match="gemini down"):
-                await acompletion(
-                    model="gemini/primary-model",
-                    messages=[{"role": "user", "content": "Hi"}],
-                )
+                await acompletion(messages=[{"role": "user", "content": "Hi"}], config=LLMConfig(model="gemini/primary-model"))
 
 
 class TestGeminiCompletion:

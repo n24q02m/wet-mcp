@@ -34,42 +34,42 @@ def mock_settings():
 def test_get_llm_config(mock_settings):
     """Test LLM config parsing."""
     config = get_llm_config()
-    assert config["model"] == "gemini/fake-model"
-    assert config["fallbacks"] is None
-    assert config["temperature"] is None
+    assert config.model == "gemini/fake-model"
+    assert config.fallbacks is None
+    assert config.temperature is None
 
 
 def test_get_llm_config_with_temperature(mock_settings):
     """Test LLM config with temperature."""
     settings.llm_temperature = 0.7
     config = get_llm_config()
-    assert config["temperature"] == 0.7
+    assert config.temperature == 0.7
 
 
 def test_get_llm_config_fallbacks(mock_settings):
     """Test LLM config with fallbacks."""
     settings.llm_models = "gemini/fake-model, openai/gpt-4"
     config = get_llm_config()
-    assert config["model"] == "gemini/fake-model"
-    assert config["fallbacks"] == ["openai/gpt-4"]
+    assert config.model == "gemini/fake-model"
+    assert config.fallbacks == ["openai/gpt-4"]
 
 
 def test_get_llm_config_empty_models(mock_settings):
     """Test LLM config with empty or whitespace models string."""
     settings.llm_models = "   ,  "
     config = get_llm_config()
-    assert config["model"] == "gemini/gemini-3-flash-preview"
-    assert config["fallbacks"] is None
+    assert config.model == "gemini/gemini-3-flash-preview"
+    assert config.fallbacks is None
 
 
 def test_get_llm_config_basic_structure(mock_settings):
     """Test LLM config returns basic structure without custom endpoints."""
     config = get_llm_config()
-    assert "model" in config
-    assert "fallbacks" in config
-    assert "temperature" in config
-    assert "api_base" not in config
-    assert "api_key" not in config
+    assert config.model is not None
+    assert hasattr(config, "fallbacks")
+    assert hasattr(config, "temperature")
+    assert config.api_base is None
+    assert config.api_key is None
 
 
 @patch("wet_mcp.llm.acompletion")
@@ -104,7 +104,7 @@ def test_analyze_media(mock_completion, mock_settings, tmp_path):
     # Verify completion call
     mock_completion.assert_called_once()
     call_args = mock_completion.call_args[1]
-    assert call_args["model"] == "gemini/fake-model"
+    assert call_args["config"].model == "gemini/fake-model"
     assert len(call_args["messages"]) == 1
     assert call_args["messages"][0]["role"] == "user"
     # "fake-image-data" base64 encoded is "ZmFrZS1pbWFnZS1kYXRh"

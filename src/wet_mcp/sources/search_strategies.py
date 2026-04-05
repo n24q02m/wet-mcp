@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.llm import acompletion, get_llm_config
+from wet_mcp.llm import LLMConfig, acompletion, get_llm_config
 from wet_mcp.sources.crawler import extract as raw_extract
 
 
@@ -22,7 +22,6 @@ async def expand_query(query: str) -> list[str]:
     try:
         config = get_llm_config()
         response = await acompletion(
-            model=config["model"],
             messages=[
                 {
                     "role": "user",
@@ -33,13 +32,14 @@ async def expand_query(query: str) -> list[str]:
                     ),
                 }
             ],
-            temperature=0.7,
-            max_tokens=100,
-            **{
-                k: v
-                for k, v in config.items()
-                if k not in ("model", "fallbacks", "temperature")
-            },
+            config=LLMConfig(
+                model=config.model,
+                temperature=0.7,
+                max_tokens=100,
+                api_base=config.api_base,
+                api_key=config.api_key,
+                fallbacks=config.fallbacks,
+            ),
         )
         text = response.choices[0].message.content or ""
         alt_queries = [
@@ -107,7 +107,6 @@ async def _extract_keywords(content: str, title: str) -> str:
     try:
         config = get_llm_config()
         response = await acompletion(
-            model=config["model"],
             messages=[
                 {
                     "role": "user",
@@ -122,13 +121,14 @@ async def _extract_keywords(content: str, title: str) -> str:
                     ),
                 }
             ],
-            temperature=0,
-            max_tokens=100,
-            **{
-                k: v
-                for k, v in config.items()
-                if k not in ("model", "fallbacks", "temperature")
-            },
+            config=LLMConfig(
+                model=config.model,
+                temperature=0,
+                max_tokens=100,
+                api_base=config.api_base,
+                api_key=config.api_key,
+                fallbacks=config.fallbacks,
+            ),
         )
         return response.choices[0].message.content or title
     except Exception:
@@ -154,7 +154,6 @@ async def generate_hyde_query(query: str, library: str) -> str | None:
     try:
         config = get_llm_config()
         response = await acompletion(
-            model=config["model"],
             messages=[
                 {
                     "role": "user",
@@ -164,13 +163,14 @@ async def generate_hyde_query(query: str, library: str) -> str | None:
                     ),
                 }
             ],
-            temperature=0,
-            max_tokens=200,
-            **{
-                k: v
-                for k, v in config.items()
-                if k not in ("model", "fallbacks", "temperature")
-            },
+            config=LLMConfig(
+                model=config.model,
+                temperature=0,
+                max_tokens=200,
+                api_base=config.api_base,
+                api_key=config.api_key,
+                fallbacks=config.fallbacks,
+            ),
         )
         return response.choices[0].message.content or None
     except Exception as e:

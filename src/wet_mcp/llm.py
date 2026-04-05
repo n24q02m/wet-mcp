@@ -4,11 +4,26 @@ import asyncio
 import base64
 import mimetypes
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 from loguru import logger
 
 from wet_mcp.config import settings
+
+
+@dataclass(frozen=True)
+class LLMConfig:
+    """Configuration for LLM requests."""
+
+    model: str
+    temperature: float | None = None
+    max_tokens: int | None = None
+    response_format: dict | None = None
+    fallbacks: list[str] | None = None
+    api_base: str | None = None
+    api_key: str | None = None
+
 
 # ---------------------------------------------------------------------------
 # Capability maps (vision / audio support detection)
@@ -85,34 +100,26 @@ def _detect_provider(model: str) -> str:
 
 
 async def acompletion(
-    *,
-    model: str,
     messages: list[dict],
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    response_format: dict | None = None,
-    fallbacks: list[str] | None = None,
-    api_base: str | None = None,
-    api_key: str | None = None,
-    **kwargs,
+    config: LLMConfig,
 ) -> object:
     """Unified async completion using native SDKs.
 
     Routes to google-genai or openai based on model prefix.
     Returns an OpenAI-compatible response object.
     """
-    provider = _detect_provider(model)
-    bare_model = _strip_provider(model)
+    provider = _detect_provider(config.model)
+    bare_model = _strip_provider(config.model)
 
     try:
         if provider == "gemini":
             return await _gemini_completion(
                 model=bare_model,
                 messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                api_key=api_key,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                response_format=config.response_format,
+                api_key=config.api_key,
             )
         else:
             # OpenAI-compatible (openai, xai/grok)
@@ -120,26 +127,26 @@ async def acompletion(
                 provider=provider,
                 model=bare_model,
                 messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                api_base=api_base,
-                api_key=api_key,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                response_format=config.response_format,
+                api_base=config.api_base,
+                api_key=config.api_key,
             )
     except Exception as e:
         # Try fallbacks
-        if fallbacks:
-            for fb_model in fallbacks:
+        if config.fallbacks:
+            for fb_model in config.fallbacks:
                 try:
-                    return await acompletion(
+                    fb_config = LLMConfig(
                         model=fb_model,
-                        messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        response_format=response_format,
-                        api_base=api_base,
-                        api_key=api_key,
+                        temperature=config.temperature,
+                        max_tokens=config.max_tokens,
+                        response_format=config.response_format,
+                        api_base=config.api_base,
+                        api_key=config.api_key,
                     )
+                    return await acompletion(messages=messages, config=fb_config)
                 except Exception:
                     continue
         raise e
@@ -315,7 +322,7 @@ async def _openai_completion(
 # ---------------------------------------------------------------------------
 
 
-def get_llm_config() -> dict:
+def get_llm_config() -> LLMConfig:
     """Build LLM configuration with fallback."""
     models = [m.strip() for m in settings.llm_models.split(",") if m.strip()]
     if not models:
@@ -324,11 +331,11 @@ def get_llm_config() -> dict:
     primary = models[0]
     fallbacks = models[1:] if len(models) > 1 else None
 
-    return {
-        "model": primary,
-        "fallbacks": fallbacks,
-        "temperature": settings.llm_temperature,
-    }
+    return LLMConfig(
+        model=primary,
+        fallbacks=fallbacks,
+        temperature=settings.llm_temperature,
+    )
 
 
 def get_model_capabilities(model: str) -> dict:
@@ -398,7 +405,7 @@ async def analyze_media(
     ]:
         try:
             content = await _read_and_truncate(media_path)
-            logger.info(f"Analyzing text file with model: {config['model']}")
+            logger.info(f"Analyzing text file with model: {config.model}")
 
             messages = [
                 {
@@ -406,34 +413,31 @@ async def analyze_media(
                     "content": f"{prompt}\n\nFile Content:\n```\n{content}\n```",
                 }
             ]
-            response = await acompletion(
-                model=config["model"],
-                messages=messages,
-                fallbacks=config["fallbacks"],
-                temperature=config["temperature"],
-            )
+            response = await acompletion(messages=messages, config=config)
             return str(response.choices[0].message.content)
         except Exception as e:
             return f"Error analyzing text file: {e}"
 
     # Check model capabilities for media
-    caps = get_model_capabilities(config["model"])
+    caps = get_model_capabilities(config.model)
 
     # Validate capability vs file type
     if mime_type.startswith("image/"):
         if not caps["vision"]:
-            return f"Error: Model {config['model']} does not support vision/images."
+            return f"Error: Model {config.model} does not support vision/images."
     elif mime_type.startswith("audio/"):
         if not caps["audio_input"]:
-            return f"Error: Model {config['model']} does not support audio input."
+            return f"Error: Model {config.model} does not support audio input."
     elif mime_type.startswith("video/"):
         if not caps["vision"]:
-            return f"Error: Model {config['model']} does not support video (requires vision)."
+            return (
+                f"Error: Model {config.model} does not support video (requires vision)."
+            )
     else:
         return f"Error: Unsupported media type: {mime_type}"
 
     try:
-        logger.info(f"Analyzing media with model: {config['model']}")
+        logger.info(f"Analyzing media with model: {config.model}")
 
         base64_image = await encode_image(media_path)
         data_url = f"data:{mime_type};base64,{base64_image}"
@@ -448,14 +452,7 @@ async def analyze_media(
             }
         ]
 
-        response = await acompletion(
-            model=config["model"],
-            messages=messages,
-            fallbacks=config["fallbacks"],
-            temperature=config["temperature"],
-            api_base=config.get("api_base"),
-            api_key=config.get("api_key"),
-        )
+        response = await acompletion(messages=messages, config=config)
 
         return str(response.choices[0].message.content)
 

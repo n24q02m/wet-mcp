@@ -5,7 +5,7 @@ import json
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.llm import acompletion, get_llm_config
+from wet_mcp.llm import LLMConfig, acompletion, get_llm_config
 from wet_mcp.sources.crawler import extract as raw_extract
 
 _MAX_CONTENT_CHARS = 50_000
@@ -21,7 +21,7 @@ _SYSTEM_PROMPT = (
 async def _call_llm_with_schema(
     messages: list[dict],
     schema: dict,
-    config: dict,
+    config: LLMConfig,
 ) -> dict:
     """Call LLM with json_schema response format, falling back to json_object.
 
@@ -36,20 +36,15 @@ async def _call_llm_with_schema(
     Raises:
         Exception: If both json_schema and json_object modes fail.
     """
-    llm_kwargs = {
-        "model": config["model"],
-        "messages": messages,
-        "temperature": 0,
-        "api_base": config.get("api_base"),
-        "api_key": config.get("api_key"),
-    }
-    if config.get("fallbacks"):
-        llm_kwargs["fallbacks"] = config["fallbacks"]
-
     # Attempt 1: json_schema mode (structured output)
     try:
-        response = await acompletion(
-            **llm_kwargs,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]  # dict unpacking
+        config_with_schema = LLMConfig(
+            model=config.model,
+            temperature=0,
+            max_tokens=config.max_tokens,
+            api_base=config.api_base,
+            api_key=config.api_key,
+            fallbacks=config.fallbacks,
             response_format={
                 "type": "json_schema",
                 "json_schema": {
@@ -59,16 +54,23 @@ async def _call_llm_with_schema(
                 },
             },
         )
+        response = await acompletion(messages=messages, config=config_with_schema)
         content = response.choices[0].message.content
         return json.loads(content)
     except Exception as e:
         logger.warning(f"json_schema mode failed, falling back to json_object: {e}")
 
     # Attempt 2: json_object mode (simpler, wider provider support)
-    response = await acompletion(
-        **llm_kwargs,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]  # dict unpacking
+    config_with_json = LLMConfig(
+        model=config.model,
+        temperature=0,
+        max_tokens=config.max_tokens,
+        api_base=config.api_base,
+        api_key=config.api_key,
+        fallbacks=config.fallbacks,
         response_format={"type": "json_object"},
     )
+    response = await acompletion(messages=messages, config=config_with_json)
     content = response.choices[0].message.content
     return json.loads(content)
 

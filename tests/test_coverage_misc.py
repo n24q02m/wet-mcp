@@ -1118,7 +1118,7 @@ class TestGetLlmConfigEmptyModels:
 
         try:
             config = get_llm_config()
-            assert config["model"] == "gemini/gemini-3-flash-preview"
+            assert config.model == "gemini/gemini-3-flash-preview"
         finally:
             settings.llm_models = original
 

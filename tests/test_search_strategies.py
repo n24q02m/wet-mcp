@@ -3,6 +3,7 @@
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from wet_mcp.llm import LLMConfig
 from wet_mcp.sources.search_strategies import (
     _extract_passage,
     enrich_snippets,
@@ -36,7 +37,7 @@ async def test_expand_query_success():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -72,7 +73,7 @@ async def test_expand_query_llm_failure_fallback():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -95,7 +96,7 @@ async def test_expand_query_numbered_lines():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -120,7 +121,7 @@ async def test_expand_query_empty_llm_response():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -144,7 +145,7 @@ async def test_expand_query_more_than_two_alts():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -312,7 +313,7 @@ async def test_extract_keywords_llm_success():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -336,7 +337,7 @@ async def test_extract_keywords_llm_failure():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -506,7 +507,7 @@ async def test_generate_hyde_query_success():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -543,7 +544,7 @@ async def test_generate_hyde_query_llm_failure():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
@@ -566,7 +567,7 @@ async def test_generate_hyde_query_empty_response():
         ) as mock_settings,
         patch(
             "wet_mcp.sources.search_strategies.get_llm_config",
-            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+            return_value=LLMConfig(model="gpt-4", fallbacks=None, temperature=0),
         ),
         patch(
             "wet_mcp.sources.search_strategies.acompletion",
