@@ -256,3 +256,92 @@ class TestSetupMcpTool:
 
             await setup(action="setup_sync")
             mock_sync.assert_called_once_with("drive")
+
+
+class TestClearModelCache:
+    """Tests for clear_model_cache()."""
+
+    def test_clear_model_cache_exists(self):
+        """Should remove directory and return path if it exists."""
+        with (
+            patch("wet_mcp.setup_tool.Path") as mock_path,
+            patch("wet_mcp.setup_tool.shutil.rmtree") as mock_rmtree,
+            patch("wet_mcp.setup_tool.os.getenv", return_value="/tmp/cache"),
+        ):
+            mock_model_cache = MagicMock()
+            mock_model_cache.exists.return_value = True
+            mock_model_cache.__str__.return_value = "/tmp/cache/models--test-model"
+
+            # Mock Path instance returned by Path()
+            mock_cache_dir = MagicMock()
+            mock_path.return_value = mock_cache_dir
+            mock_cache_dir.__truediv__.return_value = mock_model_cache
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            result = clear_model_cache("test-model")
+
+            assert result == "/tmp/cache/models--test-model"
+            mock_rmtree.assert_called_once_with(mock_model_cache)
+
+    def test_clear_model_cache_not_exists(self):
+        """Should return None if directory does not exist."""
+        with (
+            patch("wet_mcp.setup_tool.Path") as mock_path,
+            patch("wet_mcp.setup_tool.os.getenv", return_value="/tmp/cache"),
+        ):
+            mock_model_cache = MagicMock()
+            mock_model_cache.exists.return_value = False
+
+            mock_cache_dir = MagicMock()
+            mock_path.return_value = mock_cache_dir
+            mock_cache_dir.__truediv__.return_value = mock_model_cache
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            result = clear_model_cache("test-model")
+
+            assert result is None
+
+    def test_clear_model_cache_env_var(self):
+        """Should respect QWEN3_EMBED_CACHE_PATH environment variable."""
+        with (
+            patch("wet_mcp.setup_tool.Path") as mock_path,
+            patch("wet_mcp.setup_tool.os.getenv") as mock_getenv,
+        ):
+            mock_getenv.return_value = "/custom/cache"
+            mock_model_cache = MagicMock()
+            mock_model_cache.exists.return_value = False
+
+            mock_cache_dir = MagicMock()
+            mock_path.return_value = mock_cache_dir
+            mock_cache_dir.__truediv__.return_value = mock_model_cache
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            clear_model_cache("test-model")
+
+            # Check if it was called with the right env var
+            args, _ = mock_getenv.call_args
+            assert args[0] == "QWEN3_EMBED_CACHE_PATH"
+
+    def test_clear_model_cache_safe_name(self):
+        """Should replace slashes with double dashes in model name."""
+        with (
+            patch("wet_mcp.setup_tool.Path") as mock_path,
+            patch("wet_mcp.setup_tool.os.getenv", return_value="/tmp/cache"),
+        ):
+            mock_model_cache = MagicMock()
+            mock_model_cache.exists.return_value = False
+
+            mock_cache_dir = MagicMock()
+            mock_path.return_value = mock_cache_dir
+            mock_cache_dir.__truediv__.return_value = mock_model_cache
+
+            from wet_mcp.setup_tool import clear_model_cache
+
+            clear_model_cache("org/model-name")
+
+            mock_cache_dir.__truediv__.assert_called_once_with(
+                "models--org--model-name"
+            )
