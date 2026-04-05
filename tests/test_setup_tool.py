@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 
 class TestRunWarmup:
     """Tests for run_warmup() returning structured dict."""
@@ -256,3 +258,304 @@ class TestSetupMcpTool:
 
             await setup(action="setup_sync")
             mock_sync.assert_called_once_with("drive")
+
+
+@pytest.mark.asyncio
+class TestClearModelCacheComprehensive:
+    async def test_clear_model_cache_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("QWEN3_EMBED_CACHE_PATH", str(tmp_path))
+        from wet_mcp.setup_tool import clear_model_cache
+
+        model_name = "test/model"
+        safe_name = "test--model"
+        model_dir = tmp_path / f"models--{safe_name}"
+        model_dir.mkdir(parents=True)
+
+        result = clear_model_cache(model_name)
+        assert result == str(model_dir)
+        assert not model_dir.exists()
+
+    async def test_clear_model_cache_not_exists(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("QWEN3_EMBED_CACHE_PATH", str(tmp_path))
+        from wet_mcp.setup_tool import clear_model_cache
+
+        result = clear_model_cache("non/existent")
+        assert result is None
+
+
+@pytest.mark.asyncio
+class TestWarmupEdgeCases:
+    async def test_warmup_local_embedding_empty(self):
+        with (
+            patch("wet_mcp.setup.run_auto_setup"),
+            patch("wet_mcp.setup_tool.settings") as mock_settings,
+            patch("qwen3_embed.TextEmbedding") as mock_embed,
+        ):
+            mock_settings.setup_providers.return_value = "local"
+            mock_settings.rerank_enabled = False
+            mock_settings.resolve_local_embedding_model.return_value = "test-model"
+            mock_embed.return_value.embed.return_value = iter([])
+
+            from wet_mcp.setup_tool import run_warmup
+
+            result = await run_warmup()
+            assert any(
+                s["step"] == "local_embedding" and s["status"] == "warning"
+                for s in result["steps"]
+            )
+
+    async def test_warmup_local_embedding_retry_empty(self):
+        with (
+            patch("wet_mcp.setup.run_auto_setup"),
+            patch("wet_mcp.setup_tool.settings") as mock_settings,
+            patch("wet_mcp.setup_tool.clear_model_cache"),
+            patch("qwen3_embed.TextEmbedding") as mock_embed,
+        ):
+            mock_settings.setup_providers.return_value = "local"
+            mock_settings.rerank_enabled = False
+            mock_settings.resolve_local_embedding_model.return_value = "test-model"
+
+            call_count = 0
+
+            def side_effect(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    raise RuntimeError("NO_SUCHFILE")
+                mock_inst = MagicMock()
+                mock_inst.embed.return_value = iter([])
+                return mock_inst
+
+            mock_embed.side_effect = side_effect
+
+            from wet_mcp.setup_tool import run_warmup
+
+            result = await run_warmup()
+            assert any(
+                s["step"] == "local_embedding"
+                and s["status"] == "warning"
+                and "failed after cache clear" in s["message"]
+                for s in result["steps"]
+            )
+
+    async def test_warmup_local_reranker_empty(self):
+        with (
+            patch("wet_mcp.setup.run_auto_setup"),
+            patch("wet_mcp.setup_tool.settings") as mock_settings,
+            patch("qwen3_embed.TextEmbedding") as mock_embed,
+            patch("qwen3_embed.TextCrossEncoder") as mock_reranker,
+        ):
+            mock_settings.setup_providers.return_value = "local"
+            mock_settings.rerank_enabled = True
+            mock_settings.resolve_local_embedding_model.return_value = "test-model"
+            mock_settings.resolve_local_rerank_model.return_value = "test-reranker"
+
+            mock_embed.return_value.embed.return_value = iter([[0.1]])
+            mock_reranker.return_value.rerank.return_value = iter([])
+
+            from wet_mcp.setup_tool import run_warmup
+
+            result = await run_warmup()
+            assert any(
+                s["step"] == "local_reranker" and s["status"] == "warning"
+                for s in result["steps"]
+            )
+
+    async def test_warmup_local_reranker_retry_success(self):
+        with (
+            patch("wet_mcp.setup.run_auto_setup"),
+            patch("wet_mcp.setup_tool.settings") as mock_settings,
+            patch("wet_mcp.setup_tool.clear_model_cache"),
+            patch("qwen3_embed.TextEmbedding") as mock_embed,
+            patch("qwen3_embed.TextCrossEncoder") as mock_reranker,
+        ):
+            mock_settings.setup_providers.return_value = "local"
+            mock_settings.rerank_enabled = True
+            mock_settings.resolve_local_embedding_model.return_value = "test-model"
+            mock_settings.resolve_local_rerank_model.return_value = "test-reranker"
+
+            mock_embed.return_value.embed.return_value = iter([[0.1]])
+
+            call_count = 0
+
+            def side_effect(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    raise RuntimeError("NO_SUCHFILE")
+                mock_inst = MagicMock()
+                mock_inst.rerank.return_value = iter([0.9])
+                return mock_inst
+
+            mock_reranker.side_effect = side_effect
+
+            from wet_mcp.setup_tool import run_warmup
+
+            result = await run_warmup()
+            assert any(
+                s["step"] == "local_reranker" and s.get("retried")
+                for s in result["steps"]
+            )
+
+    async def test_warmup_local_reranker_retry_failure(self):
+        with (
+            patch("wet_mcp.setup.run_auto_setup"),
+            patch("wet_mcp.setup_tool.settings") as mock_settings,
+            patch("wet_mcp.setup_tool.clear_model_cache"),
+            patch("qwen3_embed.TextEmbedding") as mock_embed,
+            patch("qwen3_embed.TextCrossEncoder") as mock_reranker,
+        ):
+            mock_settings.setup_providers.return_value = "local"
+            mock_settings.rerank_enabled = True
+            mock_settings.resolve_local_embedding_model.return_value = "test-model"
+            mock_settings.resolve_local_rerank_model.return_value = "test-reranker"
+
+            mock_embed.return_value.embed.return_value = iter([[0.1]])
+
+            call_count = 0
+
+            def side_effect(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                if call_count == 1:
+                    raise RuntimeError("NO_SUCHFILE")
+                mock_inst = MagicMock()
+                mock_inst.rerank.return_value = iter([])
+                return mock_inst
+
+            mock_reranker.side_effect = side_effect
+
+            from wet_mcp.setup_tool import run_warmup
+
+            result = await run_warmup()
+            assert any(
+                s["step"] == "local_reranker"
+                and s["status"] == "warning"
+                and "failed after cache clear" in s["message"]
+                for s in result["steps"]
+            )
+
+    async def test_warmup_local_reranker_other_exception(self):
+        import pytest
+
+        with (
+            patch("wet_mcp.setup.run_auto_setup"),
+            patch("wet_mcp.setup_tool.settings") as mock_settings,
+            patch("qwen3_embed.TextEmbedding") as mock_embed,
+            patch("qwen3_embed.TextCrossEncoder") as mock_reranker,
+        ):
+            mock_settings.setup_providers.return_value = "local"
+            mock_settings.rerank_enabled = True
+            mock_settings.resolve_local_embedding_model.return_value = "test-model"
+            mock_settings.resolve_local_rerank_model.return_value = "test-reranker"
+
+            mock_embed.return_value.embed.return_value = iter([[0.1]])
+            mock_reranker.side_effect = ValueError("Some other error")
+
+            from wet_mcp.setup_tool import run_warmup
+
+            with pytest.raises(ValueError, match="Some other error"):
+                await run_warmup()
+
+
+class TestValidateCloudModelsComprehensive:
+    def test_validate_cloud_models_multiple_candidates(self):
+        mock_settings = MagicMock()
+        mock_settings.resolve_embedding_model.return_value = (
+            None  # trigger _EMBEDDING_CANDIDATES
+        )
+        mock_settings.resolve_rerank_model.return_value = None
+
+        with patch("wet_mcp.embedder.init_backend") as mock_init_embed:
+            mock_backend_fail = MagicMock()
+            mock_backend_fail.check_available.side_effect = Exception("Fail")
+
+            mock_backend_ok = MagicMock()
+            mock_backend_ok.check_available.return_value = 768
+
+            mock_init_embed.side_effect = [mock_backend_fail, mock_backend_ok]
+
+            from wet_mcp.setup_tool import _validate_cloud_models
+
+            result = _validate_cloud_models(mock_settings)
+            assert result["cloud_ready"] is True
+            assert result["embedding"]["dims"] == 768
+
+    def test_validate_cloud_models_reranker_exception(self):
+        mock_settings = MagicMock()
+        mock_settings.resolve_embedding_model.return_value = "cloud-embed"
+        mock_settings.resolve_rerank_model.return_value = "cloud-rerank"
+
+        with (
+            patch("wet_mcp.embedder.init_backend") as mock_init_embed,
+            patch("wet_mcp.reranker.init_reranker") as mock_init_rerank,
+        ):
+            mock_backend = MagicMock()
+            mock_backend.check_available.return_value = 768
+            mock_init_embed.return_value = mock_backend
+
+            mock_init_rerank.side_effect = Exception("Reranker init failed")
+
+            from wet_mcp.setup_tool import _validate_cloud_models
+
+            result = _validate_cloud_models(mock_settings)
+            assert result["cloud_ready"] is True
+            assert result["reranker"] is None
+
+
+@pytest.mark.asyncio
+async def test_warmup_local_embedding_retry_other_exception():
+    with (
+        patch("wet_mcp.setup.run_auto_setup"),
+        patch("wet_mcp.setup_tool.settings") as mock_settings,
+        patch("qwen3_embed.TextEmbedding") as mock_embed,
+    ):
+        mock_settings.setup_providers.return_value = "local"
+        mock_settings.rerank_enabled = False
+        mock_settings.resolve_local_embedding_model.return_value = "test-model"
+
+        mock_embed.side_effect = ValueError("Some other error during first attempt")
+
+        from wet_mcp.setup_tool import run_warmup
+
+        with pytest.raises(ValueError, match="Some other error during first attempt"):
+            await run_warmup()
+
+
+def test_validate_cloud_models_dims_zero():
+    mock_settings = MagicMock()
+    mock_settings.resolve_embedding_model.return_value = "cloud-embed"
+
+    with patch("wet_mcp.embedder.init_backend") as mock_init_embed:
+        mock_backend = MagicMock()
+        mock_backend.check_available.return_value = 0
+        mock_init_embed.return_value = mock_backend
+
+        from wet_mcp.setup_tool import _validate_cloud_models
+
+        result = _validate_cloud_models(mock_settings)
+        assert result["cloud_ready"] is False
+
+
+def test_validate_cloud_models_reranker_not_available():
+    mock_settings = MagicMock()
+    mock_settings.resolve_embedding_model.return_value = "cloud-embed"
+    mock_settings.resolve_rerank_model.return_value = "cloud-rerank"
+
+    with (
+        patch("wet_mcp.embedder.init_backend") as mock_init_embed,
+        patch("wet_mcp.reranker.init_reranker") as mock_init_rerank,
+    ):
+        mock_backend = MagicMock()
+        mock_backend.check_available.return_value = 768
+        mock_init_embed.return_value = mock_backend
+
+        mock_reranker = MagicMock()
+        mock_reranker.check_available.return_value = False
+        mock_init_rerank.return_value = mock_reranker
+
+        from wet_mcp.setup_tool import _validate_cloud_models
+
+        result = _validate_cloud_models(mock_settings)
+        assert result["cloud_ready"] is True
+        assert result["reranker"] is None
