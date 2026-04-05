@@ -785,7 +785,34 @@ class TestStopAutoSync:
 
 
 class TestDriveRequest:
+    @pytest.mark.asyncio
     async def test_authenticated_request(self):
+        from wet_mcp.sync import DriveRequestOptions, _drive_request
+
+        token = {"access_token": "test_token"}
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = 200
+
+        with patch("httpx.AsyncClient") as mock_client_cls:
+            mock_client = AsyncMock()
+            mock_client.request.return_value = mock_response
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = mock_client
+
+            # Test with options
+            options = DriveRequestOptions(params={"foo": "bar"}, timeout=50.0)
+            result = await _drive_request("GET", "https://example.com", token, options=options)
+
+        assert result.status_code == 200
+        # Verify auth header was set
+        call_kwargs = mock_client.request.call_args.kwargs
+        assert call_kwargs["headers"]["Authorization"] == "Bearer test_token"
+        assert call_kwargs["params"] == {"foo": "bar"}
+        assert call_kwargs["timeout"] == 50.0
+
+    @pytest.mark.asyncio
+    async def test_authenticated_request_no_options(self):
         from wet_mcp.sync import _drive_request
 
         token = {"access_token": "test_token"}
@@ -799,11 +826,10 @@ class TestDriveRequest:
             mock_client.__aexit__ = AsyncMock(return_value=False)
             mock_client_cls.return_value = mock_client
 
+            # Test without options
             result = await _drive_request("GET", "https://example.com", token)
 
         assert result.status_code == 200
-        # Verify auth header was set
-        call_kwargs = mock_client.request.call_args
-        assert "Authorization" in call_kwargs.kwargs.get(
-            "headers", {}
-        ) or "Authorization" in call_kwargs[1].get("headers", {})
+        call_kwargs = mock_client.request.call_args.kwargs
+        assert call_kwargs["headers"]["Authorization"] == "Bearer test_token"
+        assert call_kwargs["timeout"] == 120.0  # Default
