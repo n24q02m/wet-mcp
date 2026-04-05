@@ -802,7 +802,9 @@ class TestDriveRequest:
 
             # Test with options
             options = DriveRequestOptions(params={"foo": "bar"}, timeout=50.0)
-            result = await _drive_request("GET", "https://example.com", token, options=options)
+            result = await _drive_request(
+                "GET", "https://example.com", token, options=options
+            )
 
         assert result.status_code == 200
         # Verify auth header was set

@@ -150,7 +150,6 @@ async def _get_valid_token() -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-
 @dataclass
 class DriveRequestOptions:
     params: dict | None = None
@@ -521,9 +520,7 @@ async def check_health() -> bool:
             "GET",
             f"{_DRIVE_API_BASE}/files",
             token,
-            options=DriveRequestOptions(
-                params={"pageSize": 1, "fields": "files(id)"}
-            ),
+            options=DriveRequestOptions(params={"pageSize": 1, "fields": "files(id)"}),
         )
         return response.status_code == 200
     except Exception:
