@@ -1,5 +1,6 @@
 """Pytest configuration and fixtures."""
 
+import sys
 from unittest.mock import AsyncMock
 
 import pytest
@@ -26,6 +27,10 @@ async def _reset_crawler_singleton():
     This ensures tests do not leak state between each other when the
     singleton browser pool is involved.
     """
+    if "wet_mcp.sources.crawler" not in sys.modules:
+        yield
+        return
+
     import wet_mcp.sources.crawler as crawler_mod
 
     # Reset before test
