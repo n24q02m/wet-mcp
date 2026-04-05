@@ -332,6 +332,7 @@ def test_safe_local_path_oversized_file(tmp_path):
     f.write_text("x" * 200)
     assert is_safe_local_path(str(f), max_size=100) is None
 
+
 def test_safe_httpx_client_configuration():
     """Test that safe_httpx_client correctly configures the AsyncClient."""
     from web_core.http.client import _ssrf_event_hook
@@ -347,9 +348,7 @@ def test_safe_httpx_client_configuration():
         pass
 
     client2 = safe_httpx_client(
-        timeout=30,
-        event_hooks={"request": [dummy_hook]},
-        follow_redirects=True
+        timeout=30, event_hooks={"request": [dummy_hook]}, follow_redirects=True
     )
     assert client2.timeout.read == 30
     assert _ssrf_event_hook in client2.event_hooks["request"]
@@ -357,6 +356,7 @@ def test_safe_httpx_client_configuration():
     # SSRF hook must be first
     assert client2.event_hooks["request"][0] == _ssrf_event_hook
     assert client2.event_hooks["request"][1] == dummy_hook
+
 
 @pytest.mark.asyncio
 async def test_safe_httpx_client_ssrf_blocking():
