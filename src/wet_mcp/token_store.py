@@ -79,3 +79,20 @@ def save_token(provider: str, token: dict) -> None:
             pass
 
     logger.info(f"Token saved: {path}")
+
+
+def delete_token(provider: str) -> bool:
+    """Delete stored OAuth token for a provider.
+
+    Returns True if deleted, False if not found or failed.
+    """
+    path = get_token_path(provider)
+    try:
+        if path.exists():
+            path.unlink()
+            logger.info(f"Token deleted: {path}")
+            return True
+        return False
+    except OSError as e:
+        logger.warning(f"Failed to delete token at {path}: {e}")
+        return False
