@@ -168,7 +168,9 @@ All environment variables are **optional**. The server works in local mode (ONNX
 
 ## Authentication
 
-### Zero-Config Relay (Default)
+### Zero-Config Relay (BETA, Optional)
+
+> **Note**: Relay is a **BETA** credential provisioning flow. For stable production use, prefer **Environment Variables** above. The relay blocks server startup on first run and may time out in some MCP clients.
 
 On first run without any API keys in environment:
 
@@ -195,7 +197,7 @@ After relay setup, if `GOOGLE_DRIVE_CLIENT_ID` is configured, the server starts 
 2. Visit the URL and enter the code
 3. OAuth token is saved at `~/.wet-mcp/tokens/google_drive.json`
 
-### Environment Variables (CI/Automation)
+### Environment Variables (Recommended)
 
 Set API keys directly as environment variables to skip relay entirely.
 
