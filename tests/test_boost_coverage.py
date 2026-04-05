@@ -1176,6 +1176,7 @@ class TestDriveRequest:
             mock_httpx.return_value.__aexit__ = AsyncMock(return_value=None)
 
             from wet_mcp.sync import DriveRequestOptions
+
             options = DriveRequestOptions(
                 params={"q": "test"},
                 json_data={"name": "file.db"},
