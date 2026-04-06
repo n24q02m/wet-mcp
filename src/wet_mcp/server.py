@@ -52,17 +52,30 @@ _docs_db: DocsDB | None = None
 _embedding_dims: int = 0
 
 
-async def _maybe_include_setup_hint(result: dict) -> dict:
-    """If in awaiting_setup, trigger lazy relay and add hint to response."""
-    from wet_mcp.credential_state import CredentialState, get_state, trigger_relay_setup
+def _require_credentials() -> str | None:
+    """Check if credentials are configured. Returns error JSON if not, None if OK.
 
-    if get_state() == CredentialState.AWAITING_SETUP:
-        url = await trigger_relay_setup()
-        if url:
-            result["_setup_hint"] = (
-                f"Cloud features available. Configure API keys: {url}"
-            )
-    return result
+    When state is AWAITING_SETUP: BLOCK the tool — return error with setup instructions.
+    When state is LOCAL: allow (user explicitly chose local mode via skip).
+    When state is CONFIGURED: allow.
+    """
+    from wet_mcp.credential_state import CredentialState, get_setup_url, get_state
+
+    state = get_state()
+    if state == CredentialState.AWAITING_SETUP:
+        url = get_setup_url()
+        return json.dumps(
+            {
+                "error": "Credentials not configured",
+                "state": "awaiting_setup",
+                "setup_url": url,
+                "instructions": (
+                    "API keys required. Call setup(action='open_relay') to configure via browser, "
+                    "or setup(action='skip') to opt into local-only mode."
+                ),
+            }
+        )
+    return None
 
 
 async def _warmup_searxng() -> None:
@@ -235,78 +248,92 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
 
 
 async def _init_embedding_backend(mode: str) -> None:
-    """Initialize the embedding backend based on config.
+    """Initialize the embedding backend based on credential state and config.
 
-    Always initializes a backend (never FTS5-only):
-    - cloud: try cloud model, fallback to local on failure
-    - local: always available (GGUF if GPU + llama-cpp, else ONNX)
+    - AWAITING_SETUP: skip init entirely (tools are blocked anyway)
+    - CONFIGURED: cloud only — no silent local fallback
+    - LOCAL (explicit skip): local only
     """
     global _embedding_dims
+    from wet_mcp.credential_state import CredentialState, get_state
     from wet_mcp.embedder import init_backend
+
+    cred_state = get_state()
+
+    if cred_state == CredentialState.AWAITING_SETUP:
+        logger.info("Embedding: skipped (credentials not configured)")
+        return
 
     backend_type = settings.resolve_embedding_backend()
 
-    if backend_type == "cloud":
-        model = settings.resolve_embedding_model()
-        if model:
-            # Explicit model -- validate it
+    if cred_state == CredentialState.LOCAL or backend_type == "local":
+        local_model = settings.resolve_local_embedding_model()
+        try:
+            backend = await asyncio.to_thread(init_backend, "local", local_model)
+            native_dims = await asyncio.to_thread(backend.check_available)
+            if native_dims > 0:
+                if _embedding_dims == 0:
+                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+                logger.info(
+                    f"Embedding: local {local_model} "
+                    f"(native={native_dims}, stored={_embedding_dims})"
+                )
+            else:
+                logger.error("Local embedding model not available")
+        except Exception as e:
+            logger.error(f"Local embedding init failed: {e}")
+        return
+
+    # CONFIGURED + cloud backend
+    model = settings.resolve_embedding_model()
+    if model:
+        try:
+            backend = await asyncio.to_thread(init_backend, "cloud", model)
+            native_dims = await asyncio.to_thread(backend.check_available)
+            if native_dims > 0:
+                if _embedding_dims == 0:
+                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+                logger.info(
+                    f"Embedding: {model} "
+                    f"(native={native_dims}, stored={_embedding_dims})"
+                )
+                return
+        except Exception as e:
+            logger.warning(f"Embedding model {model} not available: {e}")
+    elif mode == "sdk":
+        for candidate in _EMBEDDING_CANDIDATES:
             try:
-                backend = await asyncio.to_thread(init_backend, "cloud", model)
+                backend = await asyncio.to_thread(init_backend, "cloud", candidate)
                 native_dims = await asyncio.to_thread(backend.check_available)
                 if native_dims > 0:
                     if _embedding_dims == 0:
                         _embedding_dims = _DEFAULT_EMBEDDING_DIMS
                     logger.info(
-                        f"Embedding: {model} "
+                        f"Embedding: {candidate} "
                         f"(native={native_dims}, stored={_embedding_dims})"
                     )
                     return
-            except Exception as e:
-                logger.warning(f"Embedding model {model} not available: {e}")
-        elif mode == "sdk":
-            # Auto-detect: try candidate models
-            for candidate in _EMBEDDING_CANDIDATES:
-                try:
-                    backend = await asyncio.to_thread(init_backend, "cloud", candidate)
-                    native_dims = await asyncio.to_thread(backend.check_available)
-                    if native_dims > 0:
-                        if _embedding_dims == 0:
-                            _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                        logger.info(
-                            f"Embedding: {candidate} "
-                            f"(native={native_dims}, stored={_embedding_dims})"
-                        )
-                        return
-                except Exception:
-                    continue
-        # Cloud not available -- fallback to local
-        logger.warning("Cloud embedding not available, using local fallback")
+            except Exception:
+                continue
 
-    # Local backend (always available)
-    local_model = settings.resolve_local_embedding_model()
-    try:
-        backend = await asyncio.to_thread(init_backend, "local", local_model)
-        native_dims = await asyncio.to_thread(backend.check_available)
-        if native_dims > 0:
-            if _embedding_dims == 0:
-                _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-            logger.info(
-                f"Embedding: local {local_model} "
-                f"(native={native_dims}, stored={_embedding_dims})"
-            )
-        else:
-            logger.error("Local embedding model not available")
-    except Exception as e:
-        logger.error(f"Local embedding init failed: {e}")
+    logger.error("Cloud embedding not available and local fallback is disabled")
 
 
 async def _init_reranker_backend(mode: str) -> None:
-    """Initialize the reranker backend based on config.
+    """Initialize the reranker backend based on credential state and config.
 
-    Always initializes a backend unless reranking is disabled:
-    - cloud: use RERANK_MODEL or auto-detected from API_KEYS (Cohere)
-    - local: always available (GGUF if GPU + llama-cpp, else ONNX)
+    - AWAITING_SETUP: skip init entirely (tools are blocked anyway)
+    - CONFIGURED: cloud only — no silent local fallback
+    - LOCAL (explicit skip): local only
     """
+    from wet_mcp.credential_state import CredentialState, get_state
+
+    cred_state = get_state()
+
+    if cred_state == CredentialState.AWAITING_SETUP:
+        logger.info("Reranker: skipped (credentials not configured)")
+        return
+
     rerank_backend_type = settings.resolve_rerank_backend()
 
     if not rerank_backend_type:
@@ -315,31 +342,32 @@ async def _init_reranker_backend(mode: str) -> None:
 
     from wet_mcp.reranker import init_reranker
 
-    if rerank_backend_type == "cloud":
-        model = settings.resolve_rerank_model()
-        if model:
-            try:
-                reranker = await asyncio.to_thread(init_reranker, "cloud", model)
-                available = await asyncio.to_thread(reranker.check_available)
-                if available:
-                    logger.info(f"Reranker: {model} (cloud)")
-                    return
-            except Exception as e:
-                logger.warning(f"Cloud reranker {model} not available: {e}")
-        # Cloud not available -- fallback to local
-        logger.warning("Cloud reranking not available, using local fallback")
+    if cred_state == CredentialState.LOCAL or rerank_backend_type == "local":
+        local_model = settings.resolve_local_rerank_model()
+        try:
+            reranker = await asyncio.to_thread(init_reranker, "local", local_model)
+            available = await asyncio.to_thread(reranker.check_available)
+            if available:
+                logger.info(f"Reranker: local {local_model}")
+            else:
+                logger.error("Local reranker not available")
+        except Exception as e:
+            logger.error(f"Local reranker init failed: {e}")
+        return
 
-    # Local backend (always available)
-    local_model = settings.resolve_local_rerank_model()
-    try:
-        reranker = await asyncio.to_thread(init_reranker, "local", local_model)
-        available = await asyncio.to_thread(reranker.check_available)
-        if available:
-            logger.info(f"Reranker: local {local_model}")
-        else:
-            logger.error("Local reranker not available")
-    except Exception as e:
-        logger.error(f"Local reranker init failed: {e}")
+    # CONFIGURED + cloud backend
+    model = settings.resolve_rerank_model()
+    if model:
+        try:
+            reranker = await asyncio.to_thread(init_reranker, "cloud", model)
+            available = await asyncio.to_thread(reranker.check_available)
+            if available:
+                logger.info(f"Reranker: {model} (cloud)")
+                return
+        except Exception as e:
+            logger.warning(f"Cloud reranker {model} not available: {e}")
+
+    logger.error("Cloud reranker not available and local fallback is disabled")
 
 
 # --- Helpers ---
@@ -552,6 +580,10 @@ async def search(  # noqa: PLR0913
 
     Use `help` tool with tool_name="search" for full parameter documentation.
     """
+    blocked = _require_credentials()
+    if blocked:
+        return blocked
+
     match action:
         case "search":
             if not query:
@@ -650,7 +682,6 @@ async def search(  # noqa: PLR0913
             if not result.startswith("Error"):
                 try:
                     _data = json.loads(result)
-                    _data = await _maybe_include_setup_hint(_data)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
                 except (json.JSONDecodeError, Exception):
                     pass
@@ -691,7 +722,6 @@ async def search(  # noqa: PLR0913
             if not result.startswith("Error"):
                 try:
                     _data = json.loads(result)
-                    _data = await _maybe_include_setup_hint(_data)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
                 except (json.JSONDecodeError, Exception):
                     pass
@@ -795,6 +825,10 @@ async def extract(
     _MAX_CRAWL_PAGES = 100
     _MAX_DEPTH = 5
 
+    blocked = _require_credentials()
+    if blocked:
+        return blocked
+
     max_pages = min(max_pages, _MAX_CRAWL_PAGES)
     depth = min(depth, _MAX_DEPTH)
 
@@ -819,7 +853,6 @@ async def extract(
             if not result.startswith("Error"):
                 try:
                     _data = json.loads(result)
-                    _data = await _maybe_include_setup_hint(_data)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
                 except (json.JSONDecodeError, Exception):
                     pass
@@ -961,6 +994,10 @@ async def media(  # noqa: PLR0913
     Typical workflow: list (discover) -> download (save locally) -> analyze (LLM insights).
     Use `help` tool with tool_name="media" for full documentation.
     """
+    blocked = _require_credentials()
+    if blocked:
+        return blocked
+
     from wet_mcp.sources.crawler import download_media
 
     match action:
@@ -1009,7 +1046,6 @@ async def media(  # noqa: PLR0913
             if not result.startswith("Error"):
                 try:
                     _data = json.loads(result)
-                    _data = await _maybe_include_setup_hint(_data)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
                 except (json.JSONDecodeError, Exception):
                     pass
@@ -1218,16 +1254,15 @@ async def config(
 
 @mcp.tool(
     description=(
-        "Server setup and warmup. Actions: "
-        "warmup|setup_sync|status|start|skip|reset|complete|setup_relay. "
+        "Server setup, credentials, and warmup. Actions: "
+        "open_relay|status|skip|reset|complete|warmup|setup_sync. "
+        "open_relay: Open browser-based setup page to configure all API keys at once. "
+        "status: Show current credential state and configured keys. "
+        "skip: Use local ONNX models (explicit opt-in, no cloud). "
+        "reset: Clear all credentials and reset state. "
+        "complete: Re-resolve credentials from environment. "
         "warmup: Pre-download models and install dependencies. "
-        "setup_sync: Configure Google Drive sync (OAuth Device Code). "
-        "status: Show current credential state. "
-        "start: Start relay setup to configure API keys via browser. "
-        "skip: Set local mode (skip relay permanently). "
-        "reset: Clear credentials and reset state. "
-        "complete: Re-resolve credentials from env vars. "
-        "setup_relay: Alias for start (backward compat)."
+        "setup_sync: Configure Google Drive sync (OAuth Device Code)."
     ),
     annotations=ToolAnnotations(
         title="Setup",
@@ -1239,24 +1274,41 @@ async def config(
 )
 async def setup(
     action: str,
+    key: str | None = None,
+    value: str | None = None,
     remote_type: str | None = None,
     force: bool = False,
 ) -> str:
-    """Server setup and warmup operations.
+    """Server setup, credentials, and warmup.
 
     Actions:
-    - warmup: Pre-download models and run first-time setup
-    - setup_sync: Configure cloud sync (remote_type defaults to 'drive')
-    - status: Show current credential state and setup URL
-    - start: Start relay setup to configure API keys via browser
-    - skip: Set local mode (skip relay permanently)
-    - reset: Clear credentials and reset to awaiting_setup
-    - complete: Re-resolve credentials from env vars (pick up manually set keys)
-    - setup_relay: Alias for start (backward compat)
+    - open_relay: Open browser-based setup to configure all API keys at once.
+    - status: Show current credential state and configured keys.
+    - skip: Use local ONNX models (explicit opt-in, no cloud features).
+    - reset: Clear all credentials and reset state.
+    - complete: Re-resolve credentials from environment.
+    - warmup: Pre-download models and install dependencies.
+    - setup_sync: Configure Google Drive sync (OAuth Device Code).
     """
     from wet_mcp.setup_tool import run_setup_sync, run_warmup
 
     match action:
+        case "open_relay":
+            from wet_mcp.credential_state import trigger_relay_setup
+
+            url = await trigger_relay_setup(force=force)
+            if url:
+                return json.dumps(
+                    {
+                        "status": "relay_started",
+                        "setup_url": url,
+                        "message": "Browser opened. Configure API keys in the form, then submit.",
+                    }
+                )
+            return json.dumps(
+                {"status": "error", "message": "Failed to start relay session."}
+            )
+
         case "warmup":
             result = await run_warmup()
             return json.dumps(result, indent=2, default=str)
@@ -1279,35 +1331,14 @@ async def setup(
                 }
             )
 
-        case "start":
-            from wet_mcp.credential_state import (
-                CredentialState,
-                get_state,
-                trigger_relay_setup,
-            )
+        case "start" | "setup_relay":
+            # Backward compat aliases → redirect to open_relay
+            from wet_mcp.credential_state import trigger_relay_setup
 
-            if get_state() == CredentialState.CONFIGURED and not force:
-                return json.dumps(
-                    {
-                        "status": "already_configured",
-                        "message": "Already configured. Use force=true to reconfigure.",
-                    }
-                )
-            url = await trigger_relay_setup(force=True)
+            url = await trigger_relay_setup(force=force)
             if url:
-                return json.dumps(
-                    {
-                        "status": "setup_started",
-                        "setup_url": url,
-                        "message": "Open this URL to configure API keys.",
-                    }
-                )
-            return json.dumps(
-                {
-                    "status": "error",
-                    "message": "Failed to start relay session.",
-                }
-            )
+                return json.dumps({"status": "relay_started", "setup_url": url})
+            return json.dumps({"status": "error", "message": "Relay setup failed."})
 
         case "skip":
             from mcp_relay_core import set_local_mode
@@ -1353,37 +1384,18 @@ async def setup(
                 }
             )
 
-        case "setup_relay":
-            # BACKWARD COMPAT: alias for "start"
-            from wet_mcp.credential_state import trigger_relay_setup
-
-            url = await trigger_relay_setup(force=True)
-            if url:
-                return json.dumps(
-                    {
-                        "status": "setup_started",
-                        "setup_url": url,
-                    }
-                )
-            return json.dumps(
-                {
-                    "status": "error",
-                    "message": "Relay setup failed.",
-                }
-            )
-
         case _:
             import difflib
 
             valid_actions = [
                 "complete",
-                "warmup",
-                "setup_sync",
-                "status",
-                "start",
-                "skip",
+                "open_relay",
                 "reset",
-                "setup_relay",
+                "setup_sync",
+                "skip",
+                "start",
+                "status",
+                "warmup",
             ]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""

@@ -236,22 +236,18 @@ async def test_init_embedding_litellm_explicit_model_success():
         assert server._embedding_dims == 768  # _DEFAULT_EMBEDDING_DIMS
 
 
-async def test_init_embedding_litellm_explicit_model_failure_fallback_local():
-    """Explicit model fails, falls back to local."""
+async def test_init_embedding_litellm_explicit_model_failure_no_local_fallback():
+    """Explicit model fails — no local fallback in CONFIGURED state."""
     call_count = 0
 
     def fake_init_backend(backend_type, model, **kwargs):
         nonlocal call_count
         call_count += 1
-        if backend_type == "cloud":
-            raise Exception("cloud unavailable")
-        mock_b = MagicMock()
-        mock_b.check_available.return_value = 384
-        return mock_b
+        raise Exception("cloud unavailable")
 
     with patch("wet_mcp.embedder.init_backend", side_effect=fake_init_backend):
         await server._init_embedding_backend("sdk")
-        assert call_count == 2  # cloud + local
+        assert call_count == 1  # cloud only, no local fallback
 
 
 async def test_init_embedding_litellm_autodetect(_mock_settings):
@@ -350,8 +346,8 @@ async def test_init_reranker_litellm_success(_mock_settings):
         await server._init_reranker_backend("sdk")
 
 
-async def test_init_reranker_litellm_fail_fallback_local(_mock_settings):
-    """Lines 292-307: cloud reranker fails, falls back to local."""
+async def test_init_reranker_litellm_fail_no_local_fallback(_mock_settings):
+    """Lines 292-307: cloud reranker fails — no local fallback in CONFIGURED state."""
     _mock_settings.resolve_rerank_backend.return_value = "cloud"
     _mock_settings.resolve_rerank_model.return_value = "cohere-rerank"
 
@@ -360,15 +356,11 @@ async def test_init_reranker_litellm_fail_fallback_local(_mock_settings):
     def fake_init(backend_type, model, **kwargs):
         nonlocal call_count
         call_count += 1
-        if backend_type == "cloud":
-            raise Exception("cloud unavailable")
-        mock_r = MagicMock()
-        mock_r.check_available.return_value = True
-        return mock_r
+        raise Exception("cloud unavailable")
 
     with patch("wet_mcp.reranker.init_reranker", side_effect=fake_init):
         await server._init_reranker_backend("sdk")
-        assert call_count == 2
+        assert call_count == 1  # cloud only, no local fallback
 
 
 async def test_init_reranker_local_not_available(_mock_settings):

@@ -485,7 +485,7 @@ class TestServerSetupToolNewActions:
         assert "GEMINI_API_KEY" in data["cloud_keys_in_env"]
 
     async def test_start_action_when_configured(self):
-        """start action returns already_configured when CONFIGURED."""
+        """start action returns error when CONFIGURED and no force (relay skips)."""
         import json
 
         from wet_mcp.server import setup
@@ -493,7 +493,7 @@ class TestServerSetupToolNewActions:
         set_state(CredentialState.CONFIGURED)
         result = await setup(action="start")
         data = json.loads(result)
-        assert data["status"] == "already_configured"
+        assert data["status"] == "error"
 
     async def test_start_action_force(self):
         """start action with force triggers relay."""
@@ -509,7 +509,7 @@ class TestServerSetupToolNewActions:
         ):
             result = await setup(action="start", force=True)
             data = json.loads(result)
-            assert data["status"] == "setup_started"
+            assert data["status"] == "relay_started"
             assert data["setup_url"] == "https://relay.example.com/setup/abc"
 
     async def test_start_action_failure(self):
@@ -586,40 +586,44 @@ class TestServerSetupToolNewActions:
             mock_settings.setup_providers.assert_called_once()
 
 
-class TestMaybeIncludeSetupHint:
-    """Tests for _maybe_include_setup_hint helper."""
+class TestRequireCredentials:
+    """Tests for _require_credentials helper."""
 
-    async def test_adds_hint_when_awaiting_setup(self):
-        """Adds _setup_hint when state is AWAITING_SETUP and relay returns URL."""
-        from wet_mcp.server import _maybe_include_setup_hint
+    def test_returns_error_json_when_awaiting_setup(self):
+        """Returns error JSON when state is AWAITING_SETUP."""
+        import json
+
+        import wet_mcp.credential_state as mod
+        from wet_mcp.server import _require_credentials
 
         set_state(CredentialState.AWAITING_SETUP)
-        with patch(
-            "wet_mcp.credential_state.trigger_relay_setup",
-            new_callable=AsyncMock,
-            return_value="https://relay.example.com/setup/abc",
-        ):
-            result = await _maybe_include_setup_hint({"results": []})
-            assert "_setup_hint" in result
-            assert "https://relay.example.com/setup/abc" in result["_setup_hint"]
+        mod._setup_url = "https://relay.example.com/setup/abc"
+        result = _require_credentials()
+        assert result is not None
+        data = json.loads(result)
+        assert data["error"] == "Credentials not configured"
+        assert data["state"] == "awaiting_setup"
+        assert data["setup_url"] == "https://relay.example.com/setup/abc"
+        assert "open_relay" in data["instructions"]
+        assert "set_env" not in data["instructions"]
 
-    async def test_no_hint_when_configured(self):
-        """Does NOT add _setup_hint when state is CONFIGURED."""
-        from wet_mcp.server import _maybe_include_setup_hint
+    def test_returns_none_when_configured(self):
+        """Returns None when state is CONFIGURED."""
+        from wet_mcp.server import _require_credentials
 
         set_state(CredentialState.CONFIGURED)
-        result = await _maybe_include_setup_hint({"results": []})
-        assert "_setup_hint" not in result
+        result = _require_credentials()
+        assert result is None
 
-    async def test_no_hint_when_relay_returns_none(self):
-        """Does NOT add _setup_hint when relay returns None."""
-        from wet_mcp.server import _maybe_include_setup_hint
+    def test_returns_error_json_with_null_url_when_no_relay_session(self):
+        """Returns error JSON with null setup_url when relay not yet started."""
+        import json
+
+        from wet_mcp.server import _require_credentials
 
         set_state(CredentialState.AWAITING_SETUP)
-        with patch(
-            "wet_mcp.credential_state.trigger_relay_setup",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            result = await _maybe_include_setup_hint({"results": []})
-            assert "_setup_hint" not in result
+        # _setup_url is already None (reset by _reset_module_state fixture)
+        result = _require_credentials()
+        assert result is not None
+        data = json.loads(result)
+        assert data["setup_url"] is None

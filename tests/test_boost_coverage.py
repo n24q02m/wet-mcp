@@ -1810,7 +1810,7 @@ class TestServerSetupTool:
         ):
             result = await setup(action="setup_relay")
             data = json.loads(result)
-            assert data["status"] == "setup_started"
+            assert data["status"] == "relay_started"
             assert "setup_url" in data
 
     async def test_setup_relay_failure(self):

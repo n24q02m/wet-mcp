@@ -883,7 +883,7 @@ async def test_init_embedding_backend_litellm_explicit_model():
 
 @pytest.mark.asyncio
 async def test_init_embedding_backend_litellm_explicit_model_fail():
-    """Test embedding init with explicit model failure falls to local."""
+    """Test embedding init with explicit model failure — no local fallback."""
     with (
         patch("wet_mcp.server.settings") as ms,
         patch("wet_mcp.embedder.init_backend") as mock_init,
@@ -898,16 +898,12 @@ async def test_init_embedding_backend_litellm_explicit_model_fail():
         def init_side_effect(backend_type, model, **kwargs):
             nonlocal call_count
             call_count += 1
-            if call_count == 1:
-                raise Exception("model not available")
-            mock_backend = MagicMock()
-            mock_backend.check_available.return_value = 384
-            return mock_backend
+            raise Exception("model not available")
 
         mock_init.side_effect = init_side_effect
 
         await server._init_embedding_backend("sdk")
-        assert mock_init.call_count == 2
+        assert mock_init.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -941,7 +937,7 @@ async def test_init_embedding_backend_autodetect_candidates():
 
 @pytest.mark.asyncio
 async def test_init_embedding_backend_all_candidates_fail():
-    """Test embedding auto-detect falls back to local when all candidates fail."""
+    """Test embedding auto-detect logs error when all candidates fail — no local fallback."""
     with (
         patch("wet_mcp.server.settings") as ms,
         patch("wet_mcp.embedder.init_backend") as mock_init,
@@ -956,17 +952,13 @@ async def test_init_embedding_backend_all_candidates_fail():
         def init_side_effect(backend_type, model, **kwargs):
             nonlocal call_count
             call_count += 1
-            if backend_type == "cloud":
-                raise Exception("not available")
-            mock_backend = MagicMock()
-            mock_backend.check_available.return_value = 384
-            return mock_backend
+            raise Exception("not available")
 
         mock_init.side_effect = init_side_effect
 
         await server._init_embedding_backend("sdk")
-        # 4 candidates (jina, gemini, openai, cohere) + 1 local = 5 calls
-        assert call_count == 5
+        # 4 candidates (jina, gemini, openai, cohere) — no local fallback
+        assert call_count == 4
 
 
 @pytest.mark.asyncio
@@ -1020,8 +1012,8 @@ async def test_init_reranker_backend_disabled():
 
 
 @pytest.mark.asyncio
-async def test_init_reranker_backend_litellm_cloud_fail_local_fallback():
-    """Test reranker cloud fail then local fallback."""
+async def test_init_reranker_backend_cloud_fail_no_local_fallback():
+    """Test reranker cloud fail logs error — no local fallback."""
     with (
         patch("wet_mcp.server.settings") as ms,
         patch("wet_mcp.reranker.init_reranker") as mock_init,
@@ -1036,16 +1028,12 @@ async def test_init_reranker_backend_litellm_cloud_fail_local_fallback():
         def init_side_effect(backend_type, model, **kwargs):
             nonlocal call_count
             call_count += 1
-            if backend_type == "cloud":
-                raise Exception("cloud not available")
-            mock_reranker = MagicMock()
-            mock_reranker.check_available.return_value = True
-            return mock_reranker
+            raise Exception("cloud not available")
 
         mock_init.side_effect = init_side_effect
 
         await server._init_reranker_backend("sdk")
-        assert call_count == 2
+        assert call_count == 1
 
 
 @pytest.mark.asyncio
