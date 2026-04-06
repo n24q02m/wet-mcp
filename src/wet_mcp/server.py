@@ -52,6 +52,19 @@ _docs_db: DocsDB | None = None
 _embedding_dims: int = 0
 
 
+async def _maybe_include_setup_hint(result: dict) -> dict:
+    """If in awaiting_setup, trigger lazy relay and add hint to response."""
+    from wet_mcp.credential_state import CredentialState, get_state, trigger_relay_setup
+
+    if get_state() == CredentialState.AWAITING_SETUP:
+        url = await trigger_relay_setup()
+        if url:
+            result["_setup_hint"] = (
+                f"Cloud features available. Configure API keys: {url}"
+            )
+    return result
+
+
 async def _warmup_searxng() -> None:
     """Run heavy setup and pre-warm SearXNG in background.
 
@@ -634,6 +647,13 @@ async def search(  # noqa: PLR0913
                     pass
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
+            if not result.startswith("Error"):
+                try:
+                    _data = json.loads(result)
+                    _data = await _maybe_include_setup_hint(_data)
+                    result = json.dumps(_data, ensure_ascii=False, indent=2)
+                except (json.JSONDecodeError, Exception):
+                    pass
             return result
 
         case "research":
@@ -668,6 +688,13 @@ async def search(  # noqa: PLR0913
                 await asyncio.to_thread(
                     _web_cache.set, "research", cache_params, result
                 )
+            if not result.startswith("Error"):
+                try:
+                    _data = json.loads(result)
+                    _data = await _maybe_include_setup_hint(_data)
+                    result = json.dumps(_data, ensure_ascii=False, indent=2)
+                except (json.JSONDecodeError, Exception):
+                    pass
             return result
 
         case "docs":
@@ -789,6 +816,13 @@ async def extract(
             )
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
+            if not result.startswith("Error"):
+                try:
+                    _data = json.loads(result)
+                    _data = await _maybe_include_setup_hint(_data)
+                    result = json.dumps(_data, ensure_ascii=False, indent=2)
+                except (json.JSONDecodeError, Exception):
+                    pass
             return result
 
         case "batch":
@@ -968,10 +1002,18 @@ async def media(  # noqa: PLR0913
 
             from wet_mcp.llm import analyze_media
 
-            return await _with_timeout(
+            result = await _with_timeout(
                 analyze_media(media_path=url, prompt=prompt),
                 "media.analyze",
             )
+            if not result.startswith("Error"):
+                try:
+                    _data = json.loads(result)
+                    _data = await _maybe_include_setup_hint(_data)
+                    result = json.dumps(_data, ensure_ascii=False, indent=2)
+                except (json.JSONDecodeError, Exception):
+                    pass
+            return result
 
         case _:
             import difflib
@@ -1177,13 +1219,14 @@ async def config(
 @mcp.tool(
     description=(
         "Server setup and warmup. Actions: "
-        "warmup|setup_sync|status|start|skip|reset|setup_relay. "
+        "warmup|setup_sync|status|start|skip|reset|complete|setup_relay. "
         "warmup: Pre-download models and install dependencies. "
         "setup_sync: Configure Google Drive sync (OAuth Device Code). "
         "status: Show current credential state. "
         "start: Start relay setup to configure API keys via browser. "
         "skip: Set local mode (skip relay permanently). "
         "reset: Clear credentials and reset state. "
+        "complete: Re-resolve credentials from env vars. "
         "setup_relay: Alias for start (backward compat)."
     ),
     annotations=ToolAnnotations(
@@ -1208,6 +1251,7 @@ async def setup(
     - start: Start relay setup to configure API keys via browser
     - skip: Set local mode (skip relay permanently)
     - reset: Clear credentials and reset to awaiting_setup
+    - complete: Re-resolve credentials from env vars (pick up manually set keys)
     - setup_relay: Alias for start (backward compat)
     """
     from wet_mcp.setup_tool import run_setup_sync, run_warmup
@@ -1290,6 +1334,25 @@ async def setup(
                 }
             )
 
+        case "complete":
+            from wet_mcp.credential_state import (
+                get_state as _get_state,
+            )
+            from wet_mcp.credential_state import (
+                resolve_credential_state,
+            )
+
+            resolve_credential_state()
+            state = _get_state()
+            settings.setup_providers()
+            return json.dumps(
+                {
+                    "status": "ok",
+                    "state": state.value,
+                    "message": "Credential state refreshed.",
+                }
+            )
+
         case "setup_relay":
             # BACKWARD COMPAT: alias for "start"
             from wet_mcp.credential_state import trigger_relay_setup
@@ -1313,6 +1376,7 @@ async def setup(
             import difflib
 
             valid_actions = [
+                "complete",
                 "warmup",
                 "setup_sync",
                 "status",
