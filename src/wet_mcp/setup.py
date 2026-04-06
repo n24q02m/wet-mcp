@@ -232,6 +232,7 @@ def _setup_crawl4ai() -> bool:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=True,
         )
 
         # 2. Run playwright install safely
@@ -240,6 +241,7 @@ def _setup_crawl4ai() -> bool:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=True,
         )
 
         logger.info("crawl4ai setup completed successfully")
