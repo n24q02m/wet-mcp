@@ -315,6 +315,15 @@ class TestPollRelayBackground:
                 "mcp_relay_core.release_session_lock",
                 new_callable=AsyncMock,
             ),
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "mcp_relay_core.relay.client.send_message",
+                new_callable=AsyncMock,
+            ),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(
@@ -408,6 +417,12 @@ class TestPollRelayBackground:
             patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch("mcp_relay_core.relay.client.send_message", new_callable=AsyncMock),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(
@@ -433,6 +448,12 @@ class TestPollRelayBackground:
             patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch("mcp_relay_core.relay.client.send_message", new_callable=AsyncMock),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(

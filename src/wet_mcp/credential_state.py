@@ -194,6 +194,35 @@ async def _poll_relay_background(
 
         settings.setup_providers()
 
+        # Share cloud keys with mnemo-mcp and CRG (same keys, avoid separate relay)
+        _share_cloud_keys_to_peers(config)
+
+        # Google Drive OAuth via relay messaging (best-effort)
+        session_id = getattr(session, "session_id", None)
+        if session_id:
+            try:
+                from wet_mcp.sync import setup_google_auth
+
+                await setup_google_auth(relay_url=relay_base, session_id=session_id)
+            except Exception as e:
+                logger.debug("GDrive OAuth via relay failed (non-fatal): {}", e)
+
+        # Notify browser: setup complete
+        if session_id:
+            try:
+                from mcp_relay_core.relay.client import send_message
+
+                await send_message(
+                    relay_base,
+                    session_id,
+                    {
+                        "type": "complete",
+                        "text": "Setup complete! API keys configured. You can close this tab.",
+                    },
+                )
+            except Exception:
+                pass
+
         # Release session lock
         from mcp_relay_core import release_session_lock
 
@@ -212,6 +241,29 @@ async def _poll_relay_background(
             _state = CredentialState.AWAITING_SETUP
     except Exception:
         _state = CredentialState.AWAITING_SETUP
+
+
+def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
+    """Write shared cloud API keys to mnemo-mcp and CRG config files.
+
+    wet-mcp, mnemo-mcp, and better-code-review-graph all use the same
+    cloud embedding/LLM keys. Sharing avoids needing separate relay sessions
+    for each server — one relay configures all three.
+    """
+    try:
+        from mcp_relay_core.storage.config_file import write_config
+
+        shared = {k: v for k, v in config.items() if k in CLOUD_KEYS and v}
+        if not shared:
+            return
+        for peer in ("mnemo-mcp", "better-code-review-graph"):
+            try:
+                write_config(peer, shared)
+                logger.debug("Shared cloud keys to {}", peer)
+            except Exception as e:
+                logger.debug("Failed to share keys to {}: {}", peer, e)
+    except Exception as e:
+        logger.debug("_share_cloud_keys_to_peers failed (non-fatal): {}", e)
 
 
 def set_state(state: CredentialState) -> None:
