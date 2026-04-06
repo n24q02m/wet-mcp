@@ -86,9 +86,7 @@ async def test_lifespan():
         ) as mock_shutdown,
         patch("wet_mcp.server.stop_searxng") as mock_stop,
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
     ):
         async with server._lifespan(mock_fastmcp):
@@ -741,9 +739,7 @@ async def test_lifespan_startup_no_github_token():
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
         patch.dict("os.environ", _home_vars, clear=True),
     ):
@@ -762,9 +758,7 @@ async def test_lifespan_startup_backend_init_error(mock_warmup):
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
         patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch(
@@ -790,9 +784,7 @@ async def test_lifespan_startup_sync_enabled():
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
         patch("wet_mcp.config.settings") as ms,
         patch("wet_mcp.sync.start_auto_sync") as mock_start_sync,
@@ -823,9 +815,7 @@ async def test_lifespan_shutdown_sync_enabled():
         patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
         patch("wet_mcp.server.stop_searxng"),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
         patch("wet_mcp.config.settings") as ms,
         patch("wet_mcp.sync.start_auto_sync"),
@@ -859,9 +849,7 @@ async def test_lifespan_shutdown_crawler_error():
         ),
         patch("wet_mcp.server.stop_searxng"),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
     ):
         async with server._lifespan(mock_fastmcp):

@@ -77,9 +77,7 @@ async def test_lifespan_startup_no_github_token():
         patch("wet_mcp.server._init_embedding_backend", new_callable=AsyncMock),
         patch("wet_mcp.server._init_reranker_backend", new_callable=AsyncMock),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
         patch("wet_mcp.config.settings") as cfg,
     ):
@@ -103,9 +101,7 @@ async def test_lifespan_startup_with_auto_searxng():
         patch("wet_mcp.server._init_reranker_backend", new_callable=AsyncMock),
         patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
         patch("wet_mcp.config.settings") as cfg,
     ):
@@ -137,9 +133,7 @@ async def test_lifespan_startup_backends_init_failure():
             side_effect=Exception("backend fail"),
         ),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
         patch("wet_mcp.config.settings") as cfg,
     ):
@@ -163,9 +157,7 @@ async def test_lifespan_startup_sync_enabled():
         patch("wet_mcp.server._init_embedding_backend", new_callable=AsyncMock),
         patch("wet_mcp.server._init_reranker_backend", new_callable=AsyncMock),
         patch(
-            "wet_mcp.relay_setup.ensure_config",
-            new_callable=AsyncMock,
-            return_value=None,
+            "wet_mcp.credential_state.resolve_credential_state",
         ),
         patch("wet_mcp.sync.start_auto_sync") as mock_sync,
         patch("wet_mcp.config.settings") as cfg,

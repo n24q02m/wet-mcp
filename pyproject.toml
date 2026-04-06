@@ -1,6 +1,6 @@
 [project]
 name = "wet-mcp"
-version = "2.21.0"
+version = "2.22.0"
 description = "Open-source MCP Server for web search, extract, crawl, academic research, and library docs with embedded SearXNG"
 readme = "README.md"
 license = { text = "MIT" }
@@ -52,7 +52,7 @@ dependencies = [
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
     # Relay setup (zero-env-config)
-    "mcp-relay-core>=1.2.0",
+    "mcp-relay-core>=1.4.0",
     # Google Drive sync
     "google-api-python-client>=2.193.0",
     "google-auth>=2.49.1",
@@ -115,6 +115,9 @@ markers = [
     "slow: slow tests (crawl, download, etc.)",
 ]
 addopts = "-m 'not integration and not live and not full and not e2e'"
+
+[tool.uv.sources]
+mcp-relay-core = { path = "../mcp-relay-core/packages/core-py", editable = true }
 
 [tool.ty]
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }

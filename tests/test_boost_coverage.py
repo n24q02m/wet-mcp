@@ -1800,29 +1800,25 @@ class TestServerSetupTool:
             assert data["status"] == "ok"
 
     async def test_setup_relay(self):
-        """setup_relay action delegates to ensure_config(force=True)."""
+        """setup_relay action delegates to trigger_relay_setup(force=True)."""
         from wet_mcp.server import setup
 
-        mock_config = {"GEMINI_API_KEY": "AIza_test"}
-        with (
-            patch(
-                "wet_mcp.relay_setup.ensure_config",
-                new_callable=AsyncMock,
-                return_value=mock_config,
-            ),
-            patch("wet_mcp.server.settings") as mock_settings,
+        with patch(
+            "wet_mcp.credential_state.trigger_relay_setup",
+            new_callable=AsyncMock,
+            return_value="https://relay.example.com/setup/abc",
         ):
-            mock_settings.setup_providers = MagicMock()
             result = await setup(action="setup_relay")
             data = json.loads(result)
-            assert data["status"] == "ok"
+            assert data["status"] == "setup_started"
+            assert "setup_url" in data
 
     async def test_setup_relay_failure(self):
         """setup_relay returns error when relay setup fails."""
         from wet_mcp.server import setup
 
         with patch(
-            "wet_mcp.relay_setup.ensure_config",
+            "wet_mcp.credential_state.trigger_relay_setup",
             new_callable=AsyncMock,
             return_value=None,
         ):

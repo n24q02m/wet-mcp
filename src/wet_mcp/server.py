@@ -116,13 +116,10 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
     logger.info("Starting WET MCP Server...")
 
-    # Relay-first: try env -> config file -> relay setup -> local fallback
-    try:
-        from wet_mcp.relay_setup import ensure_config
+    # Non-blocking credential resolution (fast, <10ms)
+    from wet_mcp.credential_state import resolve_credential_state
 
-        await ensure_config()
-    except Exception as e:
-        logger.debug("Relay config not available: {}. Using local mode.", e)
+    resolve_credential_state()
 
     # 1. Setup provider mode (sdk or local)
     from wet_mcp.config import settings
@@ -1180,10 +1177,14 @@ async def config(
 @mcp.tool(
     description=(
         "Server setup and warmup. Actions: "
-        "warmup|setup_sync|setup_relay. "
+        "warmup|setup_sync|status|start|skip|reset|setup_relay. "
         "warmup: Pre-download models and install dependencies. "
         "setup_sync: Configure Google Drive sync (OAuth Device Code). "
-        "setup_relay: Start relay setup to configure API keys via browser."
+        "status: Show current credential state. "
+        "start: Start relay setup to configure API keys via browser. "
+        "skip: Set local mode (skip relay permanently). "
+        "reset: Clear credentials and reset state. "
+        "setup_relay: Alias for start (backward compat)."
     ),
     annotations=ToolAnnotations(
         title="Setup",
@@ -1196,13 +1197,18 @@ async def config(
 async def setup(
     action: str,
     remote_type: str | None = None,
+    force: bool = False,
 ) -> str:
     """Server setup and warmup operations.
 
     Actions:
     - warmup: Pre-download models and run first-time setup
     - setup_sync: Configure cloud sync (remote_type defaults to 'drive')
-    - setup_relay: Start relay setup to configure API keys via browser
+    - status: Show current credential state and setup URL
+    - start: Start relay setup to configure API keys via browser
+    - skip: Set local mode (skip relay permanently)
+    - reset: Clear credentials and reset to awaiting_setup
+    - setup_relay: Alias for start (backward compat)
     """
     from wet_mcp.setup_tool import run_setup_sync, run_warmup
 
@@ -1215,21 +1221,106 @@ async def setup(
             result = await run_setup_sync(remote_type or "drive")
             return json.dumps(result, indent=2, default=str)
 
-        case "setup_relay":
-            from wet_mcp.relay_setup import ensure_config
+        case "status":
+            from wet_mcp import credential_state as _cs
 
-            config = await ensure_config(force=True, timeout=None)
-            if config:
-                settings.setup_providers()
-                return json.dumps({"status": "ok", "message": "Relay config applied."})
+            state = _cs.get_state()
             return json.dumps(
-                {"status": "error", "message": "Relay setup failed or timed out."}
+                {
+                    "state": state.value,
+                    "setup_url": _cs.get_setup_url(),
+                    "cloud_keys_in_env": [
+                        k for k in _cs.CLOUD_KEYS if os.environ.get(k)
+                    ],
+                }
+            )
+
+        case "start":
+            from wet_mcp.credential_state import (
+                CredentialState,
+                get_state,
+                trigger_relay_setup,
+            )
+
+            if get_state() == CredentialState.CONFIGURED and not force:
+                return json.dumps(
+                    {
+                        "status": "already_configured",
+                        "message": "Already configured. Use force=true to reconfigure.",
+                    }
+                )
+            url = await trigger_relay_setup(force=True)
+            if url:
+                return json.dumps(
+                    {
+                        "status": "setup_started",
+                        "setup_url": url,
+                        "message": "Open this URL to configure API keys.",
+                    }
+                )
+            return json.dumps(
+                {
+                    "status": "error",
+                    "message": "Failed to start relay session.",
+                }
+            )
+
+        case "skip":
+            from mcp_relay_core import set_local_mode
+
+            from wet_mcp.credential_state import CredentialState, set_state
+
+            set_local_mode("wet-mcp")
+            set_state(CredentialState.LOCAL)
+            return json.dumps(
+                {
+                    "status": "ok",
+                    "message": "Local mode set. Relay will not trigger on restart.",
+                }
+            )
+
+        case "reset":
+            from wet_mcp.credential_state import reset_state
+
+            reset_state()
+            return json.dumps(
+                {
+                    "status": "ok",
+                    "message": "Credentials cleared. Next tool call will offer setup.",
+                }
+            )
+
+        case "setup_relay":
+            # BACKWARD COMPAT: alias for "start"
+            from wet_mcp.credential_state import trigger_relay_setup
+
+            url = await trigger_relay_setup(force=True)
+            if url:
+                return json.dumps(
+                    {
+                        "status": "setup_started",
+                        "setup_url": url,
+                    }
+                )
+            return json.dumps(
+                {
+                    "status": "error",
+                    "message": "Relay setup failed.",
+                }
             )
 
         case _:
             import difflib
 
-            valid_actions = ["setup_relay", "setup_sync", "warmup"]
+            valid_actions = [
+                "warmup",
+                "setup_sync",
+                "status",
+                "start",
+                "skip",
+                "reset",
+                "setup_relay",
+            ]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return json.dumps(
