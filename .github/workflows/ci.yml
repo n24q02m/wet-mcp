@@ -46,7 +46,7 @@ jobs:
       - name: Install dependencies
         run: |
           # Remove local path dependency to allow CI to install from PyPI
-          sed -i 's/mcp-relay-core = { path = "..\/mcp-relay-core\/packages\/core-py", editable = true }/mcp-relay-core = ">=1.4.0"/g' pyproject.toml
+          sed -i 's/mcp-relay-core = { path = "..\/mcp-relay-core\/packages\/core-py", editable = true }/# mcp-relay-core/g' pyproject.toml
           uv sync --group dev
 
       - name: Run Ruff check
