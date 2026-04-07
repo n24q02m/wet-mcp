@@ -1047,8 +1047,11 @@ async def media(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if analyze_media returns plain text
                     pass
+                except Exception:
+                    logger.exception("Unexpected error formatting media analysis JSON")
             return result
 
         case _:
