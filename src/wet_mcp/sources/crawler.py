@@ -16,6 +16,7 @@ import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
+from urllib.request import url2pathname
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -243,6 +244,55 @@ async def _extract_with_markitdown(url: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+
+
+async def _extract_local_file(url: str) -> dict:
+    """Convert local file via markitdown if it starts with file://."""
+    from wet_mcp.security import is_safe_local_path
+
+    try:
+        parsed = urlparse(url)
+        path_str = url2pathname(parsed.path)
+
+        # Security policy for allowed directories
+        from wet_mcp.config import settings as _settings
+
+        if _settings.convert_allowed_dirs:
+            allowed_dirs = [
+                Path(d.strip())
+                for d in _settings.convert_allowed_dirs.split(",")
+                if d.strip()
+            ]
+        else:
+            # Default to allowing access only to the home directory and /tmp
+            # to prevent arbitrary file read of sensitive system files.
+            allowed_dirs = [Path.home().resolve(), Path("/tmp").resolve()]
+
+        safe_path = is_safe_local_path(
+            path_str,
+            allowed_dirs=allowed_dirs,
+            max_size=_settings.convert_max_file_size,
+        )
+
+        if safe_path is None:
+            return {
+                "url": url,
+                "error": f"Security Alert: Local path rejected or unsafe: {path_str}",
+            }
+
+        # _convert_file is defined later in this module
+        content = await asyncio.to_thread(_convert_file, safe_path)
+        return {
+            "url": url,
+            "title": safe_path.name,
+            "content": content,
+            "converter": "markitdown",
+        }
+    except Exception as e:
+        logger.error(f"Local file conversion failed for {url}: {e}")
+        return {"url": url, "error": f"Local file conversion failed: {e}"}
+
+
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -286,6 +336,10 @@ async def extract(
 
     async def process_url(url: str):
         async with sem:
+            if url.startswith("file://"):
+                logger.info(f"Local file URL detected, using markitdown: {url}")
+                return await _extract_local_file(url)
+
             if not is_safe_url(url):
                 logger.warning(f"Skipping unsafe URL: {url}")
                 return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
