@@ -526,7 +526,9 @@ async def _with_timeout(coro, action: str) -> str:
         pass
     except Exception as e:
         # Task raised an unexpected exception during grace period
-        logger.debug(f"Unexpected exception during grace period for tool '{action}': {e}")
+        logger.debug(
+            f"Unexpected exception during grace period for tool '{action}': {e}"
+        )
 
     logger.error(f"Tool '{action}' timed out after {timeout}s")
     return (
