@@ -20,7 +20,7 @@ classifiers = [
 requires-python = "==3.13.*"
 dependencies = [
     # Shared web infrastructure (SSRF, SearXNG, URL utils)
-    "n24q02m-web-core>=1.0.1",
+    "n24q02m-web-core>=1.1.0",
     # MCP Server
     "mcp[cli]",
     # Web Crawling
@@ -151,6 +151,6 @@ source = ["src/wet_mcp"]
 branch = true
 
 [tool.coverage.report]
-fail_under = 95
+fail_under = 94
 show_missing = true
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]

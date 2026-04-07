@@ -688,6 +688,21 @@ wheels = [
 ]
 
 [[package]]
+name = "gdown"
+version = "5.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "filelock" },
+    { name = "requests", extra = ["socks"] },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/cf/919a9fa16faf8e4572a24d941353edaf4d54e3ddcd048e6c1aeb8c7a9903/gdown-5.2.1.tar.gz", hash = "sha256:247c2ad1f579db5b66b54c04e6a871995fc8fd7021708b950b8ba7b32cf90323", size = 284743, upload-time = "2026-01-11T09:34:01.037Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/87/21/35dd0a0b7428bd67b12b358d7b4277f693493a3839b071d540a4c8357b78/gdown-5.2.1-py3-none-any.whl", hash = "sha256:391f0480d495fb87644d1a1ee3ddfeb2144e1de31408fbc74f7e3b3ba927052b", size = 18241, upload-time = "2026-01-11T09:34:02.637Z" },
+]
+
+[[package]]
 name = "google-api-core"
 version = "2.30.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1388,28 +1403,15 @@ cli = [
 [[package]]
 name = "mcp-relay-core"
 version = "1.4.0"
-source = { editable = "../mcp-relay-core/packages/core-py" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
     { name = "platformdirs" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "cryptography", specifier = ">=46.0.5" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "platformdirs", specifier = ">=4.3" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
-    { name = "pytest-cov", specifier = ">=7.1" },
-    { name = "pytest-timeout", specifier = ">=2.3" },
-    { name = "ruff", specifier = ">=0.15.8" },
-    { name = "ty", specifier = ">=0.0.24" },
+sdist = { url = "https://files.pythonhosted.org/packages/55/e7/52c2c559e6edd9f73b0af715c2f3bc2c8dd0cef53c1f31af462be4254340/mcp_relay_core-1.4.0.tar.gz", hash = "sha256:cef2bad3ffff862620d6c896a6639760ffbad92ebb9345b45057e3706fb1aedb", size = 67007, upload-time = "2026-04-06T00:45:30.263Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/89/be/f8b284742c25b900d50aa317b055569a72fdb6402df1d5c209c29b673942/mcp_relay_core-1.4.0-py3-none-any.whl", hash = "sha256:ed6ae8f610ee5dff48e67f42548403846f0119211687254fb8e54f638945f37d", size = 45159, upload-time = "2026-04-06T00:45:31.211Z" },
 ]
 
 [[package]]
@@ -1477,21 +1479,22 @@ wheels = [
 
 [[package]]
 name = "n24q02m-web-core"
-version = "1.0.1"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
     { name = "capsolver" },
     { name = "crawl4ai" },
     { name = "curl-cffi" },
+    { name = "gdown" },
     { name = "httpx" },
     { name = "langgraph" },
     { name = "patchright" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f5/f7/d3ca867c865eda059dae983b9e642896524310ca627f9a1eb1d67efc02e2/n24q02m_web_core-1.0.1.tar.gz", hash = "sha256:7fcccddc7b7080e2816ff8fcb0db4b6cbd890a8849a119d35740c8b3434081fb", size = 155329, upload-time = "2026-03-31T11:12:18.614Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/91/a13e5001d9cd803553e2ea2aba25ca33957edcd84c5fc7d8f40f4d16e308/n24q02m_web_core-1.1.0.tar.gz", hash = "sha256:8fda8dddf4d66f099c482cf4cfbd2de9fde5525710e616e2c33e77f14dcb4415", size = 172254, upload-time = "2026-04-06T09:02:50.625Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a1/2a/f59e7d353b5f44771bbf9e809325e1df480c6698305deb48190bb774e150/n24q02m_web_core-1.0.1-py3-none-any.whl", hash = "sha256:f915af75d5e020aa8f5d053e2c4f40d5474d621f6158508829e06c040b841748", size = 33409, upload-time = "2026-03-31T11:12:17.702Z" },
+    { url = "https://files.pythonhosted.org/packages/6d/7e/87aecaa32242c91bd0209ed9b3cc713d7dcceb87725c1e9d599c25813e17/n24q02m_web_core-1.1.0-py3-none-any.whl", hash = "sha256:756fbc86fd09a0320c2f7576940fd2a6dc36c98eb313a437d1f37637b71d6c22", size = 43993, upload-time = "2026-04-06T09:02:51.739Z" },
 ]
 
 [[package]]
@@ -2096,6 +2099,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pysocks"
+version = "1.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429, upload-time = "2019-09-20T02:07:35.714Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725, upload-time = "2019-09-20T02:06:22.938Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2344,6 +2356,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/34/64/8860370b167a9721e8956ae116825caff829224fbca0ca6e7bf8ddef8430/requests-2.33.0.tar.gz", hash = "sha256:c7ebc5e8b0f21837386ad0e1c8fe8b829fa5f544d8df3b2253bff14ef29d7652", size = 134232, upload-time = "2026-03-25T15:10:41.586Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/56/5d/c814546c2333ceea4ba42262d8c4d55763003e767fa169adc693bd524478/requests-2.33.0-py3-none-any.whl", hash = "sha256:3324635456fa185245e24865e810cecec7b4caf933d7eb133dcde67d48cee69b", size = 65017, upload-time = "2026-03-25T15:10:40.382Z" },
+]
+
+[package.optional-dependencies]
+socks = [
+    { name = "pysocks" },
 ]
 
 [[package]]
@@ -2899,7 +2916,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.23.5b2"
+version = "2.23.5b3"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -2955,8 +2972,8 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "mcp-relay-core", editable = "../mcp-relay-core/packages/core-py" },
-    { name = "n24q02m-web-core", specifier = ">=1.0.1" },
+    { name = "mcp-relay-core", specifier = ">=1.4.0" },
+    { name = "n24q02m-web-core", specifier = ">=1.1.0" },
     { name = "openai", specifier = ">=2.30.0" },
     { name = "pillow", specifier = ">=12.1.1" },
     { name = "pydantic" },
