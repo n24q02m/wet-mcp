@@ -38,6 +38,7 @@ from wet_mcp.sources.docs import (
     _strip_nav_blocks,
     _strip_nav_heading_blocks,
     _try_github_raw_docs,
+    chunk_llms_txt,
     chunk_markdown,
     discover_library,
     fetch_docs_pages,
@@ -1469,6 +1470,23 @@ class TestCleanDocContent:
 # ---------------------------------------------------------------------------
 # chunk_markdown — additional edge cases
 # ---------------------------------------------------------------------------
+
+
+class TestChunkLlmsTxtCoverage:
+    def test_chunk_llms_txt_delegation(self):
+        """chunk_llms_txt delegates to chunk_markdown with max_chunk_size=2000."""
+        content = "# Test Content"
+        base_url = "https://example.com"
+
+        with patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk:
+            mock_chunk.return_value = [{"content": "chunk1"}]
+
+            result = chunk_llms_txt(content, base_url=base_url)
+
+            mock_chunk.assert_called_once_with(
+                content, url=base_url, max_chunk_size=2000
+            )
+            assert result == [{"content": "chunk1"}]
 
 
 class TestChunkMarkdownCoverage:
