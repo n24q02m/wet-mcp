@@ -1,13 +1,16 @@
-import pytest
+import logging
 from unittest.mock import MagicMock, patch
+
 from loguru import logger
+
 from wet_mcp.setup_tool import _validate_cloud_models
+
 
 def test_validate_cloud_models_logging(caplog):
     """Verify that _validate_cloud_models logs exceptions at DEBUG level."""
+
     # Loguru doesn't use standard logging by default, so we need to bridge it
     def loguru_caplog_bridge(message):
-        import logging
         logging.getLogger().debug(message.record["message"])
 
     logger.remove()
@@ -18,9 +21,15 @@ def test_validate_cloud_models_logging(caplog):
     mock_settings.resolve_rerank_model.return_value = "test-rerank"
 
     with (
-        patch("wet_mcp.embedder.init_backend", side_effect=Exception("Embedding initialization failed")),
-        patch("wet_mcp.reranker.init_reranker", side_effect=Exception("Reranker initialization failed")),
-        caplog.at_level("DEBUG")
+        patch(
+            "wet_mcp.embedder.init_backend",
+            side_effect=Exception("Embedding initialization failed"),
+        ),
+        patch(
+            "wet_mcp.reranker.init_reranker",
+            side_effect=Exception("Reranker initialization failed"),
+        ),
+        caplog.at_level("DEBUG"),
     ):
         result = _validate_cloud_models(mock_settings)
 
@@ -28,13 +37,17 @@ def test_validate_cloud_models_logging(caplog):
     assert result["cloud_ready"] is False
 
     # Check for embedding failure log
-    assert "Cloud embedding candidate test-embed failed: Embedding initialization failed" in caplog.text
+    assert (
+        "Cloud embedding candidate test-embed failed: Embedding initialization failed"
+        in caplog.text
+    )
+
 
 def test_validate_cloud_models_reranker_logging(caplog):
     """Verify that _validate_cloud_models logs reranker exceptions at DEBUG level."""
+
     # Loguru doesn't use standard logging by default, so we need to bridge it
     def loguru_caplog_bridge(message):
-        import logging
         logging.getLogger().debug(message.record["message"])
 
     logger.remove()
@@ -49,8 +62,11 @@ def test_validate_cloud_models_reranker_logging(caplog):
 
     with (
         patch("wet_mcp.embedder.init_backend", return_value=mock_backend),
-        patch("wet_mcp.reranker.init_reranker", side_effect=Exception("Reranker initialization failed")),
-        caplog.at_level("DEBUG")
+        patch(
+            "wet_mcp.reranker.init_reranker",
+            side_effect=Exception("Reranker initialization failed"),
+        ),
+        caplog.at_level("DEBUG"),
     ):
         result = _validate_cloud_models(mock_settings)
 
@@ -59,4 +75,7 @@ def test_validate_cloud_models_reranker_logging(caplog):
     assert result["reranker"] is None
 
     # Check for reranker failure log
-    assert "Cloud reranker test-rerank failed: Reranker initialization failed" in caplog.text
+    assert (
+        "Cloud reranker test-rerank failed: Reranker initialization failed"
+        in caplog.text
+    )
