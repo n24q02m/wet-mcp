@@ -320,7 +320,8 @@ async def extract(
     """
     logger.info(f"Extracting content from {len(urls)} URLs")
 
-    crawler = await _get_crawler(stealth)
+    crawler = None
+
     sem = _get_semaphore()
 
     # Build CrawlerRunConfig with optional SPA-friendly settings
@@ -343,6 +344,11 @@ async def extract(
             if not is_safe_url(url):
                 logger.warning(f"Skipping unsafe URL: {url}")
                 return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
+
+            # Initialize crawler lazily only if we have at least one web URL
+            nonlocal crawler
+            if crawler is None:
+                crawler = await _get_crawler(stealth)
 
             # Route document URLs (PDF, DOCX, etc.) through markitdown
             if _is_document_url(url):
@@ -500,6 +506,8 @@ async def sitemap(
 
     all_urls: list[dict[str, object]] = []
     visited: set[str] = set()
+
+    crawler = None
 
     crawler = await _get_crawler(stealth=False)
     sem = _get_semaphore()
