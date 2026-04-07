@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from wet_mcp.token_store import (
+    _set_secure_permissions,
     get_token_path,
     load_token,
     save_token,
@@ -81,12 +82,35 @@ def test_save_token_creates_dir(tmp_path):
         assert (tmp_path / "tokens" / "s3.json").exists()
 
 
+def test_set_secure_permissions_windows(tmp_path):
+    """Verify icacls command construction on Windows."""
+    path = tmp_path / "test.json"
+    path.touch()
+
+    with (
+        patch("wet_mcp.token_store.os.name", "nt"),
+        patch("wet_mcp.token_store.getpass.getuser", return_value="testuser"),
+        patch("wet_mcp.token_store.subprocess.run") as mock_run,
+    ):
+        _set_secure_permissions(path)
+        mock_run.assert_called_once_with(
+            ["icacls", str(path), "/inheritance:r", "/grant:r", "testuser:F"],
+            check=True,
+            capture_output=True,
+        )
+
+
 def test_save_token_windows_permissions(token_dir):
-    """On Windows, skip chmod calls."""
+    """On Windows, verify icacls is called."""
     with (
         patch("wet_mcp.token_store.settings") as mock_settings,
         patch("wet_mcp.token_store.os.name", "nt"),
+        patch("wet_mcp.token_store.getpass.getuser", return_value="testuser"),
+        patch("wet_mcp.token_store.subprocess.run") as mock_run,
     ):
         mock_settings.get_data_dir.return_value = token_dir.parent
         save_token("drive", {"access_token": "test"})
+
+        # Should be called twice: once for the directory, once for the file
+        assert mock_run.call_count == 2
         assert load_token("drive") == {"access_token": "test"}
