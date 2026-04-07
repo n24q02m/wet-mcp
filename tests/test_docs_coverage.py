@@ -1487,6 +1487,63 @@ class TestChunkMarkdownCoverage:
 
 
 # ---------------------------------------------------------------------------
+
+    def test_chunk_markdown_h4(self):
+        """H4 headings are recognized and included in heading_path."""
+        content = """# Title 1
+## Title 2
+### Title 3
+#### Title 4
+
+This is the content of the H4 section. It needs to be long enough to pass the minimum size.
+More words to ensure we reach the 100 character threshold for a valid chunk.
+"""
+        result = chunk_markdown(content, min_chunk_size=10)
+        last_chunk = result[-1]
+        assert last_chunk["title"] == "Title 4"
+        assert last_chunk["heading_path"] == "Title 1 > Title 2 > Title 4"
+
+    def test_chunk_markdown_merging_h3_h4(self):
+        """Small H3 and H4 sections are merged until large enough or flushed by H1/H2."""
+        content = """## Main Section
+### Sub 1
+Small text.
+#### Sub 1.1
+More small text.
+### Sub 2
+This should all be in one chunk because none of the H3/H4 triggered a flush.
+The chunk should have the title and path of the last heading encountered.
+"""
+        result = chunk_markdown(content, min_chunk_size=10)
+        assert len(result) == 1
+        assert result[0]["title"] == "Sub 2"
+        assert result[0]["heading_path"] == "Main Section > Sub 2"
+
+    def test_chunk_markdown_h3_flush_large(self):
+        """H3 flushes current chunk if it exceeds half of max_chunk_size."""
+        content = "## Section 1\n\n" + ("Large content. " * 50) + "\n\n### Section 2\n\nSmall content."
+        result = chunk_markdown(content, max_chunk_size=1000, min_chunk_size=10)
+        assert len(result) >= 2
+        assert result[0]["title"] == "Section 1"
+        assert result[1]["title"] == "Section 2"
+
+    def test_chunk_markdown_path_no_h1_h2(self):
+        """heading_path construction when H1 and H2 are missing."""
+        content = "### Only H3\n\nSome content for the H3 section."
+        result = chunk_markdown(content, min_chunk_size=10)
+        assert result[0]["heading_path"] == "Only H3"
+
+    def test_chunk_markdown_multiple_h1(self):
+        """Subsequent H1 headings reset h2 and update heading_path."""
+        content = """# Page 1
+## Section 1.1
+This is enough content for Section 1.1 to be its own chunk.
+# Page 2
+This is enough content for Page 2 to be its own chunk.
+"""
+        result = chunk_markdown(content, min_chunk_size=10)
+        page2_chunk = [c for c in result if c["title"] == "Page 2"][0]
+        assert page2_chunk["heading_path"] == "Page 2"
 # _parse_objects_inv
 # ---------------------------------------------------------------------------
 
