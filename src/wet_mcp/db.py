@@ -1030,5 +1030,5 @@ class DocsDB:
         """Close database connection."""
         try:
             self._conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Error closing database connection: {e}")
