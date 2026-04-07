@@ -18,10 +18,18 @@ from functools import lru_cache
 from pathlib import Path
 
 from loguru import logger
+# Allowed SQL fragments for library updates to prevent injection
+_ALLOWED_LIBRARY_UPDATES = {
+    "docs_url = ?",
+    "registry = ?",
+    "description = ?",
+    "discovery_version = ?",
+    "updated_at = ?",
+}
 
 # Bump this when discovery scoring changes to invalidate stale caches.
-from wet_mcp.sources.docs import DISCOVERY_VERSION
 
+from wet_mcp.sources.docs import DISCOVERY_VERSION
 
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize float vector for sqlite-vec."""
@@ -366,6 +374,11 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                # Validate dynamic fragments against allowlist
+                for fragment in updates:
+                    if fragment not in _ALLOWED_LIBRARY_UPDATES:
+                        raise ValueError(f"Unauthorized update fragment: {fragment}")
+
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
                     f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
@@ -829,6 +842,31 @@ class DocsDB:
     # Export / Import (JSONL for sync)
     # -----------------------------------------------------------------------
 
+    def _get_existing_ids(self, table: str, ids: list[str]) -> set[str]:
+        """Check for existing IDs in a table using batched queries.
+
+        Validated against allowed tables to prevent SQL injection.
+        """
+        if table not in {"libraries", "versions", "doc_chunks"}:
+            raise ValueError(f"Invalid table name: {table}")
+
+        if not ids:
+            return set()
+
+        existing = set()
+        # SQLite's variable limit is 32766 for 3.32.0+, else 999
+        batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
+
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i : i + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            res = self._conn.execute(
+                f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
+            ).fetchall()
+            existing.update(r[0] for r in res)
+        return existing
+
     def export_jsonl(self) -> str:
         """Export all docs data as JSONL for sync."""
         lines = []
@@ -912,26 +950,10 @@ class DocsDB:
             elif obj_type == "chunk":
                 chunks.append(obj)
 
-        def _get_existing(table: str, items: list) -> set:
-            if table not in {"libraries", "versions", "doc_chunks"}:
-                raise ValueError(f"Invalid table name: {table}")
-            if not items:
-                return set()
-            ids = [obj["id"] for obj in items]
-            existing = set()
-            batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
-            for i in range(0, len(ids), batch_size):
-                batch = ids[i : i + batch_size]
-                placeholders = ",".join("?" * len(batch))
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})", batch
-                ).fetchall()
-                existing.update(r[0] for r in res)
-            return existing
+
 
         existing_libs = (
-            _get_existing("libraries", libraries) if mode == "merge" else set()
+            self._get_existing_ids("libraries", [obj["id"] for obj in libraries]) if mode == "merge" else set()
         )
         to_insert_libs = []
         for obj in libraries:
@@ -961,7 +983,7 @@ class DocsDB:
             stats["libraries"] += len(to_insert_libs)
 
         existing_vers = (
-            _get_existing("versions", versions) if mode == "merge" else set()
+            self._get_existing_ids("versions", [obj["id"] for obj in versions]) if mode == "merge" else set()
         )
         to_insert_vers = []
         for obj in versions:
@@ -992,7 +1014,7 @@ class DocsDB:
             stats["versions"] += len(to_insert_vers)
 
         existing_chunks = (
-            _get_existing("doc_chunks", chunks) if mode == "merge" else set()
+            self._get_existing_ids("doc_chunks", [obj["id"] for obj in chunks]) if mode == "merge" else set()
         )
         to_insert_chunks = []
         for obj in chunks:
