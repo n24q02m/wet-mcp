@@ -588,144 +588,29 @@ async def search(  # noqa: PLR0913
         case "search":
             if not query:
                 return 'Error: query is required for search action. Example: search(action="search", query="python async patterns")'
-            cache_params = {
-                "query": query,
-                "categories": categories,
-                "max_results": max_results,
-                "time_range": time_range,
-                "language": language,
-                "include_domains": include_domains,
-                "exclude_domains": exclude_domains,
-            }
-            if _web_cache:
-                cached = await asyncio.to_thread(_web_cache.get, "search", cache_params)
-                if cached:
-                    return cached
-            try:
-                searxng_url = await asyncio.wait_for(
-                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                )
-            except TimeoutError:
-                return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
-            except (SystemExit, Exception) as exc:
-                return f"Error: SearXNG startup failed: {exc}"
-            # Optional query expansion
-            search_query = query
-            if expand:
-                from wet_mcp.sources.search_strategies import expand_query
-
-                expanded = await expand_query(query)
-                if len(expanded) > 1:
-                    search_query = " OR ".join(expanded)
-
-            result = await _with_timeout(
-                searxng_search(
-                    searxng_url=searxng_url,
-                    query=search_query,
-                    categories=categories,
-                    max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
-                    time_range=time_range,
-                    language=language,
-                    include_domains=include_domains,
-                    exclude_domains=exclude_domains,
-                ),
-                "search",
+            return await _do_web_search(
+                query=query,
+                categories=categories,
+                max_results=max_results,
+                time_range=time_range,
+                language=language,
+                include_domains=include_domains,
+                exclude_domains=exclude_domains,
+                expand=expand,
+                enrich=enrich,
             )
-            if not result.startswith("Error"):
-                try:
-                    data = json.loads(result)
-                    modified = False
-
-                    # Rerank by semantic relevance (same as research/docs)
-                    try:
-                        results_list = data.get("results", [])
-                        if results_list:
-                            # Map snippet -> content for reranker (fallback to title)
-                            for r in results_list:
-                                if "content" not in r:
-                                    r["content"] = r.get("snippet", r.get("title", ""))
-                            reranked = await _rerank_results(
-                                query, results_list, top_n=max_results
-                            )
-                            if reranked:
-                                data["results"] = [
-                                    r for r in reranked if r.get("score", 1.0) > 0.2
-                                ]
-                                data["total"] = len(data["results"])
-                                modified = True
-                    except Exception as e:
-                        logger.debug(f"Search reranking failed, using original: {e}")
-
-                    # Optional snippet enrichment
-                    if enrich:
-                        try:
-                            results_list = data.get("results", [])
-                            if results_list:
-                                from wet_mcp.sources.search_strategies import (
-                                    enrich_snippets,
-                                )
-
-                                enriched = await enrich_snippets(
-                                    results_list, query, top_n=5
-                                )
-                                data["results"] = enriched
-                                modified = True
-                        except Exception as e:
-                            logger.debug(f"Snippet enrichment failed: {e}")
-
-                    if modified:
-                        result = json.dumps(data, ensure_ascii=False, indent=2)
-                except json.JSONDecodeError:
-                    pass
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
-            if not result.startswith("Error"):
-                try:
-                    _data = json.loads(result)
-                    result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
-                    pass
-            return result
 
         case "research":
             if not query:
                 return 'Error: query is required for research action. Example: search(action="research", query="transformer attention mechanism")'
-            cache_params = {
-                "query": query,
-                "max_results": max_results,
-                "time_range": time_range,
-                "language": language,
-                "include_domains": include_domains,
-                "exclude_domains": exclude_domains,
-            }
-            if _web_cache:
-                cached = await asyncio.to_thread(
-                    _web_cache.get, "research", cache_params
-                )
-                if cached:
-                    return cached
-            result = await _with_timeout(
-                _do_research(
-                    query=query,
-                    max_results=max_results,
-                    time_range=time_range,
-                    language=language,
-                    include_domains=include_domains,
-                    exclude_domains=exclude_domains,
-                ),
-                "research",
+            return await _do_research_with_cache(
+                query=query,
+                max_results=max_results,
+                time_range=time_range,
+                language=language,
+                include_domains=include_domains,
+                exclude_domains=exclude_domains,
             )
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(
-                    _web_cache.set, "research", cache_params, result
-                )
-            if not result.startswith("Error"):
-                try:
-                    _data = json.loads(result)
-                    result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
-                    pass
-            return result
 
         case "docs":
             if not library:
@@ -748,20 +633,7 @@ async def search(  # noqa: PLR0913
                 return 'Error: query (URL) is required for similar action. Example: search(action="similar", query="https://example.com/article")'
             if not query.startswith(("http://", "https://")):
                 return 'Error: query must be a full URL starting with http:// or https://. Example: search(action="similar", query="https://example.com/article"). If you want to search by keywords instead, use action="search".'
-            try:
-                searxng_url = await asyncio.wait_for(
-                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                )
-            except (TimeoutError, SystemExit, Exception) as exc:
-                return f"Error: SearXNG startup failed: {exc}"
-            from wet_mcp.sources.search_strategies import find_similar
-
-            return await _with_timeout(
-                find_similar(
-                    url=query, max_results=max_results, searxng_url=searxng_url
-                ),
-                "similar",
-            )
+            return await _do_similar_search(query, max_results=max_results)
 
         case _:
             import difflib
@@ -1419,6 +1291,43 @@ async def setup(
 # ---------------------------------------------------------------------------
 
 
+async def _do_research_with_cache(
+    query: str,
+    max_results: int = 10,
+    time_range: str | None = None,
+    language: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+) -> str:
+    """Perform academic research with caching."""
+    cache_params = {
+        "query": query,
+        "max_results": max_results,
+        "time_range": time_range,
+        "language": language,
+        "include_domains": include_domains,
+        "exclude_domains": exclude_domains,
+    }
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "research", cache_params)
+        if cached:
+            return cached
+    result = await _with_timeout(
+        _do_research(
+            query=query,
+            max_results=max_results,
+            time_range=time_range,
+            language=language,
+            include_domains=include_domains,
+            exclude_domains=exclude_domains,
+        ),
+        "research",
+    )
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "research", cache_params, result)
+    return _format_json_result(result)
+
+
 async def _do_research(
     query: str,
     max_results: int = 10,
@@ -2068,3 +1977,137 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover
     main()
+
+
+async def _do_web_search(
+    query: str,
+    categories: str = "general",
+    max_results: int = 10,
+    time_range: str | None = None,
+    language: str | None = None,
+    include_domains: list[str] | None = None,
+    exclude_domains: list[str] | None = None,
+    expand: bool = False,
+    enrich: bool = False,
+) -> str:
+    """Perform web search via SearXNG with optional expansion, reranking and enrichment."""
+    cache_params = {
+        "query": query,
+        "categories": categories,
+        "max_results": max_results,
+        "time_range": time_range,
+        "language": language,
+        "include_domains": include_domains,
+        "exclude_domains": exclude_domains,
+    }
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "search", cache_params)
+        if cached:
+            return cached
+
+    try:
+        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
+    except TimeoutError:
+        return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
+    except (SystemExit, Exception) as exc:
+        return f"Error: SearXNG startup failed: {exc}"
+
+    # Optional query expansion
+    search_query = query
+    if expand:
+        from wet_mcp.sources.search_strategies import expand_query
+
+        expanded = await expand_query(query)
+        if len(expanded) > 1:
+            search_query = " OR ".join(expanded)
+
+    result = await _with_timeout(
+        searxng_search(
+            searxng_url=searxng_url,
+            query=search_query,
+            categories=categories,
+            max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
+            time_range=time_range,
+            language=language,
+            include_domains=include_domains,
+            exclude_domains=exclude_domains,
+        ),
+        "search",
+    )
+
+    if not result.startswith("Error"):
+        try:
+            data = json.loads(result)
+            modified = False
+
+            # Rerank by semantic relevance
+            try:
+                results_list = data.get("results", [])
+                if results_list:
+                    # Map snippet -> content for reranker (fallback to title)
+                    for r in results_list:
+                        if "content" not in r:
+                            r["content"] = r.get("snippet", r.get("title", ""))
+                    reranked = await _rerank_results(
+                        query, results_list, top_n=max_results
+                    )
+                    if reranked:
+                        data["results"] = [
+                            r for r in reranked if r.get("score", 1.0) > 0.2
+                        ]
+                        data["total"] = len(data["results"])
+                        modified = True
+            except Exception as e:
+                logger.debug(f"Search reranking failed, using original: {e}")
+
+            # Optional snippet enrichment
+            if enrich:
+                try:
+                    results_list = data.get("results", [])
+                    if results_list:
+                        from wet_mcp.sources.search_strategies import enrich_snippets
+
+                        enriched = await enrich_snippets(results_list, query, top_n=5)
+                        data["results"] = enriched
+                        modified = True
+                except Exception as e:
+                    logger.debug(f"Snippet enrichment failed: {e}")
+
+            if modified:
+                result = json.dumps(data, ensure_ascii=False, indent=2)
+        except json.JSONDecodeError:
+            pass
+
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
+
+    return _format_json_result(result)
+
+
+async def _do_similar_search(
+    url: str,
+    max_results: int = 10,
+) -> str:
+    """Find pages similar to a URL."""
+    try:
+        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
+    except (TimeoutError, SystemExit, Exception) as exc:
+        return f"Error: SearXNG startup failed: {exc}"
+
+    from wet_mcp.sources.search_strategies import find_similar
+
+    return await _with_timeout(
+        find_similar(url=url, max_results=max_results, searxng_url=searxng_url),
+        "similar",
+    )
+
+
+def _format_json_result(result: str) -> str:
+    """Safely pretty-print JSON result string."""
+    if result.startswith("Error"):
+        return result
+    try:
+        data = json.loads(result)
+        return json.dumps(data, ensure_ascii=False, indent=2)
+    except (json.JSONDecodeError, Exception):
+        return result
