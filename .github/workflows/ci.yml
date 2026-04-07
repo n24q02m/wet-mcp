@@ -25,6 +25,8 @@ jobs:
     name: Lint & Test
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
+    env:
+      UV_NO_SOURCES: "true"
 
     steps:
       - name: Harden Runner
@@ -44,7 +46,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: uv sync --group dev --no-sources
+        run: uv sync --group dev
 
       - name: Run Ruff check
         run: uv run ruff check .
