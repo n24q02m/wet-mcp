@@ -5,7 +5,7 @@ batch splitting, retry logic, Qwen3EmbedBackend (local ONNX), factory functions,
 and provider detection helpers.
 """
 
-from unittest.mock import MagicMock, call, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 

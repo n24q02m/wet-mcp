@@ -103,7 +103,7 @@ class TestRemoveDiscoveryExceptionPath:
 class TestQuickHealthCheckRetryBackoff:
     """Cover line 198: asyncio.sleep in retry backoff."""
 
-    async async def test_health_check_retries_with_backoff(self):
+    async def test_health_check_retries_with_backoff(self):
         from web_core.search.runner import _quick_health_check
 
         mock_client = AsyncMock()
@@ -131,7 +131,7 @@ class TestQuickHealthCheckRetryBackoff:
 class TestTryReuseExistingMissingFields:
     """Cover line 215: missing port or pid in discovery data."""
 
-    async async def test_try_reuse_missing_port(self):
+    async def test_try_reuse_missing_port(self):
         from web_core.search.runner import _try_reuse_existing
 
         with patch(
@@ -141,7 +141,7 @@ class TestTryReuseExistingMissingFields:
             result = await _try_reuse_existing()
             assert result is None
 
-    async async def test_try_reuse_missing_pid(self):
+    async def test_try_reuse_missing_pid(self):
         from web_core.search.runner import _try_reuse_existing
 
         with patch(
@@ -155,7 +155,7 @@ class TestTryReuseExistingMissingFields:
 class TestWaitForServiceTimeout:
     """Cover lines 282-285: _wait_for_service timeout loop with sleep."""
 
-    async async def test_wait_for_service_retries_then_fails(self):
+    async def test_wait_for_service_retries_then_fails(self):
         from web_core.search.runner import _wait_for_service
 
         mock_client = AsyncMock()
@@ -567,7 +567,7 @@ class TestCleanupProcessSettingsFile:
 class TestHandleRestartCrashDiagnostics:
     """Cover lines 747-748: stderr read exception during crash diagnostics."""
 
-    async async def test_crash_stderr_read_exception(self):
+    async def test_crash_stderr_read_exception(self):
         import web_core.search.runner as module
         from web_core.search.runner import _handle_restart_and_start
 
@@ -597,7 +597,7 @@ class TestHandleRestartCrashDiagnostics:
 class TestEnsureSearxngHealthyUnhealthy:
     """Cover lines 46-59: unhealthy path with restart attempt."""
 
-    async async def test_unhealthy_triggers_restart(self):
+    async def test_unhealthy_triggers_restart(self):
         from wet_mcp.sources.searxng import _ensure_searxng_healthy
 
         # First health check fails, restart succeeds, second health check succeeds
@@ -615,7 +615,7 @@ class TestEnsureSearxngHealthyUnhealthy:
             result = await _ensure_searxng_healthy("http://localhost:8080")
             assert result == "http://127.0.0.1:9090"
 
-    async async def test_unhealthy_restart_still_unhealthy(self):
+    async def test_unhealthy_restart_still_unhealthy(self):
         from wet_mcp.sources.searxng import _ensure_searxng_healthy
 
         # Both health checks fail
@@ -633,7 +633,7 @@ class TestEnsureSearxngHealthyUnhealthy:
             result = await _ensure_searxng_healthy("http://localhost:8080")
             assert result == "http://127.0.0.1:9090"
 
-    async async def test_healthy_no_restart(self):
+    async def test_healthy_no_restart(self):
         from wet_mcp.sources.searxng import _ensure_searxng_healthy
 
         with patch(
@@ -647,7 +647,7 @@ class TestEnsureSearxngHealthyUnhealthy:
 class TestCheckHealth:
     """Cover _check_health success and exception paths."""
 
-    async async def test_check_health_success(self):
+    async def test_check_health_success(self):
         from wet_mcp.sources.searxng import _check_health
 
         with patch("wet_mcp.sources.searxng.httpx.AsyncClient") as mock_client_cls:
@@ -662,7 +662,7 @@ class TestCheckHealth:
             result = await _check_health("http://localhost:8080")
             assert result is True
 
-    async async def test_check_health_exception(self):
+    async def test_check_health_exception(self):
         from wet_mcp.sources.searxng import _check_health
 
         with patch("wet_mcp.sources.searxng.httpx.AsyncClient") as mock_client_cls:
@@ -679,7 +679,7 @@ class TestCheckHealth:
 class TestSearchDedup:
     """Cover lines 134-143: URL dedup merge logic with multiple engines."""
 
-    async async def test_search_dedup_merges_engines_and_keeps_longer_snippet(self):
+    async def test_search_dedup_merges_engines_and_keeps_longer_snippet(self):
         import unittest.mock
 
         from wet_mcp.sources.searxng import search
@@ -814,7 +814,7 @@ class TestDetectDocumentContentType:
 class TestExtractWithMarkitdown:
     """Cover lines 189-217: _extract_with_markitdown error paths."""
 
-    async async def test_markitdown_import_error(self):
+    async def test_markitdown_import_error(self):
         from wet_mcp.sources.crawler import _extract_with_markitdown
 
         with patch.dict("sys.modules", {"markitdown": None}):
@@ -823,7 +823,7 @@ class TestExtractWithMarkitdown:
                 assert "error" in result
                 assert "markitdown not installed" in result["error"]
 
-    async async def test_markitdown_conversion_error(self):
+    async def test_markitdown_conversion_error(self):
         from wet_mcp.sources.crawler import _extract_with_markitdown
 
         mock_md = MagicMock()
@@ -849,7 +849,7 @@ class TestExtractWithMarkitdown:
             assert "error" in result
             assert "Document conversion failed" in result["error"]
 
-    async async def test_markitdown_http_error(self):
+    async def test_markitdown_http_error(self):
         from wet_mcp.sources.crawler import _extract_with_markitdown
 
         mock_response = MagicMock()
@@ -877,7 +877,7 @@ class TestExtractWithMarkitdown:
 class TestGetCrawlerRetryOnFailure:
     """Cover line 143: RuntimeError after browser start retry fails."""
 
-    async async def test_get_crawler_retry_exhausted(self):
+    async def test_get_crawler_retry_exhausted(self):
         import wet_mcp.sources.crawler as crawler_mod
         from wet_mcp.sources.crawler import _get_crawler
 
@@ -897,7 +897,7 @@ class TestGetCrawlerRetryOnFailure:
 class TestExtractDocumentUrl:
     """Cover line 270-271: document URL routing in extract."""
 
-    async async def test_extract_routes_document_to_markitdown(self):
+    async def test_extract_routes_document_to_markitdown(self):
         from wet_mcp.sources.crawler import extract
 
         mock_crawler = AsyncMock()
@@ -930,7 +930,7 @@ class TestExtractDocumentUrl:
 class TestCrawlSkipsVisitedAndDepth:
     """Cover lines 353, 437: visited/depth skip in crawl/sitemap."""
 
-    async async def test_sitemap_skips_visited_urls(self):
+    async def test_sitemap_skips_visited_urls(self):
         from wet_mcp.sources.crawler import sitemap
 
         mock_crawler = AsyncMock()
@@ -956,7 +956,7 @@ class TestCrawlSkipsVisitedAndDepth:
 class TestExtractErrorPath:
     """Cover line 579: error in extract process_url."""
 
-    async async def test_extract_crawl_error(self):
+    async def test_extract_crawl_error(self):
         from wet_mcp.sources.crawler import extract
 
         mock_crawler = AsyncMock()
