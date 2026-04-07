@@ -1,7 +1,6 @@
 """Tests for wet_mcp.token_store module."""
 
 import json
-import os
 from pathlib import Path
 from unittest.mock import patch
 
