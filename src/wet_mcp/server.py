@@ -123,7 +123,7 @@ def _detect_gh_token() -> str | None:
             token = result.stdout.strip()
             if token:
                 return token
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         pass
     return None
 
@@ -313,7 +313,8 @@ async def _init_embedding_backend(mode: str) -> None:
                         f"(native={native_dims}, stored={_embedding_dims})"
                     )
                     return
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Cloud embedding candidate {candidate} failed: {e}")
                 continue
 
     logger.error("Cloud embedding not available and local fallback is disabled")
@@ -683,8 +684,10 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    logger.debug(f"JSON reformatting failed: {e}")
             return result
 
         case "research":
@@ -723,8 +726,10 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    logger.debug(f"JSON reformatting failed: {e}")
             return result
 
         case "docs":
@@ -854,8 +859,10 @@ async def extract(
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    logger.debug(f"JSON reformatting failed: {e}")
             return result
 
         case "batch":
@@ -1047,8 +1054,10 @@ async def media(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    logger.debug(f"JSON reformatting failed: {e}")
             return result
 
         case _:
