@@ -15,6 +15,7 @@ import os
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.request import url2pathname
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -286,6 +287,29 @@ async def extract(
 
     async def process_url(url: str):
         async with sem:
+            # Handle file:// URLs
+            if url.startswith("file://"):
+                from wet_mcp.config import settings as _settings
+
+                logger.info(f"Local file URL detected: {url}")
+                path_str = url2pathname(urlparse(url).path)
+
+                if _settings.convert_allowed_dirs:
+                    allowed_dirs = [
+                        Path(d.strip())
+                        for d in _settings.convert_allowed_dirs.split(",")
+                        if d.strip()
+                    ]
+                else:
+                    allowed_dirs = [Path.home().resolve(), Path("/tmp").resolve()]
+
+                return await _extract_local_file(
+                    path_str,
+                    allowed_dirs=allowed_dirs,
+                    max_size=_settings.convert_max_file_size,
+                    url_for_result=url,
+                )
+
             if not is_safe_url(url):
                 logger.warning(f"Skipping unsafe URL: {url}")
                 return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
@@ -774,6 +798,44 @@ async def batch_extract(
 # ---------------------------------------------------------------------------
 
 
+async def _extract_local_file(
+    path_str: str,
+    allowed_dirs: list[Path] | None = None,
+    max_size: int = 0,
+    url_for_result: str | None = None,
+) -> dict:
+    """Helper to extract a local file safely and return a dict."""
+    from wet_mcp.security import is_safe_local_path
+
+    safe_path = is_safe_local_path(
+        path_str,
+        allowed_dirs=allowed_dirs,
+        max_size=max_size,
+    )
+    if safe_path is None:
+        return {
+            "url" if url_for_result else "path": url_for_result or path_str,
+            "error": f"Path rejected: {path_str}",
+        }
+
+    try:
+        content = await asyncio.to_thread(_convert_file, safe_path)
+        res = {
+            "content": content,
+            "title": safe_path.name,
+        }
+        if url_for_result:
+            res["url"] = url_for_result
+        else:
+            res["path"] = str(safe_path)
+        return res
+    except Exception as e:
+        return {
+            "url" if url_for_result else "path": url_for_result or path_str,
+            "error": str(e),
+        }
+
+
 async def convert_local_files(paths: list[str]) -> str:
     """Convert local files to Markdown via markitdown.
 
@@ -787,7 +849,6 @@ async def convert_local_files(paths: list[str]) -> str:
         return f"Error: Maximum {_MAX_CONVERT_FILES} files per call (got {len(paths)})"
 
     from wet_mcp.config import settings as _settings
-    from wet_mcp.security import is_safe_local_path
 
     if _settings.convert_allowed_dirs:
         allowed_dirs = [
@@ -800,29 +861,15 @@ async def convert_local_files(paths: list[str]) -> str:
         # to prevent arbitrary file read of sensitive system files.
         allowed_dirs = [Path.home().resolve(), Path("/tmp").resolve()]
 
-    results = []
-    for path_str in paths:
-        safe_path = is_safe_local_path(
-            path_str,
+    tasks = [
+        _extract_local_file(
+            p,
             allowed_dirs=allowed_dirs,
             max_size=_settings.convert_max_file_size,
         )
-        if safe_path is None:
-            results.append({"path": path_str, "error": f"Path rejected: {path_str}"})
-            continue
-
-        try:
-            content = await asyncio.to_thread(_convert_file, safe_path)
-            results.append(
-                {
-                    "path": str(safe_path),
-                    "content": content,
-                    "title": safe_path.name,
-                }
-            )
-        except Exception as e:
-            results.append({"path": path_str, "error": str(e)})
-
+        for p in paths
+    ]
+    results = await asyncio.gather(*tasks)
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 

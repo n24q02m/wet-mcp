@@ -802,7 +802,7 @@ async def extract(
     """Read and return full page content from URLs or local files. Use this when you have a specific URL and need its content. For finding URLs first, use the `search` tool instead.
 
     Actions:
-    - extract: Get clean content from URLs. Example: extract(action="extract", urls=["https://example.com/article"])
+    - extract: Get clean content from URLs (including file:// URLs). Example: extract(action="extract", urls=["https://example.com/article"])
     - batch: Batch extract with per-domain rate limiting (max 50 URLs). Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])
     - crawl: Deep crawl following links from root URLs. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)
     - map: Discover site URL structure without extracting content. Example: extract(action="map", urls=["https://example.com"])
@@ -810,7 +810,7 @@ async def extract(
     - extract_structured: Extract structured data using JSON Schema + LLM. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})
 
     Key parameters:
-    - urls (required for extract/batch/crawl/map/extract_structured): List of URLs
+    - urls (required for extract/batch/crawl/map/extract_structured): List of URLs (including file:// URLs)
     - paths (required for convert): List of local file paths
     - format: Output format -- "markdown" (default), "text", "html"
     - depth: Crawl depth (default: 2, max: 5)
