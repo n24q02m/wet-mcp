@@ -1,12 +1,14 @@
 """Tests for wet_mcp.token_store module."""
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from wet_mcp.token_store import (
+    _get_token_dir,
     get_token_path,
     load_token,
     save_token,
@@ -21,6 +23,13 @@ def token_dir(tmp_path):
     with patch("wet_mcp.token_store.settings") as mock_settings:
         mock_settings.get_data_dir.return_value = tmp_path
         yield d
+
+
+def test_get_token_dir(tmp_path):
+    """Test _get_token_dir helper."""
+    with patch("wet_mcp.token_store.settings") as mock_settings:
+        mock_settings.get_data_dir.return_value = tmp_path
+        assert _get_token_dir() == tmp_path / "tokens"
 
 
 def test_get_token_path(token_dir):
@@ -58,10 +67,17 @@ def test_load_invalid_json(token_dir):
         assert load_token("drive") is None
 
 
-def test_load_no_access_token(token_dir):
+def test_load_invalid_format(token_dir):
+    """Test load_token with JSON that is not a dict or missing access_token."""
     with patch("wet_mcp.token_store.settings") as mock_settings:
         mock_settings.get_data_dir.return_value = token_dir.parent
         path = get_token_path("drive")
+
+        # Not a dict
+        path.write_text(json.dumps(["not a dict"]), encoding="utf-8")
+        assert load_token("drive") is None
+
+        # Missing access_token
         path.write_text(json.dumps({"refresh_token": "xyz"}), encoding="utf-8")
         assert load_token("drive") is None
 
@@ -79,6 +95,19 @@ def test_save_token_creates_dir(tmp_path):
         mock_settings.get_data_dir.return_value = tmp_path
         save_token("s3", {"access_token": "abc"})
         assert (tmp_path / "tokens" / "s3.json").exists()
+
+
+def test_save_token_chmod_error(token_dir):
+    """Test that save_token handles chmod OSError gracefully on Unix."""
+    with (
+        patch("wet_mcp.token_store.settings") as mock_settings,
+        patch("os.chmod", side_effect=OSError("perm error")),
+        patch("wet_mcp.token_store.os.name", "posix"),
+    ):
+        mock_settings.get_data_dir.return_value = token_dir.parent
+        # Should not raise exception
+        save_token("drive", {"access_token": "test"})
+        assert (token_dir / "drive.json").exists()
 
 
 def test_save_token_windows_permissions(token_dir):
