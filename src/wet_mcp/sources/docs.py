@@ -3278,7 +3278,7 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
         async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
             resp = await client.get(base_url)
             actual_url = str(resp.url).rstrip("/") + "/"
-    except Exception:
+    except httpx.HTTPError:
         actual_url = base_url.rstrip("/") + "/"
 
     # Build candidate URLs for objects.inv:
@@ -3303,7 +3303,7 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
             for inv_url in unique_candidates:
                 try:
                     resp = await client.get(inv_url)
-                except Exception:
+                except httpx.HTTPError:
                     continue
                 if resp.status_code != 200:
                     continue
@@ -3321,8 +3321,8 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
                         f"Found {len(result)} URLs from objects.inv at {inv_url}"
                     )
                     return result[:max_urls]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Error in _try_objects_inv: {e}")
 
     return []
 
@@ -3350,7 +3350,8 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
     try:
         decompressed = zlib.decompress(compressed)
         text = decompressed.decode("utf-8", errors="replace")
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Error parsing objects.inv: {e}")
         return []
 
     # Parse entries — only std:doc (pages) and std:label (sections)
