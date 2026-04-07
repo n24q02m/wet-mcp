@@ -12,6 +12,7 @@ Tests all configuration combinations:
 Run with: uv run pytest tests/test_real_comprehensive.py -v -m integration --timeout=120
 """
 
+import asyncio
 import json
 import os
 
@@ -44,42 +45,42 @@ class TestDocsDiscoveryFixes:
         """Ensure fresh discovery (no stale cache)."""
         pass
 
-    async def test_vinejs_discovery(self):
+    async async def test_vinejs_discovery(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("vinejs")
         assert result is not None, "vinejs should be discovered"
         assert "vinejs.dev" in result.get("homepage", ""), f"Got: {result}"
 
-    async def test_vinejs_scoped_discovery(self):
+    async async def test_vinejs_scoped_discovery(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("@vinejs/vine")
         assert result is not None, "@vinejs/vine should be discovered"
         assert "vinejs.dev" in result.get("homepage", ""), f"Got: {result}"
 
-    async def test_inertia_discovery(self):
+    async async def test_inertia_discovery(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("inertia")
         assert result is not None, "inertia should be discovered"
         assert "inertiajs.com" in result.get("homepage", ""), f"Got: {result}"
 
-    async def test_inertiajs_react_discovery(self):
+    async async def test_inertiajs_react_discovery(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("@inertiajs/react")
         assert result is not None, "@inertiajs/react should be discovered"
         assert "inertiajs.com" in result.get("homepage", ""), f"Got: {result}"
 
-    async def test_dry_rb_discovery(self):
+    async async def test_dry_rb_discovery(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("dry-rb")
         assert result is not None, "dry-rb should be discovered"
         assert "dry-rb.org" in result.get("homepage", ""), f"Got: {result}"
 
-    async def test_dry_validation_discovery(self):
+    async async def test_dry_validation_discovery(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("dry-validation")
@@ -95,7 +96,7 @@ class TestDocsDiscoveryFixes:
 class TestSearchTool:
     """Test search tool with embedded SearXNG."""
 
-    async def test_general_search(self):
+    async async def test_general_search(self):
         from wet_mcp.config import settings
         from wet_mcp.sources.searxng import search
 
@@ -104,7 +105,7 @@ class TestSearchTool:
         data = json.loads(result)
         assert len(data) > 0, "General search should return results"
 
-    async def test_academic_search(self):
+    async async def test_academic_search(self):
         from wet_mcp.config import settings
         from wet_mcp.sources.searxng import search
 
@@ -118,21 +119,21 @@ class TestSearchTool:
         data = json.loads(result)
         assert len(data) > 0, "Academic search should return results"
 
-    async def test_docs_search_fastapi(self):
+    async async def test_docs_search_fastapi(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("fastapi", language="python")
         assert result is not None
         assert "fastapi" in result.get("homepage", "").lower()
 
-    async def test_docs_search_react(self):
+    async async def test_docs_search_react(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("react", language="javascript")
         assert result is not None
         assert "react" in result.get("homepage", "").lower()
 
-    async def test_docs_search_axum(self):
+    async async def test_docs_search_axum(self):
         from wet_mcp.sources.docs import discover_library
 
         result = await discover_library("axum", language="rust")
@@ -152,7 +153,7 @@ class TestExternalSearXNG:
         if not _SEARXNG_AUTH_PASS:
             pytest.skip("SEARXNG_AUTH_PASS not set")
 
-    async def test_external_searxng_search(self):
+    async async def test_external_searxng_search(self):
         import httpx
 
         async with httpx.AsyncClient(timeout=30) as client:
@@ -175,7 +176,7 @@ class TestExternalSearXNG:
 class TestExtractTool:
     """Test content extraction including document conversion."""
 
-    async def test_extract_web_page(self):
+    async async def test_extract_web_page(self):
         from wet_mcp.sources.crawler import extract
 
         result = await extract(
@@ -188,7 +189,7 @@ class TestExtractTool:
         assert "content" in data[0], f"Extract failed: {data[0]}"
         assert len(data[0]["content"]) > 100
 
-    async def test_extract_pdf_markitdown(self):
+    async async def test_extract_pdf_markitdown(self):
         """Test PDF extraction via markitdown."""
         from wet_mcp.sources.crawler import extract
 
@@ -205,7 +206,7 @@ class TestExtractTool:
         if "converter" in data[0]:
             assert data[0]["converter"] == "markitdown"
 
-    async def test_is_document_url_detection(self):
+    async async def test_is_document_url_detection(self):
         from wet_mcp.sources.crawler import _is_document_url
 
         assert _is_document_url("https://example.com/file.pdf")
@@ -223,14 +224,14 @@ class TestExtractTool:
 class TestLiteLLMProxy:
     """Test with LiteLLM proxy (oci-vm-infra)."""
 
-    async def test_proxy_reachable(self):
+    async async def test_proxy_reachable(self):
         import httpx
 
         async with httpx.AsyncClient(timeout=10) as client:
             resp = await client.get(f"{LITELLM_PROXY_URL}/health/liveliness")
             assert resp.status_code == 200
 
-    async def test_proxy_chat(self):
+    async async def test_proxy_chat(self):
         """Test LLM chat via proxy using openai-compatible endpoint."""
         import httpx
 
@@ -251,7 +252,7 @@ class TestLiteLLMProxy:
             data = resp.json()
             assert data["choices"][0]["message"]["content"]
 
-    async def test_proxy_rerank(self):
+    async async def test_proxy_rerank(self):
         """Test reranking via proxy using OpenAI-compatible endpoint."""
         import httpx
 
@@ -276,7 +277,7 @@ class TestLiteLLMProxy:
             data = resp.json()
             assert len(data["results"]) > 0
 
-    async def test_proxy_rerank_via_litellm_sdk(self):
+    async async def test_proxy_rerank_via_litellm_sdk(self):
         """Test reranking via proxy using LiteLLM SDK with proxy mode flag."""
         import os
 
@@ -347,7 +348,7 @@ class TestLiteLLMSDK:
             pytest.skip("No running wet-mcp process with API_KEYS")
         self.api_keys_raw = result.stdout.strip().split("=", 1)[1]
 
-    async def test_sdk_embedding_gemini(self):
+    async async def test_sdk_embedding_gemini(self):
         """Test embedding via Gemini API directly."""
         # Parse GOOGLE_API_KEY from API_KEYS format
         google_key = None
@@ -368,7 +369,7 @@ class TestLiteLLMSDK:
         assert len(resp.data) == 1
         assert len(resp.data[0]["embedding"]) > 0
 
-    async def test_sdk_chat_gemini(self):
+    async async def test_sdk_chat_gemini(self):
         """Test chat via Gemini API directly."""
         google_key = None
         for pair in self.api_keys_raw.split(","):
@@ -415,7 +416,7 @@ class TestModalWorkers:
         if not MODAL_API_KEY:
             pytest.skip("WORKER_API_KEY not set")
 
-    async def test_modal_embedding(self):
+    async async def test_modal_embedding(self):
         """Test Qwen3-Embedding-0.6B via Modal (OpenAI-compatible)."""
         import httpx
 
@@ -436,7 +437,7 @@ class TestModalWorkers:
             assert len(data["data"]) == 2
             assert len(data["data"][0]["embedding"]) == 1024
 
-    async def test_modal_reranking(self):
+    async async def test_modal_reranking(self):
         """Test Qwen3-Reranker-0.6B via Modal (Cohere-compatible)."""
         import httpx
 
@@ -464,7 +465,7 @@ class TestModalWorkers:
             top = data["results"][0]
             assert top["index"] == 0
 
-    async def test_modal_embedding_via_litellm_sdk(self):
+    async async def test_modal_embedding_via_litellm_sdk(self):
         """Test Modal embedding via LiteLLM SDK (openai/ provider)."""
         import litellm
 
@@ -478,7 +479,7 @@ class TestModalWorkers:
         assert len(response.data) == 2
         assert len(response.data[0]["embedding"]) == 1024
 
-    async def test_modal_reranking_via_litellm_sdk(self):
+    async async def test_modal_reranking_via_litellm_sdk(self):
         """Test Modal reranking via LiteLLM SDK (cohere/ provider).
 
         Requires Modal worker deployed with /v2/rerank route and
@@ -515,15 +516,15 @@ class TestModalWorkers:
 class TestLocalONNX:
     """Test local Qwen3 ONNX embedding and reranking."""
 
-    async def test_local_embedding(self):
+    async async def test_local_embedding(self):
         from wet_mcp.embedder import Qwen3EmbedBackend
 
         backend = Qwen3EmbedBackend()
-        vectors = backend.embed_texts(["Hello world", "Python programming"])
+        vectors = await backend.embed_texts(["Hello world", "Python programming"])
         assert len(vectors) == 2
         assert len(vectors[0]) > 0  # Should have dimensions
 
-    async def test_local_reranking(self):
+    async async def test_local_reranking(self):
         from wet_mcp.reranker import Qwen3Reranker
 
         reranker = Qwen3Reranker()
@@ -549,20 +550,20 @@ class TestLocalONNX:
 class TestConfigTool:
     """Test config tool actions."""
 
-    async def test_config_status(self):
+    async async def test_config_status(self):
         from wet_mcp.config import settings
 
         assert settings.log_level in ("INFO", "DEBUG", "WARNING", "ERROR")
         assert settings.tool_timeout > 0
         assert settings.wet_cache is True or settings.wet_cache is False
 
-    async def test_config_embedding_backend_resolution(self):
+    async async def test_config_embedding_backend_resolution(self):
         from wet_mcp.config import settings
 
         backend = settings.resolve_embedding_backend()
         assert backend in ("litellm", "local")
 
-    async def test_config_rerank_backend_resolution(self):
+    async async def test_config_rerank_backend_resolution(self):
         from wet_mcp.config import settings
 
         backend = settings.resolve_rerank_backend()
@@ -577,12 +578,12 @@ class TestConfigTool:
 class TestSyncConfig:
     """Test sync configuration (without actual Google Drive)."""
 
-    async def test_sync_disabled_by_default(self):
+    async async def test_sync_disabled_by_default(self):
         from wet_mcp.config import settings
 
         assert settings.sync_enabled is False
 
-    async def test_sync_config_fields(self):
+    async async def test_sync_config_fields(self):
         from wet_mcp.config import settings
 
         assert settings.sync_folder == "wet-mcp"
@@ -597,7 +598,7 @@ class TestSyncConfig:
 class TestMediaTool:
     """Test media listing from web pages."""
 
-    async def test_list_media(self):
+    async async def test_list_media(self):
         from wet_mcp.sources.crawler import list_media
 
         result = await list_media(
@@ -619,7 +620,7 @@ class TestE2EDocsSearch:
     """End-to-end docs search including indexing and querying."""
 
     @pytest.mark.timeout(120)
-    async def test_docs_search_htmx(self):
+    async async def test_docs_search_htmx(self):
         """Full pipeline: discover → index → search."""
         from wet_mcp.sources.docs import discover_library
 
