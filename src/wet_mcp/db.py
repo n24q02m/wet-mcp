@@ -762,31 +762,30 @@ class DocsDB:
 
         _adj_map: dict[tuple[str, str, int], str] = {}
         if _adj_keys:
-            # ⚡ Bolt Optimization: Group by prefix columns (url, version_id) and use standard IN
-            # on the suffix column (chunk_index) to guarantee efficient composite index seeks,
-            # avoiding table/index scans that can occur with row-value IN (VALUES ...).
-            _groups: dict[tuple[str, str], set[int]] = {}
-            for _url, _ver, _idx in _adj_keys:
-                _groups.setdefault((_url, _ver), set()).add(_idx)
+            # ⚡ Optimization: Use row-value IN to fetch all adjacent chunks in a single query (or as few batches as possible)
+            # This leverages the composite index (url, version_id, chunk_index) and avoids N+1 queries.
+            _unique_keys = sorted(set(_adj_keys))
+            _max_params = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
+            _batch_size = _max_params // 3
 
-            _batch_size = 32764 if sqlite3.sqlite_version_info >= (3, 32, 0) else 900
-            for (_url, _ver), _indices in _groups.items():
-                _indices_list = list(_indices)
-                for i in range(0, len(_indices_list), _batch_size):
-                    _chunk_indices = _indices_list[i : i + _batch_size]
-                    _placeholders = ",".join(["?"] * len(_chunk_indices))
+            for i in range(0, len(_unique_keys), _batch_size):
+                _batch = _unique_keys[i : i + _batch_size]
+                _placeholders = ",".join(["(?, ?, ?)"] * len(_batch))
+                _params = []
+                for k in _batch:
+                    _params.extend(k)
 
-                    # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                    rows = self._conn.execute(
-                        f"""SELECT url, version_id, chunk_index, content
-                            FROM doc_chunks
-                            WHERE url = ? AND version_id = ? AND chunk_index IN ({_placeholders})""",
-                        [_url, _ver] + _chunk_indices,
-                    ).fetchall()
-                    for r in rows:
-                        _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
-                            "content"
-                        ]
+                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                rows = self._conn.execute(
+                    f"""SELECT url, version_id, chunk_index, content
+                        FROM doc_chunks
+                        WHERE (url, version_id, chunk_index) IN ({_placeholders})""",
+                    _params,
+                ).fetchall()
+                for r in rows:
+                    _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
+                        "content"
+                    ]
 
         for cid, score in scored:
             if len(results) >= limit:
