@@ -52,6 +52,9 @@ _sync_task: asyncio.Task | None = None
 # Token provider name for token_store
 _TOKEN_PROVIDER = "google_drive"
 
+# In-memory folder ID cache to avoid duplicate folder creation
+_folder_id_cache: dict[str, str] = {}
+
 
 # ---------------------------------------------------------------------------
 # Token management
@@ -180,12 +183,66 @@ async def _drive_request(
     return response
 
 
+def _load_folder_id(folder_name: str) -> str | None:
+    """Load cached folder ID from disk."""
+    path = settings.get_data_dir() / "sync_folder_ids.json"
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data.get(folder_name)
+    except (json.JSONDecodeError, OSError):
+        pass
+    return None
+
+
+def _save_folder_id(folder_name: str, folder_id: str) -> None:
+    """Persist folder ID to disk."""
+    path = settings.get_data_dir() / "sync_folder_ids.json"
+    data: dict[str, str] = {}
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        pass
+    data[folder_name] = folder_id
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+async def _verify_folder_exists(token: dict, folder_id: str) -> bool:
+    """Verify a folder ID still exists and is not trashed."""
+    response = await _drive_request(
+        "GET",
+        f"{_DRIVE_API_BASE}/files/{folder_id}",
+        token,
+        params={"fields": "id,trashed"},
+    )
+    if response.status_code == 200:
+        return not response.json().get("trashed", False)
+    return False
+
+
 async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
     """Find or create a Google Drive folder by name.
 
-    Returns folder ID, or None on failure.
+    Lookup order: memory cache -> disk cache -> Drive API search -> create.
+    Folder ID is persisted to avoid duplicate creation from eventual consistency.
     """
-    # Search for existing folder
+    # 1. Check in-memory cache
+    if folder_name in _folder_id_cache:
+        fid = _folder_id_cache[folder_name]
+        if await _verify_folder_exists(token, fid):
+            return fid
+        del _folder_id_cache[folder_name]
+
+    # 2. Check disk cache
+    saved_id = _load_folder_id(folder_name)
+    if saved_id:
+        if await _verify_folder_exists(token, saved_id):
+            _folder_id_cache[folder_name] = saved_id
+            return saved_id
+
+    # 3. Search by name on Drive
     query = (
         f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
         f"and trashed=false"
@@ -200,9 +257,12 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
     if response.status_code == 200:
         files = response.json().get("files", [])
         if files:
-            return files[0]["id"]
+            fid = files[0]["id"]
+            _folder_id_cache[folder_name] = fid
+            _save_folder_id(folder_name, fid)
+            return fid
 
-    # Create new folder
+    # 4. Create new folder
     metadata: dict[str, Any] = {
         "name": folder_name,
         "mimeType": "application/vnd.google-apps.folder",
@@ -216,7 +276,11 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
     )
 
     if response.status_code == 200:
-        return response.json().get("id")
+        fid = response.json().get("id")
+        if fid:
+            _folder_id_cache[folder_name] = fid
+            _save_folder_id(folder_name, fid)
+        return fid
 
     logger.error(f"Failed to create folder '{folder_name}': {response.text}")
     return None

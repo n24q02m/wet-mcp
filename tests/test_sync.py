@@ -153,6 +153,12 @@ class TestTokenManagement:
 
 
 class TestDriveHelpers:
+    def setup_method(self):
+        """Clear folder ID cache between tests."""
+        import wet_mcp.sync as sync_mod
+
+        sync_mod._folder_id_cache.clear()
+
     @pytest.mark.asyncio
     async def test_find_or_create_folder_existing(self):
         """Finds existing folder by name."""
@@ -164,7 +170,11 @@ class TestDriveHelpers:
             "files": [{"id": "folder123", "name": "test"}]
         }
 
-        with patch("wet_mcp.sync._drive_request", return_value=mock_response):
+        with (
+            patch("wet_mcp.sync._drive_request", return_value=mock_response),
+            patch("wet_mcp.sync._load_folder_id", return_value=None),
+            patch("wet_mcp.sync._save_folder_id"),
+        ):
             result = await _find_or_create_folder({"access_token": "t"}, "test")
             assert result == "folder123"
 
@@ -181,9 +191,13 @@ class TestDriveHelpers:
         create_response.status_code = 200
         create_response.json.return_value = {"id": "new_folder"}
 
-        with patch(
-            "wet_mcp.sync._drive_request",
-            side_effect=[search_response, create_response],
+        with (
+            patch(
+                "wet_mcp.sync._drive_request",
+                side_effect=[search_response, create_response],
+            ),
+            patch("wet_mcp.sync._load_folder_id", return_value=None),
+            patch("wet_mcp.sync._save_folder_id"),
         ):
             result = await _find_or_create_folder({"access_token": "t"}, "test")
             assert result == "new_folder"
@@ -201,12 +215,47 @@ class TestDriveHelpers:
         create_response.status_code = 500
         create_response.text = "Internal Error"
 
-        with patch(
-            "wet_mcp.sync._drive_request",
-            side_effect=[search_response, create_response],
+        with (
+            patch(
+                "wet_mcp.sync._drive_request",
+                side_effect=[search_response, create_response],
+            ),
+            patch("wet_mcp.sync._load_folder_id", return_value=None),
+            patch("wet_mcp.sync._save_folder_id"),
         ):
             result = await _find_or_create_folder({"access_token": "t"}, "test")
             assert result is None
+
+    @pytest.mark.asyncio
+    async def test_find_or_create_folder_uses_cached_id(self):
+        """Uses cached folder ID and verifies it still exists."""
+        from wet_mcp.sync import _find_or_create_folder, _folder_id_cache
+
+        _folder_id_cache["test"] = "cached_id"
+
+        verify_response = MagicMock()
+        verify_response.status_code = 200
+        verify_response.json.return_value = {"id": "cached_id", "trashed": False}
+
+        with patch("wet_mcp.sync._drive_request", return_value=verify_response):
+            result = await _find_or_create_folder({"access_token": "t"}, "test")
+            assert result == "cached_id"
+
+    @pytest.mark.asyncio
+    async def test_find_or_create_folder_disk_cache(self):
+        """Falls back to disk-cached folder ID."""
+        from wet_mcp.sync import _find_or_create_folder
+
+        verify_response = MagicMock()
+        verify_response.status_code = 200
+        verify_response.json.return_value = {"id": "disk_id", "trashed": False}
+
+        with (
+            patch("wet_mcp.sync._drive_request", return_value=verify_response),
+            patch("wet_mcp.sync._load_folder_id", return_value="disk_id"),
+        ):
+            result = await _find_or_create_folder({"access_token": "t"}, "test")
+            assert result == "disk_id"
 
     @pytest.mark.asyncio
     async def test_find_file_in_folder_found(self):
