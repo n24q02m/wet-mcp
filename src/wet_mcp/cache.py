@@ -168,5 +168,7 @@ class WebCache:
         """Close database connection."""
         try:
             self._conn.close()
-        except Exception:
-            pass
+        except sqlite3.Error as e:
+            logger.debug(f"SQLite error closing cache: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error closing cache: {e}")
