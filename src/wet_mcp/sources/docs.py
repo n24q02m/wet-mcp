@@ -1550,124 +1550,198 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
 }
 
 
-async def discover_library(name: str, language: str | None = None) -> dict | None:
-    """Discover library metadata from package registries.
+def _score_result(r: dict, name: str) -> int:
+    """Score a single registry result for relevance."""
+    score = 0
+    # Exact name match is the strongest signal
+    if r.get("name", "").lower() == name.lower():
+        score += 10
+    # Has a docs/homepage URL
+    homepage = r.get("homepage", "")
+    if homepage:
+        score += 5
+        # Non-GitHub homepage = established project with custom domain
+        parsed_hp = urlparse(homepage)
+        if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
+            lib_norm = name.lower().replace("-", "")
+            if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
+                score += 1  # Auto-generated docs, minimal boost
+                # Don't give name-in-path bonus: always true for these
+            else:
+                score += 3
+                # Library name appears in the domain → likely official site
+                # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
+                host_norm = parsed_hp.netloc.lower().replace("-", "")
+                if lib_norm in host_norm:
+                    score += 3
+            # ReadTheDocs bonus: only when subdomain exactly matches lib name
+            # Prevents e.g. "app-turbo.readthedocs.org" scoring for "turbo"
+            if any(p in parsed_hp.netloc for p in ("readthedocs", "rtfd.io")):
+                subdomain = parsed_hp.netloc.split(".")[0].lower().replace("-", "")
+                if subdomain == lib_norm:
+                    score += 2
+    # Description quality (longer = more established)
+    desc = r.get("description", "")
+    if desc:
+        desc_len = len(desc)
+        if desc_len > 100:
+            score += 3
+        elif desc_len > 50:
+            score += 2
+        elif desc_len > 20:
+            score += 1
 
-    Queries all supported registries in parallel. Scores by:
-    1. Exact name match (case-insensitive)
-    2. Has valid docs/homepage URL
-    3. Non-GitHub homepage (custom domain = established project)
-    4. Description length (longer = more established)
-    5. Dedicated docs URL pattern (readthedocs, docs.*, etc.)
+    # Penalize deprecated packages (npm deprecate-holder, squatted names)
+    if r.get("deprecated"):
+        score -= 20
 
-    Supported registries:
-    - npm (JavaScript/TypeScript)
-    - PyPI (Python)
-    - crates.io (Rust)
-    - Go modules (Go)
-    - Maven Central (Java/Kotlin/Scala)
-    - Hex.pm (Elixir/Erlang)
-    - Packagist (PHP)
-    - pub.dev (Dart/Flutter)
-    - RubyGems (Ruby)
-    - NuGet (C#/.NET)
+    # Penalize known placeholder/junk homepage patterns
+    all_urls = ((homepage or "") + " " + (r.get("repository") or "")).lower()
+    if any(p in all_urls for p in ("deprecate-holder", "placeholder")):
+        score -= 15
 
-    When ``language`` is specified, only queries matching registries.
-    This prevents e.g. npm's obscure "fastapi" package from shadowing
-    Python's FastAPI, or npm "torch" from shadowing PyTorch.
-    """
-    # -------------------------------------------------------------------
-    # Priority 0: Well-known docs — handles tools/platforms not on standard
-    # registries, sub-frameworks, and libraries with generic names that
-    # cause wrong discovery (e.g. "boost" → xgboost, "protobuf" → npm pkg).
-    # -------------------------------------------------------------------
-    well_known = _WELL_KNOWN_DOCS.get(name.lower())
-    if well_known:
-        logger.info(f"Using well-known docs for {name}: {well_known['homepage']}")
-        return {**well_known, "name": name, "registry": "well_known"}
+    # Penalize crates.io auto-generated docs.rs fallback URLs
+    if r.get("docs_rs_fallback"):
+        score -= 2
 
-    # Build registry tasks based on language filter
+    # Popularity boost for packages with star count data (Go, GitHub)
+    # Helps disambiguate generic names like "echo", "gin", etc.
+    stars = r.get("stars", 0)
+    if stars >= 10000:
+        score += 3
+    elif stars >= 1000:
+        score += 2
+    elif stars >= 100:
+        score += 1
+
+    # Download count boost for crates.io packages
+    # Helps disambiguate generic names: clap (668M), diesel (22M), etc.
+    # Higher bonuses than stars because download counts are more reliable
+    # for popularity (no manual curation needed).
+    downloads = r.get("downloads", 0)
+    if downloads >= 50_000_000:
+        score += 5
+    elif downloads >= 5_000_000:
+        score += 3
+    elif downloads >= 500_000:
+        score += 1
+
+    # Registry trust: npm/PyPI are direct package registries (exact API match),
+    # while Go uses GitHub search (may return tangentially related repos).
+    # Give primary registries a small bonus to break ties.
+    reg = r.get("registry", "")
+    if reg in ("npm", "pypi"):
+        score += 2
+
+    return score
+
+
+async def _finalize_best_result(best: dict, name: str, best_score: int) -> dict | None:
+    """Probes and upgrades the best registry result."""
+    # GitHub homepage upgrade: when the homepage is a GitHub URL,
+    # check the GitHub API for a better homepage (e.g. vuejs.org).
+    homepage = best.get("homepage", "")
+    repo_url = best.get("repository", "")
+    if homepage and "github.com" in urlparse(homepage).netloc:
+        # Try to extract owner/repo from either homepage or repo URL
+        gh_url = repo_url if repo_url else homepage
+        gh_homepage = await _get_github_homepage(gh_url)
+        if gh_homepage:
+            logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_homepage}")
+            best["homepage"] = gh_homepage
+
+    if best.get("homepage"):
+        # Probe for better docs URL (docs subdomain, ReadTheDocs, /docs/)
+        original_hp = best["homepage"]
+        probed_url = await _probe_docs_url(
+            original_hp, name, registry=best.get("registry", "")
+        )
+        if probed_url != original_hp:
+            logger.info(f"Upgraded {name} docs URL: {original_hp} -> {probed_url}")
+            best["homepage"] = probed_url
+
+        logger.info(
+            f"Discovered {name} docs: {best['homepage']} "
+            f"(via {best['registry']}, score={best_score})"
+        )
+        return best
+    # No homepage but has some data
+    return best
+
+
+async def _fallback_github_discovery(name: str, language: str) -> dict | None:
+    """Last-resort discovery via GitHub search."""
+    lang = _normalize_language(language)
+    if lang not in _GITHUB_LANGUAGE_NAMES:
+        return None
+
+    logger.info(
+        f"All registries failed for {name} ({language}), "
+        "trying GitHub search as last resort"
+    )
+    gh_result = await _discover_from_github_search(name, lang)
+    if gh_result:
+        homepage = gh_result.get("homepage", "")
+        if homepage and "github.com" not in urlparse(homepage).netloc:
+            probed = await _probe_docs_url(homepage, name, registry="github")
+            if probed != homepage:
+                logger.info(f"Probed {name} docs: {homepage} -> {probed}")
+                gh_result["homepage"] = probed
+        repo_url = gh_result.get("repository", "")
+        if homepage and "github.com" in urlparse(homepage).netloc and repo_url:
+            gh_hp = await _get_github_homepage(repo_url)
+            if gh_hp:
+                logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_hp}")
+                gh_result["homepage"] = gh_hp
+        return gh_result
+    return None
+
+
+def _get_registry_tasks(name: str, language: str | None = None) -> list:
+    """Determine which registry tasks to run based on language."""
     if language:
         lang = _normalize_language(language)
         registry_names = _LANGUAGE_REGISTRIES.get(lang)
         if registry_names is not None:
             if not registry_names:
-                # Known language but no registry — try GitHub search
-                logger.info(
-                    f"No registry for language '{language}', "
-                    "trying GitHub search fallback"
-                )
-                gh_result = await _discover_from_github_search(name, lang)
-                if gh_result:
-                    # Probe for better docs URL
-                    homepage = gh_result.get("homepage", "")
-                    if homepage and "github.com" not in urlparse(homepage).netloc:
-                        probed = await _probe_docs_url(
-                            homepage, name, registry="github"
-                        )
-                        if probed != homepage:
-                            logger.info(f"Probed {name} docs: {homepage} -> {probed}")
-                            gh_result["homepage"] = probed
-                    # Try to upgrade GitHub-only homepage via API
-                    repo_url = gh_result.get("repository", "")
-                    if (
-                        homepage
-                        and "github.com" in urlparse(homepage).netloc
-                        and repo_url
-                    ):
-                        gh_hp = await _get_github_homepage(repo_url)
-                        if gh_hp:
-                            logger.info(
-                                f"Upgraded {name} homepage: {homepage} -> {gh_hp}"
-                            )
-                            gh_result["homepage"] = gh_hp
-                    return gh_result
-                # GitHub search failed — let SearXNG handle
-                return None
+                # Known language but no registry - empty list (caller handles GitHub search)
+                return []
             # Query only matching registries
-            tasks = [
+            return [
                 _REGISTRY_FUNCTIONS[r](name)
                 for r in registry_names
                 if r in _REGISTRY_FUNCTIONS
             ]
-        else:
-            # Unknown language — query all registries as fallback
-            tasks = [
-                _discover_from_npm(name),
-                _discover_from_pypi(name),
-                _discover_from_crates(name),
-                _discover_from_go(name),
-                _discover_from_hex(name),
-                _discover_from_packagist(name),
-                _discover_from_pubdev(name),
-                _discover_from_rubygems(name),
-                _discover_from_nuget(name),
-                _discover_from_maven(name),
-            ]
-    else:
-        # No language specified — query all registries (default)
-        tasks = [
-            _discover_from_npm(name),
-            _discover_from_pypi(name),
-            _discover_from_crates(name),
-            _discover_from_go(name),
-            _discover_from_hex(name),
-            _discover_from_packagist(name),
-            _discover_from_pubdev(name),
-            _discover_from_rubygems(name),
-            _discover_from_nuget(name),
-            _discover_from_maven(name),
-        ]
+        # Unknown language — query all registries as fallback
+
+    # No language or unknown language specified — query all registries (default)
+    return [
+        _discover_from_npm(name),
+        _discover_from_pypi(name),
+        _discover_from_crates(name),
+        _discover_from_go(name),
+        _discover_from_hex(name),
+        _discover_from_packagist(name),
+        _discover_from_pubdev(name),
+        _discover_from_rubygems(name),
+        _discover_from_nuget(name),
+        _discover_from_maven(name),
+    ]
+
+
+async def _resolve_registry_results(tasks: list) -> list[dict]:
+    """Gather tasks and perform pre-upgrade homepage resolution."""
+    if not tasks:
+        return []
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
+    valid_results = [r for r in results if isinstance(r, dict)]
 
     # Pre-upgrade: for results with a GitHub homepage or repo but no
     # non-GitHub homepage, try to fill homepage from the GitHub API
-    # before scoring.  This catches PyPI packages that only list their
-    # GitHub page as "homepage" (e.g. crawl4ai → crawl4ai.com).
+    # before scoring.
     upgrade_tasks = []
     upgrade_indices = []
-    valid_results = [r for r in results if isinstance(r, dict)]
     for i, r in enumerate(valid_results):
         homepage = r.get("homepage") or ""
         repo_url = r.get("repository") or ""
@@ -1688,152 +1762,46 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
                     f"Pre-upgraded {valid_results[idx].get('name')}"
                     f" homepage from GitHub: {gh_hp}"
                 )
+    return valid_results
 
-    # Score each result for relevance
+
+async def discover_library(name: str, language: str | None = None) -> dict | None:
+    """Discover library metadata from package registries."""
+    # Priority 0: Well-known docs
+    well_known = _WELL_KNOWN_DOCS.get(name.lower())
+    if well_known:
+        logger.info(f"Using well-known docs for {name}: {well_known['homepage']}")
+        return {**well_known, "name": name, "registry": "well_known"}
+
+    # Special case: language specified but no registry support for it
+    if language:
+        lang = _normalize_language(language)
+        registry_names = _LANGUAGE_REGISTRIES.get(lang)
+        if registry_names is not None and not registry_names:
+            logger.info(
+                f"No registry for language '{language}', trying GitHub search fallback"
+            )
+            return await _fallback_github_discovery(name, language)
+
+    # Standard registry discovery
+    tasks = _get_registry_tasks(name, language)
+    valid_results = await _resolve_registry_results(tasks)
+
+    # Score results
     scored: list[tuple[int, dict]] = []
     for r in valid_results:
-        score = 0
-        # Exact name match is the strongest signal
-        if r.get("name", "").lower() == name.lower():
-            score += 10
-        # Has a docs/homepage URL
-        homepage = r.get("homepage", "")
-        if homepage:
-            score += 5
-            # Non-GitHub homepage = established project with custom domain
-            parsed_hp = urlparse(homepage)
-            if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
-                lib_norm = name.lower().replace("-", "")
-                if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
-                    score += 1  # Auto-generated docs, minimal boost
-                    # Don't give name-in-path bonus: always true for these
-                else:
-                    score += 3
-                    # Library name appears in the domain → likely official site
-                    # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
-                    host_norm = parsed_hp.netloc.lower().replace("-", "")
-                    if lib_norm in host_norm:
-                        score += 3
-                # ReadTheDocs bonus: only when subdomain exactly matches lib name
-                # Prevents e.g. "app-turbo.readthedocs.org" scoring for "turbo"
-                if any(p in parsed_hp.netloc for p in ("readthedocs", "rtfd.io")):
-                    subdomain = parsed_hp.netloc.split(".")[0].lower().replace("-", "")
-                    if subdomain == lib_norm:
-                        score += 2
-        # Description quality (longer = more established)
-        desc = r.get("description", "")
-        if desc:
-            desc_len = len(desc)
-            if desc_len > 100:
-                score += 3
-            elif desc_len > 50:
-                score += 2
-            elif desc_len > 20:
-                score += 1
-
-        # Penalize deprecated packages (npm deprecate-holder, squatted names)
-        if r.get("deprecated"):
-            score -= 20
-
-        # Penalize known placeholder/junk homepage patterns
-        all_urls = ((homepage or "") + " " + (r.get("repository") or "")).lower()
-        if any(p in all_urls for p in ("deprecate-holder", "placeholder")):
-            score -= 15
-
-        # Penalize crates.io auto-generated docs.rs fallback URLs
-        if r.get("docs_rs_fallback"):
-            score -= 2
-
-        # Popularity boost for packages with star count data (Go, GitHub)
-        # Helps disambiguate generic names like "echo", "gin", etc.
-        stars = r.get("stars", 0)
-        if stars >= 10000:
-            score += 3
-        elif stars >= 1000:
-            score += 2
-        elif stars >= 100:
-            score += 1
-
-        # Download count boost for crates.io packages
-        # Helps disambiguate generic names: clap (668M), diesel (22M), etc.
-        # Higher bonuses than stars because download counts are more reliable
-        # for popularity (no manual curation needed).
-        downloads = r.get("downloads", 0)
-        if downloads >= 50_000_000:
-            score += 5
-        elif downloads >= 5_000_000:
-            score += 3
-        elif downloads >= 500_000:
-            score += 1
-
-        # Registry trust: npm/PyPI are direct package registries (exact API match),
-        # while Go uses GitHub search (may return tangentially related repos).
-        # Give primary registries a small bonus to break ties.
-        reg = r.get("registry", "")
-        if reg in ("npm", "pypi"):
-            score += 2
-
+        score = _score_result(r, name)
         scored.append((score, r))
 
-    # Sort by score descending, pick best
-    scored.sort(key=lambda x: x[0], reverse=True)
-
+    # Pick best result and finalize
     if scored:
+        scored.sort(key=lambda x: x[0], reverse=True)
         best_score, best = scored[0]
-
-        # GitHub homepage upgrade: when the homepage is a GitHub URL,
-        # check the GitHub API for a better homepage (e.g. vuejs.org).
-        homepage = best.get("homepage", "")
-        repo_url = best.get("repository", "")
-        if homepage and "github.com" in urlparse(homepage).netloc:
-            # Try to extract owner/repo from either homepage or repo URL
-            gh_url = repo_url if repo_url else homepage
-            gh_homepage = await _get_github_homepage(gh_url)
-            if gh_homepage:
-                logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_homepage}")
-                best["homepage"] = gh_homepage
-
-        if best.get("homepage"):
-            # Probe for better docs URL (docs subdomain, ReadTheDocs, /docs/)
-            original_hp = best["homepage"]
-            probed_url = await _probe_docs_url(
-                original_hp, name, registry=best.get("registry", "")
-            )
-            if probed_url != original_hp:
-                logger.info(f"Upgraded {name} docs URL: {original_hp} -> {probed_url}")
-                best["homepage"] = probed_url
-
-            logger.info(
-                f"Discovered {name} docs: {best['homepage']} "
-                f"(via {best['registry']}, score={best_score})"
-            )
-            return best
-        # No homepage but has some data
-        return best
+        return await _finalize_best_result(best, name, best_score)
 
     # All registries failed — try GitHub search as last resort
     if language:
-        lang = _normalize_language(language)
-        if lang in _GITHUB_LANGUAGE_NAMES:
-            logger.info(
-                f"All registries failed for {name} ({language}), "
-                "trying GitHub search as last resort"
-            )
-            gh_result = await _discover_from_github_search(name, lang)
-            if gh_result:
-                homepage = gh_result.get("homepage", "")
-                if homepage and "github.com" not in urlparse(homepage).netloc:
-                    probed = await _probe_docs_url(homepage, name, registry="github")
-                    if probed != homepage:
-                        logger.info(f"Probed {name} docs: {homepage} -> {probed}")
-                        gh_result["homepage"] = probed
-                repo_url = gh_result.get("repository", "")
-                if homepage and "github.com" in urlparse(homepage).netloc and repo_url:
-                    gh_hp = await _get_github_homepage(repo_url)
-                    if gh_hp:
-                        logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_hp}")
-                        gh_result["homepage"] = gh_hp
-                return gh_result
+        return await _fallback_github_discovery(name, language)
 
     return None
 
