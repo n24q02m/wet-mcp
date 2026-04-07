@@ -19,15 +19,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies first (cached when deps don't change)
+# Strip [tool.uv.sources] local path overrides so uv resolves from PyPI
+COPY pyproject.toml uv.lock ./
+RUN sed -i '/^\[tool\.uv\.sources\]/,/^$/d' pyproject.toml && \
+    uv lock --upgrade-package mcp-relay-core
 RUN --mount=type=cache,target=/root/.cache/uv \
-    --mount=type=bind,source=uv.lock,target=uv.lock \
-    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev --no-sources
+    uv sync --frozen --no-install-project --no-dev
 
 # Copy application code and install the project
 COPY . /app
+RUN sed -i '/^\[tool\.uv\.sources\]/,/^$/d' pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-sources
+    uv sync --frozen --no-dev
 
 # Install SearXNG from GitHub (zip archive + no-build-isolation for speed)
 # Then patch version_frozen.py (zip has no .git for version detection)
