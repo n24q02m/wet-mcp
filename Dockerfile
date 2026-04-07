@@ -22,12 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --frozen --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev --no-sources
 
 # Copy application code and install the project
 COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --no-sources
 
 # Install SearXNG from GitHub (zip archive + no-build-isolation for speed)
 # Then patch version_frozen.py (zip has no .git for version detection)
