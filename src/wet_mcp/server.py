@@ -123,8 +123,8 @@ def _detect_gh_token() -> str | None:
             token = result.stdout.strip()
             if token:
                 return token
-    except Exception:
-        pass
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.debug(f"Failed to detect GitHub token from CLI: {e}")
     return None
 
 
@@ -219,8 +219,10 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
         warmup_task.cancel()
         try:
             await warmup_task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception as e:
+            logger.debug(f"Error during SearXNG warmup task cancellation: {e}")
 
     # Stop auto-sync
     from wet_mcp.config import settings
@@ -313,7 +315,8 @@ async def _init_embedding_backend(mode: str) -> None:
                         f"(native={native_dims}, stored={_embedding_dims})"
                     )
                     return
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Failed to init embedding candidate {candidate}: {e}")
                 continue
 
     logger.error("Cloud embedding not available and local fallback is disabled")
@@ -521,9 +524,10 @@ async def _with_timeout(coro, action: str) -> str:
     # Give the task a grace period to clean up (close browser pages, etc.)
     try:
         await asyncio.wait_for(asyncio.shield(task), timeout=_CANCEL_GRACE_PERIOD)
-    except (asyncio.CancelledError, TimeoutError, Exception):
-        # Task either cancelled cleanly, timed out again, or raised -- all OK
+    except (asyncio.CancelledError, TimeoutError):
         pass
+    except Exception as e:
+        logger.debug(f"Error during Tool '{action}' cancellation: {e}")
 
     logger.error(f"Tool '{action}' timed out after {timeout}s")
     return (
@@ -683,8 +687,12 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error formatting JSON result in search: {e}"
+                    )
             return result
 
         case "research":
@@ -723,8 +731,12 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error formatting JSON result in research: {e}"
+                    )
             return result
 
         case "docs":
@@ -854,8 +866,12 @@ async def extract(
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error formatting JSON result in extract: {e}"
+                    )
             return result
 
         case "batch":
@@ -1047,8 +1063,12 @@ async def media(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error formatting JSON result in media: {e}"
+                    )
             return result
 
         case _:
