@@ -223,3 +223,140 @@ async def test_extract_structured_llm_failure():
         result = json.loads(result_str)
         assert "error" in result
         assert "LLM" in result["error"]
+
+
+async def test_extract_structured_with_fallbacks():
+    """Config with fallbacks passes them to LLM kwargs."""
+    llm_output = json.dumps({"title": "Widget", "price": 29.99})
+    fallback_config = [{"model": "gpt-3.5"}]
+
+    with (
+        patch(
+            "wet_mcp.sources.structured.raw_extract",
+            new_callable=AsyncMock,
+            return_value=json.dumps(SAMPLE_PAGES),
+        ),
+        patch("wet_mcp.sources.structured.settings") as mock_settings,
+        patch(
+            "wet_mcp.sources.structured.get_llm_config",
+            return_value={
+                "model": "gpt-4",
+                "fallbacks": fallback_config,
+                "temperature": 0,
+            },
+        ),
+        patch(
+            "wet_mcp.sources.structured.acompletion",
+            new_callable=AsyncMock,
+            return_value=_mock_llm_response(llm_output),
+        ) as mock_llm,
+    ):
+        mock_settings.resolve_provider_mode.return_value = "proxy"
+
+        result_str = await extract_structured(
+            urls=["https://example.com/product"],
+            schema=SAMPLE_SCHEMA,
+        )
+        result = json.loads(result_str)
+        assert result["data"]["title"] == "Widget"
+        # Verify fallbacks were passed
+        call_kwargs = mock_llm.call_args
+        assert call_kwargs.kwargs.get("fallbacks") == fallback_config
+
+
+async def test_extract_structured_content_extraction_error():
+    """Raw extraction raises exception -- returns error."""
+    with (
+        patch(
+            "wet_mcp.sources.structured.raw_extract",
+            new_callable=AsyncMock,
+            side_effect=Exception("Connection refused"),
+        ),
+        patch("wet_mcp.sources.structured.settings") as mock_settings,
+    ):
+        mock_settings.resolve_provider_mode.return_value = "sdk"
+
+        result_str = await extract_structured(
+            urls=["https://example.com"],
+            schema=SAMPLE_SCHEMA,
+        )
+        result = json.loads(result_str)
+        assert "error" in result
+        assert "Content extraction failed" in result["error"]
+
+
+async def test_extract_structured_truncates_long_content():
+    """Content exceeding _MAX_CONTENT_CHARS is truncated."""
+    from wet_mcp.sources.structured import _MAX_CONTENT_CHARS
+
+    long_content = "x" * (_MAX_CONTENT_CHARS + 1000)
+    long_pages = [
+        {"url": "https://example.com", "title": "Big Page", "content": long_content}
+    ]
+    llm_output = json.dumps({"title": "Widget", "price": 29.99})
+
+    with (
+        patch(
+            "wet_mcp.sources.structured.raw_extract",
+            new_callable=AsyncMock,
+            return_value=json.dumps(long_pages),
+        ),
+        patch("wet_mcp.sources.structured.settings") as mock_settings,
+        patch(
+            "wet_mcp.sources.structured.get_llm_config",
+            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+        ),
+        patch(
+            "wet_mcp.sources.structured.acompletion",
+            new_callable=AsyncMock,
+            return_value=_mock_llm_response(llm_output),
+        ) as mock_llm,
+    ):
+        mock_settings.resolve_provider_mode.return_value = "proxy"
+
+        result_str = await extract_structured(
+            urls=["https://example.com"],
+            schema=SAMPLE_SCHEMA,
+        )
+        result = json.loads(result_str)
+        assert "data" in result
+        # Verify truncation happened by checking user message content
+        call_kwargs = mock_llm.call_args
+        user_msg = call_kwargs.kwargs.get("messages", [{}])[-1].get("content", "")
+        assert "truncated" in user_msg
+
+
+async def test_extract_structured_with_custom_prompt():
+    """Custom prompt is included in LLM messages."""
+    llm_output = json.dumps({"title": "Widget", "price": 29.99})
+
+    with (
+        patch(
+            "wet_mcp.sources.structured.raw_extract",
+            new_callable=AsyncMock,
+            return_value=json.dumps(SAMPLE_PAGES),
+        ),
+        patch("wet_mcp.sources.structured.settings") as mock_settings,
+        patch(
+            "wet_mcp.sources.structured.get_llm_config",
+            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+        ),
+        patch(
+            "wet_mcp.sources.structured.acompletion",
+            new_callable=AsyncMock,
+            return_value=_mock_llm_response(llm_output),
+        ) as mock_llm,
+    ):
+        mock_settings.resolve_provider_mode.return_value = "proxy"
+
+        result_str = await extract_structured(
+            urls=["https://example.com/product"],
+            schema=SAMPLE_SCHEMA,
+            prompt="Focus on price in USD",
+        )
+        result = json.loads(result_str)
+        assert "data" in result
+        # Verify custom prompt was included
+        call_kwargs = mock_llm.call_args
+        user_msg = call_kwargs.kwargs.get("messages", [{}])[-1].get("content", "")
+        assert "Focus on price in USD" in user_msg

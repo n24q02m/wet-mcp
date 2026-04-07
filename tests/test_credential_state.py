@@ -607,6 +607,184 @@ class TestServerSetupToolNewActions:
             mock_settings.setup_providers.assert_called_once()
 
 
+class TestShareCloudKeysToPeers:
+    """Tests for _share_cloud_keys_to_peers helper."""
+
+    def test_shares_cloud_keys(self):
+        """Shares matching cloud keys to peer servers."""
+        from wet_mcp.credential_state import _share_cloud_keys_to_peers
+
+        config = {"GEMINI_API_KEY": "test-key", "SOME_OTHER": "val"}
+        with patch("mcp_relay_core.storage.config_file.write_config") as mock_write:
+            _share_cloud_keys_to_peers(config)
+            assert mock_write.call_count == 2
+            # Should write to both peers
+            calls = [c.args[0] for c in mock_write.call_args_list]
+            assert "mnemo-mcp" in calls
+            assert "better-code-review-graph" in calls
+
+    def test_skips_when_no_cloud_keys(self):
+        """Skips when config has no matching cloud keys."""
+        from wet_mcp.credential_state import _share_cloud_keys_to_peers
+
+        config = {"SOME_KEY": "value"}
+        with patch("mcp_relay_core.storage.config_file.write_config") as mock_write:
+            _share_cloud_keys_to_peers(config)
+            mock_write.assert_not_called()
+
+    def test_handles_write_error(self):
+        """Handles write_config error for individual peer."""
+        from wet_mcp.credential_state import _share_cloud_keys_to_peers
+
+        config = {"OPENAI_API_KEY": "test-key"}
+        with patch(
+            "mcp_relay_core.storage.config_file.write_config",
+            side_effect=Exception("disk full"),
+        ):
+            # Should not raise
+            _share_cloud_keys_to_peers(config)
+
+    def test_handles_import_error(self):
+        """Handles import error gracefully."""
+        from wet_mcp.credential_state import _share_cloud_keys_to_peers
+
+        config = {"GEMINI_API_KEY": "test-key"}
+        with patch(
+            "mcp_relay_core.storage.config_file.write_config",
+            side_effect=ImportError("no module"),
+        ):
+            _share_cloud_keys_to_peers(config)
+
+
+class TestPollRelayBackgroundGDriveAndMessage:
+    """Tests for Google Drive OAuth and send_message in _poll_relay_background."""
+
+    async def test_gdrive_oauth_attempted(self, monkeypatch):
+        """Google Drive OAuth is attempted when session_id exists."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        mock_session = MagicMock(session_id="sess-123")
+        config = {"GEMINI_API_KEY": "from-relay"}
+
+        with (
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=config,
+            ),
+            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("wet_mcp.config.settings") as mock_settings,
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_gdrive,
+            patch(
+                "mcp_relay_core.relay.client.send_message",
+                new_callable=AsyncMock,
+            ) as mock_send,
+        ):
+            mock_settings.setup_providers = MagicMock()
+            await _poll_relay_background(
+                "https://relay.example.com", mock_session, 10.0
+            )
+            mock_gdrive.assert_awaited_once_with(
+                relay_url="https://relay.example.com", session_id="sess-123"
+            )
+            mock_send.assert_awaited_once()
+            assert get_state() == CredentialState.CONFIGURED
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    async def test_gdrive_oauth_failure_nonfatal(self, monkeypatch):
+        """Google Drive OAuth failure is non-fatal."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        mock_session = MagicMock(session_id="sess-456")
+        config = {"GEMINI_API_KEY": "from-relay"}
+
+        with (
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=config,
+            ),
+            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("wet_mcp.config.settings") as mock_settings,
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                side_effect=Exception("OAuth failed"),
+            ),
+            patch(
+                "mcp_relay_core.relay.client.send_message",
+                new_callable=AsyncMock,
+            ),
+        ):
+            mock_settings.setup_providers = MagicMock()
+            await _poll_relay_background(
+                "https://relay.example.com", mock_session, 10.0
+            )
+            # Still CONFIGURED despite GDrive failure
+            assert get_state() == CredentialState.CONFIGURED
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    async def test_send_message_failure_nonfatal(self, monkeypatch):
+        """send_message failure is non-fatal (lines 225-226)."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        mock_session = MagicMock(session_id="sess-789")
+        config = {"GEMINI_API_KEY": "from-relay"}
+
+        with (
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=config,
+            ),
+            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("wet_mcp.config.settings") as mock_settings,
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "mcp_relay_core.relay.client.send_message",
+                new_callable=AsyncMock,
+                side_effect=Exception("network error"),
+            ),
+        ):
+            mock_settings.setup_providers = MagicMock()
+            await _poll_relay_background(
+                "https://relay.example.com", mock_session, 10.0
+            )
+            assert get_state() == CredentialState.CONFIGURED
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    async def test_no_session_id_skips_gdrive_and_message(self, monkeypatch):
+        """When session has no session_id, skip GDrive OAuth and send_message."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        mock_session = MagicMock(spec=[])  # No session_id attribute
+        config = {"GEMINI_API_KEY": "from-relay"}
+
+        with (
+            patch(
+                "mcp_relay_core.relay.client.poll_for_result",
+                new_callable=AsyncMock,
+                return_value=config,
+            ),
+            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("wet_mcp.config.settings") as mock_settings,
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+        ):
+            mock_settings.setup_providers = MagicMock()
+            await _poll_relay_background(
+                "https://relay.example.com", mock_session, 10.0
+            )
+            assert get_state() == CredentialState.CONFIGURED
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+
 class TestRequireCredentials:
     """Tests for _require_credentials helper."""
 
