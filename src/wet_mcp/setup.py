@@ -32,8 +32,8 @@ def _find_searx_package_dir() -> Path | None:
         spec = importlib.util.find_spec("searx")
         if spec and spec.submodule_search_locations:
             return Path(spec.submodule_search_locations[0])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Error finding searx package: {e}")
     return None
 
 
