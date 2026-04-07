@@ -124,7 +124,7 @@ def _detect_gh_token() -> str | None:
             if token:
                 return token
     except Exception:
-        pass
+        logger.debug("Failed to detect GH token")
     return None
 
 
@@ -314,6 +314,7 @@ async def _init_embedding_backend(mode: str) -> None:
                     )
                     return
             except Exception:
+                logger.debug("Failed to initialize embedding backend")
                 continue
 
     logger.error("Cloud embedding not available and local fallback is disabled")
@@ -521,7 +522,10 @@ async def _with_timeout(coro, action: str) -> str:
     # Give the task a grace period to clean up (close browser pages, etc.)
     try:
         await asyncio.wait_for(asyncio.shield(task), timeout=_CANCEL_GRACE_PERIOD)
-    except (asyncio.CancelledError, TimeoutError, Exception):
+    except (asyncio.CancelledError, TimeoutError):
+        pass
+    except Exception:
+        logger.debug("Unexpected exception during timeout cleanup")
         # Task either cancelled cleanly, timed out again, or raised -- all OK
         pass
 
@@ -677,14 +681,18 @@ async def search(  # noqa: PLR0913
                         result = json.dumps(data, ensure_ascii=False, indent=2)
                 except json.JSONDecodeError:
                     pass
+                except Exception:
+                    logger.debug("Failed to pretty-print JSON result")
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
             if not result.startswith("Error"):
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception:
+                    logger.debug("Failed to pretty-print JSON result")
             return result
 
         case "research":
@@ -723,8 +731,10 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception:
+                    logger.debug("Failed to pretty-print JSON result")
             return result
 
         case "docs":
@@ -854,8 +864,10 @@ async def extract(
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception:
+                    logger.debug("Failed to pretty-print JSON result")
             return result
 
         case "batch":
@@ -1047,8 +1059,10 @@ async def media(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
                     pass
+                except Exception:
+                    logger.debug("Failed to pretty-print JSON result")
             return result
 
         case _:
