@@ -77,8 +77,8 @@ def resolve_credential_state() -> CredentialState:
             # Propagate shared cloud keys to sibling servers on every startup
             _share_cloud_keys_to_peers(saved)
             return _state
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to read config: {}", e)
 
     # 3. Check local mode marker
     try:
@@ -89,8 +89,8 @@ def resolve_credential_state() -> CredentialState:
             logger.info("Local mode marker found, skipping relay")
             _state = CredentialState.LOCAL
             return _state
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to get mode: {}", e)
 
     # 4. Nothing found
     logger.info("No credentials found -- server starting in awaiting_setup mode")
@@ -222,8 +222,8 @@ async def _poll_relay_background(
                         "text": "Setup complete! API keys configured. You can close this tab.",
                     },
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to send completion message: {}", e)
 
         # Release session lock
         from mcp_relay_core import release_session_lock
@@ -237,11 +237,12 @@ async def _poll_relay_background(
                 from mcp_relay_core import set_local_mode
 
                 set_local_mode(SERVER_NAME)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("Failed to set local mode: {}", e)
         else:
             _state = CredentialState.AWAITING_SETUP
     except Exception:
+        logger.exception("Relay polling failed")
         _state = CredentialState.AWAITING_SETUP
 
 
@@ -285,5 +286,5 @@ def reset_state() -> None:
 
         clear_mode(SERVER_NAME)
         delete_config(SERVER_NAME)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Reset state failed: {}", e)
