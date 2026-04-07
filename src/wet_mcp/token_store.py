@@ -13,9 +13,11 @@ Token lifecycle:
 
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import stat
+import subprocess
 from pathlib import Path
 
 from loguru import logger
@@ -31,6 +33,32 @@ def _get_token_dir() -> Path:
 def get_token_path(provider: str) -> Path:
     """Get path for a provider's token file."""
     return _get_token_dir() / f"{provider}.json"
+
+
+def _set_secure_permissions(path: Path, is_dir: bool = False) -> None:
+    """Set secure file/directory permissions (Unix: 0600/0700, Windows: icacls)."""
+    if os.name == "nt":
+        # Windows: use icacls to grant full control only to the current user
+        # and disable inheritance.
+        try:
+            user = getpass.getuser()
+            # /inheritance:r - remove all inherited ACEs
+            # /grant:r <user>:F - grant <user> Full control, replace existing ACEs
+            subprocess.run(
+                ["icacls", str(path), "/inheritance:r", "/grant:r", f"{user}:F"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except (subprocess.CalledProcessError, OSError) as e:
+            logger.warning(f"Failed to set Windows permissions for {path}: {e}")
+    else:
+        # Unix: use chmod (0700 for dirs, 0600 for files)
+        try:
+            mode = stat.S_IRWXU if is_dir else (stat.S_IRUSR | stat.S_IWUSR)
+            path.chmod(mode)
+        except OSError as e:
+            logger.warning(f"Failed to set Unix permissions for {path}: {e}")
 
 
 def load_token(provider: str) -> dict | None:
@@ -60,22 +88,10 @@ def save_token(provider: str, token: dict) -> None:
     """
     token_dir = _get_token_dir()
     token_dir.mkdir(parents=True, exist_ok=True)
-
-    # Secure directory permissions (Unix only)
-    if os.name != "nt":  # pragma: no cover
-        try:
-            token_dir.chmod(stat.S_IRWXU)  # 0700
-        except OSError:
-            pass
+    _set_secure_permissions(token_dir, is_dir=True)
 
     path = get_token_path(provider)
     path.write_text(json.dumps(token, indent=2), encoding="utf-8")
-
-    # Secure file permissions (Unix only)
-    if os.name != "nt":  # pragma: no cover
-        try:
-            path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600
-        except OSError:
-            pass
+    _set_secure_permissions(path)
 
     logger.info(f"Token saved: {path}")
