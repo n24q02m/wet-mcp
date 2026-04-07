@@ -44,7 +44,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --group dev --no-sources
 
       - name: Run Ruff check
         run: uv run ruff check .
