@@ -123,8 +123,8 @@ def _detect_gh_token() -> str | None:
             token = result.stdout.strip()
             if token:
                 return token
-    except Exception:
-        pass
+    except (subprocess.SubprocessError, OSError) as e:
+        logger.debug(f"GitHub token detection failed: {e}")
     return None
 
 
