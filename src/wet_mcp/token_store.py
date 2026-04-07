@@ -13,9 +13,11 @@ Token lifecycle:
 
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import stat
+import subprocess
 from pathlib import Path
 
 from loguru import logger
@@ -23,14 +25,42 @@ from loguru import logger
 from wet_mcp.config import settings
 
 
-def _get_token_dir() -> Path:
-    """Get directory for token storage (~/.wet-mcp/tokens/)."""
-    return settings.get_data_dir() / "tokens"
+def _set_secure_permissions(path: Path, is_dir: bool = False) -> None:
+    """Set secure permissions for a file or directory.
+
+    Unix: 0700 for directories, 0600 for files.
+    Windows: icacls to grant full access only to the current owner.
+    """
+    if os.name == "nt":
+        try:
+            # On Windows, we use icacls to disable inheritance and grant full
+            # control only to the current user.
+            user = getpass.getuser()
+            # Disable inheritance and remove all inherited ACEs
+            subprocess.run(
+                ["icacls", str(path), "/inheritance:r"],
+                check=True,
+                capture_output=True,
+            )
+            # Grant full control to the owner
+            subprocess.run(
+                ["icacls", str(path), "/grant:r", f"{user}:F"],
+                check=True,
+                capture_output=True,
+            )
+        except (subprocess.CalledProcessError, OSError) as e:
+            logger.warning(f"Failed to set Windows permissions for {path}: {e}")
+    else:
+        try:
+            mode = stat.S_IRWXU if is_dir else (stat.S_IRUSR | stat.S_IWUSR)
+            path.chmod(mode)
+        except OSError as e:
+            logger.warning(f"Failed to set Unix permissions for {path}: {e}")
 
 
 def get_token_path(provider: str) -> Path:
     """Get path for a provider's token file."""
-    return _get_token_dir() / f"{provider}.json"
+    return settings.get_config_dir() / f"{provider}_token.json"
 
 
 def load_token(provider: str) -> dict | None:
@@ -58,24 +88,16 @@ def save_token(provider: str, token: dict) -> None:
     File permissions: 0600 (owner read/write only)
     Directory permissions: 0700 (owner read/write/execute only)
     """
-    token_dir = _get_token_dir()
+    path = get_token_path(provider)
+    token_dir = path.parent
     token_dir.mkdir(parents=True, exist_ok=True)
 
-    # Secure directory permissions (Unix only)
-    if os.name != "nt":  # pragma: no cover
-        try:
-            token_dir.chmod(stat.S_IRWXU)  # 0700
-        except OSError:
-            pass
+    # Secure directory permissions
+    _set_secure_permissions(token_dir, is_dir=True)
 
-    path = get_token_path(provider)
     path.write_text(json.dumps(token, indent=2), encoding="utf-8")
 
-    # Secure file permissions (Unix only)
-    if os.name != "nt":  # pragma: no cover
-        try:
-            path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600
-        except OSError:
-            pass
+    # Secure file permissions
+    _set_secure_permissions(path, is_dir=False)
 
     logger.info(f"Token saved: {path}")

@@ -161,6 +161,10 @@ class Settings(BaseSettings):
             return Path(self.cache_dir).expanduser()
         return _default_data_dir()
 
+    def get_config_dir(self) -> Path:
+        """Get config directory. Equivalent to get_data_dir()."""
+        return self.get_data_dir()
+
     def get_db_path(self) -> Path:
         """Get resolved docs database path."""
         if self.docs_db_path:

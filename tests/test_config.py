@@ -472,3 +472,9 @@ def test_resolve_local_rerank_model():
         result = settings.resolve_local_rerank_model()
         assert result == "test-rerank"
         m.assert_called_once()
+
+def test_get_config_dir():
+    from pathlib import Path
+    from wet_mcp.config import Settings
+    s = Settings(cache_dir="/tmp/test")
+    assert str(s.get_config_dir()) == "/tmp/test"
