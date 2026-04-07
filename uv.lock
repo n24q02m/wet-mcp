@@ -1402,30 +1402,8 @@ cli = [
 
 [[package]]
 name = "mcp-relay-core"
-version = "1.4.0"
-source = { editable = "../mcp-relay-core/packages/core-py" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "httpx" },
-    { name = "platformdirs" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "cryptography", specifier = ">=46.0.5" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "platformdirs", specifier = ">=4.3" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
-    { name = "pytest-cov", specifier = ">=7.1" },
-    { name = "pytest-timeout", specifier = ">=2.3" },
-    { name = "ruff", specifier = ">=0.15.8" },
-    { name = "ty", specifier = ">=0.0.24" },
-]
+version = "0.1.0"
+source = { editable = "../tmp/mcp-relay-core/packages/core-py" }
 
 [[package]]
 name = "mdurl"
@@ -2929,7 +2907,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.23.5b3"
+version = "2.24.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -2985,7 +2963,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "mcp-relay-core", editable = "../mcp-relay-core/packages/core-py" },
+    { name = "mcp-relay-core", editable = "../tmp/mcp-relay-core/packages/core-py" },
     { name = "n24q02m-web-core", specifier = ">=1.1.0" },
     { name = "openai", specifier = ">=2.30.0" },
     { name = "pillow", specifier = ">=12.1.1" },
