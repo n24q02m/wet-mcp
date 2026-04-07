@@ -36,3 +36,9 @@ def test_detect_gh_token_os_error():
     with patch("shutil.which", return_value="/usr/bin/gh"):
         with patch("subprocess.run", side_effect=OSError("Failed to execute")):
             assert _detect_gh_token() is None
+
+
+def test_detect_gh_token_generic_exception():
+    with patch("shutil.which", return_value="/usr/bin/gh"):
+        with patch("subprocess.run", side_effect=Exception("generic error")):
+            assert _detect_gh_token() is None
