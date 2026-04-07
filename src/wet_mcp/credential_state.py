@@ -77,8 +77,8 @@ def resolve_credential_state() -> CredentialState:
             # Propagate shared cloud keys to sibling servers on every startup
             _share_cloud_keys_to_peers(saved)
             return _state
-    except Exception:
-        pass
+    except (ImportError, Exception) as e:
+        logger.debug("Failed to read config file: {}", e)
 
     # 3. Check local mode marker
     try:
@@ -89,8 +89,8 @@ def resolve_credential_state() -> CredentialState:
             logger.info("Local mode marker found, skipping relay")
             _state = CredentialState.LOCAL
             return _state
-    except Exception:
-        pass
+    except (ImportError, Exception) as e:
+        logger.debug("Failed to get mode: {}", e)
 
     # 4. Nothing found
     logger.info("No credentials found -- server starting in awaiting_setup mode")
@@ -162,7 +162,7 @@ async def trigger_relay_setup(
 
         return _setup_url
 
-    except Exception as e:
+    except (ImportError, Exception) as e:
         logger.debug("Relay setup failed: {}. Server continues in awaiting_setup.", e)
         _state = CredentialState.AWAITING_SETUP
         return None
@@ -206,7 +206,7 @@ async def _poll_relay_background(
                 from wet_mcp.sync import setup_google_auth
 
                 await setup_google_auth(relay_url=relay_base, session_id=session_id)
-            except Exception as e:
+            except (ImportError, Exception) as e:
                 logger.debug("GDrive OAuth via relay failed (non-fatal): {}", e)
 
         # Notify browser: setup complete
@@ -222,8 +222,8 @@ async def _poll_relay_background(
                         "text": "Setup complete! API keys configured. You can close this tab.",
                     },
                 )
-            except Exception:
-                pass
+            except (ImportError, Exception) as e:
+                logger.debug("Failed to send complete message to relay: {}", e)
 
         # Release session lock
         from mcp_relay_core import release_session_lock
@@ -237,11 +237,12 @@ async def _poll_relay_background(
                 from mcp_relay_core import set_local_mode
 
                 set_local_mode(SERVER_NAME)
-            except Exception:
-                pass
+            except (ImportError, Exception) as e:
+                logger.debug("Failed to set local mode: {}", e)
         else:
             _state = CredentialState.AWAITING_SETUP
-    except Exception:
+    except Exception as e:
+        logger.exception("Unexpected error in background relay polling: {}", e)
         _state = CredentialState.AWAITING_SETUP
 
 
@@ -262,9 +263,9 @@ def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
             try:
                 write_config(peer, shared)
                 logger.debug("Shared cloud keys to {}", peer)
-            except Exception as e:
+            except (ImportError, Exception) as e:
                 logger.debug("Failed to share keys to {}: {}", peer, e)
-    except Exception as e:
+    except (ImportError, Exception) as e:
         logger.debug("_share_cloud_keys_to_peers failed (non-fatal): {}", e)
 
 
@@ -285,5 +286,5 @@ def reset_state() -> None:
 
         clear_mode(SERVER_NAME)
         delete_config(SERVER_NAME)
-    except Exception:
-        pass
+    except (ImportError, Exception) as e:
+        logger.debug("Failed to reset credential state: {}", e)
