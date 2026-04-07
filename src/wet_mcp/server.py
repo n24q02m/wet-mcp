@@ -1367,15 +1367,22 @@ async def setup(
 
         case "complete":
             from wet_mcp.credential_state import (
-                get_state as _get_state,
+                CredentialState,
+                resolve_credential_state,
             )
             from wet_mcp.credential_state import (
-                resolve_credential_state,
+                get_state as _get_state,
             )
 
             resolve_credential_state()
             state = _get_state()
-            settings.setup_providers()
+            mode = settings.setup_providers()
+
+            # Re-init embedding + reranker if now configured
+            if state == CredentialState.CONFIGURED:
+                await _init_embedding_backend(mode)
+                await _init_reranker_backend(mode)
+
             return json.dumps(
                 {
                     "status": "ok",

@@ -2899,7 +2899,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.23.0"
+version = "2.23.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
