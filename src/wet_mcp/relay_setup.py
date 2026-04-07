@@ -38,7 +38,8 @@ def load_config_from_file() -> dict[str, str] | None:
             logger.info("Config loaded from file")
             return saved
         return None
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to load config from file: {}", e)
         return None
 
 
@@ -117,8 +118,8 @@ async def ensure_config(
                         "text": "API keys saved. Starting Google Drive sync setup...",
                     },
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to notify relay page (info): {}", e)
 
         # Trigger GDrive OAuth Device Code using default client ID from settings
         from wet_mcp.config import settings as _settings
@@ -148,8 +149,8 @@ async def ensure_config(
                     f"{relay_url}/api/sessions/{session.session_id}/messages",
                     json={"type": "complete", "text": msg},
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to notify relay page (complete): {}", e)
 
         return config
 
