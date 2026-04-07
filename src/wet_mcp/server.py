@@ -683,7 +683,10 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"JSON formatting failed: {e}")
                     pass
             return result
 
@@ -723,7 +726,10 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"JSON formatting failed: {e}")
                     pass
             return result
 
@@ -854,7 +860,10 @@ async def extract(
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"JSON formatting failed: {e}")
                     pass
             return result
 
@@ -1047,7 +1056,10 @@ async def media(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"JSON formatting failed: {e}")
                     pass
             return result
 
