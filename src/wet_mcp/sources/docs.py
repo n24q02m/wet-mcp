@@ -2964,6 +2964,113 @@ async def _fetch_github_readme(repo_url: str) -> list[dict] | None:
     return None
 
 
+async def _get_github_default_branch(
+    client: "httpx.AsyncClient", api_base: str
+) -> str | None:
+    """Resolve the default branch for a GitHub repository."""
+    try:
+        resp = await client.get(
+            api_base,
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                **_github_headers(),
+            },
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json().get("default_branch", "main")
+    except Exception:
+        return None
+
+
+async def _get_github_candidate_paths(
+    client: "httpx.AsyncClient", api_base: str, default_branch: str
+) -> list[str] | None:
+    """Fetch and filter the repository tree for potential doc files."""
+    try:
+        resp = await client.get(
+            f"{api_base}/git/trees/{default_branch}?recursive=1",
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                **_github_headers(),
+            },
+        )
+        if resp.status_code != 200:
+            return None
+
+        tree = resp.json().get("tree", [])
+        candidate_paths: list[str] = []
+        for item in tree:
+            if item.get("type") != "blob":
+                continue
+            path = item.get("path", "")
+            path_lower = path.lower()
+
+            # Skip .github/ directory files (templates, workflows)
+            if path_lower.startswith(".github/"):
+                continue
+
+            # Skip known non-doc files by stem
+            fname = path.rsplit("/", 1)[-1]
+            stem = fname.rsplit(".", 1)[0].lower()
+            if stem in _SKIP_FILES:
+                continue
+
+            # Include root README.md
+            if path_lower == "readme.md" or path_lower == "readme.rst":
+                candidate_paths.append(path)
+                continue
+
+            # Only markdown and RST files
+            if not path_lower.endswith((".md", ".mdx", ".rst")):
+                continue
+
+            # Must be in a docs-like directory
+            parts = path.split("/")
+            if any(p.lower() in _DOC_DIRS for p in parts):
+                candidate_paths.append(path)
+        return candidate_paths
+    except Exception:
+        return None
+
+
+def _process_github_doc_file(
+    fpath: str, content: str, owner: str, repo: str, default_branch: str
+) -> tuple[dict | None, bool]:
+    """Process a single GitHub doc file content.
+
+    Returns:
+        Tuple of (page_dict, is_macro_skipped).
+        page_dict: {url, title, content, original_len} if successful.
+    """
+    try:
+        # Skip files with excessive template macros;
+        # strip scattered macros from otherwise useful files
+        if _has_excessive_macros(content):
+            return None, True
+
+        original_len = len(content)
+        content = _strip_template_macros(content)
+
+        # Convert RST to Markdown for consistent chunking
+        if fpath.lower().endswith(".rst"):
+            content = _rst_to_markdown(content)
+
+        # Derive title from filename
+        fname = fpath.rsplit("/", 1)[-1]
+        title = fname.rsplit(".", 1)[0].replace("-", " ").replace("_", " ")
+
+        gh_page_url = f"https://github.com/{owner}/{repo}/blob/{default_branch}/{fpath}"
+        return {
+            "url": gh_page_url,
+            "title": title,
+            "content": content,
+            "original_len": original_len,
+        }, False
+    except Exception:
+        return None, False
+
+
 async def _try_github_raw_docs(
     repo_url: str,
     max_files: int = 50,
@@ -2997,66 +3104,14 @@ async def _try_github_raw_docs(
 
     async with _safe_httpx_client(timeout=20) as client:
         # Resolve default branch
-        try:
-            resp = await client.get(
-                api_base,
-                headers={
-                    "Accept": "application/vnd.github.v3+json",
-                    **_github_headers(),
-                },
-            )
-            if resp.status_code != 200:
-                return None
-            default_branch = resp.json().get("default_branch", "main")
-        except Exception:
+        default_branch = await _get_github_default_branch(client, api_base)
+        if not default_branch:
             return None
 
         # Collect all candidate markdown files from tree API
-        candidate_paths: list[str] = []
-        try:
-            resp = await client.get(
-                f"{api_base}/git/trees/{default_branch}?recursive=1",
-                headers={
-                    "Accept": "application/vnd.github.v3+json",
-                    **_github_headers(),
-                },
-            )
-            if resp.status_code != 200:
-                return None
-
-            tree = resp.json().get("tree", [])
-            for item in tree:
-                if item.get("type") != "blob":
-                    continue
-                path = item.get("path", "")
-                path_lower = path.lower()
-
-                # Skip .github/ directory files (templates, workflows)
-                if path_lower.startswith(".github/"):
-                    continue
-
-                # Skip known non-doc files by stem
-                fname = path.rsplit("/", 1)[-1]
-                stem = fname.rsplit(".", 1)[0].lower()
-                if stem in _SKIP_FILES:
-                    continue
-
-                # Include root README.md
-                if path_lower == "readme.md" or path_lower == "readme.rst":
-                    candidate_paths.append(path)
-                    continue
-
-                # Only markdown and RST files
-                if not path_lower.endswith((".md", ".mdx", ".rst")):
-                    continue
-
-                # Must be in a docs-like directory
-                parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
-                    candidate_paths.append(path)
-        except Exception:
-            return None
-
+        candidate_paths = await _get_github_candidate_paths(
+            client, api_base, default_branch
+        )
         if not candidate_paths:
             return None
 
@@ -3113,38 +3168,16 @@ async def _try_github_raw_docs(
             fpath = res["fpath"]
             content = res["content"]
 
-            try:
-                # Skip files with excessive template macros;
-                # strip scattered macros from otherwise useful files
-                if _has_excessive_macros(content):
-                    skipped_macros += 1
-                    continue
-
-                original_len = len(content)
-                content = _strip_template_macros(content)
-                fetch_original_bytes += original_len
-                fetch_stripped_bytes += len(content)
-
-                # Convert RST to Markdown for consistent chunking
-                if fpath.lower().endswith(".rst"):
-                    content = _rst_to_markdown(content)
-
-                # Derive title from filename
-                fname = fpath.rsplit("/", 1)[-1]
-                title = fname.rsplit(".", 1)[0].replace("-", " ").replace("_", " ")
-
-                gh_page_url = (
-                    f"https://github.com/{owner}/{repo}/blob/{default_branch}/{fpath}"
-                )
-                pages.append(
-                    {
-                        "url": gh_page_url,
-                        "title": title,
-                        "content": content,
-                    }
-                )
-            except Exception:
+            page, is_macro_skipped = _process_github_doc_file(
+                fpath, content, owner, repo, default_branch
+            )
+            if is_macro_skipped:
+                skipped_macros += 1
                 continue
+            if page:
+                fetch_original_bytes += page.pop("original_len", 0)
+                fetch_stripped_bytes += len(page["content"])
+                pages.append(page)
 
         if skipped_macros:
             logger.info(
@@ -3178,11 +3211,6 @@ async def _try_github_raw_docs(
             return pages
 
     return None
-
-
-# ---------------------------------------------------------------------------
-# Sitemap discovery — find all docs URLs from sitemap.xml
-# ---------------------------------------------------------------------------
 
 
 async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
