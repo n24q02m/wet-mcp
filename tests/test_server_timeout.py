@@ -33,6 +33,9 @@ def mock_dependencies():
         "wet_mcp.reranker": MagicMock(),
         "wet_mcp.setup": MagicMock(),
         "wet_mcp.sync": MagicMock(),
+            "web_core": MagicMock(),
+            "web_core.http": MagicMock(),
+            "web_core.http.client": MagicMock(),
         # Mock config explicitly
         "wet_mcp.config": MagicMock(),
     }
@@ -165,5 +168,47 @@ def test_with_timeout_cleanup(mock_dependencies):
         assert result == expected_msg
         # Verify cleanup ran
         assert cleanup_done[0] is True, "Cleanup block did not run"
+
+    asyncio.run(_test())
+
+def test_with_timeout_cleanup_exception(mock_dependencies):
+    """Test that cleanup exceptions in _with_timeout are logged and don't crash the server."""
+    server_module, mock_settings = mock_dependencies
+    _with_timeout = server_module._with_timeout
+    logger = server_module.logger
+
+    mock_settings.tool_timeout = 0.1
+
+    async def slow_coro():
+        try:
+            await asyncio.sleep(0.5)
+        finally:
+            raise RuntimeError("Cleanup failure")
+
+    async def _test():
+        with patch.object(logger, "debug") as mock_debug:
+            result = await _with_timeout(slow_coro(), "cleanup_fail_action")
+
+            assert "Error: 'cleanup_fail_action' timed out" in result
+            # Verify cleanup exception was logged
+            mock_debug.assert_any_call("Tool 'cleanup_fail_action' cleanup exception: Cleanup failure")
+
+    asyncio.run(_test())
+
+
+def test_with_timeout_cancelled_error(mock_dependencies):
+    """Test that asyncio.CancelledError from wait() itself is re-raised by _with_timeout."""
+    server_module, mock_settings = mock_dependencies
+    _with_timeout = server_module._with_timeout
+
+    mock_settings.tool_timeout = 0.1
+
+    async def slow_coro():
+        await asyncio.sleep(0.5)
+
+    async def _test():
+        with patch("asyncio.wait", side_effect=asyncio.CancelledError):
+            with pytest.raises(asyncio.CancelledError):
+                await _with_timeout(slow_coro(), "cancel_action")
 
     asyncio.run(_test())

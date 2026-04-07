@@ -123,7 +123,8 @@ def _detect_gh_token() -> str | None:
             token = result.stdout.strip()
             if token:
                 return token
-    except Exception:
+    except Exception as e:
+        logger.debug(f"Command token retrieval failed: {e}")
         pass
     return None
 
@@ -219,7 +220,10 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
         warmup_task.cancel()
         try:
             await warmup_task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.debug(f"Warmup task cleanup error: {e}")
             pass
 
     # Stop auto-sync
@@ -313,7 +317,8 @@ async def _init_embedding_backend(mode: str) -> None:
                         f"(native={native_dims}, stored={_embedding_dims})"
                     )
                     return
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Embedding candidate {candidate} failed: {e}")
                 continue
 
     logger.error("Cloud embedding not available and local fallback is disabled")
@@ -520,9 +525,23 @@ async def _with_timeout(coro, action: str) -> str:
 
     # Give the task a grace period to clean up (close browser pages, etc.)
     try:
-        await asyncio.wait_for(asyncio.shield(task), timeout=_CANCEL_GRACE_PERIOD)
-    except (asyncio.CancelledError, TimeoutError, Exception):
-        # Task either cancelled cleanly, timed out again, or raised -- all OK
+        # Use wait() instead of wait_for(shield()) to avoid immediate CancelledError
+        # for an already-cancelled task.
+        done, _pending = await asyncio.wait({task}, timeout=_CANCEL_GRACE_PERIOD)
+        if done:
+            # Check if it raised an exception other than CancelledError during cleanup
+            try:
+                task.result()
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.debug(f"Tool '{action}' cleanup exception: {e}")
+    except asyncio.CancelledError:
+        # Re-raise if the outer scope is also being cancelled
+        raise
+    except Exception as e:
+        # Unexpected errors in wait() itself
+        logger.debug(f"Tool '{action}' wait exception: {e}")
         pass
 
     logger.error(f"Tool '{action}' timed out after {timeout}s")
@@ -683,7 +702,10 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"JSON pretty-print failed: {e}")
                     pass
             return result
 
@@ -723,7 +745,10 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"JSON pretty-print failed: {e}")
                     pass
             return result
 
@@ -854,7 +879,10 @@ async def extract(
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"JSON pretty-print failed: {e}")
                     pass
             return result
 
@@ -1047,7 +1075,10 @@ async def media(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    pass
+                except Exception as e:
+                    logger.debug(f"JSON pretty-print failed: {e}")
                     pass
             return result
 
