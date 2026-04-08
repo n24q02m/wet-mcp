@@ -207,7 +207,9 @@ async def _poll_relay_background(
 
                 await setup_google_auth(relay_url=relay_base, session_id=session_id)
             except Exception:
-                logger.opt(exception=True).debug("GDrive OAuth via relay failed (non-fatal)")
+                logger.opt(exception=True).debug(
+                    "GDrive OAuth via relay failed (non-fatal)"
+                )
 
         # Notify browser: setup complete
         if session_id:
@@ -266,7 +268,9 @@ def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
             except Exception:
                 logger.opt(exception=True).debug("Failed to share keys to {}", peer)
     except Exception:
-        logger.opt(exception=True).debug("_share_cloud_keys_to_peers failed (non-fatal)")
+        logger.opt(exception=True).debug(
+            "_share_cloud_keys_to_peers failed (non-fatal)"
+        )
 
 
 def set_state(state: CredentialState) -> None:
