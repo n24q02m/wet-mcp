@@ -12,6 +12,7 @@ Tests all configuration combinations:
 Run with: uv run pytest tests/test_real_comprehensive.py -v -m integration --timeout=120
 """
 
+import asyncio
 import json
 import os
 
@@ -519,7 +520,7 @@ class TestLocalONNX:
         from wet_mcp.embedder import Qwen3EmbedBackend
 
         backend = Qwen3EmbedBackend()
-        vectors = backend.embed_texts(["Hello world", "Python programming"])
+        vectors = await backend.embed_texts(["Hello world", "Python programming"])
         assert len(vectors) == 2
         assert len(vectors[0]) > 0  # Should have dimensions
 

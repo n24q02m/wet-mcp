@@ -16,8 +16,8 @@ Embeddings are truncated to fixed dims in server._embed().
 
 from __future__ import annotations
 
+import asyncio
 import os
-import time
 from typing import Protocol
 
 from loguru import logger
@@ -48,26 +48,28 @@ def _is_retryable(exc: Exception) -> bool:
         "timed out",
         "connection",
         "temporarily unavailable",
+        "unavailable",
         "overloaded",
-        "resource exhausted",
-        "resource_exhausted",
     ]
     return any(p in msg for p in retryable_patterns)
 
 
 def _is_unsupported_param(exc: Exception, param: str) -> bool:
-    """Check if an exception indicates an unsupported parameter.
-
-    Detects errors like "does not support parameters: {'dimensions': ...}"
-    or "output_dimension is not supported for this model".
-    Uses stem matching (e.g. "dimension" matches "dimensions", "output_dimension").
-    """
+    """Check if the error is due to an unsupported parameter."""
     msg = str(exc).lower()
-    # Use the stem (without trailing 's') for broader matching
-    stem = param.lower().rstrip("s")
-    return (
-        "not support" in msg or "unsupported" in msg or "not a valid" in msg
-    ) and stem in msg
+    # "dimensions" parameter is the primary one we care about for fallback
+    if param == "dimensions":
+        return any(
+            p in msg
+            for p in (
+                "dimensions",
+                "output_dimensionality",
+                "unexpected keyword argument",
+                "invalid argument",
+                "unsupported parameter",
+            )
+        )
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +80,7 @@ def _is_unsupported_param(exc: Exception, param: str) -> bool:
 class EmbeddingBackend(Protocol):
     """Protocol for embedding backends."""
 
-    def embed_texts(
+    async def embed_texts(
         self,
         texts: list[str],
         dimensions: int | None = None,
@@ -86,7 +88,7 @@ class EmbeddingBackend(Protocol):
         """Embed a batch of texts. Returns list of embedding vectors."""
         ...  # pragma: no cover
 
-    def embed_single(
+    async def embed_single(
         self,
         text: str,
         dimensions: int | None = None,
@@ -94,7 +96,7 @@ class EmbeddingBackend(Protocol):
         """Embed a single text. Returns embedding vector."""
         ...  # pragma: no cover
 
-    def check_available(self) -> int:
+    async def check_available(self) -> int:
         """Check if backend is available.
 
         Returns:
@@ -148,12 +150,13 @@ def _strip_provider(model: str) -> str:
 class CloudEmbeddingBackend:
     """Cloud embedding via native SDKs (Gemini, OpenAI, Cohere)."""
 
-    # Gemini API: max 100 texts per batch request.
-    # Other providers (OpenAI, Cohere) allow more but 100 is safe for all.
-    MAX_BATCH_SIZE = 100
+    MAX_BATCH_SIZE = 96  # Common safe batch size across providers
 
     def __init__(
-        self, model: str, api_base: str | None = None, api_key: str | None = None
+        self,
+        model: str,
+        api_base: str | None = None,
+        api_key: str | None = None,
     ):
         self.model = model
         self.api_base = api_base
@@ -161,7 +164,7 @@ class CloudEmbeddingBackend:
         self._provider = _detect_embedding_provider(model)
         self._bare_model = _strip_provider(model)
 
-    def _embed_batch_inner(
+    async def _embed_batch_inner(
         self,
         texts: list[str],
         dimensions: int | None = None,
@@ -178,7 +181,7 @@ class CloudEmbeddingBackend:
 
         for attempt in range(MAX_RETRIES):
             try:
-                embeddings = self._call_provider(texts, use_dimensions)
+                embeddings = await self._call_provider(texts, use_dimensions)
                 # Truncate locally if server returned more dims than requested
                 if dimensions and embeddings and len(embeddings[0]) > dimensions:
                     embeddings = [e[:dimensions] for e in embeddings]
@@ -204,7 +207,7 @@ class CloudEmbeddingBackend:
                         f"Embedding retry {attempt + 1}/{MAX_RETRIES} "
                         f"after {delay}s: {e}"
                     )
-                    time.sleep(delay)
+                    await asyncio.sleep(delay)
                 else:
                     break
 
@@ -212,23 +215,23 @@ class CloudEmbeddingBackend:
         assert last_exc is not None  # guaranteed by loop logic
         raise last_exc
 
-    def _call_provider(
+    async def _call_provider(
         self, texts: list[str], dimensions: int | None = None
     ) -> list[list[float]]:
         """Route to the correct provider SDK."""
         if self._provider == "gemini":
-            return self._embed_gemini(texts, dimensions)
+            return await self._embed_gemini(texts, dimensions)
         elif self._provider == "cohere":
-            return self._embed_cohere(texts, dimensions)
+            return await self._embed_cohere(texts, dimensions)
         elif self._provider == "jina":
-            return self._embed_jina(texts, dimensions)
+            return await self._embed_jina(texts, dimensions)
         else:
-            return self._embed_openai(texts, dimensions)
+            return await self._embed_openai(texts, dimensions)
 
-    def _embed_gemini(
+    async def _embed_gemini(
         self, texts: list[str], dimensions: int | None = None
     ) -> list[list[float]]:
-        """Embed via Google Gemini (google-genai SDK)."""
+        """Embed via Gemini SDK (google-genai)."""
         from google import genai
         from google.genai import types
 
@@ -244,7 +247,9 @@ class CloudEmbeddingBackend:
         if dimensions:
             config_kwargs["output_dimensionality"] = dimensions
 
-        result = client.models.embed_content(
+        # google-genai Client.models.embed_content is synchronous, use to_thread
+        result = await asyncio.to_thread(
+            client.models.embed_content,
             model=self._bare_model,
             contents=texts,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]  # SDK accepts list[str]
             config=types.EmbedContentConfig(**config_kwargs) if config_kwargs else None,
@@ -253,15 +258,15 @@ class CloudEmbeddingBackend:
         embeddings = result.embeddings or []
         return [list(e.values or []) for e in embeddings]
 
-    def _embed_openai(
+    async def _embed_openai(
         self, texts: list[str], dimensions: int | None = None
     ) -> list[list[float]]:
         """Embed via OpenAI SDK."""
-        from openai import OpenAI
+        from openai import AsyncOpenAI
 
         key = self.api_key or os.getenv("OPENAI_API_KEY") or ""
         base = self.api_base or "https://api.openai.com/v1"
-        client = OpenAI(api_key=key, base_url=base)
+        client = AsyncOpenAI(api_key=key, base_url=base)
 
         kwargs: dict = {
             "model": self._bare_model,
@@ -270,20 +275,22 @@ class CloudEmbeddingBackend:
         if dimensions:
             kwargs["dimensions"] = dimensions
 
-        response = client.embeddings.create(**kwargs)
+        response = await client.embeddings.create(**kwargs)
         data = sorted(response.data, key=lambda x: x.index)
         return [d.embedding for d in data]
 
-    def _embed_cohere(
+    async def _embed_cohere(
         self, texts: list[str], dimensions: int | None = None
     ) -> list[list[float]]:
         """Embed via Cohere SDK (ClientV2)."""
         import cohere
 
         key = self.api_key or os.getenv("COHERE_API_KEY") or ""
+        # Cohere V2 SDK's ClientV2.embed is synchronous, use to_thread
         client = cohere.ClientV2(api_key=key)
 
-        response = client.embed(
+        response = await asyncio.to_thread(
+            client.embed,
             model=self._bare_model,
             texts=texts,
             input_type="search_document",
@@ -298,7 +305,7 @@ class CloudEmbeddingBackend:
             embeddings = [e[:dimensions] for e in embeddings]
         return embeddings
 
-    def _embed_jina(
+    async def _embed_jina(
         self, texts: list[str], dimensions: int | None = None
     ) -> list[list[float]]:
         """Embed via Jina AI (httpx, REST API)."""
@@ -312,21 +319,22 @@ class CloudEmbeddingBackend:
         if dimensions:
             payload["dimensions"] = dimensions
 
-        response = httpx.post(
-            "https://api.jina.ai/v1/embeddings",
-            json=payload,
-            headers={
-                "Authorization": f"Bearer {key}",
-                "Content-Type": "application/json",
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
-        data = response.json()["data"]
-        data_sorted = sorted(data, key=lambda x: x["index"])
-        return [d["embedding"] for d in data_sorted]
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.jina.ai/v1/embeddings",
+                json=payload,
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            data = response.json()["data"]
+            data_sorted = sorted(data, key=lambda x: x["index"])
+            return [d["embedding"] for d in data_sorted]
 
-    def embed_texts(
+    async def embed_texts(
         self,
         texts: list[str],
         dimensions: int | None = None,
@@ -336,7 +344,7 @@ class CloudEmbeddingBackend:
             return []
 
         if len(texts) <= self.MAX_BATCH_SIZE:
-            return self._embed_batch_inner(texts, dimensions)
+            return await self._embed_batch_inner(texts, dimensions)
 
         # Split into batches
         all_embeddings: list[list[float]] = []
@@ -352,28 +360,28 @@ class CloudEmbeddingBackend:
             logger.debug(
                 f"Embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
             )
-            batch_result = self._embed_batch_inner(batch, dimensions)
+            batch_result = await self._embed_batch_inner(batch, dimensions)
             all_embeddings.extend(batch_result)
 
         return all_embeddings
 
-    def embed_single(
+    async def embed_single(
         self,
         text: str,
         dimensions: int | None = None,
     ) -> list[float]:
         """Embed a single text."""
-        results = self.embed_texts([text], dimensions)
+        results = await self.embed_texts([text], dimensions)
         return results[0]
 
-    def check_available(self) -> int:
+    async def check_available(self) -> int:
         """Check if the cloud model is available via test request.
 
         Distinguishes between invalid API keys (warning) and other
         failures (debug) so users know when their keys are wrong.
         """
         try:
-            embeddings = self._call_provider(["test"])
+            embeddings = await self._call_provider(["test"])
             if embeddings:
                 dim = len(embeddings[0])
                 logger.info(f"Embedding model {self.model} available (dims={dim})")
@@ -431,7 +439,7 @@ class Qwen3EmbedBackend:
             logger.info("Local embedding model loaded")
         return self._model
 
-    def embed_texts(
+    async def embed_texts(
         self,
         texts: list[str],
         dimensions: int | None = None,
@@ -441,40 +449,53 @@ class Qwen3EmbedBackend:
             return []
 
         model = self._get_model()
-        # Pass dim to model.embed() so MRL truncation happens BEFORE L2-normalization
-        kwargs = {}
-        if dimensions and dimensions > 0:
-            kwargs["dim"] = dimensions
-        embeddings = list(model.embed(texts, **kwargs))
+
+        # Local inference is CPU-bound, use to_thread to keep loop responsive
+        def _embed():
+            # Pass dim to model.embed() so MRL truncation happens BEFORE L2-normalization
+            kwargs = {}
+            if dimensions and dimensions > 0:
+                kwargs["dim"] = dimensions
+            return list(model.embed(texts, **kwargs))
+
+        embeddings = await asyncio.to_thread(_embed)
         return [emb.tolist() for emb in embeddings]
 
-    def embed_single(
+    async def embed_single(
         self,
         text: str,
         dimensions: int | None = None,
     ) -> list[float]:
         """Embed a single text (document/passage)."""
-        results = self.embed_texts([text], dimensions)
+        results = await self.embed_texts([text], dimensions)
         return results[0]
 
-    def embed_single_query(
+    async def embed_single_query(
         self,
         text: str,
         dimensions: int | None = None,
     ) -> list[float]:
         """Embed a query with instruction prefix (asymmetric retrieval)."""
         model = self._get_model()
-        kwargs = {}
-        if dimensions and dimensions > 0:
-            kwargs["dim"] = dimensions
-        result = list(model.query_embed(text, **kwargs))
+
+        def _embed_query():
+            kwargs = {}
+            if dimensions and dimensions > 0:
+                kwargs["dim"] = dimensions
+            return list(model.query_embed(text, **kwargs))
+
+        result = await asyncio.to_thread(_embed_query)
         return result[0].tolist()
 
-    def check_available(self) -> int:
+    async def check_available(self) -> int:
         """Check if qwen3-embed is available."""
         try:
             model = self._get_model()
-            result = list(model.embed(["test"]))
+
+            def _check():
+                return list(model.embed(["test"]))
+
+            result = await asyncio.to_thread(_check)
             if result:
                 dim = len(result[0])
                 logger.info(
