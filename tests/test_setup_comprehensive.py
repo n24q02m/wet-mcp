@@ -36,8 +36,10 @@ def test_find_searx_package_dir_not_found(mock_find_spec):
 
 
 @patch("importlib.util.find_spec", side_effect=Exception("Test error"))
-def test_find_searx_package_dir_exception(mock_find_spec):
+@patch("wet_mcp.setup.logger")
+def test_find_searx_package_dir_exception(mock_logger, mock_find_spec):
     assert _find_searx_package_dir() is None
+    mock_logger.debug.assert_called_with("Error finding searx package: Test error")
 
 
 # Test patch_searxng_version
