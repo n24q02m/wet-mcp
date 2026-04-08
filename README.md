@@ -51,7 +51,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 | `extract` | `extract`, `batch`, `crawl`, `map`, `convert`, `extract_structured` | Content extraction, batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema) |
 | `media` | `list`, `download`, `analyze` | Media discovery, download, and analysis |
 | `config` | `status`, `set`, `cache_clear`, `docs_reindex` | Server configuration and cache management |
-| `setup` | `warmup`, `setup_sync`, `setup_relay` | Pre-download models, configure cloud sync, relay setup |
+| `setup` | `open_relay`, `status`, `skip`, `reset`, `complete`, `warmup`, `setup_sync` | Credential setup (browser relay, local-only mode, reset), status check, model warmup, Google Drive sync |
 | `help` | -- | Full documentation for any tool |
 
 ## Security

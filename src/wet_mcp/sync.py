@@ -242,27 +242,33 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
             _folder_id_cache[folder_name] = saved_id
             return saved_id
 
-    # 3. Search by name on Drive
+    # 3. Search by name on Drive (retry for eventual consistency)
+    import asyncio
+
     query = (
         f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
         f"and trashed=false"
     )
-    response = await _drive_request(
-        "GET",
-        f"{_DRIVE_API_BASE}/files",
-        token,
-        params={"q": query, "fields": "files(id,name)", "spaces": "drive"},
-    )
+    for attempt in range(3):
+        response = await _drive_request(
+            "GET",
+            f"{_DRIVE_API_BASE}/files",
+            token,
+            params={"q": query, "fields": "files(id,name)", "spaces": "drive"},
+        )
 
-    if response.status_code == 200:
-        files = response.json().get("files", [])
-        if files:
-            fid = files[0]["id"]
-            _folder_id_cache[folder_name] = fid
-            _save_folder_id(folder_name, fid)
-            return fid
+        if response.status_code == 200:
+            files = response.json().get("files", [])
+            if files:
+                fid = files[0]["id"]
+                _folder_id_cache[folder_name] = fid
+                _save_folder_id(folder_name, fid)
+                return fid
 
-    # 4. Create new folder
+        if attempt < 2:
+            await asyncio.sleep(1.0 * (2**attempt))  # 1s, 2s backoff
+
+    # 4. Create new folder (only after 3 search attempts)
     metadata: dict[str, Any] = {
         "name": folder_name,
         "mimeType": "application/vnd.google-apps.folder",
