@@ -24,7 +24,7 @@ jobs:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
-      UV_NO_SOURCES: "true"
+      UV_NO_SOURCES: "false"
 
     steps:
       - name: Harden Runner
