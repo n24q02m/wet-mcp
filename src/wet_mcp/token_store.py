@@ -56,7 +56,7 @@ def load_token(provider: str) -> dict | None:
 
 def _set_secure_permissions(path: Path, is_dir: bool = False) -> None:
     """Set secure file/directory permissions (Unix: 0600/0700, Windows: ACLs)."""
-    if os.name == "nt":
+    if os.name == "nt":  # pragma: no cover
         try:
             # On Windows, use icacls to:
             # 1. /inheritance:r - Remove all inherited ACEs
