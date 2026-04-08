@@ -1033,9 +1033,7 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     project name — must match the library name to prevent false positives
     (e.g., ``chi.readthedocs.io`` being an unrelated Python project).
     """
-    candidates, clean_name_norm = _get_doc_candidates(
-        homepage, lib_name, registry
-    )
+    candidates, clean_name_norm = _get_doc_candidates(homepage, lib_name, registry)
     if not candidates:
         return homepage
 
