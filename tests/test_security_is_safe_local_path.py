@@ -16,6 +16,9 @@ def load_security():
     spec = importlib.util.spec_from_file_location(
         "wet_mcp.security", "src/wet_mcp/security.py"
     )
+    if spec is None or spec.loader is None:
+        raise ImportError("Could not load wet_mcp.security")
+
     mod = importlib.util.module_from_spec(spec)
     sys.modules["wet_mcp.security"] = mod
     spec.loader.exec_module(mod)
