@@ -1098,7 +1098,7 @@ async def help(tool_name: str = "search") -> str:
 @mcp.tool(
     description=(
         "Server config and management. Actions: "
-        "status|set|cache_clear|docs_reindex|warmup|setup_sync. "
+        "status|set|cache_clear|docs_reindex. "
         "Use help tool with tool_name='config' for full docs."
     ),
     annotations=ToolAnnotations(
