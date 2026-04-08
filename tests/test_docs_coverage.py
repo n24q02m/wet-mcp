@@ -3361,3 +3361,71 @@ def test_chunk_llms_txt_delegation():
 
         mock_chunk.assert_called_once_with(content, url=url, max_chunk_size=2000)
         assert result == [{"content": "chunk1"}]
+
+
+# ---------------------------------------------------------------------------
+# chunk_llms_txt
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_llms_txt_delegation():
+    """chunk_llms_txt delegates to chunk_markdown with correct parameters."""
+    with patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk:
+        mock_chunk.return_value = [{"content": "chunk1"}]
+        content = "some content"
+        url = "https://docs.test"
+        result = chunk_llms_txt(content, base_url=url)
+
+        mock_chunk.assert_called_once_with(content, url=url, max_chunk_size=2000)
+        assert result == [{"content": "chunk1"}]
+
+
+# ---------------------------------------------------------------------------
+# chunk_llms_txt
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_llms_txt_delegation():
+    """chunk_llms_txt delegates to chunk_markdown with correct parameters."""
+    with patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk:
+        mock_chunk.return_value = [{"content": "chunk1"}]
+        content = "some content"
+        url = "https://docs.test"
+        result = chunk_llms_txt(content, base_url=url)
+
+        mock_chunk.assert_called_once_with(content, url=url, max_chunk_size=2000)
+        assert result == [{"content": "chunk1"}]
+
+
+# ---------------------------------------------------------------------------
+# chunk_llms_txt
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_llms_txt_delegation():
+    """chunk_llms_txt delegates to chunk_markdown with correct parameters."""
+    with patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk:
+        mock_chunk.return_value = [{"content": "chunk1"}]
+        content = "some content"
+        url = "https://docs.test"
+        result = chunk_llms_txt(content, base_url=url)
+
+        mock_chunk.assert_called_once_with(content, url=url, max_chunk_size=2000)
+        assert result == [{"content": "chunk1"}]
+
+
+# ---------------------------------------------------------------------------
+# chunk_llms_txt
+# ---------------------------------------------------------------------------
+
+
+def test_chunk_llms_txt_delegation():
+    """chunk_llms_txt delegates to chunk_markdown with correct parameters."""
+    with patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk:
+        mock_chunk.return_value = [{"content": "chunk1"}]
+        content = "some content"
+        url = "https://docs.test"
+        result = chunk_llms_txt(content, base_url=url)
+
+        mock_chunk.assert_called_once_with(content, url=url, max_chunk_size=2000)
+        assert result == [{"content": "chunk1"}]
