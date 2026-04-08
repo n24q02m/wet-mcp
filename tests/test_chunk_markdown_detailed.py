@@ -42,11 +42,16 @@ sys.modules["wet_mcp.sources.crawler"] = crawler
 
 # 2. Mock importlib.metadata.version BEFORE wet_mcp is imported
 import importlib.metadata
+
 original_version = importlib.metadata.version
+
+
 def mock_version(name):
     if name == "wet-mcp":
         return "2.24.0"
     return original_version(name)
+
+
 importlib.metadata.version = mock_version
 
 # 3. Prevent __init__.py from importing everything
@@ -55,6 +60,7 @@ sys.modules["wet_mcp.server"] = MagicMock()
 
 # 4. Import the function
 from wet_mcp.sources.docs import chunk_markdown
+
 
 def test_h1_resets_h2():
     """H1 should reset the H2 state for heading_path."""
@@ -75,6 +81,7 @@ Content 2.1
     assert chunks[3]["title"] == "Section 2.1"
     assert chunks[3]["heading_path"] == "Title 2 > Section 2.1"
 
+
 def test_h4_heading():
     """H4 headings should be recognized and used in heading_path."""
     content = """# H1
@@ -89,22 +96,28 @@ Content under H4
     assert chunks[1]["title"] == "H4"
     assert chunks[1]["heading_path"] == "H1 > H2 > H4"
 
+
 def test_h3_flush_threshold():
     """H3 should flush only if current chunk is large enough (max_chunk_size // 2)."""
     max_size = 200
     # Case 1: Below threshold
     content_small = "## H2\n" + "a" * 50 + "\n### H3\n" + "b" * 50
-    chunks_small = chunk_markdown(content_small, max_chunk_size=max_size, min_chunk_size=1)
+    chunks_small = chunk_markdown(
+        content_small, max_chunk_size=max_size, min_chunk_size=1
+    )
     assert len(chunks_small) == 1
     assert chunks_small[0]["title"] == "H3"
     assert chunks_small[0]["heading_path"] == "H2 > H3"
 
     # Case 2: Above threshold
     content_large = "## H2\n" + "a" * 120 + "\n### H3\n" + "b" * 50
-    chunks_large = chunk_markdown(content_large, max_chunk_size=max_size, min_chunk_size=1)
+    chunks_large = chunk_markdown(
+        content_large, max_chunk_size=max_size, min_chunk_size=1
+    )
     assert len(chunks_large) == 2
     assert chunks_large[0]["title"] == "H2"
     assert chunks_large[1]["title"] == "H3"
+
 
 def test_noise_cleaning_integration():
     """_clean_doc_content noise removal works within chunk_markdown."""
@@ -123,16 +136,19 @@ Content
         assert "---" not in c["content"]
         assert "shields.io" not in c["content"]
 
+
 def test_empty_after_cleaning():
     """Should return empty list if all content is noise."""
     content = "![Badge](https://img.shields.io/badge/any-thing-blue)"
     chunks = chunk_markdown(content)
     assert chunks == []
 
+
 def test_empty_content_variants():
     """Empty or whitespace-only strings."""
     assert chunk_markdown("") == []
     assert chunk_markdown("   \n\t  ") == []
+
 
 if __name__ == "__main__":
     test_h1_resets_h2()
