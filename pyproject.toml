@@ -116,6 +116,8 @@ markers = [
 ]
 addopts = "-m 'not integration and not live and not full and not e2e'"
 
+[tool.uv.sources]
+mcp-relay-core = { path = "../mcp-relay-core/packages/core-py", editable = true }
 
 [tool.ty]
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }

@@ -1999,7 +1999,7 @@ _TOC_LINK_RE = re.compile(r"^\s*[-*]\s*\[.*?\]\(#[^)]*\)\s*$", re.MULTILINE)
 # Navigation line patterns
 _NAV_RE = re.compile(
     r"^\s*(?:"
-    r"\u2190 Previous|Next \→|Skip to (?:main )?content|"
+    r"\u2190 Previous|Next \u2192|Skip to (?:main )?content|"
     r"Table of [Cc]ontents|On this page|"
     r"Edit (?:this|on) (?:page|GitHub)|"
     r"Suggest (?:changes|edits)|"
