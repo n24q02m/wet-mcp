@@ -683,8 +683,13 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if result is plain text
                     pass
+                except Exception:
+                    logger.exception(
+                        "Unexpected error formatting search tool JSON result"
+                    )
             return result
 
         case "research":
@@ -723,8 +728,13 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if result is plain text
                     pass
+                except Exception:
+                    logger.exception(
+                        "Unexpected error formatting research tool JSON result"
+                    )
             return result
 
         case "docs":
@@ -854,8 +864,13 @@ async def extract(
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if result is plain text
                     pass
+                except Exception:
+                    logger.exception(
+                        "Unexpected error formatting extract tool JSON result"
+                    )
             return result
 
         case "batch":
@@ -1047,8 +1062,13 @@ async def media(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if result is plain text
                     pass
+                except Exception:
+                    logger.exception(
+                        "Unexpected error formatting analyze tool JSON result"
+                    )
             return result
 
         case _:
