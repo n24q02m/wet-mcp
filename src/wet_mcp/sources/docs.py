@@ -20,7 +20,7 @@ import re
 import zlib
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import ParseResult, urljoin, urlparse
 
 import httpx
 from loguru import logger
@@ -853,7 +853,7 @@ async def _get_github_homepage(url: str) -> str | None:
 
 def _get_probe_candidates(
     homepage: str, lib_name: str, registry: str
-) -> tuple[list[tuple[str, str]], str, Any]:
+) -> tuple[list[tuple[str, str]], str, ParseResult]:
     """Generate potential documentation URLs to probe."""
     parsed = urlparse(homepage)
     netloc = parsed.netloc
@@ -962,7 +962,7 @@ async def _check_probe_candidate(
     client: httpx.AsyncClient,
     label: str,
     url: str,
-    parsed_homepage: Any,
+    parsed_homepage: ParseResult,
     clean_name_norm: str,
     lib_name: str,
 ) -> tuple[str, str, int, bool] | None:
