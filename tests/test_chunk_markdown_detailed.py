@@ -1,3 +1,4 @@
+# ruff: noqa: E402, I001
 import sys
 from unittest.mock import MagicMock
 
