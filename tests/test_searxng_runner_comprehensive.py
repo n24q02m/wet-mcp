@@ -154,7 +154,7 @@ async def test_quick_health_check():
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             pass
 
-    with patch("httpx.AsyncClient", return_value=MockClientContextManager()):
+    with patch("wet_mcp.searxng_runner.httpx.AsyncClient", return_value=MockClientContextManager()):
         assert await _quick_health_check("http://localhost:8080", retries=1) is True
 
         mock_client.get.side_effect = httpx.RequestError("error")
@@ -223,7 +223,7 @@ async def test_wait_for_service():
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             pass
 
-    with patch("httpx.AsyncClient", return_value=MockClientContextManager()):
+    with patch("wet_mcp.searxng_runner.httpx.AsyncClient", return_value=MockClientContextManager()):
         assert await _wait_for_service("http://localhost:8080", timeout=1.0) is True
 
 

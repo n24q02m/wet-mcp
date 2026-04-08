@@ -1,4 +1,5 @@
 import asyncio
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -175,10 +176,10 @@ class TestSyncCoverage:
             patch("wet_mcp.sync.sync_full", new_callable=AsyncMock),
         ):
             ms.sync_enabled = True
-            ms.sync_interval = 0.01
+            ms.sync_interval = 3600
             start_auto_sync(db_mock)
             assert sync._sync_task is not None
-            await asyncio.sleep(0.02)
+            assert not sync._sync_task.done()
             stop_auto_sync()
             assert sync._sync_task is None
 
@@ -207,7 +208,7 @@ class TestSyncCoverage:
             patch("wet_mcp.sync.settings") as ms,
             patch("wet_mcp.sync.httpx.AsyncClient") as mc,
             patch("wet_mcp.sync.asyncio.sleep"),
-            patch("wet_mcp.sync.time.time", side_effect=[100, 2000]),
+            patch("wet_mcp.sync.time.time", side_effect=[100, 2000] + [2000] * 10),
         ):
             ms.google_drive_client_id = "c"
             ms.google_drive_client_secret = "s"

@@ -123,7 +123,7 @@ class TestEnsureConfigForced:
                 "mcp_relay_core.storage.config_file.write_config",
             ),
             patch("wet_mcp.relay_setup.apply_config"),
-            patch("httpx.AsyncClient") as mock_httpx,
+            patch("wet_mcp.relay_setup.httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
         ):
             mock_settings.google_drive_client_id = None

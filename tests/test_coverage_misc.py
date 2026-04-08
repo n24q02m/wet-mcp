@@ -117,7 +117,7 @@ class TestQuickHealthCheckRetryBackoff:
                 pass
 
         with (
-            patch("httpx.AsyncClient", return_value=MockClientCM()),
+            patch("web_core.search.runner.httpx.AsyncClient", return_value=MockClientCM()),
             patch(
                 "web_core.search.runner.asyncio.sleep", new_callable=AsyncMock
             ) as mock_sleep,
@@ -177,7 +177,7 @@ class TestWaitForServiceTimeout:
                 raise asyncio.CancelledError
 
         with (
-            patch("httpx.AsyncClient", return_value=MockClientCM()),
+            patch("web_core.search.runner.httpx.AsyncClient", return_value=MockClientCM()),
             patch("web_core.search.runner.asyncio.sleep", side_effect=fake_sleep),
             patch("web_core.search.runner.time") as mock_time,
         ):
@@ -840,7 +840,7 @@ class TestExtractWithMarkitdown:
         mock_client.__aexit__ = AsyncMock(return_value=None)
 
         with (
-            patch("httpx.AsyncClient", return_value=mock_client),
+            patch("wet_mcp.sources.crawler.httpx.AsyncClient", return_value=mock_client),
             patch.dict(
                 "sys.modules", {"markitdown": MagicMock(MarkItDown=mock_md_cls)}
             ),
@@ -865,7 +865,7 @@ class TestExtractWithMarkitdown:
         mock_md_cls = MagicMock()
 
         with (
-            patch("httpx.AsyncClient", return_value=mock_client),
+            patch("wet_mcp.sources.crawler.httpx.AsyncClient", return_value=mock_client),
             patch.dict(
                 "sys.modules", {"markitdown": MagicMock(MarkItDown=mock_md_cls)}
             ),

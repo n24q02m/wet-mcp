@@ -187,7 +187,7 @@ class TestEnsureConfig:
                 return_value=mock_config,
             ),
             patch("mcp_relay_core.storage.config_file.write_config"),
-            patch("httpx.AsyncClient") as mock_httpx,
+            patch("wet_mcp.credential_state.httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
             patch(
@@ -240,7 +240,7 @@ class TestEnsureConfig:
                 return_value=mock_config,
             ),
             patch("mcp_relay_core.storage.config_file.write_config"),
-            patch("httpx.AsyncClient") as mock_httpx,
+            patch("wet_mcp.credential_state.httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
         ):
@@ -288,7 +288,7 @@ class TestEnsureConfig:
                 return_value=mock_config,
             ),
             patch("mcp_relay_core.storage.config_file.write_config"),
-            patch("httpx.AsyncClient") as mock_httpx,
+            patch("wet_mcp.credential_state.httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
             patch(

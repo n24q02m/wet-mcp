@@ -841,7 +841,7 @@ class TestDriveRequest:
         mock_response = MagicMock(spec=httpx.Response)
         mock_response.status_code = 200
 
-        with patch("httpx.AsyncClient") as mock_client_cls:
+        with patch("wet_mcp.sync.httpx.AsyncClient") as mock_client_cls:
             mock_client = AsyncMock()
             mock_client.request.return_value = mock_response
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
