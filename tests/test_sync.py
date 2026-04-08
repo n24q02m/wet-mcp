@@ -180,7 +180,7 @@ class TestDriveHelpers:
 
     @pytest.mark.asyncio
     async def test_find_or_create_folder_creates_new(self):
-        """Creates folder when not found."""
+        """Creates folder when not found (after 3 search retries)."""
         from wet_mcp.sync import _find_or_create_folder
 
         search_response = MagicMock()
@@ -194,10 +194,16 @@ class TestDriveHelpers:
         with (
             patch(
                 "wet_mcp.sync._drive_request",
-                side_effect=[search_response, create_response],
+                side_effect=[
+                    search_response,
+                    search_response,
+                    search_response,
+                    create_response,
+                ],
             ),
             patch("wet_mcp.sync._load_folder_id", return_value=None),
             patch("wet_mcp.sync._save_folder_id"),
+            patch("asyncio.sleep", return_value=None),
         ):
             result = await _find_or_create_folder({"access_token": "t"}, "test")
             assert result == "new_folder"
@@ -218,10 +224,16 @@ class TestDriveHelpers:
         with (
             patch(
                 "wet_mcp.sync._drive_request",
-                side_effect=[search_response, create_response],
+                side_effect=[
+                    search_response,
+                    search_response,
+                    search_response,
+                    create_response,
+                ],
             ),
             patch("wet_mcp.sync._load_folder_id", return_value=None),
             patch("wet_mcp.sync._save_folder_id"),
+            patch("asyncio.sleep", return_value=None),
         ):
             result = await _find_or_create_folder({"access_token": "t"}, "test")
             assert result is None
