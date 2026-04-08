@@ -809,7 +809,7 @@ async def _get_github_homepage(url: str) -> str | None:
 
 def _get_doc_candidates(
     homepage: str, lib_name: str, registry: str = ""
-) -> tuple[list[tuple[str, str]], str, str]:
+) -> tuple[list[tuple[str, str]], str]:
     """Generate candidate documentation URLs for probing."""
     parsed = urlparse(homepage)
     netloc = parsed.netloc
@@ -881,7 +881,7 @@ def _get_doc_candidates(
         docs_path_url = f"{parsed.scheme}://{parsed.netloc}/docs/"
         candidates.append(("docs_path", docs_path_url))
 
-    return candidates, clean_name, clean_name_norm
+    return candidates, clean_name_norm
 
 
 def _validate_rtd_inventory(
@@ -1033,7 +1033,7 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     project name — must match the library name to prevent false positives
     (e.g., ``chi.readthedocs.io`` being an unrelated Python project).
     """
-    candidates, clean_name, clean_name_norm = _get_doc_candidates(
+    candidates, clean_name_norm = _get_doc_candidates(
         homepage, lib_name, registry
     )
     if not candidates:
