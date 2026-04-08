@@ -1485,7 +1485,6 @@ class TestChunkMarkdownCoverage:
         result = chunk_markdown(content)
         assert result == []
 
-
     def test_chunk_markdown_h4(self):
         """H4 headings are recognized and included in heading_path."""
         content = """# Title 1
@@ -1519,7 +1518,11 @@ The chunk should have the title and path of the last heading encountered.
 
     def test_chunk_markdown_h3_flush_large(self):
         """H3 flushes current chunk if it exceeds half of max_chunk_size."""
-        content = "## Section 1\n\n" + ("Large content. " * 50) + "\n\n### Section 2\n\nSmall content."
+        content = (
+            "## Section 1\n\n"
+            + ("Large content. " * 50)
+            + "\n\n### Section 2\n\nSmall content."
+        )
         result = chunk_markdown(content, max_chunk_size=1000, min_chunk_size=10)
         assert len(result) >= 2
         assert result[0]["title"] == "Section 1"
@@ -1542,6 +1545,8 @@ This is enough content for Page 2 to be its own chunk.
         result = chunk_markdown(content, min_chunk_size=10)
         page2_chunk = [c for c in result if c["title"] == "Page 2"][0]
         assert page2_chunk["heading_path"] == "Page 2"
+
+
 # _parse_objects_inv
 # ---------------------------------------------------------------------------
 
