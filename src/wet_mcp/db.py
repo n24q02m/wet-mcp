@@ -18,6 +18,11 @@ from functools import lru_cache
 from pathlib import Path
 
 from loguru import logger
+from wet_mcp.sources.docs import DISCOVERY_VERSION
+# Bump this when discovery scoring changes to invalidate stale caches.
+
+
+
 # Allowed SQL fragments for library updates to prevent injection
 _ALLOWED_LIBRARY_UPDATES = {
     "docs_url = ?",
@@ -26,10 +31,6 @@ _ALLOWED_LIBRARY_UPDATES = {
     "discovery_version = ?",
     "updated_at = ?",
 }
-
-# Bump this when discovery scoring changes to invalidate stale caches.
-
-from wet_mcp.sources.docs import DISCOVERY_VERSION
 
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize float vector for sqlite-vec."""

@@ -1,7 +1,5 @@
 import pytest
-import sqlite3
-import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from wet_mcp.db import DocsDB
 
 @pytest.fixture
@@ -26,7 +24,7 @@ def test_get_existing_ids_valid_tables(db):
 def test_upsert_library_unauthorized_fragment(db):
     """Test upsert_library raises ValueError for unauthorized SQL fragments."""
     # First, create a library to trigger the update path
-    lib_id = db.upsert_library(name="testlib")
+    db.upsert_library(name="testlib")
 
     # Mock _ALLOWED_LIBRARY_UPDATES to test the validation logic
     # We can't easily patch the constant if it's already used in the method,
