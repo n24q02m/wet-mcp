@@ -88,7 +88,7 @@ def test_set_secure_permissions_windows(tmp_path):
     path.touch()
 
     with (
-        patch("wet_mcp.token_store.os.name", "nt"),
+        patch("wet_mcp.token_store.sys.platform", "win32"),
         patch("wet_mcp.token_store.getpass.getuser", return_value="testuser"),
         patch("wet_mcp.token_store.subprocess.run") as mock_run,
     ):
@@ -96,7 +96,8 @@ def test_set_secure_permissions_windows(tmp_path):
         mock_run.assert_called_once_with(
             ["icacls", str(path), "/inheritance:r", "/grant:r", "testuser:F"],
             check=True,
-            capture_output=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
 
 
@@ -104,7 +105,7 @@ def test_save_token_windows_permissions(token_dir):
     """On Windows, verify icacls is called."""
     with (
         patch("wet_mcp.token_store.settings") as mock_settings,
-        patch("wet_mcp.token_store.os.name", "nt"),
+        patch("wet_mcp.token_store.sys.platform", "win32"),
         patch("wet_mcp.token_store.getpass.getuser", return_value="testuser"),
         patch("wet_mcp.token_store.subprocess.run") as mock_run,
     ):

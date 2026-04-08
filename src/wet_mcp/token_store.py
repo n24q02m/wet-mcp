@@ -18,6 +18,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 from loguru import logger
@@ -56,7 +57,7 @@ def load_token(provider: str) -> dict | None:
 
 def _set_secure_permissions(path: Path, is_dir: bool = False) -> None:
     """Set secure file/directory permissions (Unix: 0600/0700, Windows: ACLs)."""
-    if os.name == "nt":  # pragma: no cover
+    if sys.platform == "win32":  # pragma: no cover
         try:
             # On Windows, use icacls to:
             # 1. /inheritance:r - Remove all inherited ACEs
@@ -65,7 +66,8 @@ def _set_secure_permissions(path: Path, is_dir: bool = False) -> None:
             subprocess.run(
                 ["icacls", str(path), "/inheritance:r", "/grant:r", f"{user}:F"],
                 check=True,
-                capture_output=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
             )
         except (subprocess.CalledProcessError, OSError) as e:
             logger.warning(
