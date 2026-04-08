@@ -1403,15 +1403,12 @@ cli = [
 [[package]]
 name = "mcp-relay-core"
 version = "1.4.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/n24q02m/mcp-relay-core.git?subdirectory=packages%2Fcore-py#e42094ece7edbce22f01cae679450ec57d5b66ef" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
     { name = "platformdirs" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/55/e7/52c2c559e6edd9f73b0af715c2f3bc2c8dd0cef53c1f31af462be4254340/mcp_relay_core-1.4.0.tar.gz", hash = "sha256:cef2bad3ffff862620d6c896a6639760ffbad92ebb9345b45057e3706fb1aedb", size = 67007, upload-time = "2026-04-06T00:45:30.263Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/89/be/f8b284742c25b900d50aa317b055569a72fdb6402df1d5c209c29b673942/mcp_relay_core-1.4.0-py3-none-any.whl", hash = "sha256:ed6ae8f610ee5dff48e67f42548403846f0119211687254fb8e54f638945f37d", size = 45159, upload-time = "2026-04-06T00:45:31.211Z" },
+    { name = "pygments" },
 ]
 
 [[package]]
@@ -2972,7 +2969,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "mcp-relay-core", specifier = ">=1.4.0" },
+    { name = "mcp-relay-core", git = "https://github.com/n24q02m/mcp-relay-core.git?subdirectory=packages%2Fcore-py" },
     { name = "n24q02m-web-core", specifier = ">=1.1.0" },
     { name = "openai", specifier = ">=2.30.0" },
     { name = "pillow", specifier = ">=12.1.1" },

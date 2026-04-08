@@ -567,16 +567,19 @@ class DocsDB:
         fts_chunks: dict[str, dict],
     ) -> list[tuple[str, float]]:
         """Combine FTS and vector scores using RRF or FTS-only scoring."""
-        all_ids = set(fts_scores.keys()) | set(vec_scores.keys())
+        # ⚡ Bolt Optimization: Use dictionary view union directly instead of casting to sets
+        # (e.g. `fts_scores.keys() | vec_scores.keys()`). This avoids allocating two intermediate
+        # set objects entirely.
+        all_ids = fts_scores.keys() | vec_scores.keys()
         scored: list[tuple[str, float]] = []
 
         if vec_scores:
             # RRF fusion when both FTS and vector signals available
             k = 60
-            # ⚡ Bolt Optimization: Sort only the specific score dictionaries directly
-            # instead of sorting all_ids with a lambda.
-            fts_ranked = sorted(fts_scores, key=lambda x: fts_scores[x], reverse=True)
-            vec_ranked = sorted(vec_scores, key=lambda x: vec_scores[x], reverse=True)
+            # ⚡ Bolt Optimization: Use __getitem__ instead of lambda x: dict[x] for faster sorting.
+            # Avoids O(N) Python-level function call overhead.
+            fts_ranked = sorted(fts_scores, key=fts_scores.__getitem__, reverse=True)
+            vec_ranked = sorted(vec_scores, key=vec_scores.__getitem__, reverse=True)
             fts_rank = {cid: i + 1 for i, cid in enumerate(fts_ranked)}
             vec_rank = {cid: i + 1 for i, cid in enumerate(vec_ranked)}
 
