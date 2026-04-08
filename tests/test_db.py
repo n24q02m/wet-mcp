@@ -8,7 +8,6 @@ RRF fusion scoring, and tiered FTS fallback.
 
 import importlib.util
 import json
-import sqlite3
 import struct
 import sys
 import types
@@ -1373,14 +1372,13 @@ class TestCloseErrorHandling:
 
     def test_close_with_broken_connection(self, tmp_path):
         """close() handles broken connections gracefully (lines 972-973)."""
+        import sqlite3
         db = DocsDB(tmp_path / "close_broken.db", embedding_dims=0)
         # Replace _conn with a mock whose close() raises
         mock_conn = MagicMock()
         mock_conn.close.side_effect = sqlite3.Error("connection error")
         db._conn = mock_conn
         db.close()  # Should not raise
-
-
 # -----------------------------------------------------------------------
 # stats() (lines 287-291)
 # -----------------------------------------------------------------------

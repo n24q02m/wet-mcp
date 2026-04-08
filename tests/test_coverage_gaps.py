@@ -1,7 +1,6 @@
 """Tests to cover remaining gaps in sync.py, setup_tool.py, cache.py, and reranker.py."""
 
 import asyncio
-import sqlite3
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -309,6 +308,7 @@ class TestCachePurgeAndClose:
 
     def test_close_handles_exception(self):
         """L190-191: close() catches exceptions from conn.close()."""
+        import sqlite3
         from wet_mcp.cache import WebCache
 
         cache = WebCache.__new__(WebCache)
@@ -316,7 +316,6 @@ class TestCachePurgeAndClose:
         cache._conn.close.side_effect = sqlite3.Error("already closed")
 
         cache.close()  # Should not raise
-
 
 # ---------------------------------------------------------------------------
 # reranker.py coverage gaps
