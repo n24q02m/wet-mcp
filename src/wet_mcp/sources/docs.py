@@ -3487,7 +3487,9 @@ def _filter_doc_url(
         return None
 
     # Versioned docs: restrict to same version path prefix
-    if context.version_prefix and not full_parsed.path.startswith(context.version_prefix):
+    if context.version_prefix and not full_parsed.path.startswith(
+        context.version_prefix
+    ):
         return None
 
     return full_url
