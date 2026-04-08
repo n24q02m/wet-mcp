@@ -3345,6 +3345,7 @@ def test_apply_version_to_url_other_site():
     result = _apply_version_to_url(url, "3.12")
     assert result == url
 
+
 # ---------------------------------------------------------------------------
 # chunk_llms_txt
 # ---------------------------------------------------------------------------
