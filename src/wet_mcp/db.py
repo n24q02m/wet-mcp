@@ -16,7 +16,6 @@ import time
 import uuid
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 
@@ -754,34 +753,37 @@ class DocsDB:
             _ch = fts_chunks.get(_cid)
             if not _ch:
                 continue
-            _url = _ch.get("url", "")
-            _ver = _ch.get("version_id", "")
-            _idx = _ch.get("chunk_index", -1)
-            if _url and _ver and _idx >= 0:
-                _adj_keys.append((_url, _ver, _idx - 1))
-                _adj_keys.append((_url, _ver, _idx + 1))
+            _u = _ch.get("url", "")
+            _v = _ch.get("version_id", "")
+            _i = _ch.get("chunk_index", -1)
+            if _u and _v and _i >= 0:
+                _adj_keys.append((_u, _v, _i - 1))
+                _adj_keys.append((_u, _v, _i + 1))
 
         _adj_map: dict[tuple[str, str, int], str] = {}
         if _adj_keys:
-            # ⚡ Bolt Optimization: Prefetch all adjacent chunks in a single batched query
-            # using row-value IN syntax to leverage the composite index (url, version_id, chunk_index).
-            # This eliminates N+1 query overhead while ensuring O(log N) index seeks.
-            _unique_adj = sorted(set(_adj_keys))
-            _max_params = 32764 if sqlite3.sqlite_version_info >= (3, 32, 0) else 900
-            _batch_size = _max_params // 3
+            # ⚡ Bolt Optimization: Prefetch all adjacent chunks in a single query
+            # by grouping by (url, version_id) and using composite OR clauses.
+            # This eliminates N+1 queries while ensuring efficient index seeks.
+            _groups: dict[tuple[str, str], list[int]] = {}
+            for _ukey, _vkey, _idx in sorted(set(_adj_keys)):
+                _groups.setdefault((_ukey, _vkey), []).append(_idx)
 
-            for i in range(0, len(_unique_adj), _batch_size):
-                _batch = _unique_adj[i : i + _batch_size]
-                _placeholders = ",".join(["(?,?,?)"] * len(_batch))
-                _params: list[Any] = []
-                for k in _batch:
-                    _params.extend(k)
+            _clauses = []
+            _params = []
+            for (_ukey, _vkey), _indices in _groups.items():
+                _placeholders = ",".join(["?"] * len(_indices))
+                _clauses.append(
+                    f"(url = ? AND version_id = ? AND chunk_index IN ({_placeholders}))"
+                )
+                _params.extend([_ukey, _vkey] + _indices)
 
+            if _clauses:
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 rows = self._conn.execute(
                     f"""SELECT url, version_id, chunk_index, content
                         FROM doc_chunks
-                        WHERE (url, version_id, chunk_index) IN ({_placeholders})""",
+                        WHERE {" OR ".join(_clauses)}""",
                     _params,
                 ).fetchall()
                 for r in rows:
