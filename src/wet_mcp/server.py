@@ -584,11 +584,10 @@ async def search(  # noqa: PLR0913
     if blocked:
         return blocked
 
-    if not query:
-        return f"Error: query is required for {action} action."
-
     match action:
         case "search":
+            if not query:
+                return 'Error: query is required for search action. Example: search(action="search", query="python async patterns")'
             cache_params = {
                 "query": query,
                 "categories": categories,
@@ -601,7 +600,7 @@ async def search(  # noqa: PLR0913
             return await _execute_search_with_cache(
                 "search",
                 cache_params,
-                _do_web_search(
+                lambda: _do_web_search(
                     query=query,
                     categories=categories,
                     max_results=max_results,
@@ -615,6 +614,8 @@ async def search(  # noqa: PLR0913
             )
 
         case "research":
+            if not query:
+                return 'Error: query is required for research action. Example: search(action="research", query="transformer attention mechanism")'
             cache_params = {
                 "query": query,
                 "max_results": max_results,
@@ -626,7 +627,7 @@ async def search(  # noqa: PLR0913
             return await _execute_search_with_cache(
                 "research",
                 cache_params,
-                _do_research(
+                lambda: _do_research(
                     query=query,
                     max_results=max_results,
                     time_range=time_range,
@@ -639,6 +640,8 @@ async def search(  # noqa: PLR0913
         case "docs":
             if not library:
                 return 'Error: library is required for docs action. Example: search(action="docs", query="routing", library="fastapi")'
+            if not query:
+                return 'Error: query is required for docs action. Example: search(action="docs", query="how to create routes", library="fastapi")'
             return await _with_timeout(
                 _do_docs_search(
                     library=library,
@@ -651,6 +654,8 @@ async def search(  # noqa: PLR0913
             )
 
         case "similar":
+            if not query:
+                return 'Error: query (URL) is required for similar action. Example: search(action="similar", query="https://example.com/article")'
             if not query.startswith(("http://", "https://")):
                 return 'Error: query must be a full URL starting with http:// or https://. Example: search(action="similar", query="https://example.com/article"). If you want to search by keywords instead, use action="search".'
             return await _with_timeout(
@@ -1317,7 +1322,7 @@ async def setup(
 async def _execute_search_with_cache(
     action: str,
     cache_params: dict,
-    coro,
+    coro_factory,
 ) -> str:
     """Execute search with caching and result formatting."""
     if _web_cache:
@@ -1325,7 +1330,7 @@ async def _execute_search_with_cache(
         if cached:
             return cached
 
-    result = await _with_timeout(coro, action)
+    result = await _with_timeout(coro_factory(), action)
 
     if _web_cache and not result.startswith("Error"):
         await asyncio.to_thread(_web_cache.set, action, cache_params, result)
