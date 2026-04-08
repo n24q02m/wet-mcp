@@ -18,7 +18,7 @@ import json
 import os
 import re
 import zlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
@@ -3399,6 +3399,41 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
 # Docs fetching with Crawl4AI
 # ---------------------------------------------------------------------------
 
+# SPA-friendly crawl settings: scroll full page to trigger lazy-loaded
+# content and add a small delay for JS rendering before capture.
+_SPA_KWARGS: dict = {
+    "scan_full_page": True,
+    "delay_before_return_html": 1.0,
+}
+
+# Generated/index pages to skip (Sphinx, MkDocs, etc.)
+_SKIP_URL_PATTERNS = (
+    "/genindex",
+    "/searchindex",
+    "/modindex",
+    "/_modules/",
+    "/_sources/",
+    "/blog/",
+    "/changelog",
+    "/releases",
+)
+
+# GitHub-specific paths to skip
+_GH_SKIP_PATHS = {
+    "features",
+    "enterprise",
+    "copilot",
+    "marketplace",
+    "security",
+    "sponsors",
+    "login",
+    "signup",
+    "about",
+    "pricing",
+    "customer-stories",
+    "why-github",
+}
+
 
 @dataclass(frozen=True)
 class DocsCrawlContext:
@@ -3408,10 +3443,10 @@ class DocsCrawlContext:
     docs_parsed: Any
     is_github: bool
     gh_path_prefix: str
-    gh_skip_paths: set[str]
-    skip_url_patterns: tuple[str, ...]
     version_prefix: str
     query: str = ""
+    gh_skip_paths: set[str] = field(default_factory=lambda: set(_GH_SKIP_PATHS))
+    skip_url_patterns: tuple[str, ...] = _SKIP_URL_PATTERNS
 
 
 def _filter_doc_url(
@@ -3435,7 +3470,8 @@ def _filter_doc_url(
     full_parsed = urlparse(full_url)
 
     # Skip generated index/module pages
-    if any(pat in full_parsed.path.lower() for pat in context.skip_url_patterns):
+    path_lower = full_parsed.path.lower()
+    if any(pat in path_lower for pat in context.skip_url_patterns):
         return None
 
     # GitHub-specific: stay within same repo
@@ -3544,13 +3580,6 @@ async def fetch_docs_pages(
     """
     from wet_mcp.sources.crawler import extract
 
-    # SPA-friendly crawl settings: scroll full page to trigger lazy-loaded
-    # content and add a small delay for JS rendering before capture.
-    _SPA_KWARGS: dict = {
-        "scan_full_page": True,
-        "delay_before_return_html": 1.0,
-    }
-
     # Step 1: Fetch root page
     logger.info(f"Fetching docs root: {docs_url}")
     try:
@@ -3570,32 +3599,6 @@ async def fetch_docs_pages(
     docs_parsed = urlparse(docs_url)
     _is_github = "github.com" in docs_parsed.netloc
     _gh_path_prefix = "/".join(docs_parsed.path.strip("/").split("/")[:2])
-    _gh_skip_paths = {
-        "features",
-        "enterprise",
-        "copilot",
-        "marketplace",
-        "security",
-        "sponsors",
-        "login",
-        "signup",
-        "about",
-        "pricing",
-        "customer-stories",
-        "why-github",
-    }
-
-    # Generated/index pages to skip (Sphinx, MkDocs, etc.)
-    _skip_url_patterns = (
-        "/genindex",
-        "/searchindex",
-        "/modindex",
-        "/_modules/",
-        "/_sources/",
-        "/blog/",
-        "/changelog",
-        "/releases",
-    )
 
     # Detect redirect: if actual URL differs from docs_url (e.g., versioned
     # docs), use the redirected path as prefix to restrict crawling to that
@@ -3620,8 +3623,6 @@ async def fetch_docs_pages(
         docs_parsed=docs_parsed,
         is_github=_is_github,
         gh_path_prefix=_gh_path_prefix,
-        gh_skip_paths=_gh_skip_paths,
-        skip_url_patterns=_skip_url_patterns,
         version_prefix=_version_prefix,
         query=query,
     )
