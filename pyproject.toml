@@ -152,5 +152,3 @@ branch = true
 fail_under = 94
 show_missing = true
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
-[tool.uv.sources]
-mcp-relay-core = { path = "../mcp-relay-core/packages/core-py", editable = true }
