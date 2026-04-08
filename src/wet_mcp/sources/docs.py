@@ -20,7 +20,7 @@ import re
 import zlib
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import ParseResult, urljoin, urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from loguru import logger
@@ -70,6 +70,7 @@ _PROBE_AUTH_SEGMENTS = (
     "/auth",
     "/register",
 )
+
 
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
@@ -853,7 +854,7 @@ async def _get_github_homepage(url: str) -> str | None:
 
 def _get_probe_candidates(
     homepage: str, lib_name: str, registry: str
-) -> tuple[list[tuple[str, str]], str, ParseResult]:
+) -> tuple[list[tuple[str, str]], str, Any]:
     """Generate potential documentation URLs to probe."""
     parsed = urlparse(homepage)
     netloc = parsed.netloc
@@ -962,7 +963,7 @@ async def _check_probe_candidate(
     client: httpx.AsyncClient,
     label: str,
     url: str,
-    parsed_homepage: ParseResult,
+    parsed_homepage: Any,
     clean_name_norm: str,
     lib_name: str,
 ) -> tuple[str, str, int, bool] | None:
@@ -1024,17 +1025,17 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     Many libraries list their marketing/landing page in package registries,
     but actual documentation lives at a different URL:
 
-    - ``docs.{domain}`` subdomain (e.g., docs.solidjs.com, docs.nestjs.com)
-    - ``{name}.readthedocs.io`` (validated via ``objects.inv`` project name)
-    - ``{homepage}/docs/`` path (e.g., remix.run/docs/)
+    - docs.{domain} subdomain (e.g., docs.solidjs.com, docs.nestjs.com)
+    - {name}.readthedocs.io (validated via objects.inv project name)
+    - {homepage}/docs/ path (e.g., remix.run/docs/)
 
     Probes these alternatives in parallel. Returns the best URL found,
-    preferring URLs with Sphinx ``objects.inv`` (guaranteed rich docs).
-    Falls back to ``homepage`` if no better alternative exists.
+    preferring URLs with Sphinx objects.inv (guaranteed rich docs).
+    Falls back to homepage if no better alternative exists.
 
-    ReadTheDocs results are validated by parsing the ``objects.inv`` header
+    ReadTheDocs results are validated by parsing the objects.inv header
     project name — must match the library name to prevent false positives
-    (e.g., ``chi.readthedocs.io`` being an unrelated Python project).
+    (e.g., chi.readthedocs.io being an unrelated Python project).
     """
     candidates, clean_name_norm, parsed_homepage = _get_probe_candidates(
         homepage, lib_name, registry
@@ -1080,6 +1081,8 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     return homepage
 
 
+# ---------------------------------------------------------------------------
+# Language → registry mapping for targeted discovery
 # ---------------------------------------------------------------------------
 
 _LANGUAGE_ALIASES: dict[str, str] = {
