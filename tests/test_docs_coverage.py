@@ -1486,8 +1486,6 @@ class TestChunkMarkdownCoverage:
         assert result == []
 
 
-# ---------------------------------------------------------------------------
-
     def test_chunk_markdown_h4(self):
         """H4 headings are recognized and included in heading_path."""
         content = """# Title 1
