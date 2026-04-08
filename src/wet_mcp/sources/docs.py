@@ -1562,7 +1562,7 @@ def _score_result(r: dict, name: str) -> int:
         score += 5
         # Non-GitHub homepage = established project with custom domain
         parsed_hp = urlparse(homepage)
-        if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
+        if parsed_hp.netloc and parsed_hp.netloc not in ("github.com", "www.github.com"):
             lib_norm = name.lower().replace("-", "")
             if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
                 score += 1  # Auto-generated docs, minimal boost
@@ -1642,7 +1642,7 @@ async def _finalize_best_result(best: dict, name: str, best_score: int) -> dict 
     # check the GitHub API for a better homepage (e.g. vuejs.org).
     homepage = best.get("homepage", "")
     repo_url = best.get("repository", "")
-    if homepage and "github.com" in urlparse(homepage).netloc:
+    if homepage and urlparse(homepage).netloc in ("github.com", "www.github.com"):
         # Try to extract owner/repo from either homepage or repo URL
         gh_url = repo_url if repo_url else homepage
         gh_homepage = await _get_github_homepage(gh_url)
@@ -1682,13 +1682,13 @@ async def _fallback_github_discovery(name: str, language: str) -> dict | None:
     gh_result = await _discover_from_github_search(name, lang)
     if gh_result:
         homepage = gh_result.get("homepage", "")
-        if homepage and "github.com" not in urlparse(homepage).netloc:
+        if homepage and urlparse(homepage).netloc not in ("github.com", "www.github.com"):
             probed = await _probe_docs_url(homepage, name, registry="github")
             if probed != homepage:
                 logger.info(f"Probed {name} docs: {homepage} -> {probed}")
                 gh_result["homepage"] = probed
         repo_url = gh_result.get("repository", "")
-        if homepage and "github.com" in urlparse(homepage).netloc and repo_url:
+        if homepage and urlparse(homepage).netloc in ("github.com", "www.github.com") and repo_url:
             gh_hp = await _get_github_homepage(repo_url)
             if gh_hp:
                 logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_hp}")
@@ -1745,7 +1745,7 @@ async def _resolve_registry_results(tasks: list) -> list[dict]:
     for i, r in enumerate(valid_results):
         homepage = r.get("homepage") or ""
         repo_url = r.get("repository") or ""
-        hp_is_github = "github.com" in homepage
+        hp_is_github = urlparse(homepage).netloc in ("github.com", "www.github.com")
         # Upgrade when NO homepage at all, OR homepage IS a GitHub URL
         if (not homepage or hp_is_github) and (repo_url or homepage):
             gh_url = repo_url if "github.com" in repo_url else homepage
@@ -3416,7 +3416,7 @@ async def fetch_docs_pages(
 
     # For GitHub URLs, restrict crawl to the same repo path
     docs_parsed = urlparse(docs_url)
-    _is_github = "github.com" in docs_parsed.netloc
+    _is_github = docs_parsed.netloc in ("github.com", "www.github.com")
     _gh_path_prefix = "/".join(docs_parsed.path.strip("/").split("/")[:2])
     _gh_skip_paths = {
         "features",
