@@ -27,7 +27,7 @@ import pytest
 class TestIsPidAliveWindows:
     """Cover lines 115-124: Windows ctypes branch."""
 
-    def test_is_pid_alive_windows_handle_found(self):
+    async def test_is_pid_alive_windows_handle_found(self):
         from web_core.search.runner import _is_pid_alive
 
         mock_kernel32 = MagicMock()
@@ -62,7 +62,7 @@ class TestIsPidAliveWindows:
                 assert result is True
                 mock_ctypes.windll.kernel32.CloseHandle.assert_called_once_with(42)
 
-    def test_is_pid_alive_windows_handle_not_found(self):
+    async def test_is_pid_alive_windows_handle_not_found(self):
         from web_core.search.runner import _is_pid_alive
 
         with patch("web_core.search.runner.sys") as mock_sys:
@@ -77,7 +77,7 @@ class TestIsPidAliveWindows:
 class TestWriteDiscoveryFailure:
     """Cover lines 161-162: _write_discovery exception path."""
 
-    def test_write_discovery_exception_logged(self):
+    async def test_write_discovery_exception_logged(self):
         from web_core.search.runner import _write_discovery
 
         with patch(
@@ -91,7 +91,7 @@ class TestWriteDiscoveryFailure:
 class TestRemoveDiscoveryExceptionPath:
     """Cover lines 170-171: _remove_discovery exception path."""
 
-    def test_remove_discovery_exception_suppressed(self):
+    async def test_remove_discovery_exception_suppressed(self):
         from web_core.search.runner import _remove_discovery
 
         with patch("web_core.search.runner._DISCOVERY_FILE") as mock_file:
@@ -192,7 +192,7 @@ class TestWaitForServiceTimeout:
 class TestIsSearchInstalled:
     """Cover lines 299-300: ModuleNotFoundError path."""
 
-    def test_is_searxng_installed_module_not_found(self):
+    async def test_is_searxng_installed_module_not_found(self):
         from web_core.search.runner import _is_searxng_installed
 
         with patch("importlib.util.find_spec", side_effect=ModuleNotFoundError):
@@ -202,7 +202,7 @@ class TestIsSearchInstalled:
 class TestInstallSearxngPaths:
     """Cover lines 358-359, 364-366: install failure and exception paths."""
 
-    def test_install_searxng_deps_fail(self):
+    async def test_install_searxng_deps_fail(self):
         from web_core.search.runner import _install_searxng
 
         with (
@@ -215,7 +215,7 @@ class TestInstallSearxngPaths:
             mock_run.return_value = mock_result
             assert _install_searxng() is False
 
-    def test_install_searxng_general_exception(self):
+    async def test_install_searxng_general_exception(self):
         from web_core.search.runner import _install_searxng
 
         with patch(
@@ -231,21 +231,21 @@ class TestInstallSearxngPaths:
 class TestSigtermThenKill:
     """Cover lines 410-411, 420-430: _sigterm_then_kill edge cases."""
 
-    def test_sigterm_already_dead(self):
+    async def test_sigterm_already_dead(self):
         from web_core.search.runner import _sigterm_then_kill
 
         with patch("os.kill", side_effect=ProcessLookupError):
             result = _sigterm_then_kill(9999, "test")
             assert result is True
 
-    def test_sigterm_permission_error_on_kill(self):
+    async def test_sigterm_permission_error_on_kill(self):
         from web_core.search.runner import _sigterm_then_kill
 
         with patch("os.kill", side_effect=PermissionError):
             result = _sigterm_then_kill(9999, "test")
             assert result is True
 
-    def test_sigterm_graceful_exit_after_check(self):
+    async def test_sigterm_graceful_exit_after_check(self):
         from web_core.search.runner import _sigterm_then_kill
 
         call_count = 0
@@ -264,7 +264,7 @@ class TestSigtermThenKill:
             result = _sigterm_then_kill(1234)
             assert result is True
 
-    def test_sigterm_permission_error_on_check(self):
+    async def test_sigterm_permission_error_on_check(self):
         """Cover line 420-421: PermissionError on alive check."""
         from web_core.search.runner import _sigterm_then_kill
 
@@ -286,7 +286,7 @@ class TestSigtermThenKill:
         sys.platform == "win32",
         reason="Unix-only: requires SIGKILL/killpg/getpgid",
     )
-    def test_sigterm_force_kill_needed(self):
+    async def test_sigterm_force_kill_needed(self):
         """Cover lines 424-430: needs SIGKILL after timeout."""
         from web_core.search.runner import _sigterm_then_kill
 
@@ -306,7 +306,7 @@ class TestSigtermThenKill:
         sys.platform == "win32",
         reason="Unix-only: requires SIGKILL/killpg/getpgid",
     )
-    def test_sigterm_force_kill_already_dead(self):
+    async def test_sigterm_force_kill_already_dead(self):
         """Cover line 429-430: ProcessLookupError on SIGKILL."""
         from web_core.search.runner import _sigterm_then_kill
 
@@ -329,7 +329,7 @@ class TestSigtermThenKill:
 class TestForceKillProcess:
     """Cover lines 440, 450-451, 462-463, 467-476."""
 
-    def test_force_kill_already_dead(self):
+    async def test_force_kill_already_dead(self):
         """Cover line 440: process already dead."""
         from web_core.search.runner import _force_kill_process
 
@@ -341,7 +341,7 @@ class TestForceKillProcess:
         sys.platform == "win32",
         reason="Unix-only: requires SIGKILL/killpg/getpgid",
     )
-    def test_force_kill_unix_killpg_fails_falls_back(self):
+    async def test_force_kill_unix_killpg_fails_falls_back(self):
         """Cover lines 450-451: killpg fails, falls back to proc.terminate."""
         from web_core.search.runner import _force_kill_process
 
@@ -363,7 +363,7 @@ class TestForceKillProcess:
         sys.platform == "win32",
         reason="Unix-only: requires SIGKILL/killpg/getpgid",
     )
-    def test_force_kill_unix_sigkill_fallback(self):
+    async def test_force_kill_unix_sigkill_fallback(self):
         """Cover lines 462-463: SIGKILL killpg fails, falls back to proc.kill."""
         from web_core.search.runner import _force_kill_process
 
@@ -396,7 +396,7 @@ class TestForceKillProcess:
         sys.platform == "win32",
         reason="Unix-only: requires SIGKILL/killpg/getpgid",
     )
-    def test_force_kill_unix_cannot_kill(self):
+    async def test_force_kill_unix_cannot_kill(self):
         """Cover lines 467-468: process cannot be killed."""
         from web_core.search.runner import _force_kill_process
 
@@ -413,7 +413,7 @@ class TestForceKillProcess:
             mock_sys.platform = "linux"
             _force_kill_process(proc)  # Should log warning but not crash
 
-    def test_force_kill_windows_path(self):
+    async def test_force_kill_windows_path(self):
         """Cover lines 469-474: Windows path."""
         from web_core.search.runner import _force_kill_process
 
@@ -433,7 +433,7 @@ class TestForceKillProcess:
         sys.platform == "win32",
         reason="Unix-only: requires SIGKILL/killpg/getpgid",
     )
-    def test_force_kill_general_exception(self):
+    async def test_force_kill_general_exception(self):
         """Cover lines 475-476: general exception in force kill."""
         from web_core.search.runner import _force_kill_process
 
@@ -451,7 +451,7 @@ class TestForceKillProcess:
 class TestKillStalePortProcess:
     """Cover lines 503-506, 523-537: stale port process edge cases."""
 
-    def test_kill_stale_port_windows_exception(self):
+    async def test_kill_stale_port_windows_exception(self):
         """Cover lines 503-506: Windows netstat exception."""
         from web_core.search.runner import _kill_stale_port_process
 
@@ -462,7 +462,7 @@ class TestKillStalePortProcess:
             mock_sys.platform = "win32"
             _kill_stale_port_process(8080)  # Should not crash
 
-    def test_kill_stale_port_windows_invalid_pid(self):
+    async def test_kill_stale_port_windows_invalid_pid(self):
         """Cover lines 503: ValueError on pid parse."""
         from web_core.search.runner import _kill_stale_port_process
 
@@ -476,7 +476,7 @@ class TestKillStalePortProcess:
             mock_sys.platform = "win32"
             _kill_stale_port_process(8080)  # Should not crash
 
-    def test_kill_stale_port_unix_lsof_not_found_fuser_fallback(self):
+    async def test_kill_stale_port_unix_lsof_not_found_fuser_fallback(self):
         """Cover lines 525-534: lsof not found, falls back to fuser."""
         from web_core.search.runner import _kill_stale_port_process
 
@@ -497,7 +497,7 @@ class TestKillStalePortProcess:
             mock_sys.platform = "linux"
             _kill_stale_port_process(8080)
 
-    def test_kill_stale_port_unix_lsof_not_found_fuser_not_found(self):
+    async def test_kill_stale_port_unix_lsof_not_found_fuser_not_found(self):
         """Cover lines 534: both lsof and fuser not found."""
         from web_core.search.runner import _kill_stale_port_process
 
@@ -511,7 +511,7 @@ class TestKillStalePortProcess:
             mock_sys.platform = "linux"
             _kill_stale_port_process(8080)  # Should not crash
 
-    def test_kill_stale_port_unix_general_exception(self):
+    async def test_kill_stale_port_unix_general_exception(self):
         """Cover lines 536-537: general exception on lsof."""
         from web_core.search.runner import _kill_stale_port_process
 
@@ -522,7 +522,7 @@ class TestKillStalePortProcess:
             mock_sys.platform = "linux"
             _kill_stale_port_process(8080)  # Should not crash
 
-    def test_kill_stale_port_unix_invalid_pid(self):
+    async def test_kill_stale_port_unix_invalid_pid(self):
         """Cover lines 523: ValueError on pid parse from lsof."""
         from web_core.search.runner import _kill_stale_port_process
 
@@ -541,7 +541,7 @@ class TestKillStalePortProcess:
 class TestCleanupProcessSettingsFile:
     """Cover lines 553-554, 567-569: settings file cleanup."""
 
-    def test_cleanup_process_settings_file(self, tmp_path):
+    async def test_cleanup_process_settings_file(self, tmp_path):
         import web_core.search.runner as module
 
         module._searxng_process = None
@@ -552,7 +552,7 @@ class TestCleanupProcessSettingsFile:
         with patch("web_core.search.runner._CONFIG_DIR", tmp_path):
             module._cleanup_process()
 
-    def test_cleanup_process_settings_file_exception(self):
+    async def test_cleanup_process_settings_file_exception(self):
         import web_core.search.runner as module
 
         module._searxng_process = None
@@ -750,12 +750,12 @@ class TestSearchDedup:
 class TestDetectDocumentContentType:
     """Cover lines 175-184: _detect_document_content_type."""
 
-    def test_pdf_content_type(self):
+    async def test_pdf_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert _detect_document_content_type("application/pdf") is True
 
-    def test_docx_content_type(self):
+    async def test_docx_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert (
@@ -765,7 +765,7 @@ class TestDetectDocumentContentType:
             is True
         )
 
-    def test_pptx_content_type(self):
+    async def test_pptx_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert (
@@ -775,7 +775,7 @@ class TestDetectDocumentContentType:
             is True
         )
 
-    def test_xlsx_content_type(self):
+    async def test_xlsx_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert (
@@ -785,27 +785,27 @@ class TestDetectDocumentContentType:
             is True
         )
 
-    def test_msword_content_type(self):
+    async def test_msword_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert _detect_document_content_type("application/msword") is True
 
-    def test_ms_powerpoint_content_type(self):
+    async def test_ms_powerpoint_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert _detect_document_content_type("application/vnd.ms-powerpoint") is True
 
-    def test_ms_excel_content_type(self):
+    async def test_ms_excel_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert _detect_document_content_type("application/vnd.ms-excel") is True
 
-    def test_non_document_content_type(self):
+    async def test_non_document_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert _detect_document_content_type("text/html") is False
 
-    def test_empty_content_type(self):
+    async def test_empty_content_type(self):
         from wet_mcp.sources.crawler import _detect_document_content_type
 
         assert _detect_document_content_type("") is False
@@ -982,19 +982,19 @@ class TestExtractErrorPath:
 class TestCloudEmbeddingBackendCheckAvailableEmpty:
     """Cover check_available returns 0 when embeddings are empty."""
 
-    def test_check_available_empty_data(self):
+    async def test_check_available_empty_data(self):
         from wet_mcp.embedder import CloudEmbeddingBackend
 
         backend = CloudEmbeddingBackend("text-embedding-3-large")
 
         with patch.object(backend, "_call_provider", return_value=[]):
-            assert backend.check_available() == 0
+            assert await backend.check_available() == 0
 
 
 class TestCloudEmbeddingBackendWithApiBaseAndKey:
     """Cover api_base and api_key pass-through."""
 
-    def test_embed_with_api_base_and_key(self):
+    async def test_embed_with_api_base_and_key(self):
         from wet_mcp.embedder import CloudEmbeddingBackend
 
         backend = CloudEmbeddingBackend(
@@ -1006,10 +1006,10 @@ class TestCloudEmbeddingBackendWithApiBaseAndKey:
         assert backend.api_key == "sk-test"
 
         with patch.object(backend, "_call_provider", return_value=[[0.1]]):
-            result = backend.embed_texts(["test"])
+            result = await backend.embed_texts(["test"])
             assert result == [[0.1]]
 
-    def test_check_available_with_api_base_and_key(self):
+    async def test_check_available_with_api_base_and_key(self):
         from wet_mcp.embedder import CloudEmbeddingBackend
 
         backend = CloudEmbeddingBackend(
@@ -1019,14 +1019,14 @@ class TestCloudEmbeddingBackendWithApiBaseAndKey:
         )
 
         with patch.object(backend, "_call_provider", return_value=[[0.1, 0.2]]):
-            dims = backend.check_available()
+            dims = await backend.check_available()
             assert dims == 2
 
 
 class TestQwen3EmbedBackendLoadError:
     """Cover lines 262-272: _get_model import error and lazy loading."""
 
-    def test_get_model_import_error(self):
+    async def test_get_model_import_error(self):
         from wet_mcp.embedder import Qwen3EmbedBackend
 
         backend = Qwen3EmbedBackend()
@@ -1038,7 +1038,7 @@ class TestQwen3EmbedBackendLoadError:
                 with pytest.raises(ImportError):
                     backend._get_model()
 
-    def test_get_model_caches(self):
+    async def test_get_model_caches(self):
         from wet_mcp.embedder import Qwen3EmbedBackend
 
         backend = Qwen3EmbedBackend("test-model")
@@ -1057,7 +1057,7 @@ class TestQwen3EmbedBackendLoadError:
 class TestQwen3EmbedCheckAvailableEmptyResult:
     """Cover line 324: check_available returns 0 when result is empty."""
 
-    def test_check_available_empty_result(self):
+    async def test_check_available_empty_result(self):
         from wet_mcp.embedder import Qwen3EmbedBackend
 
         backend = Qwen3EmbedBackend()
@@ -1065,14 +1065,14 @@ class TestQwen3EmbedCheckAvailableEmptyResult:
         mock_model.embed.return_value = iter([])
 
         with patch.object(backend, "_get_model", return_value=mock_model):
-            dims = backend.check_available()
+            dims = await backend.check_available()
             assert dims == 0
 
 
 class TestQwen3EmbedSingleQuery:
     """Cover lines 306-311: embed_single_query with dimensions."""
 
-    def test_embed_single_query_with_dims(self):
+    async def test_embed_single_query_with_dims(self):
         import numpy as np
 
         from wet_mcp.embedder import Qwen3EmbedBackend
@@ -1082,11 +1082,11 @@ class TestQwen3EmbedSingleQuery:
         mock_model.query_embed.return_value = iter([np.array([0.1, 0.2, 0.3])])
 
         with patch.object(backend, "_get_model", return_value=mock_model):
-            vec = backend.embed_single_query("search query", dimensions=3)
+            vec = await backend.embed_single_query("search query", dimensions=3)
             assert vec == pytest.approx([0.1, 0.2, 0.3])
             mock_model.query_embed.assert_called_once_with("search query", dim=3)
 
-    def test_embed_single_query_no_dims(self):
+    async def test_embed_single_query_no_dims(self):
         import numpy as np
 
         from wet_mcp.embedder import Qwen3EmbedBackend
@@ -1096,7 +1096,7 @@ class TestQwen3EmbedSingleQuery:
         mock_model.query_embed.return_value = iter([np.array([0.4, 0.5])])
 
         with patch.object(backend, "_get_model", return_value=mock_model):
-            vec = backend.embed_single_query("query")
+            vec = await backend.embed_single_query("query")
             assert vec == pytest.approx([0.4, 0.5])
             mock_model.query_embed.assert_called_once_with("query")
 
@@ -1109,7 +1109,7 @@ class TestQwen3EmbedSingleQuery:
 class TestGetLlmConfigEmptyModels:
     """Cover line 33: empty models fallback."""
 
-    def test_empty_models_fallback(self):
+    async def test_empty_models_fallback(self):
         from wet_mcp.config import settings
         from wet_mcp.llm import get_llm_config
 
@@ -1126,7 +1126,7 @@ class TestGetLlmConfigEmptyModels:
 class TestAnalyzeMediaMimeUnknown:
     """Cover unknown mime type."""
 
-    def test_mime_type_none(self, tmp_path):
+    async def test_mime_type_none(self, tmp_path):
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
@@ -1148,7 +1148,7 @@ class TestAnalyzeMediaMimeUnknown:
 class TestAnalyzeMediaErrorPaths:
     """Cover lines 120-121, 131-132, 134-135, 166-168: error handling."""
 
-    def test_text_file_completion_error(self, tmp_path):
+    async def test_text_file_completion_error(self, tmp_path):
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
@@ -1167,7 +1167,7 @@ class TestAnalyzeMediaErrorPaths:
             result = asyncio.run(analyze_media(str(txt)))
             assert "Error analyzing text file" in result
 
-    def test_audio_not_supported(self, tmp_path):
+    async def test_audio_not_supported(self, tmp_path):
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
@@ -1188,7 +1188,7 @@ class TestAnalyzeMediaErrorPaths:
             result = asyncio.run(analyze_media(str(audio_file)))
             assert "does not support audio input" in result
 
-    def test_video_not_supported(self, tmp_path):
+    async def test_video_not_supported(self, tmp_path):
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
 
@@ -1209,7 +1209,7 @@ class TestAnalyzeMediaErrorPaths:
             result = asyncio.run(analyze_media(str(video_file)))
             assert "does not support video" in result
 
-    def test_media_analysis_exception(self, tmp_path):
+    async def test_media_analysis_exception(self, tmp_path):
         """Cover exception during media analysis."""
         from wet_mcp.config import settings
         from wet_mcp.llm import analyze_media
@@ -1245,7 +1245,7 @@ class TestAnalyzeMediaErrorPaths:
 class TestCohereRerankerWithApiKey:
     """Cover CohereReranker api_key pass-through."""
 
-    def test_rerank_with_api_key(self):
+    async def test_rerank_with_api_key(self):
         from wet_mcp.reranker import CohereReranker
 
         reranker = CohereReranker(model="rerank-v4.0-pro", api_key="sk-test")
@@ -1264,7 +1264,7 @@ class TestCohereRerankerWithApiKey:
             assert len(results) == 1
             assert reranker.api_key == "sk-test"
 
-    def test_check_available_with_api_key(self):
+    async def test_check_available_with_api_key(self):
         from wet_mcp.reranker import CohereReranker
 
         reranker = CohereReranker(model="rerank-v4.0-pro", api_key="sk-test")
@@ -1287,7 +1287,7 @@ class TestCohereRerankerWithApiKey:
 class TestQwen3RerankerLoadModel:
     """Cover lines 164-174: _get_model lazy loading and caching."""
 
-    def test_get_model_loads_and_caches(self):
+    async def test_get_model_loads_and_caches(self):
         from wet_mcp.reranker import Qwen3Reranker
 
         reranker = Qwen3Reranker("test-model")
@@ -1301,7 +1301,7 @@ class TestQwen3RerankerLoadModel:
             assert model1 is model2
             mock_cross_encoder.assert_called_once()
 
-    def test_get_model_import_error(self):
+    async def test_get_model_import_error(self):
         from wet_mcp.reranker import Qwen3Reranker
 
         reranker = Qwen3Reranker()
@@ -1317,7 +1317,7 @@ class TestQwen3RerankerLoadModel:
 class TestCohereRerankerCheckAvailableEmpty:
     """Cover edge case: check_available with empty results."""
 
-    def test_check_available_empty_results(self):
+    async def test_check_available_empty_results(self):
         from wet_mcp.reranker import CohereReranker
 
         reranker = CohereReranker(api_key="test-key")

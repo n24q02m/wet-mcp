@@ -270,7 +270,7 @@ async def _init_embedding_backend(mode: str) -> None:
         local_model = settings.resolve_local_embedding_model()
         try:
             backend = await asyncio.to_thread(init_backend, "local", local_model)
-            native_dims = await asyncio.to_thread(backend.check_available)
+            native_dims = await backend.check_available()
             if native_dims > 0:
                 if _embedding_dims == 0:
                     _embedding_dims = _DEFAULT_EMBEDDING_DIMS
@@ -289,7 +289,7 @@ async def _init_embedding_backend(mode: str) -> None:
     if model:
         try:
             backend = await asyncio.to_thread(init_backend, "cloud", model)
-            native_dims = await asyncio.to_thread(backend.check_available)
+            native_dims = await backend.check_available()
             if native_dims > 0:
                 if _embedding_dims == 0:
                     _embedding_dims = _DEFAULT_EMBEDDING_DIMS
@@ -304,7 +304,7 @@ async def _init_embedding_backend(mode: str) -> None:
         for candidate in _EMBEDDING_CANDIDATES:
             try:
                 backend = await asyncio.to_thread(init_backend, "cloud", candidate)
-                native_dims = await asyncio.to_thread(backend.check_available)
+                native_dims = await backend.check_available()
                 if native_dims > 0:
                     if _embedding_dims == 0:
                         _embedding_dims = _DEFAULT_EMBEDDING_DIMS
@@ -388,10 +388,8 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
         return None
     try:
         if is_query and isinstance(backend, Qwen3EmbedBackend):
-            return await asyncio.to_thread(
-                backend.embed_single_query, text, _embedding_dims
-            )
-        return await asyncio.to_thread(backend.embed_single, text, _embedding_dims)
+            return await backend.embed_single_query(text, _embedding_dims)
+        return await backend.embed_single(text, _embedding_dims)
     except Exception as e:
         logger.debug(f"Embedding failed: {e}")
         return None
@@ -405,7 +403,7 @@ async def _embed_batch(texts: list[str]) -> list[list[float]] | None:
     if not backend:
         return None
     try:
-        return await asyncio.to_thread(backend.embed_texts, texts, _embedding_dims)
+        return await backend.embed_texts(texts, _embedding_dims)
     except Exception as e:
         logger.debug(f"Batch embedding failed: {e}")
         return None
@@ -683,8 +681,13 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if result is plain text
                     pass
+                except Exception:
+                    logger.exception(
+                        "Unexpected error formatting search tool JSON result"
+                    )
             return result
 
         case "research":
@@ -723,8 +726,13 @@ async def search(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if result is plain text
                     pass
+                except Exception:
+                    logger.exception(
+                        "Unexpected error formatting research tool JSON result"
+                    )
             return result
 
         case "docs":
@@ -854,8 +862,13 @@ async def extract(
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if result is plain text
                     pass
+                except Exception:
+                    logger.exception(
+                        "Unexpected error formatting extract tool JSON result"
+                    )
             return result
 
         case "batch":
@@ -1047,8 +1060,13 @@ async def media(  # noqa: PLR0913
                 try:
                     _data = json.loads(result)
                     result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except (json.JSONDecodeError, Exception):
+                except json.JSONDecodeError:
+                    # Expected if result is plain text
                     pass
+                except Exception:
+                    logger.exception(
+                        "Unexpected error formatting analyze tool JSON result"
+                    )
             return result
 
         case _:

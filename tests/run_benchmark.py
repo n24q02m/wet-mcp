@@ -264,8 +264,8 @@ async def main():
     try:
         from wet_mcp.embedder import get_backend, init_backend
 
-        backend = await asyncio.to_thread(init_backend, "local", None)
-        ndims = await asyncio.to_thread(backend.check_available)
+        backend = init_backend("local", None)
+        ndims = await backend.check_available()
         if ndims > 0:
             print(f"Embedding: local ONNX (dims={ndims})")
 

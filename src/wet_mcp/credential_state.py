@@ -78,7 +78,7 @@ def resolve_credential_state() -> CredentialState:
             _share_cloud_keys_to_peers(saved)
             return _state
     except Exception:
-        pass
+        logger.opt(exception=True).debug("Failed to read config")
 
     # 3. Check local mode marker
     try:
@@ -90,7 +90,7 @@ def resolve_credential_state() -> CredentialState:
             _state = CredentialState.LOCAL
             return _state
     except Exception:
-        pass
+        logger.opt(exception=True).debug("Failed to get mode")
 
     # 4. Nothing found
     logger.info("No credentials found -- server starting in awaiting_setup mode")
@@ -206,8 +206,10 @@ async def _poll_relay_background(
                 from wet_mcp.sync import setup_google_auth
 
                 await setup_google_auth(relay_url=relay_base, session_id=session_id)
-            except Exception as e:
-                logger.debug("GDrive OAuth via relay failed (non-fatal): {}", e)
+            except Exception:
+                logger.opt(exception=True).debug(
+                    "GDrive OAuth via relay failed (non-fatal)"
+                )
 
         # Notify browser: setup complete
         if session_id:
@@ -223,25 +225,26 @@ async def _poll_relay_background(
                     },
                 )
             except Exception:
-                pass
+                logger.opt(exception=True).debug("Failed to send completion message")
 
         # Release session lock
         from mcp_relay_core import release_session_lock
 
         await release_session_lock(SERVER_NAME)
 
-    except RuntimeError as e:
-        if "RELAY_SKIPPED" in str(e):
+    except RuntimeError as ex:
+        if "RELAY_SKIPPED" in str(ex):
             _state = CredentialState.LOCAL
             try:
                 from mcp_relay_core import set_local_mode
 
                 set_local_mode(SERVER_NAME)
             except Exception:
-                pass
+                logger.opt(exception=True).warning("Failed to set local mode")
         else:
             _state = CredentialState.AWAITING_SETUP
     except Exception:
+        logger.exception("Relay polling failed")
         _state = CredentialState.AWAITING_SETUP
 
 
@@ -262,10 +265,12 @@ def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
             try:
                 write_config(peer, shared)
                 logger.debug("Shared cloud keys to {}", peer)
-            except Exception as e:
-                logger.debug("Failed to share keys to {}: {}", peer, e)
-    except Exception as e:
-        logger.debug("_share_cloud_keys_to_peers failed (non-fatal): {}", e)
+            except Exception:
+                logger.opt(exception=True).debug("Failed to share keys to {}", peer)
+    except Exception:
+        logger.opt(exception=True).debug(
+            "_share_cloud_keys_to_peers failed (non-fatal)"
+        )
 
 
 def set_state(state: CredentialState) -> None:
@@ -286,4 +291,4 @@ def reset_state() -> None:
         clear_mode(SERVER_NAME)
         delete_config(SERVER_NAME)
     except Exception:
-        pass
+        logger.opt(exception=True).warning("Reset state failed")

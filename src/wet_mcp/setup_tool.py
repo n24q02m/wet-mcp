@@ -46,11 +46,12 @@ def _validate_cloud_models(settings_obj) -> dict:
     for candidate in candidates:
         try:
             backend = init_backend("cloud", candidate)
-            dims = backend.check_available()
+                dims = await backend.check_available()
             if dims > 0:
                 embedding_info = {"model": candidate, "dims": dims}
                 break
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"Cloud embedding candidate {candidate} failed: {exc}")
             continue
 
     if not embedding_info:
@@ -63,7 +64,8 @@ def _validate_cloud_models(settings_obj) -> dict:
             reranker = init_reranker("cloud", rerank_model)
             if reranker.check_available():
                 reranker_info = {"model": rerank_model}
-        except Exception:
+        except Exception as exc:
+            logger.debug(f"Cloud reranker {rerank_model} failed: {exc}")
             pass
 
     return {
