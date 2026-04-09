@@ -46,7 +46,16 @@ def _validate_cloud_models(settings_obj) -> dict:
     for candidate in candidates:
         try:
             backend = init_backend("cloud", candidate)
-                dims = await backend.check_available()
+            dims_or_coro = backend.check_available()
+            import inspect
+            if inspect.iscoroutine(dims_or_coro):
+                import asyncio
+                try:
+                    dims = asyncio.get_running_loop().run_until_complete(dims_or_coro)
+                except RuntimeError:
+                    dims = asyncio.run(dims_or_coro)
+            else:
+                dims = dims_or_coro
             if dims > 0:
                 embedding_info = {"model": candidate, "dims": dims}
                 break
@@ -62,7 +71,17 @@ def _validate_cloud_models(settings_obj) -> dict:
     if rerank_model:
         try:
             reranker = init_reranker("cloud", rerank_model)
-            if reranker.check_available():
+            is_avail_or_coro = reranker.check_available()
+            import inspect
+            if inspect.iscoroutine(is_avail_or_coro):
+                import asyncio
+                try:
+                    is_avail = asyncio.get_running_loop().run_until_complete(is_avail_or_coro)
+                except RuntimeError:
+                    is_avail = asyncio.run(is_avail_or_coro)
+            else:
+                is_avail = is_avail_or_coro
+            if is_avail:
                 reranker_info = {"model": rerank_model}
         except Exception as exc:
             logger.debug(f"Cloud reranker {rerank_model} failed: {exc}")
