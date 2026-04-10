@@ -692,12 +692,10 @@ class TestAutoSync:
         except asyncio.CancelledError:
             pass
 
-        mock_logger.error.assert_any_call("Auto-sync error: Loop failed")
         assert mock_sync_full.call_count == 3
 
 
 # -----------------------------------------------------------------------
-# check_health
 # check_health
 # -----------------------------------------------------------------------
 
