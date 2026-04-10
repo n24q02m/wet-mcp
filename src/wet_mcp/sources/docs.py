@@ -3278,7 +3278,11 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
         async with _safe_httpx_client(timeout=15, follow_redirects=True) as client:
             resp = await client.get(base_url)
             actual_url = str(resp.url).rstrip("/") + "/"
-    except Exception:
+    except httpx.HTTPError as e:
+        logger.debug(f"Failed to resolve actual base URL for {base_url}: {e}")
+        actual_url = base_url.rstrip("/") + "/"
+    except Exception as e:
+        logger.debug(f"Unexpected error resolving actual base URL for {base_url}: {e}")
         actual_url = base_url.rstrip("/") + "/"
 
     # Build candidate URLs for objects.inv:
@@ -3303,7 +3307,13 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
             for inv_url in unique_candidates:
                 try:
                     resp = await client.get(inv_url)
-                except Exception:
+                except httpx.HTTPError as e:
+                    logger.debug(f"Failed to fetch objects.inv from {inv_url}: {e}")
+                    continue
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error fetching objects.inv from {inv_url}: {e}"
+                    )
                     continue
                 if resp.status_code != 200:
                     continue
@@ -3321,8 +3331,8 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
                         f"Found {len(result)} URLs from objects.inv at {inv_url}"
                     )
                     return result[:max_urls]
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Error during objects.inv discovery for {base_url}: {e}")
 
     return []
 
@@ -3350,7 +3360,11 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
     try:
         decompressed = zlib.decompress(compressed)
         text = decompressed.decode("utf-8", errors="replace")
-    except Exception:
+    except zlib.error as e:
+        logger.debug(f"Zlib decompression failed for objects.inv from {base_url}: {e}")
+        return []
+    except Exception as e:
+        logger.debug(f"Unexpected error parsing objects.inv from {base_url}: {e}")
         return []
 
     # Parse entries — only std:doc (pages) and std:label (sections)
