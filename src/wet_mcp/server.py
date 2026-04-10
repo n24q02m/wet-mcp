@@ -123,8 +123,8 @@ def _detect_gh_token() -> str | None:
             token = result.stdout.strip()
             if token:
                 return token
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to detect GitHub token from gh CLI: {e}")
     return None
 
 
@@ -313,7 +313,8 @@ async def _init_embedding_backend(mode: str) -> None:
                         f"(native={native_dims}, stored={_embedding_dims})"
                     )
                     return
-            except Exception:
+            except Exception as e:
+                logger.debug(f"Embedding candidate {candidate} failed: {e}")
                 continue
 
     logger.error("Cloud embedding not available and local fallback is disabled")
