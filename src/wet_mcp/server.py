@@ -219,8 +219,10 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
         warmup_task.cancel()
         try:
             await warmup_task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception as e:
+            logger.warning(f"Error during warmup task shutdown: {e}")
 
     # Stop auto-sync
     from wet_mcp.config import settings
