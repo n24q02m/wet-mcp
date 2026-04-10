@@ -124,7 +124,7 @@ def _detect_gh_token() -> str | None:
             if token:
                 return token
     except Exception:
-        pass
+        logger.debug("Failed to retrieve GitHub token via CLI")
     return None
 
 

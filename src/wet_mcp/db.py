@@ -1034,4 +1034,4 @@ class DocsDB:
         try:
             self._conn.close()
         except Exception:
-            pass
+            logger.debug("Failed to close documentation database connection")

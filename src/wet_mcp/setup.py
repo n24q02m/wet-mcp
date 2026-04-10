@@ -33,7 +33,7 @@ def _find_searx_package_dir() -> Path | None:
         if spec and spec.submodule_search_locations:
             return Path(spec.submodule_search_locations[0])
     except Exception:
-        pass
+        logger.debug("Failed to find SearXNG package directory")
     return None
 
 

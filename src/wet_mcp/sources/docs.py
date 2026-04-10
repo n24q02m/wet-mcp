@@ -3322,7 +3322,7 @@ async def _try_objects_inv(base_url: str, max_urls: int = 50) -> list[str]:
                     )
                     return result[:max_urls]
     except Exception:
-        pass
+        logger.debug("Failed to discover documentation via objects.inv")
 
     return []
 
