@@ -77,7 +77,7 @@ def resolve_credential_state() -> CredentialState:
             # Propagate shared cloud keys to sibling servers on every startup
             _share_cloud_keys_to_peers(saved)
             return _state
-    except Exception:
+    except (ImportError, OSError):
         logger.opt(exception=True).debug("Failed to read config")
 
     # 3. Check local mode marker
@@ -89,7 +89,7 @@ def resolve_credential_state() -> CredentialState:
             logger.info("Local mode marker found, skipping relay")
             _state = CredentialState.LOCAL
             return _state
-    except Exception:
+    except (ImportError, OSError):
         logger.opt(exception=True).debug("Failed to get mode")
 
     # 4. Nothing found
