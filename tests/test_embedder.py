@@ -94,7 +94,10 @@ class TestCloudEmbeddingBackend:
         """Batch embedding returns correct vectors."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             return_value=[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
         ):
             vecs = await backend.embed_texts(["hello", "world"])
@@ -113,7 +116,9 @@ class TestCloudEmbeddingBackend:
         """Dimensions parameter is passed through to _call_provider."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, return_value=[[0.1]]) as mock_call:
+        with patch.object(
+            backend, "_call_provider", new_callable=AsyncMock, return_value=[[0.1]]
+        ) as mock_call:
             await backend.embed_texts(["test"], dimensions=256)
             mock_call.assert_called_once_with(["test"], 256)
 
@@ -121,7 +126,9 @@ class TestCloudEmbeddingBackend:
         """No dimensions parameter when not specified."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, return_value=[[0.1]]) as mock_call:
+        with patch.object(
+            backend, "_call_provider", new_callable=AsyncMock, return_value=[[0.1]]
+        ) as mock_call:
             await backend.embed_texts(["test"])
             mock_call.assert_called_once_with(["test"], None)
 
@@ -131,7 +138,10 @@ class TestCloudEmbeddingBackend:
 
         unsupported_err = Exception("output_dimension is not supported for this model")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=[unsupported_err, [[0.1] * 1024]],
         ):
             result = await backend.embed_texts(["test"], dimensions=768)
@@ -142,7 +152,12 @@ class TestCloudEmbeddingBackend:
         """Truncates locally when server returns more dims than requested."""
         backend = CloudEmbeddingBackend("gemini/gemini-embedding-001")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, return_value=[[0.1] * 3072]):
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
+            return_value=[[0.1] * 3072],
+        ):
             result = await backend.embed_texts(["test"], dimensions=768)
             assert len(result[0]) == 768
 
@@ -150,7 +165,11 @@ class TestCloudEmbeddingBackend:
         """Non-retryable API errors are raised to caller."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, side_effect=Exception("Invalid model"),
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
+            side_effect=Exception("Invalid model"),
         ):
             with pytest.raises(Exception, match="Invalid model"):
                 await backend.embed_texts(["test"])
@@ -159,7 +178,12 @@ class TestCloudEmbeddingBackend:
         """Single text embedding returns one vector."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, return_value=[[0.1, 0.2, 0.3]]):
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
+            return_value=[[0.1, 0.2, 0.3]],
+        ):
             vec = await backend.embed_single("hello")
 
         assert vec == [0.1, 0.2, 0.3]
@@ -168,7 +192,12 @@ class TestCloudEmbeddingBackend:
         """Returns dimension count when model is available."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, return_value=[[0.0] * 768]):
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
+            return_value=[[0.0] * 768],
+        ):
             dims = await backend.check_available()
 
         assert dims == 768
@@ -177,7 +206,11 @@ class TestCloudEmbeddingBackend:
         """Returns 0 when model is not available."""
         backend = CloudEmbeddingBackend("nonexistent")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, side_effect=Exception("Invalid API key")
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
+            side_effect=Exception("Invalid API key"),
         ):
             dims = await backend.check_available()
 
@@ -389,7 +422,9 @@ class TestBatchSplitting:
         def mock_call(texts, dimensions=None):
             return [[float(j)] for j in range(len(texts))]
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, side_effect=mock_call):
+        with patch.object(
+            backend, "_call_provider", new_callable=AsyncMock, side_effect=mock_call
+        ):
             vecs = await backend.embed_texts([f"text_{i}" for i in range(n)])
 
         assert len(vecs) == n
@@ -402,7 +437,9 @@ class TestBatchSplitting:
         def mock_call(texts, dimensions=None):
             return [[0.0] for _ in range(len(texts))]
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, side_effect=mock_call) as mock:
+        with patch.object(
+            backend, "_call_provider", new_callable=AsyncMock, side_effect=mock_call
+        ) as mock:
             await backend.embed_texts([f"t{i}" for i in range(n)])
 
         assert mock.call_count == 3
@@ -415,7 +452,9 @@ class TestBatchSplitting:
         def mock_call(texts, dimensions=None):
             return [[0.0] for _ in range(len(texts))]
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, side_effect=mock_call) as mock:
+        with patch.object(
+            backend, "_call_provider", new_callable=AsyncMock, side_effect=mock_call
+        ) as mock:
             await backend.embed_texts([f"text_{i}" for i in range(n)])
 
         assert mock.call_count == 1
@@ -432,7 +471,10 @@ class TestRetryLogic:
         """Retries on rate limit errors with exponential backoff."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=[
                 Exception("429 rate limit exceeded"),
                 [[0.1]],
@@ -448,7 +490,10 @@ class TestRetryLogic:
         """Retries on 5xx server errors."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=[
                 Exception("503 service temporarily unavailable"),
                 [[0.2]],
@@ -463,7 +508,10 @@ class TestRetryLogic:
         """Non-retryable errors fail immediately without retry."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=Exception("Invalid API key"),
         ):
             with pytest.raises(Exception, match="Invalid API key"):
@@ -476,7 +524,10 @@ class TestRetryLogic:
         """Retry delays use exponential backoff."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=[
                 Exception("429 rate limit"),
                 Exception("429 rate limit"),
@@ -492,7 +543,10 @@ class TestRetryLogic:
         """Raises after all retries are exhausted."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=Exception("429 rate limit"),
         ):
             with pytest.raises(Exception, match="429 rate limit"):
@@ -631,21 +685,32 @@ class TestCheckAvailableApiKeyValidation:
     async def test_api_key_401_returns_zero(self):
         """401 errors are caught and return 0."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, side_effect=Exception("401 Unauthorized")
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
+            side_effect=Exception("401 Unauthorized"),
         ):
             assert await backend.check_available() == 0
 
     async def test_api_key_403_returns_zero(self):
         """403 forbidden returns 0."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, side_effect=Exception("403 Forbidden")
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
+            side_effect=Exception("403 Forbidden"),
         ):
             assert await backend.check_available() == 0
 
     async def test_invalid_key_detected(self):
         """'invalid' keyword in error is caught."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=Exception("Invalid API key provided"),
         ):
             assert await backend.check_available() == 0
@@ -653,7 +718,10 @@ class TestCheckAvailableApiKeyValidation:
     async def test_unauthorized_detected(self):
         """'unauthorized' keyword in error is caught."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=Exception("Unauthorized access"),
         ):
             assert await backend.check_available() == 0
@@ -661,7 +729,10 @@ class TestCheckAvailableApiKeyValidation:
     async def test_non_auth_error_returns_zero(self):
         """Non-auth errors (e.g. model not found) also return 0."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock,
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
             side_effect=Exception("Model not found"),
         ):
             assert await backend.check_available() == 0
@@ -669,13 +740,20 @@ class TestCheckAvailableApiKeyValidation:
     async def test_success_returns_dims(self):
         """Successful check returns embedding dimensions."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, return_value=[[0.1, 0.2, 0.3]]):
+        with patch.object(
+            backend,
+            "_call_provider",
+            new_callable=AsyncMock,
+            return_value=[[0.1, 0.2, 0.3]],
+        ):
             assert await backend.check_available() == 3
 
     async def test_empty_embeddings_returns_zero(self):
         """Returns 0 when provider returns empty embeddings."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
-        with patch.object(backend, "_call_provider", new_callable=AsyncMock, return_value=[]):
+        with patch.object(
+            backend, "_call_provider", new_callable=AsyncMock, return_value=[]
+        ):
             assert await backend.check_available() == 0
 
 
