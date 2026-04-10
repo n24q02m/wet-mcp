@@ -69,12 +69,6 @@ async def test_ensure_searxng_passes_configured_port(mock_settings, mock_wc_ensu
     mock_wc_ensure.assert_called_once_with(start_port=12345)
 
 
-def test_stop_searxng_delegates():
-    """stop_searxng should call web-core's shutdown_searxng."""
-    with patch("wet_mcp.searxng_runner.shutdown_searxng") as mock_shutdown:
-        stop_searxng()
-        mock_shutdown.assert_called_once()
-
 
 def test_patched_installer_calls_patches():
     """Verify monkey-patched installer applies wet-mcp patches after install."""
@@ -106,3 +100,33 @@ def test_patched_installer_skips_patches_on_failure():
         assert result is False
         mock_version.assert_not_called()
         mock_windows.assert_not_called()
+
+def test_stop_searxng_calls_terminate():
+    """Verify stop_searxng calls terminate on the process handle."""
+    mock_proc = MagicMock()
+    with patch("wet_mcp.searxng_runner._searxng_process", mock_proc):
+        with patch("wet_mcp.searxng_runner.shutdown_searxng") as mock_shutdown:
+            stop_searxng()
+            mock_proc.terminate.assert_called_once()
+            mock_shutdown.assert_called_once()
+
+
+def test_stop_searxng_no_process_no_error():
+    """Verify stop_searxng handles case with no active process."""
+    with patch("wet_mcp.searxng_runner._searxng_process", None):
+        with patch("wet_mcp.searxng_runner.shutdown_searxng") as mock_shutdown:
+            # Should not raise any error
+            stop_searxng()
+            mock_shutdown.assert_called_once()
+
+
+def test_stop_searxng_handles_terminate_exception():
+    """Verify stop_searxng ignores exceptions during terminate."""
+    mock_proc = MagicMock()
+    mock_proc.terminate.side_effect = Exception("Terminate failed")
+    with patch("wet_mcp.searxng_runner._searxng_process", mock_proc):
+        with patch("wet_mcp.searxng_runner.shutdown_searxng") as mock_shutdown:
+            # Should catch exception and still call shutdown
+            stop_searxng()
+            mock_proc.terminate.assert_called_once()
+            mock_shutdown.assert_called_once()
