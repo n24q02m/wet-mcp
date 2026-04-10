@@ -66,7 +66,9 @@ async def test_extract_file_url_and_convert_concurrent(tmp_path):
         test_file2 = tmp_path / "test2.txt"
         test_file2.write_text("Hello 2")
 
-        result_json = await crawler.convert_local_files([str(test_file), str(test_file2)])
+        result_json = await crawler.convert_local_files(
+            [str(test_file), str(test_file2)]
+        )
         results = json.loads(result_json)
         assert len(results) == 2
         assert results[0]["content"] == "Converted Content"
