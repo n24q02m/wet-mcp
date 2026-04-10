@@ -38,6 +38,7 @@ from wet_mcp.sources.docs import (
     _strip_nav_blocks,
     _strip_nav_heading_blocks,
     _try_github_raw_docs,
+    chunk_llms_txt,
     chunk_markdown,
     discover_library,
     fetch_docs_pages,
@@ -3343,3 +3344,40 @@ def test_apply_version_to_url_other_site():
     url = "https://docs.python.org/3/library/json.html"
     result = _apply_version_to_url(url, "3.12")
     assert result == url
+
+def test_chunk_llms_txt_parameters():
+    """Verify chunk_llms_txt calls chunk_markdown with specific parameters."""
+    content = "# Title\n\nSome content."
+    base_url = "https://example.com/docs"
+
+    with patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk:
+        mock_chunk.return_value = [{"content": "mocked"}]
+
+        result = chunk_llms_txt(content, base_url=base_url)
+
+        mock_chunk.assert_called_once_with(content, url=base_url, max_chunk_size=2000)
+        assert result == [{"content": "mocked"}]
+
+
+def test_chunk_llms_txt_functional():
+    """Functional test for chunk_llms_txt ensuring it actually chunks."""
+    content = """# Main
+
+## Section 1
+This is a long section that should be kept as one if it's under the limit.
+It contains enough text to be a valid chunk.
+The limit for llms.txt is 2000 characters which is quite large.
+
+## Section 2
+Another section with more content.
+Markdown headers are the primary splitting points.
+"""
+    base_url = "https://example.com/llms.txt"
+
+    chunks = chunk_llms_txt(content, base_url=base_url)
+
+    assert len(chunks) >= 2
+    assert chunks[0]["url"] == base_url
+    assert "# Main" in chunks[0]["content"]
+    assert "## Section 1" in chunks[0]["content"]
+    assert "## Section 2" in chunks[1]["content"]
