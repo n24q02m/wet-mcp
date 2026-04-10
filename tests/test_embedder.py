@@ -271,7 +271,7 @@ class TestProviderSDKs:
         mock_openai_mod = MagicMock(OpenAI=mock_openai_cls)
 
         with patch.dict("sys.modules", {"openai": mock_openai_mod}):
-            backend._embed_openai(["test"], dimensions=256)
+            await backend._embed_openai(["test"], dimensions=256)
             mock_client.embeddings.create.assert_called_once_with(
                 model="text-embedding-3-small", input=["test"], dimensions=256
             )
@@ -298,7 +298,7 @@ class TestProviderSDKs:
         mock_openai_mod = MagicMock(OpenAI=mock_openai_cls)
 
         with patch.dict("sys.modules", {"openai": mock_openai_mod}):
-            backend._embed_openai(["test"])
+            await backend._embed_openai(["test"])
             mock_openai_cls.assert_called_once_with(
                 api_key="test-key", base_url="https://custom.api/v1"
             )
@@ -349,7 +349,7 @@ class TestProviderSDKs:
         mock_cohere_mod.ClientV2.return_value = mock_client
 
         with patch.dict("sys.modules", {"cohere": mock_cohere_mod}):
-            result = backend._embed_cohere(["test"], dimensions=768)
+            result = await backend._embed_cohere(["test"], dimensions=768)
 
         assert len(result[0]) == 768
 
