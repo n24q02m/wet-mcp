@@ -16,6 +16,7 @@ import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
+from urllib.request import url2pathname
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
@@ -286,6 +287,14 @@ async def extract(
 
     async def process_url(url: str):
         async with sem:
+            # Handle local file URLs
+            if url.startswith("file://"):
+                try:
+                    path_str = url2pathname(urlparse(url).path)
+                    return await _extract_local_file(path_str, url=url)
+                except Exception as e:
+                    return {"url": url, "error": f"Invalid file URL: {e}"}
+
             if not is_safe_url(url):
                 logger.warning(f"Skipping unsafe URL: {url}")
                 return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
@@ -774,18 +783,16 @@ async def batch_extract(
 # ---------------------------------------------------------------------------
 
 
-async def convert_local_files(paths: list[str]) -> str:
-    """Convert local files to Markdown via markitdown.
+async def _extract_local_file(path_str: str, url: str | None = None) -> dict:
+    """Validate and convert a local file to Markdown.
 
     Args:
-        paths: List of absolute file paths (max 10).
+        path_str: Local file path.
+        url: Original URL if this was a file:// URL.
 
     Returns:
-        JSON array of {path, content, title} or {path, error}.
+        Dict with result (content, title, etc.) or error.
     """
-    if len(paths) > _MAX_CONVERT_FILES:
-        return f"Error: Maximum {_MAX_CONVERT_FILES} files per call (got {len(paths)})"
-
     from wet_mcp.config import settings as _settings
     from wet_mcp.security import is_safe_local_path
 
@@ -800,28 +807,42 @@ async def convert_local_files(paths: list[str]) -> str:
         # to prevent arbitrary file read of sensitive system files.
         allowed_dirs = [Path.home().resolve(), Path("/tmp").resolve()]
 
-    results = []
-    for path_str in paths:
-        safe_path = is_safe_local_path(
-            path_str,
-            allowed_dirs=allowed_dirs,
-            max_size=_settings.convert_max_file_size,
-        )
-        if safe_path is None:
-            results.append({"path": path_str, "error": f"Path rejected: {path_str}"})
-            continue
+    safe_path = is_safe_local_path(
+        path_str,
+        allowed_dirs=allowed_dirs,
+        max_size=_settings.convert_max_file_size,
+    )
+    if safe_path is None:
+        return {"url": url or path_str, "error": f"Path rejected: {path_str}"}
 
-        try:
-            content = await asyncio.to_thread(_convert_file, safe_path)
-            results.append(
-                {
-                    "path": str(safe_path),
-                    "content": content,
-                    "title": safe_path.name,
-                }
-            )
-        except Exception as e:
-            results.append({"path": path_str, "error": str(e)})
+    try:
+        content = await asyncio.to_thread(_convert_file, safe_path)
+        res = {
+            "path": str(safe_path),
+            "content": content,
+            "title": safe_path.name,
+        }
+        if url:
+            res["url"] = url
+        return res
+    except Exception as e:
+        return {"url": url or path_str, "error": str(e)}
+
+
+async def convert_local_files(paths: list[str]) -> str:
+    """Convert local files to Markdown via markitdown.
+
+    Args:
+        paths: List of absolute file paths (max 10).
+
+    Returns:
+        JSON array of {path, content, title} or {path, error}.
+    """
+    if len(paths) > _MAX_CONVERT_FILES:
+        return f"Error: Maximum {_MAX_CONVERT_FILES} files per call (got {len(paths)})"
+
+    tasks = [_extract_local_file(path) for path in paths]
+    results = await asyncio.gather(*tasks)
 
     return json.dumps(results, ensure_ascii=False, indent=2)
 
