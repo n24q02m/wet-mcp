@@ -123,8 +123,8 @@ def _detect_gh_token() -> str | None:
             token = result.stdout.strip()
             if token:
                 return token
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to detect GH token from CLI: {e}")
     return None
 
 
@@ -219,8 +219,10 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
         warmup_task.cancel()
         try:
             await warmup_task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError:
             pass
+        except Exception as e:
+            logger.warning(f"Error during SearXNG warmup task shutdown: {e}")
 
     # Stop auto-sync
     from wet_mcp.config import settings
@@ -519,9 +521,10 @@ async def _with_timeout(coro, action: str) -> str:
     # Give the task a grace period to clean up (close browser pages, etc.)
     try:
         await asyncio.wait_for(asyncio.shield(task), timeout=_CANCEL_GRACE_PERIOD)
-    except (asyncio.CancelledError, TimeoutError, Exception):
-        # Task either cancelled cleanly, timed out again, or raised -- all OK
+    except (asyncio.CancelledError, TimeoutError):
         pass
+    except Exception as e:
+        logger.debug(f"Error during tool task cancellation: {e}")
 
     logger.error(f"Tool '{action}' timed out after {timeout}s")
     return (
@@ -674,6 +677,7 @@ async def search(  # noqa: PLR0913
                     if modified:
                         result = json.dumps(data, ensure_ascii=False, indent=2)
                 except json.JSONDecodeError:
+                    # Expected if the result string is not valid JSON
                     pass
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
@@ -684,9 +688,9 @@ async def search(  # noqa: PLR0913
                 except json.JSONDecodeError:
                     # Expected if result is plain text
                     pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting search tool JSON result"
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error formatting search tool JSON result: {e}"
                     )
             return result
 
@@ -729,9 +733,9 @@ async def search(  # noqa: PLR0913
                 except json.JSONDecodeError:
                     # Expected if result is plain text
                     pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting research tool JSON result"
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error formatting research tool JSON result: {e}"
                     )
             return result
 
@@ -865,9 +869,9 @@ async def extract(
                 except json.JSONDecodeError:
                     # Expected if result is plain text
                     pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting extract tool JSON result"
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error formatting extract tool JSON result: {e}"
                     )
             return result
 
@@ -1063,9 +1067,9 @@ async def media(  # noqa: PLR0913
                 except json.JSONDecodeError:
                     # Expected if result is plain text
                     pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting analyze tool JSON result"
+                except Exception as e:
+                    logger.debug(
+                        f"Unexpected error formatting analyze tool JSON result: {e}"
                     )
             return result
 
@@ -1939,6 +1943,7 @@ async def _discover_docs_url(
         except TimeoutError:
             logger.warning("SearXNG discovery fallback timed out")
         except json.JSONDecodeError:
+            # Expected if SearXNG result is not valid JSON
             pass
 
     return docs_url, repo_url, registry, description

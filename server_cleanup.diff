@@ -1,0 +1,16 @@
+<<<<<<< SEARCH
+                except json.JSONDecodeError:
+                    pass
+=======
+                except json.JSONDecodeError:
+                    # Expected if the result string is not valid JSON
+                    pass
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+        except json.JSONDecodeError:
+            pass
+=======
+        except json.JSONDecodeError:
+            # Expected if SearXNG result is not valid JSON
+            pass
+>>>>>>> REPLACE
