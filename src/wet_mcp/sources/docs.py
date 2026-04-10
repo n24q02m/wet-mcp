@@ -19,7 +19,6 @@ import os
 import re
 import zlib
 from dataclasses import dataclass
-from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -30,6 +29,205 @@ from wet_mcp.security import safe_httpx_client as _safe_httpx_client
 # Bump this whenever discovery scoring or crawl logic changes.
 # Libraries cached with an older version are automatically re-indexed.
 DISCOVERY_VERSION = 27
+
+# Constants for _probe_docs_url
+_PROBE_GENERIC_NAMES = frozenset(
+    {
+        "core",
+        "react",
+        "cli",
+        "common",
+        "utils",
+        "types",
+        "client",
+        "server",
+        "api",
+        "app",
+        "config",
+        "test",
+        "ui",
+        "web",
+    }
+)
+_PROBE_SKIP_SUBDOMAINS = {
+    "github.com",
+    "github.io",
+    "gitlab.com",
+    "bitbucket.org",
+    "pypi.org",
+    "npmjs.com",
+    "npmjs.org",
+    "crates.io",
+}
+_PROBE_RTD_SKIP_REGISTRIES = {"npm", "crates", "go"}
+_PROBE_AUTH_SEGMENTS = (
+    "/login",
+    "/signin",
+    "/signup",
+    "/account",
+    "/auth",
+    "/register",
+)
+
+
+def _get_probe_candidates(
+    homepage: str, lib_name: str, registry: str = ""
+) -> list[tuple[str, str]]:
+    """Generate potential documentation URLs for a library."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(homepage)
+    netloc = parsed.netloc
+    base_domain = netloc.removeprefix("www.") if netloc.startswith("www.") else netloc
+
+    scope_part = ""
+    pkg_part = lib_name.lower().lstrip("@")
+    if "/" in pkg_part:
+        scope_part = pkg_part.split("/")[0]
+        pkg_part = pkg_part.split("/")[-1]
+    clean_name = pkg_part
+
+    candidates: list[tuple[str, str]] = []
+
+    # 1. docs.{domain} subdomain
+    if (
+        not base_domain.startswith("docs.")
+        and base_domain not in _PROBE_SKIP_SUBDOMAINS
+    ):
+        candidates.append(("docs_subdomain", f"https://docs.{base_domain}/"))
+
+    # 2. ReadTheDocs
+    if (
+        "readthedocs" not in base_domain
+        and clean_name not in _PROBE_GENERIC_NAMES
+        and registry not in _PROBE_RTD_SKIP_REGISTRIES
+    ):
+        rtd_name = scope_part or clean_name
+        if len(rtd_name) > 4:
+            candidates.append(
+                ("readthedocs", f"https://{rtd_name}.readthedocs.io/en/latest/")
+            )
+
+    # 3. {homepage}/docs/ path
+    if len(parsed.path.strip("/")) <= 1:
+        docs_path_url = f"{parsed.scheme}://{parsed.netloc}/docs/"
+        candidates.append(("docs_path", docs_path_url))
+
+    return candidates
+
+
+def _validate_rtd_inventory(
+    inv_content: bytes, clean_name_norm: str, lib_name: str
+) -> bool:
+    """Validate Sphinx objects.inv for ReadTheDocs."""
+    import re
+    import zlib
+
+    inv_text = inv_content[:500].decode("utf-8", errors="replace")
+    proj_match = re.search(r"^# Project:\s*(.+)$", inv_text, re.MULTILINE)
+    if proj_match:
+        proj_name = (
+            proj_match.group(1)
+            .strip()
+            .lower()
+            .replace("-", "")
+            .replace("_", "")
+            .replace(" ", "")
+        )
+        if clean_name_norm not in proj_name:
+            logger.debug(
+                f'RTD project "{proj_match.group(1).strip()}"'
+                f' doesn\'t match "{lib_name}", skipping'
+            )
+            return False
+    # Count objects: real docs have 50+, squatters < 30
+    try:
+        hdr_pos = 0
+        for _ in range(4):
+            hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
+        decompressed = zlib.decompress(inv_content[hdr_pos:])
+        obj_count = len(decompressed.split(b"\n")) - 1
+        if obj_count < 50:
+            logger.debug(
+                f"RTD {lib_name}: only {obj_count} objects, likely squatter — skipping"
+            )
+            return False
+    except Exception:
+        return False
+    return True
+
+
+def _score_probe_result(label: str, size: int, has_inv: bool) -> int:
+    """Score a probed documentation URL candidate."""
+    score = 0
+    if has_inv:
+        score += 100  # Sphinx docs = gold standard
+    if size > 10000:
+        score += 10
+    elif size > 2000:
+        score += 5
+    elif size > 500:
+        score += 2
+    if label == "docs_subdomain":
+        score += 3
+    if label == "original":
+        score += 5
+    return score
+
+
+async def _check_probe_candidate(
+    client: httpx.AsyncClient,
+    label: str,
+    url: str,
+    orig_netloc: str,
+    clean_name_norm: str,
+    lib_name: str,
+) -> tuple[str, str, int, bool] | None:
+    """Check a single documentation URL candidate."""
+    from urllib.parse import urlparse
+
+    try:
+        resp = await client.get(url)
+        if resp.status_code != 200:
+            return None
+        content = resp.text
+        content_len = len(content)
+        if content_len < 500:
+            return None
+        final_url = str(resp.url)
+        final_path = urlparse(final_url).path.lower()
+        if any(seg in final_path for seg in _PROBE_AUTH_SEGMENTS):
+            return None
+        # Avoid redirect loops back to the original homepage
+        if urlparse(final_url).netloc == orig_netloc and label not in (
+            "docs_path",
+            "original",
+        ):
+            final_parsed = urlparse(final_url)
+            if not final_parsed.path.startswith("/docs"):
+                if "docs" not in final_parsed.netloc:
+                    return None
+        # Check for objects.inv
+        has_inv = False
+        inv_url = final_url.rstrip("/") + "/objects.inv"
+        try:
+            inv_resp = await client.get(inv_url)
+            if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
+                b"# Sphinx inventory version"
+            ):
+                if label == "readthedocs":
+                    if not _validate_rtd_inventory(
+                        inv_resp.content, clean_name_norm, lib_name
+                    ):
+                        return None
+                has_inv = True
+        except Exception:
+            pass
+        if label == "readthedocs" and not has_inv:
+            return None
+        return (label, final_url, content_len, has_inv)
+    except Exception:
+        return None
 
 
 def _github_headers() -> dict[str, str]:
@@ -820,191 +1018,28 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     Probes these alternatives in parallel. Returns the best URL found,
     preferring URLs with Sphinx ``objects.inv`` (guaranteed rich docs).
     Falls back to ``homepage`` if no better alternative exists.
-
-    ReadTheDocs results are validated by parsing the ``objects.inv`` header
-    project name — must match the library name to prevent false positives
-    (e.g., ``chi.readthedocs.io`` being an unrelated Python project).
     """
-    parsed = urlparse(homepage)
-    netloc = parsed.netloc
-    base_domain = netloc.removeprefix("www.") if netloc.startswith("www.") else netloc
-    # Normalize lib name for probing:
-    # "@nestjs/core" → scope="nestjs", pkg="core"
-    # "solid-js" → scope="", pkg="solid-js"
-    scope_part = ""
-    pkg_part = lib_name.lower().lstrip("@")
-    if "/" in pkg_part:
-        scope_part = pkg_part.split("/")[0]
-        pkg_part = pkg_part.split("/")[-1]
-    clean_name = pkg_part
-    # Normalized for matching (no hyphens/underscores)
-    clean_name_norm = clean_name.replace("-", "").replace("_", "")
-    # Generic package names that collide with unrelated RTD projects
-    _GENERIC_NAMES = frozenset(
-        {
-            "core",
-            "react",
-            "cli",
-            "common",
-            "utils",
-            "types",
-            "client",
-            "server",
-            "api",
-            "app",
-            "config",
-            "test",
-            "ui",
-            "web",
-        }
-    )
+    orig_parsed = urlparse(homepage)
+    orig_netloc = orig_parsed.netloc
 
-    candidates: list[tuple[str, str]] = []
+    pkg_part = lib_name.lower().lstrip("@").split("/")[-1]
+    clean_name_norm = pkg_part.replace("-", "").replace("_", "")
 
-    # 1. docs.{domain} subdomain — skip for generic hosting domains
-    # (docs.github.com is GitHub's own docs, not project docs)
-    # (docs.pypi.org is PyPI's own API docs, not project docs)
-    _skip_docs_subdomain = {
-        "github.com",
-        "github.io",
-        "gitlab.com",
-        "bitbucket.org",
-        "pypi.org",
-        "npmjs.com",
-        "npmjs.org",
-        "crates.io",
-    }
-    if not base_domain.startswith("docs.") and base_domain not in _skip_docs_subdomain:
-        candidates.append(("docs_subdomain", f"https://docs.{base_domain}/"))
-
-    # 2. ReadTheDocs: probe {name}.readthedocs.io when not already on RTD.
-    # Skip for generic package names and very short names (<=4 chars).
-    # Skip for non-Python registries (npm, crates, go) — RTD is almost
-    # exclusively used by Python projects, so probing for React/Rust/Go
-    # libs would match unrelated Python packages with the same name.
-    # Validated via objects.inv: project name must match + object count >= 50
-    # to reject squatter/placeholder projects (real docs have 50+ objects).
-    _rtd_skip_registries = {"npm", "crates", "go"}
-    if (
-        "readthedocs" not in base_domain
-        and clean_name not in _GENERIC_NAMES
-        and registry not in _rtd_skip_registries
-    ):
-        rtd_name = scope_part or clean_name
-        if len(rtd_name) > 4:
-            candidates.append(
-                ("readthedocs", f"https://{rtd_name}.readthedocs.io/en/latest/")
-            )
-
-    # 3. {homepage}/docs/ path (only if homepage has no path or short path)
-    if len(parsed.path.strip("/")) <= 1:
-        docs_path_url = f"{parsed.scheme}://{parsed.netloc}/docs/"
-        candidates.append(("docs_path", docs_path_url))
-
-    if not candidates:
+    candidates = _get_probe_candidates(homepage, lib_name, registry)
+    if not candidates and not (len(orig_parsed.path.strip("/")) <= 1):
         return homepage
 
     # Include the original homepage as a candidate so it competes fairly.
-    # This prevents ReadTheDocs/docs subdomain from incorrectly overriding
-    # an already-good docs URL (e.g. docs.djangoproject.com → django.readthedocs.io).
     candidates.insert(0, ("original", homepage))
-
-    async def _check(
-        client: httpx.AsyncClient, label: str, url: str
-    ) -> tuple[str, str, int, bool] | None:
-        try:
-            resp = await client.get(url)
-            if resp.status_code != 200:
-                return None
-            content = resp.text
-            content_len = len(content)
-            # Must be substantial HTML/text, not an error page
-            if content_len < 500:
-                return None
-            final_url = str(resp.url)
-            # Reject login/auth/account pages (false positive redirects)
-            final_path = urlparse(final_url).path.lower()
-            _auth_segments = (
-                "/login",
-                "/signin",
-                "/signup",
-                "/account",
-                "/auth",
-                "/register",
-            )
-            if any(seg in final_path for seg in _auth_segments):
-                return None
-            # Avoid redirect loops back to the original homepage
-            if urlparse(final_url).netloc == parsed.netloc and label not in (
-                "docs_path",
-                "original",
-            ):
-                final_parsed = urlparse(final_url)
-                if not final_parsed.path.startswith("/docs"):
-                    if "docs" not in final_parsed.netloc:
-                        return None
-            # Check for objects.inv (Sphinx docs indicator)
-            has_inv = False
-            inv_url = final_url.rstrip("/") + "/objects.inv"
-            try:
-                inv_resp = await client.get(inv_url)
-                if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
-                    b"# Sphinx inventory version"
-                ):
-                    # For ReadTheDocs: validate project name matches lib
-                    # and has enough objects (>= 50) to be real docs,
-                    # not a squatter/placeholder project.
-                    if label == "readthedocs":
-                        inv_content = inv_resp.content
-                        inv_text = inv_content[:500].decode("utf-8", errors="replace")
-                        proj_match = re.search(
-                            r"^# Project:\s*(.+)$", inv_text, re.MULTILINE
-                        )
-                        if proj_match:
-                            proj_name = (
-                                proj_match.group(1)
-                                .strip()
-                                .lower()
-                                .replace("-", "")
-                                .replace("_", "")
-                                .replace(" ", "")
-                            )
-                            if clean_name_norm not in proj_name:
-                                logger.debug(
-                                    f"RTD project '{proj_match.group(1).strip()}'"
-                                    f" doesn't match '{lib_name}', skipping"
-                                )
-                                return None
-                        # Count objects: real docs have 50+, squatters < 30
-                        try:
-                            # Find end of header (4 lines starting with #)
-                            hdr_pos = 0
-                            for _ in range(4):
-                                hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
-                            decompressed = zlib.decompress(inv_content[hdr_pos:])
-                            obj_count = len(decompressed.split(b"\n")) - 1
-                            if obj_count < 50:
-                                logger.debug(
-                                    f"RTD {lib_name}: only {obj_count} "
-                                    f"objects, likely squatter — skipping"
-                                )
-                                return None
-                        except Exception:
-                            # Can't count objects — reject for safety
-                            return None
-                    has_inv = True
-            except Exception:
-                pass
-            # ReadTheDocs without objects.inv is unreliable — skip
-            if label == "readthedocs" and not has_inv:
-                return None
-            return (label, final_url, content_len, has_inv)
-        except Exception:
-            return None
 
     async with _safe_httpx_client(timeout=10, follow_redirects=True) as client:
         results = await asyncio.gather(
-            *[_check(client, label, url) for label, url in candidates],
+            *[
+                _check_probe_candidate(
+                    client, label, url, orig_netloc, clean_name_norm, lib_name
+                )
+                for label, url in candidates
+            ],
             return_exceptions=True,
         )
 
@@ -1012,26 +1047,10 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     if not valid:
         return homepage
 
-    # Pick best: objects.inv > large content > small content
     best: tuple[str, str] | None = None
-    best_score = 0
+    best_score = -1
     for label, final_url, size, has_inv in valid:
-        score = 0
-        if has_inv:
-            score += 100  # Sphinx docs = gold standard
-        if size > 10000:
-            score += 10
-        elif size > 2000:
-            score += 5
-        elif size > 500:
-            score += 2
-        # docs subdomain gets small bonus (same org, high confidence)
-        if label == "docs_subdomain":
-            score += 3
-        # Original homepage gets bonus — it's the registry-provided URL,
-        # only replace if an alternative is strictly superior.
-        if label == "original":
-            score += 5
+        score = _score_probe_result(label, size, has_inv)
         if score > best_score:
             best_score = score
             best = (label, final_url)
@@ -1044,831 +1063,6 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
         return best[1]
 
     return homepage
-
-
-# ---------------------------------------------------------------------------
-# Language → registry mapping for targeted discovery
-# ---------------------------------------------------------------------------
-
-_LANGUAGE_ALIASES: dict[str, str] = {
-    "py": "python",
-    "js": "javascript",
-    "ts": "typescript",
-    "node": "javascript",
-    "nodejs": "javascript",
-    "rs": "rust",
-    "golang": "go",
-    "kt": "kotlin",
-    "c#": "csharp",
-    "dotnet": "csharp",
-    ".net": "csharp",
-    "c++": "cpp",
-    "rb": "ruby",
-}
-
-# Map normalized language to supported registries.
-# Empty list = language known but no registry integration (use SearXNG).
-_LANGUAGE_REGISTRIES: dict[str, list[str]] = {
-    "python": ["pypi"],
-    "javascript": ["npm"],
-    "typescript": ["npm"],
-    "rust": ["crates"],
-    "go": ["go"],
-    "java": ["maven"],
-    "kotlin": ["maven"],
-    "scala": ["maven"],
-    "csharp": ["nuget"],
-    "php": ["packagist"],
-    "ruby": ["rubygems"],
-    "dart": ["pubdev"],
-    "elixir": ["hex"],
-    "erlang": ["hex"],
-    # Languages without integrated registry — use GitHub search fallback
-    "swift": [],
-    "c": [],
-    "cpp": [],
-    "zig": [],
-    "haskell": [],
-    "lua": [],
-    "perl": [],
-    "r": [],
-    "julia": [],
-    "clojure": [],
-    "nim": [],
-    "ocaml": [],
-}
-
-# Registry name → discovery function
-_REGISTRY_FUNCTIONS: dict[str, Any] = {
-    "npm": _discover_from_npm,
-    "pypi": _discover_from_pypi,
-    "crates": _discover_from_crates,
-    "go": _discover_from_go,
-    "hex": _discover_from_hex,
-    "packagist": _discover_from_packagist,
-    "pubdev": _discover_from_pubdev,
-    "rubygems": _discover_from_rubygems,
-    "nuget": _discover_from_nuget,
-    "maven": _discover_from_maven,
-}
-
-
-def _normalize_language(language: str) -> str:
-    """Normalize language name to canonical form."""
-    lang = language.strip().lower()
-    return _LANGUAGE_ALIASES.get(lang, lang)
-
-
-# ---------------------------------------------------------------------------
-# Well-known docs — ONLY for genuinely ambiguous names, monorepo
-# sub-frameworks, and non-library tools/platforms that no registry can
-# discover correctly.  Entries should be minimal — add a new registry
-# instead of adding entries here.
-# ---------------------------------------------------------------------------
-_WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
-    # --- Ambiguous names (multi-language collision) ---
-    "boost": {
-        "homepage": "https://www.boost.org/doc/libs/",
-        "repository": "https://github.com/boostorg/boost",
-        "description": "Boost C++ Libraries — portable, peer-reviewed",
-    },
-    "cmake": {
-        "homepage": "https://cmake.org/cmake/help/latest/",
-        "repository": "https://github.com/Kitware/CMake",
-        "description": "CMake cross-platform build system",
-    },
-    "protobuf": {
-        "homepage": "https://protobuf.dev/",
-        "repository": "https://github.com/protocolbuffers/protobuf",
-        "description": "Protocol Buffers — Google's data interchange format",
-    },
-    "flux": {
-        "homepage": "https://fluxcd.io/flux/",
-        "repository": "https://github.com/fluxcd/flux2",
-        "description": "Flux — GitOps toolkit for Kubernetes",
-    },
-    # --- Java/Spring monorepo sub-frameworks ---
-    "spring-webflux": {
-        "homepage": "https://docs.spring.io/spring-framework/reference/web/webflux.html",
-        "repository": "https://github.com/spring-projects/spring-framework",
-        "description": "Spring WebFlux — reactive web framework for Java",
-    },
-    "kafka-streams": {
-        "homepage": "https://kafka.apache.org/documentation/streams/",
-        "repository": "https://github.com/apache/kafka",
-        "description": "Apache Kafka Streams — stream processing library",
-    },
-    "reactor-test": {
-        "homepage": "https://projectreactor.io/docs/core/release/reference/#testing",
-        "repository": "https://github.com/reactor/reactor-core",
-        "description": "Project Reactor test utilities — StepVerifier",
-    },
-    # --- Android Jetpack monorepo ---
-    "navigation-compose": {
-        "homepage": "https://developer.android.com/develop/ui/compose/navigation",
-        "repository": "https://github.com/androidx/androidx",
-        "description": "Jetpack Navigation for Compose",
-    },
-    "work-manager": {
-        "homepage": "https://developer.android.com/develop/background-work/background-tasks/persistent/getting-started",
-        "repository": "https://github.com/androidx/androidx",
-        "description": "Android WorkManager — background task scheduling",
-    },
-    "datastore": {
-        "homepage": "https://developer.android.com/topic/libraries/architecture/datastore",
-        "repository": "https://github.com/androidx/androidx",
-        "description": "Android Jetpack DataStore — data storage solution",
-    },
-    # --- Non-library tools/platforms ---
-    "gitlab-ci": {
-        "homepage": "https://docs.gitlab.com/ci/yaml/",
-        "repository": "https://github.com/gitlabhq/gitlabhq",
-        "description": "GitLab CI/CD pipeline configuration",
-    },
-    "linkerd": {
-        "homepage": "https://linkerd.io/2/reference/",
-        "repository": "https://github.com/linkerd/linkerd2",
-        "description": "Linkerd — ultra-light service mesh for Kubernetes",
-    },
-    "apisix": {
-        "homepage": "https://apisix.apache.org/docs/apisix/getting-started/",
-        "repository": "https://github.com/apache/apisix",
-        "description": "Apache APISIX — cloud-native API gateway",
-    },
-    "krakend": {
-        "homepage": "https://www.krakend.io/docs/overview/",
-        "repository": "https://github.com/krakend/krakend-ce",
-        "description": "KrakenD — high-performance API gateway",
-    },
-    "defold": {
-        "homepage": "https://defold.com/manuals/introduction/",
-        "repository": "https://github.com/defold/defold",
-        "description": "Defold — cross-platform game engine",
-    },
-    "sqitch": {
-        "homepage": "https://sqitch.org/docs/",
-        "repository": "https://github.com/sqitchers/sqitch",
-        "description": "Sqitch — database change management",
-    },
-    "tekton": {
-        "homepage": "https://tekton.dev/docs/",
-        "repository": "https://github.com/tektoncd/pipeline",
-        "description": "Tekton — Kubernetes-native CI/CD pipelines",
-    },
-    "spline": {
-        "homepage": "https://docs.spline.design/",
-        "repository": "",
-        "description": "Spline — 3D design tool for the web",
-    },
-    "dhall": {
-        "homepage": "https://dhall-lang.org/",
-        "repository": "https://github.com/dhall-lang/dhall-haskell",
-        "description": "Dhall — programmable configuration language",
-    },
-    "@enhance/ssr": {
-        "homepage": "https://enhance.dev/docs/",
-        "repository": "https://github.com/enhance-dev/enhance",
-        "description": "Enhance — HTML-first web framework",
-    },
-    # --- Go tools (binaries, not importable packages) ---
-    "staticcheck": {
-        "homepage": "https://staticcheck.dev/docs/",
-        "repository": "https://github.com/dominikh/go-tools",
-        "description": "Staticcheck — Go static analysis tool",
-    },
-    "mockgen": {
-        "homepage": "https://pkg.go.dev/go.uber.org/mock/mockgen",
-        "repository": "https://github.com/uber-go/mock",
-        "description": "MockGen — Go mock code generator",
-    },
-    "govulncheck": {
-        "homepage": "https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck",
-        "repository": "https://github.com/golang/vuln",
-        "description": "govulncheck — Go vulnerability scanner",
-    },
-    # --- Popular libraries with wrong/missing npm/PyPI homepage ---
-    "chakra-ui": {
-        "homepage": "https://www.chakra-ui.com/docs",
-        "repository": "https://github.com/chakra-ui/chakra-ui",
-        "description": "Chakra UI — accessible React component library",
-    },
-    "@chakra-ui/react": {
-        "homepage": "https://www.chakra-ui.com/docs",
-        "repository": "https://github.com/chakra-ui/chakra-ui",
-        "description": "Chakra UI — accessible React component library",
-    },
-    "clerk": {
-        "homepage": "https://clerk.com/docs",
-        "repository": "https://github.com/clerk/javascript",
-        "description": "Clerk — authentication and user management",
-    },
-    "@clerk/nextjs": {
-        "homepage": "https://clerk.com/docs",
-        "repository": "https://github.com/clerk/javascript",
-        "description": "Clerk — authentication and user management for Next.js",
-    },
-    "supabase": {
-        "homepage": "https://supabase.com/docs",
-        "repository": "https://github.com/supabase/supabase",
-        "description": "Supabase — open-source Firebase alternative",
-    },
-    "@supabase/supabase-js": {
-        "homepage": "https://supabase.com/docs/reference/javascript/",
-        "repository": "https://github.com/supabase/supabase-js",
-        "description": "Supabase JavaScript client library",
-    },
-    # --- Scoped / monorepo sub-packages with missing homepage ---
-    "@vue/router": {
-        "homepage": "https://router.vuejs.org/",
-        "repository": "https://github.com/vuejs/router",
-        "description": "Vue Router — official router for Vue.js",
-    },
-    "vue-router": {
-        "homepage": "https://router.vuejs.org/",
-        "repository": "https://github.com/vuejs/router",
-        "description": "Vue Router — official router for Vue.js",
-    },
-    "@vue/pinia": {
-        "homepage": "https://pinia.vuejs.org/",
-        "repository": "https://github.com/vuejs/pinia",
-        "description": "Pinia — intuitive store for Vue.js",
-    },
-    "pinia": {
-        "homepage": "https://pinia.vuejs.org/",
-        "repository": "https://github.com/vuejs/pinia",
-        "description": "Pinia — intuitive store for Vue.js",
-    },
-    # --- Ambiguous short names (deprecated/squatted on npm) ---
-    "nest": {
-        "homepage": "https://docs.nestjs.com/",
-        "repository": "https://github.com/nestjs/nest",
-        "description": "NestJS — progressive Node.js framework",
-    },
-    "nestjs": {
-        "homepage": "https://docs.nestjs.com/",
-        "repository": "https://github.com/nestjs/nest",
-        "description": "NestJS — progressive Node.js framework",
-    },
-    # --- Name aliasing (common name != package name) ---
-    "nextjs": {
-        "homepage": "https://nextjs.org/docs",
-        "repository": "https://github.com/vercel/next.js",
-        "description": "Next.js — the React framework for the web",
-    },
-    "next.js": {
-        "homepage": "https://nextjs.org/docs",
-        "repository": "https://github.com/vercel/next.js",
-        "description": "Next.js — the React framework for the web",
-    },
-    "vuejs": {
-        "homepage": "https://vuejs.org/",
-        "repository": "https://github.com/vuejs/core",
-        "description": "Vue.js — progressive JavaScript framework",
-    },
-    "angular": {
-        "homepage": "https://angular.dev/",
-        "repository": "https://github.com/angular/angular",
-        "description": "Angular — web application framework by Google",
-    },
-    "trpc": {
-        "homepage": "https://trpc.io/docs",
-        "repository": "https://github.com/trpc/trpc",
-        "description": "tRPC — end-to-end typesafe APIs",
-    },
-    "@trpc/server": {
-        "homepage": "https://trpc.io/docs",
-        "repository": "https://github.com/trpc/trpc",
-        "description": "tRPC — end-to-end typesafe APIs",
-    },
-    "tanstack-query": {
-        "homepage": "https://tanstack.com/query/latest",
-        "repository": "https://github.com/TanStack/query",
-        "description": "TanStack Query — async state management",
-    },
-    "react-query": {
-        "homepage": "https://tanstack.com/query/latest",
-        "repository": "https://github.com/TanStack/query",
-        "description": "TanStack Query — async state management",
-    },
-    "turborepo": {
-        "homepage": "https://turbo.build/repo/docs",
-        "repository": "https://github.com/vercel/turborepo",
-        "description": "Turborepo — high-performance build system for JS/TS monorepos",
-    },
-    # --- Wrong/missing registry metadata (real package, bad discovery) ---
-    "vinejs": {
-        "homepage": "https://vinejs.dev/docs/introduction",
-        "repository": "https://github.com/vinejs/vine",
-        "description": "VineJS — form data validation library for Node.js",
-    },
-    "@vinejs/vine": {
-        "homepage": "https://vinejs.dev/docs/introduction",
-        "repository": "https://github.com/vinejs/vine",
-        "description": "VineJS — form data validation library for Node.js",
-    },
-    "inertia": {
-        "homepage": "https://inertiajs.com/",
-        "repository": "https://github.com/inertiajs/inertia",
-        "description": "Inertia.js — modern monolith SPA framework",
-    },
-    "inertiajs": {
-        "homepage": "https://inertiajs.com/",
-        "repository": "https://github.com/inertiajs/inertia",
-        "description": "Inertia.js — modern monolith SPA framework",
-    },
-    "@inertiajs/react": {
-        "homepage": "https://inertiajs.com/",
-        "repository": "https://github.com/inertiajs/inertia",
-        "description": "Inertia.js React adapter — modern monolith SPA framework",
-    },
-    "@inertiajs/vue3": {
-        "homepage": "https://inertiajs.com/",
-        "repository": "https://github.com/inertiajs/inertia",
-        "description": "Inertia.js Vue 3 adapter — modern monolith SPA framework",
-    },
-    # --- Umbrella orgs / meta-packages not on registries ---
-    "dry-rb": {
-        "homepage": "https://dry-rb.org/",
-        "repository": "https://github.com/dry-rb",
-        "description": "dry-rb — Ruby gems for common programming patterns",
-    },
-    "dry-validation": {
-        "homepage": "https://dry-rb.org/gems/dry-validation/",
-        "repository": "https://github.com/dry-rb/dry-validation",
-        "description": "dry-validation — data validation for Ruby",
-    },
-    "dry-types": {
-        "homepage": "https://dry-rb.org/gems/dry-types/",
-        "repository": "https://github.com/dry-rb/dry-types",
-        "description": "dry-types — flexible type system for Ruby",
-    },
-    # --- Cross-ecosystem collisions (name exists on wrong registry) ---
-    "rails": {
-        "homepage": "https://guides.rubyonrails.org/",
-        "repository": "https://github.com/rails/rails",
-        "description": "Ruby on Rails — full-stack web application framework",
-    },
-    "laravel": {
-        "homepage": "https://laravel.com/docs",
-        "repository": "https://github.com/laravel/laravel",
-        "description": "Laravel — PHP web application framework",
-    },
-    "symfony": {
-        "homepage": "https://symfony.com/doc/current/",
-        "repository": "https://github.com/symfony/symfony",
-        "description": "Symfony — PHP web application framework",
-    },
-    "echo": {
-        "homepage": "https://echo.labstack.com/",
-        "repository": "https://github.com/labstack/echo",
-        "description": "Echo — high-performance Go web framework",
-    },
-    "flutter": {
-        "homepage": "https://docs.flutter.dev/",
-        "repository": "https://github.com/flutter/flutter",
-        "description": "Flutter — UI toolkit for multi-platform apps by Google",
-    },
-    "swift": {
-        "homepage": "https://www.swift.org/documentation/",
-        "repository": "https://github.com/swiftlang/swift",
-        "description": "Swift — programming language by Apple",
-    },
-    "nginx": {
-        "homepage": "https://nginx.org/en/docs/",
-        "repository": "https://github.com/nginx/nginx",
-        "description": "nginx — high-performance HTTP and reverse proxy server",
-    },
-    "beautiful-soup": {
-        "homepage": "https://www.crummy.com/software/BeautifulSoup/bs4/doc/",
-        "repository": "https://code.launchpad.net/beautifulsoup",
-        "description": "Beautiful Soup — HTML/XML parser for Python",
-    },
-    "beautifulsoup": {
-        "homepage": "https://www.crummy.com/software/BeautifulSoup/bs4/doc/",
-        "repository": "https://code.launchpad.net/beautifulsoup",
-        "description": "Beautiful Soup — HTML/XML parser for Python",
-    },
-    "bs4": {
-        "homepage": "https://www.crummy.com/software/BeautifulSoup/bs4/doc/",
-        "repository": "https://code.launchpad.net/beautifulsoup",
-        "description": "Beautiful Soup — HTML/XML parser for Python",
-    },
-    "pytorch": {
-        "homepage": "https://pytorch.org/docs/stable/",
-        "repository": "https://github.com/pytorch/pytorch",
-        "description": "PyTorch — open-source deep learning framework",
-    },
-    "torch": {
-        "homepage": "https://pytorch.org/docs/stable/",
-        "repository": "https://github.com/pytorch/pytorch",
-        "description": "PyTorch — open-source deep learning framework",
-    },
-    "tensorflow": {
-        "homepage": "https://www.tensorflow.org/api_docs",
-        "repository": "https://github.com/tensorflow/tensorflow",
-        "description": "TensorFlow — end-to-end ML platform",
-    },
-    "sklearn": {
-        "homepage": "https://scikit-learn.org/stable/",
-        "repository": "https://github.com/scikit-learn/scikit-learn",
-        "description": "scikit-learn — machine learning in Python",
-    },
-    # --- Generic names (multi-language/ecosystem collision) ---
-    "graphql": {
-        "homepage": "https://graphql.org/learn/",
-        "repository": "https://github.com/graphql/graphql-spec",
-        "description": "GraphQL — query language for APIs",
-    },
-    "redis": {
-        "homepage": "https://redis.io/docs/",
-        "repository": "https://github.com/redis/redis",
-        "description": "Redis — in-memory data store",
-    },
-    "kafka": {
-        "homepage": "https://kafka.apache.org/documentation/",
-        "repository": "https://github.com/apache/kafka",
-        "description": "Apache Kafka — distributed event streaming platform",
-    },
-    "grpc": {
-        "homepage": "https://grpc.io/docs/",
-        "repository": "https://github.com/grpc/grpc",
-        "description": "gRPC — high-performance RPC framework",
-    },
-    "htmx": {
-        "homepage": "https://htmx.org/docs/",
-        "repository": "https://github.com/bigskysoftware/htmx",
-        "description": "htmx — high power tools for HTML",
-    },
-    # --- Java/Spring ecosystem ---
-    "spring-boot": {
-        "homepage": "https://docs.spring.io/spring-boot/reference/",
-        "repository": "https://github.com/spring-projects/spring-boot",
-        "description": "Spring Boot — Java application framework",
-    },
-    "spring": {
-        "homepage": "https://docs.spring.io/spring-framework/reference/",
-        "repository": "https://github.com/spring-projects/spring-framework",
-        "description": "Spring Framework — comprehensive Java application framework",
-    },
-    "spring-security": {
-        "homepage": "https://docs.spring.io/spring-security/reference/",
-        "repository": "https://github.com/spring-projects/spring-security",
-        "description": "Spring Security — authentication and authorization for Java",
-    },
-    # --- Rust crates with no custom homepage ---
-    "axum": {
-        "homepage": "https://docs.rs/axum/latest/axum/",
-        "repository": "https://github.com/tokio-rs/axum",
-        "description": "axum — ergonomic and modular web framework for Rust",
-    },
-    "reqwest": {
-        "homepage": "https://docs.rs/reqwest/latest/reqwest/",
-        "repository": "https://github.com/seanmonstar/reqwest",
-        "description": "reqwest — HTTP client for Rust",
-    },
-    "sqlx": {
-        "homepage": "https://docs.rs/sqlx/latest/sqlx/",
-        "repository": "https://github.com/launchbadge/sqlx",
-        "description": "SQLx — async SQL toolkit for Rust",
-    },
-    # --- Python popular but ambiguous ---
-    "celery": {
-        "homepage": "https://docs.celeryq.dev/en/stable/",
-        "repository": "https://github.com/celery/celery",
-        "description": "Celery — distributed task queue for Python",
-    },
-    "numpy": {
-        "homepage": "https://numpy.org/doc/stable/",
-        "repository": "https://github.com/numpy/numpy",
-        "description": "NumPy — numerical computing with Python",
-    },
-    "pandas": {
-        "homepage": "https://pandas.pydata.org/docs/",
-        "repository": "https://github.com/pandas-dev/pandas",
-        "description": "pandas — data analysis and manipulation for Python",
-    },
-}
-
-
-async def discover_library(name: str, language: str | None = None) -> dict | None:
-    """Discover library metadata from package registries.
-
-    Queries all supported registries in parallel. Scores by:
-    1. Exact name match (case-insensitive)
-    2. Has valid docs/homepage URL
-    3. Non-GitHub homepage (custom domain = established project)
-    4. Description length (longer = more established)
-    5. Dedicated docs URL pattern (readthedocs, docs.*, etc.)
-
-    Supported registries:
-    - npm (JavaScript/TypeScript)
-    - PyPI (Python)
-    - crates.io (Rust)
-    - Go modules (Go)
-    - Maven Central (Java/Kotlin/Scala)
-    - Hex.pm (Elixir/Erlang)
-    - Packagist (PHP)
-    - pub.dev (Dart/Flutter)
-    - RubyGems (Ruby)
-    - NuGet (C#/.NET)
-
-    When ``language`` is specified, only queries matching registries.
-    This prevents e.g. npm's obscure "fastapi" package from shadowing
-    Python's FastAPI, or npm "torch" from shadowing PyTorch.
-    """
-    # -------------------------------------------------------------------
-    # Priority 0: Well-known docs — handles tools/platforms not on standard
-    # registries, sub-frameworks, and libraries with generic names that
-    # cause wrong discovery (e.g. "boost" → xgboost, "protobuf" → npm pkg).
-    # -------------------------------------------------------------------
-    well_known = _WELL_KNOWN_DOCS.get(name.lower())
-    if well_known:
-        logger.info(f"Using well-known docs for {name}: {well_known['homepage']}")
-        return {**well_known, "name": name, "registry": "well_known"}
-
-    # Build registry tasks based on language filter
-    if language:
-        lang = _normalize_language(language)
-        registry_names = _LANGUAGE_REGISTRIES.get(lang)
-        if registry_names is not None:
-            if not registry_names:
-                # Known language but no registry — try GitHub search
-                logger.info(
-                    f"No registry for language '{language}', "
-                    "trying GitHub search fallback"
-                )
-                gh_result = await _discover_from_github_search(name, lang)
-                if gh_result:
-                    # Probe for better docs URL
-                    homepage = gh_result.get("homepage", "")
-                    if homepage and "github.com" not in urlparse(homepage).netloc:
-                        probed = await _probe_docs_url(
-                            homepage, name, registry="github"
-                        )
-                        if probed != homepage:
-                            logger.info(f"Probed {name} docs: {homepage} -> {probed}")
-                            gh_result["homepage"] = probed
-                    # Try to upgrade GitHub-only homepage via API
-                    repo_url = gh_result.get("repository", "")
-                    if (
-                        homepage
-                        and "github.com" in urlparse(homepage).netloc
-                        and repo_url
-                    ):
-                        gh_hp = await _get_github_homepage(repo_url)
-                        if gh_hp:
-                            logger.info(
-                                f"Upgraded {name} homepage: {homepage} -> {gh_hp}"
-                            )
-                            gh_result["homepage"] = gh_hp
-                    return gh_result
-                # GitHub search failed — let SearXNG handle
-                return None
-            # Query only matching registries
-            tasks = [
-                _REGISTRY_FUNCTIONS[r](name)
-                for r in registry_names
-                if r in _REGISTRY_FUNCTIONS
-            ]
-        else:
-            # Unknown language — query all registries as fallback
-            tasks = [
-                _discover_from_npm(name),
-                _discover_from_pypi(name),
-                _discover_from_crates(name),
-                _discover_from_go(name),
-                _discover_from_hex(name),
-                _discover_from_packagist(name),
-                _discover_from_pubdev(name),
-                _discover_from_rubygems(name),
-                _discover_from_nuget(name),
-                _discover_from_maven(name),
-            ]
-    else:
-        # No language specified — query all registries (default)
-        tasks = [
-            _discover_from_npm(name),
-            _discover_from_pypi(name),
-            _discover_from_crates(name),
-            _discover_from_go(name),
-            _discover_from_hex(name),
-            _discover_from_packagist(name),
-            _discover_from_pubdev(name),
-            _discover_from_rubygems(name),
-            _discover_from_nuget(name),
-            _discover_from_maven(name),
-        ]
-
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Pre-upgrade: for results with a GitHub homepage or repo but no
-    # non-GitHub homepage, try to fill homepage from the GitHub API
-    # before scoring.  This catches PyPI packages that only list their
-    # GitHub page as "homepage" (e.g. crawl4ai → crawl4ai.com).
-    upgrade_tasks = []
-    upgrade_indices = []
-    valid_results = [r for r in results if isinstance(r, dict)]
-    for i, r in enumerate(valid_results):
-        homepage = r.get("homepage") or ""
-        repo_url = r.get("repository") or ""
-        hp_is_github = "github.com" in homepage
-        # Upgrade when NO homepage at all, OR homepage IS a GitHub URL
-        if (not homepage or hp_is_github) and (repo_url or homepage):
-            gh_url = repo_url if "github.com" in repo_url else homepage
-            if "github.com" in gh_url:
-                upgrade_tasks.append(_get_github_homepage(gh_url))
-                upgrade_indices.append(i)
-
-    if upgrade_tasks:
-        gh_results = await asyncio.gather(*upgrade_tasks, return_exceptions=True)
-        for idx, gh_hp in zip(upgrade_indices, gh_results, strict=False):
-            if isinstance(gh_hp, str) and gh_hp:
-                valid_results[idx]["homepage"] = gh_hp
-                logger.debug(
-                    f"Pre-upgraded {valid_results[idx].get('name')}"
-                    f" homepage from GitHub: {gh_hp}"
-                )
-
-    # Score each result for relevance
-    scored: list[tuple[int, dict]] = []
-    for r in valid_results:
-        score = 0
-        # Exact name match is the strongest signal
-        if r.get("name", "").lower() == name.lower():
-            score += 10
-        # Has a docs/homepage URL
-        homepage = r.get("homepage", "")
-        if homepage:
-            score += 5
-            # Non-GitHub homepage = established project with custom domain
-            parsed_hp = urlparse(homepage)
-            if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
-                lib_norm = name.lower().replace("-", "")
-                if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
-                    score += 1  # Auto-generated docs, minimal boost
-                    # Don't give name-in-path bonus: always true for these
-                else:
-                    score += 3
-                    # Library name appears in the domain → likely official site
-                    # e.g. fastapi.tiangolo.com, pytorch.org, react.dev
-                    host_norm = parsed_hp.netloc.lower().replace("-", "")
-                    if lib_norm in host_norm:
-                        score += 3
-                # ReadTheDocs bonus: only when subdomain exactly matches lib name
-                # Prevents e.g. "app-turbo.readthedocs.org" scoring for "turbo"
-                if any(p in parsed_hp.netloc for p in ("readthedocs", "rtfd.io")):
-                    subdomain = parsed_hp.netloc.split(".")[0].lower().replace("-", "")
-                    if subdomain == lib_norm:
-                        score += 2
-        # Description quality (longer = more established)
-        desc = r.get("description", "")
-        if desc:
-            desc_len = len(desc)
-            if desc_len > 100:
-                score += 3
-            elif desc_len > 50:
-                score += 2
-            elif desc_len > 20:
-                score += 1
-
-        # Penalize deprecated packages (npm deprecate-holder, squatted names)
-        if r.get("deprecated"):
-            score -= 20
-
-        # Penalize known placeholder/junk homepage patterns
-        all_urls = ((homepage or "") + " " + (r.get("repository") or "")).lower()
-        if any(p in all_urls for p in ("deprecate-holder", "placeholder")):
-            score -= 15
-
-        # Penalize crates.io auto-generated docs.rs fallback URLs
-        if r.get("docs_rs_fallback"):
-            score -= 2
-
-        # Popularity boost for packages with star count data (Go, GitHub)
-        # Helps disambiguate generic names like "echo", "gin", etc.
-        stars = r.get("stars", 0)
-        if stars >= 10000:
-            score += 3
-        elif stars >= 1000:
-            score += 2
-        elif stars >= 100:
-            score += 1
-
-        # Download count boost for crates.io packages
-        # Helps disambiguate generic names: clap (668M), diesel (22M), etc.
-        # Higher bonuses than stars because download counts are more reliable
-        # for popularity (no manual curation needed).
-        downloads = r.get("downloads", 0)
-        if downloads >= 50_000_000:
-            score += 5
-        elif downloads >= 5_000_000:
-            score += 3
-        elif downloads >= 500_000:
-            score += 1
-
-        # Registry trust: npm/PyPI are direct package registries (exact API match),
-        # while Go uses GitHub search (may return tangentially related repos).
-        # Give primary registries a small bonus to break ties.
-        reg = r.get("registry", "")
-        if reg in ("npm", "pypi"):
-            score += 2
-
-        scored.append((score, r))
-
-    # Sort by score descending, pick best
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    if scored:
-        best_score, best = scored[0]
-
-        # GitHub homepage upgrade: when the homepage is a GitHub URL,
-        # check the GitHub API for a better homepage (e.g. vuejs.org).
-        homepage = best.get("homepage", "")
-        repo_url = best.get("repository", "")
-        if homepage and "github.com" in urlparse(homepage).netloc:
-            # Try to extract owner/repo from either homepage or repo URL
-            gh_url = repo_url if repo_url else homepage
-            gh_homepage = await _get_github_homepage(gh_url)
-            if gh_homepage:
-                logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_homepage}")
-                best["homepage"] = gh_homepage
-
-        if best.get("homepage"):
-            # Probe for better docs URL (docs subdomain, ReadTheDocs, /docs/)
-            original_hp = best["homepage"]
-            probed_url = await _probe_docs_url(
-                original_hp, name, registry=best.get("registry", "")
-            )
-            if probed_url != original_hp:
-                logger.info(f"Upgraded {name} docs URL: {original_hp} -> {probed_url}")
-                best["homepage"] = probed_url
-
-            logger.info(
-                f"Discovered {name} docs: {best['homepage']} "
-                f"(via {best['registry']}, score={best_score})"
-            )
-            return best
-        # No homepage but has some data
-        return best
-
-    # All registries failed — try GitHub search as last resort
-    if language:
-        lang = _normalize_language(language)
-        if lang in _GITHUB_LANGUAGE_NAMES:
-            logger.info(
-                f"All registries failed for {name} ({language}), "
-                "trying GitHub search as last resort"
-            )
-            gh_result = await _discover_from_github_search(name, lang)
-            if gh_result:
-                homepage = gh_result.get("homepage", "")
-                if homepage and "github.com" not in urlparse(homepage).netloc:
-                    probed = await _probe_docs_url(homepage, name, registry="github")
-                    if probed != homepage:
-                        logger.info(f"Probed {name} docs: {homepage} -> {probed}")
-                        gh_result["homepage"] = probed
-                repo_url = gh_result.get("repository", "")
-                if homepage and "github.com" in urlparse(homepage).netloc and repo_url:
-                    gh_hp = await _get_github_homepage(repo_url)
-                    if gh_hp:
-                        logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_hp}")
-                        gh_result["homepage"] = gh_hp
-                return gh_result
-
-    return None
-
-
-def _normalize_docs_url(url: str) -> str:
-    """Normalize an overly-specific docs URL to a broader docs root.
-
-    When a package registry returns a deeply nested page URL
-    (e.g., ``/docs/stable/clients/python/overview``), normalize it to the
-    docs root for better crawler coverage (e.g., ``/docs/stable/``).
-
-    Only normalizes when there are 3+ path segments after a docs marker.
-    """
-    parsed = urlparse(url)
-    path = parsed.path.rstrip("/")
-    parts = path.split("/")
-
-    doc_markers = ("docs", "doc", "documentation")
-    for i, p in enumerate(parts):
-        if p.lower() in doc_markers:
-            remaining = len(parts) - i - 1
-            if remaining >= 3:
-                keep_up_to = i + 2  # docs + one level (version/section)
-                normalized_path = "/".join(parts[:keep_up_to]) + "/"
-                normalized = f"{parsed.scheme}://{parsed.netloc}{normalized_path}"
-                logger.info(f"Normalized docs URL: {url} -> {normalized}")
-                return normalized
-            break
-
-    return url
-
-
-# ---------------------------------------------------------------------------
-# llms.txt discovery — try to fetch AI-friendly docs
-# ---------------------------------------------------------------------------
 
 
 async def try_llms_txt(base_url: str) -> str | None:
