@@ -330,3 +330,35 @@ def test_safe_local_path_oversized_file(tmp_path):
     f = tmp_path / "big.txt"
     f.write_text("x" * 200)
     assert is_safe_local_path(str(f), max_size=100) is None
+
+def test_safe_local_path_explicit_none_allows_all(tmp_path):
+    """allowed_dirs=None (default) should allow access (within size limits)."""
+    f = tmp_path / "allow_me.txt"
+    f.write_text("hello")
+    assert is_safe_local_path(str(f), allowed_dirs=None) is not None
+
+
+def test_safe_local_path_empty_list_blocks_all(tmp_path):
+    """allowed_dirs=[] should block ALL access."""
+    f = tmp_path / "block_me.txt"
+    f.write_text("hello")
+    assert is_safe_local_path(str(f), allowed_dirs=[]) is None
+
+
+def test_safe_local_path_resolve_failure_variants():
+    """Test ValueError and OSError during Path.resolve()."""
+    with patch("wet_mcp.security.Path.resolve", side_effect=ValueError("invalid path")):
+        assert is_safe_local_path("/some/path") is None
+
+    with patch("wet_mcp.security.Path.resolve", side_effect=OSError("permission denied")):
+        assert is_safe_local_path("/some/path") is None
+
+
+def test_safe_local_path_stat_failure(tmp_path):
+    """Test OSError during p.stat()."""
+    f = tmp_path / "stat_fail.txt"
+    f.write_text("hello")
+
+    # We need to patch the stat method of the resolved path object
+    with patch("wet_mcp.security.Path.stat", side_effect=OSError("device error")):
+        assert is_safe_local_path(str(f)) is None
