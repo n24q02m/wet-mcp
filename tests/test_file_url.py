@@ -1,22 +1,23 @@
-import asyncio
-import json
-import os
-import sys
 import importlib.util
+import json
+import sys
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
+
 import pytest
+
 
 # This test uses isolated loading because of the complex dependency environment
 @pytest.mark.asyncio
 async def test_extract_file_url_and_convert_concurrent(tmp_path):
     # Setup Mocks
-    with MagicMock() as mock_loguru, \
-         MagicMock() as mock_httpx, \
-         MagicMock() as mock_crawl4ai, \
-         MagicMock() as mock_aiolimiter, \
-         MagicMock() as mock_markitdown:
-
+    with (
+        MagicMock() as mock_loguru,
+        MagicMock() as mock_httpx,
+        MagicMock() as mock_crawl4ai,
+        MagicMock() as mock_aiolimiter,
+        MagicMock() as mock_markitdown,
+    ):
         sys.modules["loguru"] = mock_loguru
         sys.modules["httpx"] = mock_httpx
         sys.modules["crawl4ai"] = mock_crawl4ai
@@ -41,7 +42,9 @@ async def test_extract_file_url_and_convert_concurrent(tmp_path):
         mock_markitdown.MarkItDown.return_value = mock_mid
 
         # Load module
-        spec = importlib.util.spec_from_file_location("wet_mcp.sources.crawler", "src/wet_mcp/sources/crawler.py")
+        spec = importlib.util.spec_from_file_location(
+            "wet_mcp.sources.crawler", "src/wet_mcp/sources/crawler.py"
+        )
         crawler = importlib.util.module_from_spec(spec)
         sys.modules["wet_mcp.sources.crawler"] = crawler
         spec.loader.exec_module(crawler)
