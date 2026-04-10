@@ -519,9 +519,12 @@ async def _with_timeout(coro, action: str) -> str:
     # Give the task a grace period to clean up (close browser pages, etc.)
     try:
         await asyncio.wait_for(asyncio.shield(task), timeout=_CANCEL_GRACE_PERIOD)
-    except (asyncio.CancelledError, TimeoutError, Exception):
-        # Task either cancelled cleanly, timed out again, or raised -- all OK
+    except (asyncio.CancelledError, TimeoutError):
+        # Task either cancelled cleanly or timed out again -- all OK
         pass
+    except Exception as e:
+        # Unexpected error during cleanup
+        logger.debug(f"Unexpected error during tool cleanup: {e}")
 
     logger.error(f"Tool '{action}' timed out after {timeout}s")
     return (
