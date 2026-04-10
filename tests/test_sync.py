@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-import wet_mcp.sync
 from wet_mcp import sync
 from wet_mcp.sync import (
     _has_token_available,
@@ -535,7 +534,9 @@ def clean_sync_task():
     sync._sync_task = initial
 
 
-class TestAutoSyncLifecycle:
+class TestAutoSync:
+    """Consolidated tests for auto-sync management."""
+
     @pytest.mark.asyncio
     async def test_stop_auto_sync_no_task(self):
         sync._sync_task = None
@@ -609,8 +610,94 @@ class TestAutoSyncLifecycle:
 
             await sync._sync_task
 
+    @pytest.mark.asyncio
+    @patch("wet_mcp.sync.sync_full", new_callable=AsyncMock)
+    @patch("wet_mcp.sync.settings")
+    async def test_auto_sync_loop_success(self, mock_settings, mock_sync_full):
+        """Verify _auto_sync_loop runs sync_full and sleeps."""
+        from wet_mcp.sync import _auto_sync_loop
+
+        db_mock = MagicMock()
+        mock_settings.sync_interval = 0.1
+
+        # We'll use a side effect to break the infinite loop
+        # and also verify it ran at least twice (initial + one loop)
+        call_count = 0
+
+        async def sync_side_effect(*args):
+            nonlocal call_count
+            call_count += 1
+            if call_count >= 2:
+                raise asyncio.CancelledError()
+
+        mock_sync_full.side_effect = sync_side_effect
+
+        try:
+            await _auto_sync_loop(db_mock)
+        except asyncio.CancelledError:
+            pass
+
+        assert call_count >= 2
+        assert mock_sync_full.call_count >= 2
+
+    @pytest.mark.asyncio
+    @patch("wet_mcp.sync.sync_full", new_callable=AsyncMock)
+    @patch("wet_mcp.sync.settings")
+    @patch("wet_mcp.sync.logger")
+    async def test_auto_sync_loop_initial_error(
+        self, mock_logger, mock_settings, mock_sync_full
+    ):
+        """Verify _auto_sync_loop continues after initial sync error."""
+        from wet_mcp.sync import _auto_sync_loop
+
+        db_mock = MagicMock()
+        mock_settings.sync_interval = 0.01
+
+        # First call fails, second call we cancel to break loop
+        mock_sync_full.side_effect = [
+            Exception("Initial failed"),
+            asyncio.CancelledError(),
+        ]
+
+        try:
+            await _auto_sync_loop(db_mock)
+        except asyncio.CancelledError:
+            pass
+
+        mock_logger.error.assert_any_call("Initial sync error: Initial failed")
+        assert mock_sync_full.call_count == 2
+
+    @pytest.mark.asyncio
+    @patch("wet_mcp.sync.sync_full", new_callable=AsyncMock)
+    @patch("wet_mcp.sync.settings")
+    @patch("wet_mcp.sync.logger")
+    async def test_auto_sync_loop_runtime_error(
+        self, mock_logger, mock_settings, mock_sync_full
+    ):
+        """Verify _auto_sync_loop continues after runtime sync error."""
+        from wet_mcp.sync import _auto_sync_loop
+
+        db_mock = MagicMock()
+        mock_settings.sync_interval = 0.01
+
+        # Initial success, first loop error, second loop cancel
+        mock_sync_full.side_effect = [
+            None,
+            Exception("Loop failed"),
+            asyncio.CancelledError(),
+        ]
+
+        try:
+            await _auto_sync_loop(db_mock)
+        except asyncio.CancelledError:
+            pass
+
+        mock_logger.error.assert_any_call("Auto-sync error: Loop failed")
+        assert mock_sync_full.call_count == 3
+
 
 # -----------------------------------------------------------------------
+# check_health
 # check_health
 # -----------------------------------------------------------------------
 
@@ -731,118 +818,6 @@ class TestSetupSync:
             mock_settings.google_drive_client_id = "client123"
             with pytest.raises(SystemExit, match="1"):
                 setup_sync()
-
-
-class TestStartAutoSync:
-    def teardown_method(self):
-        """Ensure _sync_task is reset after each test."""
-        if wet_mcp.sync._sync_task and not wet_mcp.sync._sync_task.done():
-            wet_mcp.sync._sync_task.cancel()
-        wet_mcp.sync._sync_task = None
-
-    def test_sync_disabled(self):
-        """Task is not started if sync is disabled."""
-        mock_db = MagicMock()
-        with (
-            patch("wet_mcp.sync.settings") as mock_settings,
-            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
-        ):
-            mock_settings.sync_enabled = False
-            start_auto_sync(mock_db)
-            mock_create_task.assert_not_called()
-
-    def test_no_client_id_still_starts(self):
-        """Task is started even if client ID is empty (sync_enabled=True)."""
-        mock_db = MagicMock()
-        with (
-            patch("wet_mcp.sync.settings") as mock_settings,
-            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
-            patch("wet_mcp.sync._auto_sync_loop"),
-        ):
-            mock_settings.sync_enabled = True
-            mock_settings.google_drive_client_id = ""
-            mock_settings.sync_interval = 60
-            start_auto_sync(mock_db)
-            mock_create_task.assert_called_once()
-
-    def test_invalid_interval(self):
-        """Task is not started if interval is <= 0."""
-        mock_db = MagicMock()
-        with (
-            patch("wet_mcp.sync.settings") as mock_settings,
-            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
-        ):
-            mock_settings.sync_enabled = True
-            mock_settings.google_drive_client_id = "client123"
-            mock_settings.sync_interval = 0
-            start_auto_sync(mock_db)
-            mock_create_task.assert_not_called()
-
-    def test_already_running(self):
-        """Task is not started if already running."""
-        mock_task = MagicMock()
-        mock_task.done.return_value = False
-        wet_mcp.sync._sync_task = mock_task
-
-        mock_db = MagicMock()
-        with (
-            patch("wet_mcp.sync.settings") as mock_settings,
-            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
-        ):
-            mock_settings.sync_enabled = True
-            mock_settings.google_drive_client_id = "client123"
-            mock_settings.sync_interval = 60
-
-            start_auto_sync(mock_db)
-            mock_create_task.assert_not_called()
-
-    def test_starts_task(self):
-        """Task is started correctly when conditions are met."""
-        wet_mcp.sync._sync_task = None
-
-        mock_db = MagicMock()
-        with (
-            patch("wet_mcp.sync.settings") as mock_settings,
-            patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
-            patch("wet_mcp.sync._auto_sync_loop") as mock_loop,
-        ):
-            mock_settings.sync_enabled = True
-            mock_settings.google_drive_client_id = "client123"
-            mock_settings.sync_interval = 60
-
-            dummy_task = MagicMock()
-            mock_create_task.return_value = dummy_task
-
-            start_auto_sync(mock_db)
-
-            mock_create_task.assert_called_once()
-            assert wet_mcp.sync._sync_task == dummy_task
-            mock_loop.assert_called_once_with(mock_db)
-
-
-class TestStopAutoSync:
-    def test_no_task(self):
-        wet_mcp.sync._sync_task = None
-        stop_auto_sync()
-        assert wet_mcp.sync._sync_task is None
-
-    def test_task_already_done(self):
-        import asyncio
-
-        future = asyncio.Future()
-        future.set_result(None)
-        wet_mcp.sync._sync_task = future  # ty: ignore[invalid-assignment]
-        stop_auto_sync()
-        # Task is done, should not be cancelled or cleared
-        assert wet_mcp.sync._sync_task is future
-
-    def test_running_task_cancelled(self):
-        mock_task = MagicMock()
-        mock_task.done.return_value = False
-        wet_mcp.sync._sync_task = mock_task
-        stop_auto_sync()
-        mock_task.cancel.assert_called_once()
-        assert wet_mcp.sync._sync_task is None
 
 
 class TestDriveRequest:
