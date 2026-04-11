@@ -1,12 +1,12 @@
 import logging
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from loguru import logger
 
 from wet_mcp.setup_tool import _validate_cloud_models
 
 
-def test_validate_cloud_models_logging(caplog):
+async def test_validate_cloud_models_logging(caplog):
     """Verify that _validate_cloud_models logs exceptions at DEBUG level."""
 
     # Loguru doesn't use standard logging by default, so we need to bridge it
@@ -31,7 +31,7 @@ def test_validate_cloud_models_logging(caplog):
         ),
         caplog.at_level("DEBUG"),
     ):
-        result = _validate_cloud_models(mock_settings)
+        result = await _validate_cloud_models(mock_settings)
 
     # Cloud ready should be False because embedding failed
     assert result["cloud_ready"] is False
@@ -43,7 +43,7 @@ def test_validate_cloud_models_logging(caplog):
     )
 
 
-def test_validate_cloud_models_reranker_logging(caplog):
+async def test_validate_cloud_models_reranker_logging(caplog):
     """Verify that _validate_cloud_models logs reranker exceptions at DEBUG level."""
 
     # Loguru doesn't use standard logging by default, so we need to bridge it
@@ -58,7 +58,7 @@ def test_validate_cloud_models_reranker_logging(caplog):
     mock_settings.resolve_rerank_model.return_value = "test-rerank"
 
     mock_backend = MagicMock()
-    mock_backend.check_available.return_value = 768
+    mock_backend.check_available = AsyncMock(return_value=768)
 
     with (
         patch("wet_mcp.embedder.init_backend", return_value=mock_backend),
@@ -68,7 +68,7 @@ def test_validate_cloud_models_reranker_logging(caplog):
         ),
         caplog.at_level("DEBUG"),
     ):
-        result = _validate_cloud_models(mock_settings)
+        result = await _validate_cloud_models(mock_settings)
 
     assert result["cloud_ready"] is True
     assert result["embedding"] == {"model": "test-embed", "dims": 768}

@@ -100,7 +100,7 @@ async def test_lifespan():
 async def test_init_embedding_backend():
     with patch("wet_mcp.embedder.init_backend") as mock_init:
         mock_backend = MagicMock()
-        mock_backend.check_available.return_value = 768
+        mock_backend.check_available = AsyncMock(return_value=768)
         mock_init.return_value = mock_backend
 
         await server._init_embedding_backend("sdk")
@@ -121,7 +121,7 @@ async def test_init_reranker_backend():
 async def test_embed():
     with patch("wet_mcp.embedder.get_backend") as mock_get_backend:
         mock_backend = MagicMock()
-        mock_backend.embed_single.return_value = [0.1, 0.2]
+        mock_backend.embed_single = AsyncMock(return_value=[0.1, 0.2])
         mock_get_backend.return_value = mock_backend
 
         res = await server._embed("hello")
@@ -132,7 +132,7 @@ async def test_embed():
 async def test_embed_batch():
     with patch("wet_mcp.embedder.get_backend") as mock_get_backend:
         mock_backend = MagicMock()
-        mock_backend.embed_texts.return_value = [[0.1, 0.2]]
+        mock_backend.embed_texts = AsyncMock(return_value=[[0.1, 0.2]])
         mock_get_backend.return_value = mock_backend
 
         res = await server._embed_batch(["hello"])
@@ -874,7 +874,7 @@ async def test_init_embedding_backend_litellm_explicit_model():
         ms.resolve_local_embedding_model.return_value = "local-model"
 
         mock_backend = MagicMock()
-        mock_backend.check_available.return_value = 1536
+        mock_backend.check_available = AsyncMock(return_value=1536)
         mock_init.return_value = mock_backend
 
         await server._init_embedding_backend("sdk")
@@ -926,7 +926,7 @@ async def test_init_embedding_backend_autodetect_candidates():
             if call_count <= 2:
                 raise Exception("not available")
             mock_backend = MagicMock()
-            mock_backend.check_available.return_value = 768
+            mock_backend.check_available = AsyncMock(return_value=768)
             return mock_backend
 
         mock_init.side_effect = init_side_effect
@@ -991,7 +991,7 @@ async def test_init_embedding_backend_local_not_available():
         ms.resolve_local_embedding_model.return_value = "local-model"
 
         mock_backend = MagicMock()
-        mock_backend.check_available.return_value = 0
+        mock_backend.check_available = AsyncMock(return_value=0)
         mock_init.return_value = mock_backend
 
         await server._init_embedding_backend("local")

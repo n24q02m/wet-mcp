@@ -1139,7 +1139,7 @@ class TestAnalyzeMediaMimeUnknown:
 
         try:
             with patch("wet_mcp.llm._has_llm_provider", return_value=True):
-                result = asyncio.run(analyze_media(str(f)))
+                result = await analyze_media(str(f))
             assert "Error" in result
         finally:
             settings.download_dir = original_download
@@ -1164,7 +1164,7 @@ class TestAnalyzeMediaErrorPaths:
                 side_effect=Exception("API down"),
             ),
         ):
-            result = asyncio.run(analyze_media(str(txt)))
+            result = await analyze_media(str(txt))
             assert "Error analyzing text file" in result
 
     async def test_audio_not_supported(self, tmp_path):
@@ -1185,7 +1185,7 @@ class TestAnalyzeMediaErrorPaths:
                 "audio_input": False,
                 "audio_output": False,
             }
-            result = asyncio.run(analyze_media(str(audio_file)))
+            result = await analyze_media(str(audio_file))
             assert "does not support audio input" in result
 
     async def test_video_not_supported(self, tmp_path):
@@ -1206,7 +1206,7 @@ class TestAnalyzeMediaErrorPaths:
                 "audio_input": False,
                 "audio_output": False,
             }
-            result = asyncio.run(analyze_media(str(video_file)))
+            result = await analyze_media(str(video_file))
             assert "does not support video" in result
 
     async def test_media_analysis_exception(self, tmp_path):
@@ -1232,7 +1232,7 @@ class TestAnalyzeMediaErrorPaths:
                 "audio_input": False,
                 "audio_output": False,
             }
-            result = asyncio.run(analyze_media(str(img)))
+            result = await analyze_media(str(img))
             assert "Error analyzing media" in result
             assert "LLM crashed" in result
 

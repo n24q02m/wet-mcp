@@ -228,7 +228,7 @@ async def test_init_embedding_litellm_explicit_model_success():
     """Lines 206-222: litellm with explicit model, successful init."""
     with patch("wet_mcp.embedder.init_backend") as mock_init:
         mock_backend = MagicMock()
-        mock_backend.check_available.return_value = 1024
+        mock_backend.check_available = AsyncMock(return_value=1024)
         mock_init.return_value = mock_backend
 
         server._embedding_dims = 0
@@ -261,7 +261,7 @@ async def test_init_embedding_litellm_autodetect(_mock_settings):
         attempts.append(model)
         if model == "text-embedding-3-large":
             mock_b = MagicMock()
-            mock_b.check_available.return_value = 3072
+            mock_b.check_available = AsyncMock(return_value=3072)
             return mock_b
         raise Exception("not available")
 
@@ -284,7 +284,7 @@ async def test_init_embedding_litellm_autodetect_all_fail_local_fallback(
         if backend_type == "cloud":
             raise Exception("not available")
         mock_b = MagicMock()
-        mock_b.check_available.return_value = 384
+        mock_b.check_available = AsyncMock(return_value=384)
         return mock_b
 
     with patch("wet_mcp.embedder.init_backend", side_effect=fake_init):
@@ -296,9 +296,11 @@ async def test_init_embedding_local_zero_dims():
     with patch("wet_mcp.embedder.init_backend") as mock_init:
         # First call for litellm fails
         mock_backend_cloud = MagicMock()
-        mock_backend_cloud.check_available.side_effect = Exception("no cloud")
+        mock_backend_cloud.check_available = AsyncMock(
+            side_effect=Exception("no cloud")
+        )
         mock_backend_local = MagicMock()
-        mock_backend_local.check_available.return_value = 0
+        mock_backend_local.check_available = AsyncMock(return_value=0)
 
         mock_init.side_effect = [
             Exception("cloud fail"),

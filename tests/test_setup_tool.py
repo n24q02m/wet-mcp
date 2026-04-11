@@ -43,7 +43,7 @@ class TestRunWarmup:
             mock_settings.resolve_rerank_model.return_value = "rerank-v3"
 
             mock_backend = MagicMock()
-            mock_backend.check_available.return_value = 768
+            mock_backend.check_available = AsyncMock(return_value=768)
             mock_init_backend.return_value = mock_backend
 
             mock_reranker = MagicMock()

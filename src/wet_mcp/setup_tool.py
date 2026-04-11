@@ -34,7 +34,7 @@ def clear_model_cache(model_name: str) -> str | None:
     return None
 
 
-def _validate_cloud_models(settings_obj) -> dict:
+async def _validate_cloud_models(settings_obj) -> dict:
     """Check if cloud embedding and reranking models are valid."""
     from wet_mcp.embedder import init_backend
     from wet_mcp.reranker import init_reranker
@@ -46,7 +46,7 @@ def _validate_cloud_models(settings_obj) -> dict:
     for candidate in candidates:
         try:
             backend = init_backend("cloud", candidate)
-                dims = await backend.check_available()
+            dims = await backend.check_available()
             if dims > 0:
                 embedding_info = {"model": candidate, "dims": dims}
                 break
@@ -66,7 +66,6 @@ def _validate_cloud_models(settings_obj) -> dict:
                 reranker_info = {"model": rerank_model}
         except Exception as exc:
             logger.debug(f"Cloud reranker {rerank_model} failed: {exc}")
-            pass
 
     return {
         "cloud_ready": True,
@@ -196,7 +195,7 @@ async def run_warmup() -> dict:
     # 2. Check cloud models if API keys are configured
     mode = settings.setup_providers()
     if mode == "sdk":
-        cloud_result = await asyncio.to_thread(_validate_cloud_models, settings)
+        cloud_result = await _validate_cloud_models(settings)
         if cloud_result["cloud_ready"]:
             steps.append(
                 {
