@@ -796,9 +796,16 @@ async def convert_local_files(paths: list[str]) -> str:
             if d.strip()
         ]
     else:
-        # Default to allowing access only to the home directory and /tmp
-        # to prevent arbitrary file read of sensitive system files.
-        allowed_dirs = [Path.home().resolve(), Path("/tmp").resolve()]
+        # Default to allowing access only to the home directory and the
+        # platform temp directory to prevent arbitrary file read of
+        # sensitive system files. ``tempfile.gettempdir()`` returns the
+        # OS-level temp dir (``/tmp`` on Linux, ``$TMPDIR`` /
+        # ``/var/folders/...`` on macOS, ``C:\Users\<u>\AppData\Local\Temp``
+        # on Windows) — hardcoding ``/tmp`` breaks on non-Linux hosts.
+        allowed_dirs = [
+            Path.home().resolve(),
+            Path(tempfile.gettempdir()).resolve(),
+        ]
 
     results = []
     for path_str in paths:
