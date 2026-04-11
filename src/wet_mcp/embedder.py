@@ -68,7 +68,6 @@ def _is_unsupported_param(exc: Exception, param: str) -> bool:
                 "unexpected keyword argument",
                 "invalid argument",
                 "unsupported parameter",
-                "is not supported",
             )
         )
     return False

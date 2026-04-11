@@ -62,6 +62,8 @@ async def _validate_cloud_models(settings_obj) -> dict:
     if rerank_model:
         try:
             reranker = init_reranker("cloud", rerank_model)
+            # reranker.check_available() is sync (unlike embedder.check_available());
+            # adding async reranker backends will require awaiting here
             if reranker.check_available():
                 reranker_info = {"model": rerank_model}
         except Exception as exc:
