@@ -15,7 +15,7 @@ RELAY_SCHEMA: dict[str, Any] = {
             "type": "password",
             "placeholder": "jina_...",
             "helpUrl": "https://jina.ai/api-key",
-            "helpText": "Search + Extraction + Embedding + Reranking (highest priority).",
+            "helpText": "Embedding + Reranking (highest priority cloud provider).",
             "required": False,
         },
         {

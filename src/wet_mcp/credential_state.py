@@ -273,13 +273,16 @@ def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
         )
 
 
-def save_credentials(config: dict[str, str]) -> None:
+def save_credentials(config: dict[str, str]) -> dict | None:
     """Save credentials from OAuth form to config.enc and apply to environment.
 
     Called by the local OAuth AS when the user submits API keys via the
     browser form. Writes to encrypted config file, applies to env vars
     for immediate use, re-initializes providers, and shares keys with
     sibling MCP servers.
+
+    Returns optional dict with next_step info (e.g., GDrive device code)
+    for the form to display.
     """
     global _state
 
@@ -309,6 +312,113 @@ def save_credentials(config: dict[str, str]) -> None:
 
     # Share cloud keys with sibling servers
     _share_cloud_keys_to_peers(config)
+
+    # Trigger GDrive OAuth Device Code flow if configured
+    try:
+        from wet_mcp.config import settings as s
+
+        if s.google_drive_client_id and s.google_drive_client_secret:
+            import httpx
+
+            response = httpx.post(
+                "https://oauth2.googleapis.com/device/code",
+                data={
+                    "client_id": s.google_drive_client_id,
+                    "scope": "https://www.googleapis.com/auth/drive.file",
+                },
+                timeout=15.0,
+            )
+            if response.status_code == 200:
+                device_data = response.json()
+                logger.info(
+                    "GDrive device code requested, user_code={}",
+                    device_data.get("user_code"),
+                )
+
+                # Start background polling for token
+                import asyncio
+                import threading
+
+                def _poll_gdrive_token():
+                    asyncio.run(
+                        _gdrive_token_poll(
+                            s.google_drive_client_id,
+                            s.google_drive_client_secret,
+                            device_data["device_code"],
+                            device_data.get("interval", 5),
+                            device_data.get("expires_in", 1800),
+                        )
+                    )
+
+                threading.Thread(target=_poll_gdrive_token, daemon=True).start()
+
+                return {
+                    "type": "oauth_device_code",
+                    "verification_url": device_data["verification_url"],
+                    "user_code": device_data["user_code"],
+                }
+    except Exception:
+        logger.opt(exception=True).debug(
+            "GDrive device code request failed (non-fatal)"
+        )
+
+    return None
+
+
+async def _gdrive_token_poll(
+    client_id: str,
+    client_secret: str,
+    device_code: str,
+    interval: int,
+    expires_in: int,
+) -> None:
+    """Background poll Google OAuth for device code token completion."""
+    import asyncio
+    import time
+
+    import httpx
+
+    deadline = time.time() + expires_in
+    async with httpx.AsyncClient() as client:
+        while time.time() < deadline:
+            await asyncio.sleep(interval)
+            try:
+                resp = await client.post(
+                    "https://oauth2.googleapis.com/token",
+                    data={
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "device_code": device_code,
+                        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                    },
+                    timeout=15.0,
+                )
+                data = resp.json()
+                if "access_token" in data:
+                    # Save token
+                    from wet_mcp.token_store import save_token
+
+                    save_token("google_drive", data)
+                    logger.info("GDrive OAuth token saved successfully")
+
+                    # Start auto-sync
+                    try:
+                        # Auto-sync will start on next server restart or can be triggered manually
+                        logger.info(
+                            "GDrive authorized. Sync will start on next server restart."
+                        )
+                    except Exception:
+                        pass
+                    return
+                elif data.get("error") == "authorization_pending":
+                    continue
+                elif data.get("error") == "slow_down":
+                    interval += 5
+                else:
+                    logger.warning("GDrive token poll error: {}", data.get("error"))
+                    return
+            except Exception:
+                logger.opt(exception=True).debug("GDrive token poll request failed")
 
 
 def set_state(state: CredentialState) -> None:
