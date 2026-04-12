@@ -273,6 +273,44 @@ def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
         )
 
 
+def save_credentials(config: dict[str, str]) -> None:
+    """Save credentials from OAuth form to config.enc and apply to environment.
+
+    Called by the local OAuth AS when the user submits API keys via the
+    browser form. Writes to encrypted config file, applies to env vars
+    for immediate use, re-initializes providers, and shares keys with
+    sibling MCP servers.
+    """
+    global _state
+
+    from mcp_core.storage.config_file import write_config
+
+    from wet_mcp.relay_setup import apply_config
+
+    # Persist to encrypted config file
+    write_config(SERVER_NAME, config)
+
+    # Apply to environment for immediate use
+    apply_config(config)
+
+    # Update state
+    _state = CredentialState.CONFIGURED
+    logger.info("Credentials saved via local OAuth form")
+
+    # Re-init providers so new keys take effect immediately
+    try:
+        from wet_mcp.config import settings
+
+        settings.setup_providers()
+    except Exception:
+        logger.opt(exception=True).debug(
+            "Provider re-init after save failed (non-fatal)"
+        )
+
+    # Share cloud keys with sibling servers
+    _share_cloud_keys_to_peers(config)
+
+
 def set_state(state: CredentialState) -> None:
     """For testing and setup tool actions."""
     global _state

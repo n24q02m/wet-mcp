@@ -543,7 +543,10 @@ async def test_with_timeout_expired():
 
 
 def test_main():
-    with patch("wet_mcp.server.mcp.run") as mock_run:
+    with (
+        patch("wet_mcp.server.mcp.run") as mock_run,
+        patch.dict(os.environ, {"MCP_TRANSPORT": "stdio"}),
+    ):
         server.main()
         mock_run.assert_called_once()
 

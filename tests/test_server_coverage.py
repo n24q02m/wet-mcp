@@ -9,6 +9,7 @@ Targets uncovered lines: 106, 134, 136, 147-149, 172-174, 187-188,
 
 import asyncio
 import json
+import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1127,8 +1128,11 @@ async def test_discover_docs_url_with_language():
 
 
 def test_main_entry_point():
-    """Line 1542: main() calls mcp.run()."""
-    with patch("wet_mcp.server.mcp.run") as mock_run:
+    """main() in stdio mode calls mcp.run()."""
+    with (
+        patch("wet_mcp.server.mcp.run") as mock_run,
+        patch.dict(os.environ, {"MCP_TRANSPORT": "stdio"}),
+    ):
         server.main()
         mock_run.assert_called_once()
 
