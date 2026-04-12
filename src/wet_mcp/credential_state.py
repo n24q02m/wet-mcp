@@ -324,7 +324,7 @@ def save_credentials(config: dict[str, str]) -> dict | None:
                 "https://oauth2.googleapis.com/device/code",
                 data={
                     "client_id": s.google_drive_client_id,
-                    "scope": "https://www.googleapis.com/auth/drive.file",
+                    "scope": "https://www.googleapis.com/auth/drive.appdata",
                 },
                 timeout=15.0,
             )
