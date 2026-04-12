@@ -2109,16 +2109,15 @@ async def run_http(port: int = 0) -> None:
     if mark_fn:
         set_gdrive_complete_callback(mark_fn)
 
-    import webbrowser
-
     import uvicorn
     from mcp_core.storage.config_file import read_config
 
     existing = read_config("wet-mcp")
     if existing is None:
-        url = f"http://127.0.0.1:{actual_port}/authorize"
-        logger.info("No credentials found. Opening browser to {}", url)
-        webbrowser.open(url)
+        logger.info(
+            "No credentials found. Server at http://127.0.0.1:{}/authorize",
+            actual_port,
+        )
     else:
         logger.info("Credentials already configured for wet-mcp")
 

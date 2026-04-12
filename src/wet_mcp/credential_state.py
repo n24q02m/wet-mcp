@@ -411,11 +411,18 @@ async def _gdrive_token_poll(
                     logger.info(
                         "GDrive authorized. Sync will start on next server restart."
                     )
+                    logger.debug(
+                        "GDrive complete callback: {}",
+                        _on_gdrive_complete,
+                    )
                     if _on_gdrive_complete:
                         try:
                             _on_gdrive_complete()
+                            logger.info("GDrive setup-status marked complete")
                         except Exception:
-                            pass
+                            logger.opt(exception=True).warning(
+                                "GDrive complete callback failed"
+                            )
                     return
                 elif data.get("error") == "authorization_pending":
                     continue
