@@ -330,3 +330,10 @@ def test_safe_local_path_oversized_file(tmp_path):
     f = tmp_path / "big.txt"
     f.write_text("x" * 200)
     assert is_safe_local_path(str(f), max_size=100) is None
+
+
+def test_safe_local_path_empty_allowed_dirs(tmp_path):
+    """Returns None when allowed_dirs is an empty list."""
+    f = tmp_path / "test.txt"
+    f.write_text("hello")
+    assert is_safe_local_path(str(f), allowed_dirs=[]) is None
