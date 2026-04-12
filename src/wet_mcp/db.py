@@ -89,12 +89,22 @@ def _chunk_quality_score(content: str) -> float:
     score += min(code_blocks, 3) * 2.0  # up to +6
 
     # Function/class definitions signal API documentation
-    defs = len(_DEF_RE.findall(content))
-    score += min(defs, 4) * 1.5  # up to +6
+    # ⚡ Bolt Optimization: Use finditer with early break instead of findall to avoid full string scan
+    defs = 0
+    for _ in _DEF_RE.finditer(content):
+        defs += 1
+        if defs >= 4:
+            break
+    score += defs * 1.5  # up to +6
 
     # Docstrings/doc comments signal well-documented code
-    docstrings = len(_DOCSTRING_RE.findall(content))
-    score += min(docstrings, 3) * 1.0  # up to +3
+    # ⚡ Bolt Optimization: Use finditer with early break instead of findall
+    docstrings = 0
+    for _ in _DOCSTRING_RE.finditer(content):
+        docstrings += 1
+        if docstrings >= 3:
+            break
+    score += docstrings * 1.0  # up to +3
 
     # Longer content tends to be more informative
     length = len(content)
@@ -120,7 +130,12 @@ def _chunk_quality_score(content: str) -> float:
             score -= 2.0
 
     # Directive-heavy content (leftover mkdocs/rst noise)
-    directives = len(_DIRECTIVE_RE.findall(content))
+    # ⚡ Bolt Optimization: Use finditer with early break instead of findall
+    directives = 0
+    for _ in _DIRECTIVE_RE.finditer(content):
+        directives += 1
+        if directives > 3:
+            break
     if directives > 3:
         score -= 2.0
     elif directives > 1:
