@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import wet_mcp.db as db
@@ -47,7 +48,7 @@ def test_db_link_ratio_branches():
 
 
 @patch("sqlite3.connect")
-def test_sqlite_vec_extension(mock_connect):
+def test_sqlite_vec_extension(mock_connect: Any):
     mock_conn = MagicMock()
     mock_connect.return_value = mock_conn
     mock_conn.execute.return_value.fetchone.return_value = None
@@ -62,13 +63,13 @@ def test_sqlite_vec_extension(mock_connect):
 
 def test_clear_version_chunks():
     database = db.DocsDB(Path("/tmp/test2.db"))
-    database.clear_version_chunks = MagicMock(return_value=1)
+    database.clear_version_chunks = MagicMock(return_value=1)  # ty: ignore[invalid-assignment]
     database.clear_version_chunks("test")
 
 
 def test_combine_scores_no_match():
     database = db.DocsDB(Path("/tmp/test3.db"))
-    scores = database._combine_scores({}, {}, "search")
+    scores = database._combine_scores({}, {}, {})
     assert scores == []
 
 
