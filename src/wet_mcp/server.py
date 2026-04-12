@@ -2089,45 +2089,19 @@ async def run_http(port: int = 0) -> None:
     Args:
         port: TCP port to bind. 0 means auto-find a free port.
     """
-    from mcp_core.transport.local_server import build_local_app, find_free_port
+    from mcp_core.transport.local_server import run_local_server
 
     from wet_mcp.credential_state import save_credentials, set_gdrive_complete_callback
     from wet_mcp.relay_schema import RELAY_SCHEMA
 
-    os.environ["MCP_NO_RELOAD"] = "1"
-    actual_port = port if port != 0 else find_free_port()
-
-    app, _jwt_issuer = build_local_app(
+    await run_local_server(
         mcp,  # ty: ignore[invalid-argument-type]
         server_name="wet-mcp",
         relay_schema=RELAY_SCHEMA,
+        port=port,
         on_credentials_saved=save_credentials,
+        setup_complete_hook=set_gdrive_complete_callback,
     )
-
-    # Wire GDrive completion callback to form status endpoint
-    mark_fn = getattr(app.state, "mark_setup_complete", None)
-    if mark_fn:
-        set_gdrive_complete_callback(mark_fn)
-
-    import uvicorn
-    from mcp_core.storage.config_file import read_config
-
-    existing = read_config("wet-mcp")
-    if existing is None:
-        logger.info(
-            "No credentials found. Server at http://127.0.0.1:{}/authorize",
-            actual_port,
-        )
-    else:
-        logger.info("Credentials already configured for wet-mcp")
-
-    logger.info("Starting local MCP server on 127.0.0.1:{}", actual_port)
-    uv_config = uvicorn.Config(
-        app, host="127.0.0.1", port=actual_port, log_level="info"
-    )
-    server = uvicorn.Server(uv_config)
-    server.install_signal_handlers = lambda: None
-    await server.serve()
 
 
 def main() -> None:
