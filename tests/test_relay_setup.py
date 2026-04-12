@@ -56,14 +56,14 @@ class TestLoadConfigFromFile:
 
     def test_returns_none_when_no_file(self):
         with patch(
-            "mcp_relay_core.storage.config_file.read_config",
+            "mcp_core.storage.config_file.read_config",
             return_value=None,
         ):
             result = load_config_from_file()
         assert result is None
 
     def test_returns_none_on_import_error(self):
-        """When mcp_relay_core is not installed, returns None gracefully."""
+        """When mcp_core is not installed, returns None gracefully."""
         result = load_config_from_file()
         # Should not raise, returns None if module missing or config not found
         assert result is None or isinstance(result, dict)
@@ -110,17 +110,17 @@ class TestEnsureConfigForced:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 return_value=mock_session,
             ) as mock_create,
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=mock_config,
             ),
             patch(
-                "mcp_relay_core.storage.config_file.write_config",
+                "mcp_core.storage.config_file.write_config",
             ),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("httpx.AsyncClient") as mock_httpx,
@@ -138,7 +138,7 @@ class TestEnsureConfigForced:
     async def test_returns_none_on_exception(self):
         """When relay server is unreachable, returns None."""
         with patch(
-            "mcp_relay_core.relay.client.create_session",
+            "mcp_core.relay.client.create_session",
             new_callable=AsyncMock,
             side_effect=ConnectionError("unreachable"),
         ):

@@ -1359,7 +1359,7 @@ async def setup(
             return json.dumps({"status": "error", "message": "Relay setup failed."})
 
         case "skip":
-            from mcp_relay_core import set_local_mode
+            from mcp_core import set_local_mode
 
             from wet_mcp.credential_state import CredentialState, set_state
 

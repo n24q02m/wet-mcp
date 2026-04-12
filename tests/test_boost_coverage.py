@@ -76,7 +76,7 @@ class TestEnsureConfig:
         with (
             patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("timed out waiting"),
             ),
@@ -99,7 +99,7 @@ class TestEnsureConfig:
         with (
             patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("RELAY_SKIPPED"),
             ),
@@ -122,7 +122,7 @@ class TestEnsureConfig:
         with (
             patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("some other error"),
             ),
@@ -145,7 +145,7 @@ class TestEnsureConfig:
         with (
             patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 side_effect=Exception("connection refused"),
             ),
@@ -177,16 +177,16 @@ class TestEnsureConfig:
         with (
             patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 return_value=mock_session,
             ),
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=mock_config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
@@ -230,16 +230,16 @@ class TestEnsureConfig:
         with (
             patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 return_value=mock_session,
             ),
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=mock_config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
@@ -278,16 +278,16 @@ class TestEnsureConfig:
         with (
             patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 return_value=mock_session,
             ),
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=mock_config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
@@ -317,7 +317,7 @@ class TestLoadConfigFromFile:
 
         saved = {"GEMINI_API_KEY": "test-key", "OPENAI_API_KEY": ""}
         with patch(
-            "mcp_relay_core.storage.config_file.read_config",
+            "mcp_core.storage.config_file.read_config",
             return_value=saved,
         ):
             result = load_config_from_file()
@@ -329,7 +329,7 @@ class TestLoadConfigFromFile:
 
         saved = {"SOME_OTHER_KEY": "value"}
         with patch(
-            "mcp_relay_core.storage.config_file.read_config",
+            "mcp_core.storage.config_file.read_config",
             return_value=saved,
         ):
             result = load_config_from_file()
@@ -340,7 +340,7 @@ class TestLoadConfigFromFile:
         from wet_mcp.relay_setup import load_config_from_file
 
         with patch(
-            "mcp_relay_core.storage.config_file.read_config",
+            "mcp_core.storage.config_file.read_config",
             side_effect=Exception("disk error"),
         ):
             result = load_config_from_file()
@@ -355,7 +355,7 @@ class TestEnsureConfigForced:
         from wet_mcp.relay_setup import ensure_config
 
         with patch(
-            "mcp_relay_core.relay.client.create_session",
+            "mcp_core.relay.client.create_session",
             new_callable=AsyncMock,
             side_effect=RuntimeError("RELAY_SKIPPED by user"),
         ):
@@ -367,7 +367,7 @@ class TestEnsureConfigForced:
         from wet_mcp.relay_setup import ensure_config
 
         with patch(
-            "mcp_relay_core.relay.client.create_session",
+            "mcp_core.relay.client.create_session",
             new_callable=AsyncMock,
             side_effect=RuntimeError("network error"),
         ):
@@ -379,7 +379,7 @@ class TestEnsureConfigForced:
         from wet_mcp.relay_setup import ensure_config
 
         with patch(
-            "mcp_relay_core.relay.client.create_session",
+            "mcp_core.relay.client.create_session",
             new_callable=AsyncMock,
             side_effect=Exception("unexpected"),
         ):

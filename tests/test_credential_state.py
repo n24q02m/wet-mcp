@@ -83,7 +83,7 @@ class TestResolveCredentialState:
 
         saved = {"GEMINI_API_KEY": "from-file", "OPENAI_API_KEY": ""}
         with patch(
-            "mcp_relay_core.storage.config_file.read_config",
+            "mcp_core.storage.config_file.read_config",
             return_value=saved,
         ):
             result = resolve_credential_state()
@@ -99,11 +99,11 @@ class TestResolveCredentialState:
         saved = {"SOME_OTHER_KEY": "value"}
         with (
             patch(
-                "mcp_relay_core.storage.config_file.read_config",
+                "mcp_core.storage.config_file.read_config",
                 return_value=saved,
             ),
             patch(
-                "mcp_relay_core.get_mode",
+                "mcp_core.get_mode",
                 return_value=None,
             ),
         ):
@@ -117,11 +117,11 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_relay_core.storage.config_file.read_config",
+                "mcp_core.storage.config_file.read_config",
                 side_effect=Exception("decrypt failed"),
             ),
             patch(
-                "mcp_relay_core.get_mode",
+                "mcp_core.get_mode",
                 return_value=None,
             ),
         ):
@@ -135,11 +135,11 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_relay_core.storage.config_file.read_config",
+                "mcp_core.storage.config_file.read_config",
                 return_value=None,
             ),
             patch(
-                "mcp_relay_core.get_mode",
+                "mcp_core.get_mode",
                 return_value="local",
             ),
         ):
@@ -153,11 +153,11 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_relay_core.storage.config_file.read_config",
+                "mcp_core.storage.config_file.read_config",
                 return_value=None,
             ),
             patch(
-                "mcp_relay_core.get_mode",
+                "mcp_core.get_mode",
                 side_effect=Exception("file not found"),
             ),
         ):
@@ -171,11 +171,11 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_relay_core.storage.config_file.read_config",
+                "mcp_core.storage.config_file.read_config",
                 return_value=None,
             ),
             patch(
-                "mcp_relay_core.get_mode",
+                "mcp_core.get_mode",
                 return_value=None,
             ),
         ):
@@ -207,21 +207,21 @@ class TestTriggerRelaySetup:
         )
         with (
             patch(
-                "mcp_relay_core.acquire_session_lock",
+                "mcp_core.acquire_session_lock",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 return_value=mock_session,
             ),
             patch(
-                "mcp_relay_core.write_session_lock",
+                "mcp_core.write_session_lock",
                 new_callable=AsyncMock,
             ),
             patch(
-                "mcp_relay_core.try_open_browser",
+                "mcp_core.try_open_browser",
                 return_value=True,
             ),
         ):
@@ -233,7 +233,7 @@ class TestTriggerRelaySetup:
 
     async def test_reuses_existing_session_lock(self):
         """Reuses existing session lock if found."""
-        from mcp_relay_core import SessionInfo
+        from mcp_core import SessionInfo
 
         existing = SessionInfo(
             session_id="existing-id",
@@ -241,7 +241,7 @@ class TestTriggerRelaySetup:
             created_at=1000.0,
         )
         with patch(
-            "mcp_relay_core.acquire_session_lock",
+            "mcp_core.acquire_session_lock",
             new_callable=AsyncMock,
             return_value=existing,
         ):
@@ -257,21 +257,21 @@ class TestTriggerRelaySetup:
         )
         with (
             patch(
-                "mcp_relay_core.acquire_session_lock",
+                "mcp_core.acquire_session_lock",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
             patch(
-                "mcp_relay_core.relay.client.create_session",
+                "mcp_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 return_value=mock_session,
             ),
             patch(
-                "mcp_relay_core.write_session_lock",
+                "mcp_core.write_session_lock",
                 new_callable=AsyncMock,
             ) as mock_write_lock,
             patch(
-                "mcp_relay_core.try_open_browser",
+                "mcp_core.try_open_browser",
                 return_value=True,
             ) as mock_browser,
         ):
@@ -285,7 +285,7 @@ class TestTriggerRelaySetup:
     async def test_exception_returns_none(self):
         """On exception, returns None and resets to AWAITING_SETUP."""
         with patch(
-            "mcp_relay_core.acquire_session_lock",
+            "mcp_core.acquire_session_lock",
             new_callable=AsyncMock,
             side_effect=ConnectionError("unreachable"),
         ):
@@ -305,14 +305,14 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch(
-                "mcp_relay_core.release_session_lock",
+                "mcp_core.release_session_lock",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -321,7 +321,7 @@ class TestPollRelayBackground:
                 return_value=True,
             ),
             patch(
-                "mcp_relay_core.relay.client.send_message",
+                "mcp_core.relay.client.send_message",
                 new_callable=AsyncMock,
             ),
         ):
@@ -340,11 +340,11 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("RELAY_SKIPPED"),
             ),
-            patch("mcp_relay_core.set_local_mode") as mock_set_local,
+            patch("mcp_core.set_local_mode") as mock_set_local,
         ):
             await _poll_relay_background(
                 "https://relay.example.com", mock_session, 10.0
@@ -358,12 +358,12 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("RELAY_SKIPPED"),
             ),
             patch(
-                "mcp_relay_core.set_local_mode",
+                "mcp_core.set_local_mode",
                 side_effect=Exception("file error"),
             ),
         ):
@@ -378,7 +378,7 @@ class TestPollRelayBackground:
         set_state(CredentialState.SETUP_IN_PROGRESS)
 
         with patch(
-            "mcp_relay_core.relay.client.poll_for_result",
+            "mcp_core.relay.client.poll_for_result",
             new_callable=AsyncMock,
             side_effect=RuntimeError("timed out"),
         ):
@@ -393,7 +393,7 @@ class TestPollRelayBackground:
         set_state(CredentialState.SETUP_IN_PROGRESS)
 
         with patch(
-            "mcp_relay_core.relay.client.poll_for_result",
+            "mcp_core.relay.client.poll_for_result",
             new_callable=AsyncMock,
             side_effect=Exception("connection refused"),
         ):
@@ -410,19 +410,19 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ) as mock_poll,
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
-            patch("mcp_relay_core.relay.client.send_message", new_callable=AsyncMock),
+            patch("mcp_core.relay.client.send_message", new_callable=AsyncMock),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(
@@ -441,19 +441,19 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
-            patch("mcp_relay_core.relay.client.send_message", new_callable=AsyncMock),
+            patch("mcp_core.relay.client.send_message", new_callable=AsyncMock),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(
@@ -472,8 +472,8 @@ class TestResetState:
         mod._setup_url = "https://example.com"
 
         with (
-            patch("mcp_relay_core.clear_mode"),
-            patch("mcp_relay_core.storage.config_file.delete_config"),
+            patch("mcp_core.clear_mode"),
+            patch("mcp_core.storage.config_file.delete_config"),
         ):
             reset_state()
             assert get_state() == CredentialState.AWAITING_SETUP
@@ -483,7 +483,7 @@ class TestResetState:
         """reset_state handles errors gracefully."""
         set_state(CredentialState.CONFIGURED)
         with (
-            patch("mcp_relay_core.clear_mode", side_effect=Exception("fail")),
+            patch("mcp_core.clear_mode", side_effect=Exception("fail")),
         ):
             reset_state()
             assert get_state() == CredentialState.AWAITING_SETUP
@@ -555,7 +555,7 @@ class TestServerSetupToolNewActions:
 
         from wet_mcp.server import setup
 
-        with patch("mcp_relay_core.set_local_mode") as mock_set:
+        with patch("mcp_core.set_local_mode") as mock_set:
             result = await setup(action="skip")
             data = json.loads(result)
             assert data["status"] == "ok"
@@ -570,8 +570,8 @@ class TestServerSetupToolNewActions:
 
         set_state(CredentialState.CONFIGURED)
         with (
-            patch("mcp_relay_core.clear_mode"),
-            patch("mcp_relay_core.storage.config_file.delete_config"),
+            patch("mcp_core.clear_mode"),
+            patch("mcp_core.storage.config_file.delete_config"),
         ):
             result = await setup(action="reset")
             data = json.loads(result)
@@ -615,7 +615,7 @@ class TestShareCloudKeysToPeers:
         from wet_mcp.credential_state import _share_cloud_keys_to_peers
 
         config = {"GEMINI_API_KEY": "test-key", "SOME_OTHER": "val"}
-        with patch("mcp_relay_core.storage.config_file.write_config") as mock_write:
+        with patch("mcp_core.storage.config_file.write_config") as mock_write:
             _share_cloud_keys_to_peers(config)
             assert mock_write.call_count == 2
             # Should write to both peers
@@ -628,7 +628,7 @@ class TestShareCloudKeysToPeers:
         from wet_mcp.credential_state import _share_cloud_keys_to_peers
 
         config = {"SOME_KEY": "value"}
-        with patch("mcp_relay_core.storage.config_file.write_config") as mock_write:
+        with patch("mcp_core.storage.config_file.write_config") as mock_write:
             _share_cloud_keys_to_peers(config)
             mock_write.assert_not_called()
 
@@ -638,7 +638,7 @@ class TestShareCloudKeysToPeers:
 
         config = {"OPENAI_API_KEY": "test-key"}
         with patch(
-            "mcp_relay_core.storage.config_file.write_config",
+            "mcp_core.storage.config_file.write_config",
             side_effect=Exception("disk full"),
         ):
             # Should not raise
@@ -650,7 +650,7 @@ class TestShareCloudKeysToPeers:
 
         config = {"GEMINI_API_KEY": "test-key"}
         with patch(
-            "mcp_relay_core.storage.config_file.write_config",
+            "mcp_core.storage.config_file.write_config",
             side_effect=ImportError("no module"),
         ):
             _share_cloud_keys_to_peers(config)
@@ -667,20 +667,20 @@ class TestPollRelayBackgroundGDriveAndMessage:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_gdrive,
             patch(
-                "mcp_relay_core.relay.client.send_message",
+                "mcp_core.relay.client.send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -703,20 +703,20 @@ class TestPollRelayBackgroundGDriveAndMessage:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 side_effect=Exception("OAuth failed"),
             ),
             patch(
-                "mcp_relay_core.relay.client.send_message",
+                "mcp_core.relay.client.send_message",
                 new_callable=AsyncMock,
             ),
         ):
@@ -736,20 +736,20 @@ class TestPollRelayBackgroundGDriveAndMessage:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
             patch(
-                "mcp_relay_core.relay.client.send_message",
+                "mcp_core.relay.client.send_message",
                 new_callable=AsyncMock,
                 side_effect=Exception("network error"),
             ),
@@ -769,13 +769,13 @@ class TestPollRelayBackgroundGDriveAndMessage:
 
         with (
             patch(
-                "mcp_relay_core.relay.client.poll_for_result",
+                "mcp_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_relay_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(
