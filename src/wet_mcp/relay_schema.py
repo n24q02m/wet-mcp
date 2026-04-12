@@ -48,9 +48,14 @@ RELAY_SCHEMA: dict[str, Any] = {
     ],
     "capabilityInfo": [
         {
-            "label": "Search & Extraction",
-            "priority": "Jina > SearXNG (local)",
-            "description": "Web search, content extraction, and site crawling.",
+            "label": "Search",
+            "priority": "SearXNG (auto-start local)",
+            "description": "Web search via SearXNG. Auto-starts locally, no API key needed.",
+        },
+        {
+            "label": "Extraction",
+            "priority": "Built-in (httpx + readability)",
+            "description": "Content extraction from URLs. No API key needed.",
         },
         {
             "label": "Embedding",

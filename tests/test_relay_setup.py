@@ -43,9 +43,10 @@ class TestRelaySchema:
 
     def test_capability_info_present(self):
         assert "capabilityInfo" in RELAY_SCHEMA
-        assert len(RELAY_SCHEMA["capabilityInfo"]) == 4
+        assert len(RELAY_SCHEMA["capabilityInfo"]) == 5
         labels = [c["label"] for c in RELAY_SCHEMA["capabilityInfo"]]
-        assert "Search & Extraction" in labels
+        assert "Search" in labels
+        assert "Extraction" in labels
         assert "Embedding" in labels
         assert "Reranking" in labels
         assert "LLM / Vision" in labels
