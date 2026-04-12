@@ -40,8 +40,8 @@ _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
 _DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3"
 
-# OAuth scope: access only the hidden Application Data folder
-_SCOPE = "https://www.googleapis.com/auth/drive.appdata"
+# OAuth scope: access only files created by this app
+_SCOPE = "https://www.googleapis.com/auth/drive.file"
 
 # Device code flow grant type
 _DEVICE_CODE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
@@ -242,7 +242,7 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
             _folder_id_cache[folder_name] = saved_id
             return saved_id
 
-    # 3. Search by name in appDataFolder (retry for eventual consistency)
+    # 3. Search by name on Drive (retry for eventual consistency)
     import asyncio
 
     query = (
@@ -254,11 +254,7 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
             "GET",
             f"{_DRIVE_API_BASE}/files",
             token,
-            params={
-                "q": query,
-                "fields": "files(id,name)",
-                "spaces": "appDataFolder",
-            },
+            params={"q": query, "fields": "files(id,name)", "spaces": "drive"},
         )
 
         if response.status_code == 200:
@@ -272,11 +268,10 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
         if attempt < 2:
             await asyncio.sleep(1.0 * (2**attempt))  # 1s, 2s backoff
 
-    # 4. Create new folder in appDataFolder (only after 3 search attempts)
+    # 4. Create new folder (only after 3 search attempts)
     metadata: dict[str, Any] = {
         "name": folder_name,
         "mimeType": "application/vnd.google-apps.folder",
-        "parents": ["appDataFolder"],
     }
     response = await _drive_request(
         "POST",
@@ -312,7 +307,7 @@ async def _find_file_in_folder(
         params={
             "q": query,
             "fields": "files(id,name,modifiedTime)",
-            "spaces": "appDataFolder",
+            "spaces": "drive",
         },
     )
 
