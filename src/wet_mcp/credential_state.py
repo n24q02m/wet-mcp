@@ -7,6 +7,7 @@ Reset: configured/local -> awaiting_setup (via setup tool)
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from enum import Enum
 
 from loguru import logger
@@ -31,6 +32,13 @@ class CredentialState(Enum):
 # Module-level state
 _state = CredentialState.AWAITING_SETUP
 _setup_url: str | None = None
+_on_gdrive_complete: Callable[[], None] | None = None
+
+
+def set_gdrive_complete_callback(cb: Callable[[], None]) -> None:
+    """Set callback for when GDrive OAuth completes (used by HTTP server)."""
+    global _on_gdrive_complete
+    _on_gdrive_complete = cb
 
 
 def get_state() -> CredentialState:
@@ -400,15 +408,14 @@ async def _gdrive_token_poll(
 
                     save_token("google_drive", data)
                     logger.info("GDrive OAuth token saved successfully")
-
-                    # Start auto-sync
-                    try:
-                        # Auto-sync will start on next server restart or can be triggered manually
-                        logger.info(
-                            "GDrive authorized. Sync will start on next server restart."
-                        )
-                    except Exception:
-                        pass
+                    logger.info(
+                        "GDrive authorized. Sync will start on next server restart."
+                    )
+                    if _on_gdrive_complete:
+                        try:
+                            _on_gdrive_complete()
+                        except Exception:
+                            pass
                     return
                 elif data.get("error") == "authorization_pending":
                     continue
