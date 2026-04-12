@@ -39,6 +39,7 @@ def set_gdrive_complete_callback(cb: Callable[[], None]) -> None:
     """Set callback for when GDrive OAuth completes (used by HTTP server)."""
     global _on_gdrive_complete
     _on_gdrive_complete = cb
+    logger.debug("GDrive complete callback registered")
 
 
 def get_state() -> CredentialState:
@@ -411,16 +412,11 @@ async def _gdrive_token_poll(
                     logger.info(
                         "GDrive authorized. Sync will start on next server restart."
                     )
-                    logger.debug(
-                        "GDrive complete callback: {}",
-                        _on_gdrive_complete,
-                    )
                     if _on_gdrive_complete:
                         try:
                             _on_gdrive_complete()
-                            logger.info("GDrive setup-status marked complete")
                         except Exception:
-                            logger.opt(exception=True).warning(
+                            logger.opt(exception=True).debug(
                                 "GDrive complete callback failed"
                             )
                     return
