@@ -10,7 +10,6 @@ from pydantic import SecretStr
 from wet_mcp.config import settings
 from wet_mcp.llm import (
     _AUDIO_INPUT_MODELS,
-    _AUDIO_OUTPUT_MODELS,
     _VISION_MODELS,
     _detect_provider,
     _has_llm_provider,
@@ -317,7 +316,6 @@ def test_analyze_media_tilde_download_dir(mock_settings, tmp_path, monkeypatch):
     assert "Access denied" not in result
 
 
-
 def test_get_model_capabilities_comprehensive():
     """Test all hardcoded models for vision and audio input."""
     for model in _VISION_MODELS:
@@ -378,6 +376,7 @@ def test_get_model_capabilities_legacy():
         "audio_input": False,
         "audio_output": False,
     }
+
 
 def test_strip_provider():
     """Test provider prefix stripping."""
