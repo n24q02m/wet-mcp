@@ -56,43 +56,6 @@ _chunk_quality_score = _db_mod._chunk_quality_score
 _serialize_f32 = _db_mod._serialize_f32
 
 
-# ---------------------------------------------------------------------------
-# sqlite-vec extension availability check.
-#
-# macOS Python from ``actions/setup-python`` is built against a system
-# SQLite compiled WITHOUT ``--enable-loadable-sqlite-extensions``, so
-# ``sqlite3.Connection.enable_load_extension`` does not exist. Tests that
-# exercise the vector table require the extension to load; on macOS CI we
-# skip them rather than fail. Production code already degrades gracefully
-# (FTS-only mode), so runtime behaviour is unchanged.
-# ---------------------------------------------------------------------------
-def _sqlite_vec_loadable() -> bool:
-    import sqlite3 as _sqlite3
-
-    conn = _sqlite3.connect(":memory:")
-    try:
-        if not hasattr(conn, "enable_load_extension"):
-            return False
-        try:
-            import sqlite_vec  # noqa: F401
-        except ImportError:
-            return False
-        return True
-    finally:
-        conn.close()
-
-
-_SQLITE_VEC_AVAILABLE = _sqlite_vec_loadable()
-_requires_sqlite_vec = pytest.mark.skipif(
-    not _SQLITE_VEC_AVAILABLE,
-    reason=(
-        "sqlite-vec extension cannot be loaded on this platform "
-        "(sqlite3 built without enable_load_extension, e.g. macOS "
-        "actions/setup-python builds)"
-    ),
-)
-
-
 @pytest.fixture
 def db(tmp_path):
     """Create a fresh DocsDB for each test."""
@@ -667,7 +630,6 @@ class TestEdgeCases:
 class TestSqliteVecLoading:
     """Test sqlite-vec extension loading paths."""
 
-    @_requires_sqlite_vec
     def test_vec_enabled_when_extension_available(self, tmp_path):
         """When sqlite-vec is available and dims > 0, vec should be enabled."""
         db = DocsDB(tmp_path / "vec_test.db", embedding_dims=4)
@@ -698,7 +660,6 @@ class TestSqliteVecLoading:
             finally:
                 db.close()
 
-    @_requires_sqlite_vec
     def test_vec_table_not_recreated_on_reopen(self, tmp_path):
         """Re-opening a DB with existing vec table does not error."""
         db_path = tmp_path / "vec_reopen.db"
@@ -791,7 +752,6 @@ class TestUpsertLibraryPaths:
 # -----------------------------------------------------------------------
 
 
-@_requires_sqlite_vec
 class TestAddChunksVec:
     def test_add_chunks_with_embeddings(self, tmp_path):
         """add_chunks inserts vector embeddings when vec is enabled."""
@@ -899,7 +859,6 @@ class TestAddChunksVec:
 # -----------------------------------------------------------------------
 
 
-@_requires_sqlite_vec
 class TestClearVersionChunksVec:
     def test_clear_version_chunks_with_vec(self, tmp_path):
         """clear_version_chunks removes vec entries."""
@@ -1073,7 +1032,6 @@ class TestSearchWithVec:
         finally:
             db.close()
 
-    @_requires_sqlite_vec
     def test_vector_search_error_handled(self, tmp_path):
         """Vector search errors are caught gracefully."""
         db = DocsDB(tmp_path / "vec_err.db", embedding_dims=4)
@@ -1301,7 +1259,6 @@ class TestImportJSONLModes:
         finally:
             db.close()
 
-    @_requires_sqlite_vec
     def test_import_replace_vec_error_handled(self, tmp_path):
         """Replace mode handles vec table deletion errors (lines 879-882)."""
         db = DocsDB(tmp_path / "import_vec_err.db", embedding_dims=4)
@@ -1444,7 +1401,6 @@ class TestStats:
         assert stats["chunks"] == 4
         assert stats["vec_enabled"] is False
 
-    @_requires_sqlite_vec
     def test_stats_vec_enabled(self, tmp_path):
         """Stats shows vec_enabled when extension loaded."""
         db = DocsDB(tmp_path / "stats_vec.db", embedding_dims=4)
@@ -1463,7 +1419,6 @@ class TestStats:
 class TestSerializeEmbeddingError:
     """Cover lines 531-532: embedding serialization failure."""
 
-    @_requires_sqlite_vec
     def test_add_chunks_bad_embedding_caught(self, tmp_path):
         """A single bad embedding is caught, others still inserted."""
         db = DocsDB(tmp_path / "bad_emb.db", embedding_dims=4)
@@ -1594,7 +1549,6 @@ class TestImportBlankLines:
 class TestVecSearchChunkLoading:
     """Cover lines 732-741: vec search loads chunk data not in FTS."""
 
-    @_requires_sqlite_vec
     def test_vec_search_loads_non_fts_chunks(self, tmp_path):
         """When vec search returns chunks not found by FTS, they get loaded."""
 

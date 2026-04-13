@@ -212,7 +212,7 @@ class TestSetupToolCoverageGaps:
     @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
     @patch("wet_mcp.reranker.init_reranker")
     @patch("wet_mcp.embedder.init_backend")
-    async def test_cloud_reranker_init_exception(self, mock_init, mock_rr_init):
+    def test_cloud_reranker_init_exception(self, mock_init, mock_rr_init):
         """reranker init raises exception, caught by except."""
         from wet_mcp.setup_tool import _validate_cloud_models
 
@@ -221,12 +221,12 @@ class TestSetupToolCoverageGaps:
         mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
 
         mock_backend = MagicMock()
-        mock_backend.check_available = AsyncMock(return_value=768)
+        mock_backend.check_available.return_value = 768
         mock_init.return_value = mock_backend
 
         mock_rr_init.side_effect = Exception("reranker init failed")
 
-        result = await _validate_cloud_models(mock_settings)
+        result = _validate_cloud_models(mock_settings)
         assert result["cloud_ready"] is True
         assert result["reranker"] is None
 

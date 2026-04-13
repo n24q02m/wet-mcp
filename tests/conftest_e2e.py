@@ -32,9 +32,9 @@ def pytest_addoption(parser):
     """Add --setup and --browser CLI options for E2E tests."""
     parser.addoption(
         "--setup",
-        choices=["relay", "env", "plugin", "http"],
+        choices=["relay", "env", "plugin"],
         default="env",
-        help="Server setup mode: relay (manual), env (env vars), plugin (published), http (HTTP+OAuth)",
+        help="Server setup mode: relay (manual credentials), env (env vars), plugin (published package)",
     )
     parser.addoption(
         "--browser",

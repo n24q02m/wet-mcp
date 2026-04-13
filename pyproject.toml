@@ -44,7 +44,7 @@ dependencies = [
 
     "pillow>=12.1.1",
     "diskcache>=5.6.3",
-    "cryptography>=46.0.7",
+    "cryptography>=46.0.6",
     # Document conversion (PDF, DOCX, PPTX → Markdown)
     "markitdown[pdf,docx,pptx,xlsx]",
     # Schema validation for structured extraction
@@ -52,7 +52,7 @@ dependencies = [
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
     # Relay setup (zero-env-config)
-    "n24q02m-mcp-core>=1.0.0b3",
+    "mcp-relay-core>=1.4.0",
     # Google Drive sync
     "google-api-python-client>=2.193.0",
     "google-auth>=2.49.1",
@@ -115,6 +115,9 @@ markers = [
     "slow: slow tests (crawl, download, etc.)",
 ]
 addopts = "-m 'not integration and not live and not full and not e2e'"
+
+[tool.uv.sources]
+mcp-relay-core = { path = "../mcp-relay-core/packages/core-py", editable = true }
 
 [tool.ty]
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }

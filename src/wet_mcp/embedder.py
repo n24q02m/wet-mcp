@@ -63,7 +63,6 @@ def _is_unsupported_param(exc: Exception, param: str) -> bool:
             p in msg
             for p in (
                 "dimensions",
-                "output_dimension",
                 "output_dimensionality",
                 "unexpected keyword argument",
                 "invalid argument",

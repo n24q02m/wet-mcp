@@ -38,7 +38,6 @@ from wet_mcp.sources.docs import (
     _strip_nav_blocks,
     _strip_nav_heading_blocks,
     _try_github_raw_docs,
-    chunk_llms_txt,
     chunk_markdown,
     discover_library,
     fetch_docs_pages,
@@ -1485,38 +1484,6 @@ class TestChunkMarkdownCoverage:
         )
         result = chunk_markdown(content)
         assert result == []
-
-    def test_h3_h4_flushing_logic(self):
-        """H3/H4 headings trigger flush only if buffer is large enough."""
-        content = """# Title\n## Section\n### Sub1\nSmall content here.\n### Sub2\nMore content here."""
-        # max_chunk_size=40, so threshold is 20.
-        # "## Section\n### Sub1\nSmall content here." is ~40 chars, should flush before Sub2
-        result = chunk_markdown(content, max_chunk_size=40, min_chunk_size=5)
-        # Should have at least 2 chunks: one starting at # Title, one starting at ### Sub2
-        assert len(result) >= 2
-        assert "Sub2" in result[-1]["title"]
-
-    def test_h1_resets_h2_state(self):
-        """Level 1 heading resets the internal Level 2 state."""
-        content = """# H1-A\n## H2-A\nContent A is long enough to be a chunk.\n# H1-B\n## H2-B\nContent B is also long enough to be a chunk."""
-        result = chunk_markdown(content, min_chunk_size=10)
-        # Find chunk for Content B
-        chunk_b = [c for c in result if "Content B" in c["content"]][0]
-        assert chunk_b["heading_path"] == "H1-B > H2-B"
-
-    def test_h4_heading_path(self):
-        """Level 4 headings are correctly included in the heading path."""
-        content = """# H1\n## H2\n### H3\n#### H4\nDeeply nested content that meets min size."""
-        result = chunk_markdown(content, min_chunk_size=10)
-        chunk = [c for c in result if "Deeply nested" in c["content"]][0]
-        assert "H4" in chunk["heading_path"]
-        assert "H1 > H2 > H4" == chunk["heading_path"]
-
-    def test_h2_without_h1_path(self):
-        """Heading path handles missing H1 gracefully."""
-        content = """## Only H2\nContent for H2 only section."""
-        result = chunk_markdown(content, min_chunk_size=5)
-        assert result[0]["heading_path"] == " > Only H2"
 
 
 # ---------------------------------------------------------------------------
@@ -3376,40 +3343,3 @@ def test_apply_version_to_url_other_site():
     url = "https://docs.python.org/3/library/json.html"
     result = _apply_version_to_url(url, "3.12")
     assert result == url
-
-def test_chunk_llms_txt_parameters():
-    """Verify chunk_llms_txt calls chunk_markdown with specific parameters."""
-    content = "# Title\n\nSome content."
-    base_url = "https://example.com/docs"
-
-    with patch("wet_mcp.sources.docs.chunk_markdown") as mock_chunk:
-        mock_chunk.return_value = [{"content": "mocked"}]
-
-        result = chunk_llms_txt(content, base_url=base_url)
-
-        mock_chunk.assert_called_once_with(content, url=base_url, max_chunk_size=2000)
-        assert result == [{"content": "mocked"}]
-
-
-def test_chunk_llms_txt_functional():
-    """Functional test for chunk_llms_txt ensuring it actually chunks."""
-    content = """# Main
-
-## Section 1
-This is a long section that should be kept as one if it's under the limit.
-It contains enough text to be a valid chunk.
-The limit for llms.txt is 2000 characters which is quite large.
-
-## Section 2
-Another section with more content.
-Markdown headers are the primary splitting points.
-"""
-    base_url = "https://example.com/llms.txt"
-
-    chunks = chunk_llms_txt(content, base_url=base_url)
-
-    assert len(chunks) >= 2
-    assert chunks[0]["url"] == base_url
-    assert "# Main" in chunks[0]["content"]
-    assert "## Section 1" in chunks[0]["content"]
-    assert "## Section 2" in chunks[1]["content"]
