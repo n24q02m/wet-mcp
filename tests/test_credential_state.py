@@ -826,3 +826,84 @@ class TestRequireCredentials:
         assert result is not None
         data = json.loads(result)
         assert data["setup_url"] is None
+
+
+class TestSaveCredentialsGdriveNextStep:
+    """Cover the GDrive Device Code branch in save_credentials, including
+    the best-effort try_open_browser launch at the verification URL."""
+
+    def test_returns_device_code_and_opens_browser(self):
+        from wet_mcp.credential_state import save_credentials
+
+        device_payload = {
+            "device_code": "dev123",
+            "user_code": "USER-CODE",
+            "verification_url": "https://example.test/verify",
+            "interval": 5,
+            "expires_in": 1800,
+        }
+
+        mock_httpx_response = MagicMock()
+        mock_httpx_response.status_code = 200
+        mock_httpx_response.json = MagicMock(return_value=device_payload)
+
+        with (
+            patch("mcp_core.storage.config_file.write_config"),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
+            patch("wet_mcp.config.settings") as mock_settings,
+            patch("httpx.post", return_value=mock_httpx_response),
+            patch("threading.Thread") as mock_thread,
+            patch("mcp_core.try_open_browser") as mock_browser,
+        ):
+            mock_settings.google_drive_client_id = "cid"
+            mock_settings.google_drive_client_secret = "csec"
+            mock_settings.setup_providers = MagicMock()
+
+            result = save_credentials({"FOO": "bar"})
+
+        assert result is not None
+        assert result["type"] == "oauth_device_code"
+        assert result["verification_url"] == "https://example.test/verify"
+        assert result["user_code"] == "USER-CODE"
+        mock_browser.assert_called_once_with("https://example.test/verify")
+        mock_thread.assert_called_once()
+
+    def test_returns_none_when_device_code_non_200(self):
+        from wet_mcp.credential_state import save_credentials
+
+        mock_httpx_response = MagicMock()
+        mock_httpx_response.status_code = 400
+        mock_httpx_response.json = MagicMock(return_value={})
+
+        with (
+            patch("mcp_core.storage.config_file.write_config"),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
+            patch("wet_mcp.config.settings") as mock_settings,
+            patch("httpx.post", return_value=mock_httpx_response),
+        ):
+            mock_settings.google_drive_client_id = "cid"
+            mock_settings.google_drive_client_secret = "csec"
+            mock_settings.setup_providers = MagicMock()
+
+            result = save_credentials({"FOO": "bar"})
+
+        assert result is None
+
+    def test_returns_none_when_no_gdrive_configured(self):
+        from wet_mcp.credential_state import save_credentials
+
+        with (
+            patch("mcp_core.storage.config_file.write_config"),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
+            patch("wet_mcp.config.settings") as mock_settings,
+        ):
+            mock_settings.google_drive_client_id = ""
+            mock_settings.google_drive_client_secret = ""
+            mock_settings.setup_providers = MagicMock()
+
+            result = save_credentials({"FOO": "bar"})
+
+        assert result is None

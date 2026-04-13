@@ -116,9 +116,6 @@ markers = [
 ]
 addopts = "-m 'not integration and not live and not full and not e2e'"
 
-[tool.uv.sources]
-n24q02m-mcp-core = { path = "../mcp-core/packages/core-py", editable = true }
-
 [tool.ty]
 rules = { unresolved-import = "ignore", unresolved-attribute = "ignore", possibly-missing-attribute = "ignore" }
 
