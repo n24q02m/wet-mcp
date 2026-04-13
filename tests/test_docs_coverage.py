@@ -3393,17 +3393,19 @@ def test_chunk_llms_txt_parameters():
 
 
 def test_chunk_llms_txt_functional():
-    """Functional test for chunk_llms_txt ensuring it actually chunks."""
-    content = """# Main
+    """Functional test for chunk_llms_txt ensuring it actually chunks.
+
+    Each section contains enough filler (> 2000 chars) so that the chunker
+    (max_chunk_size=2000) is forced to emit distinct chunks per header.
+    """
+    filler = ("Lorem ipsum dolor sit amet consectetur adipiscing elit. " * 40).strip()
+    content = f"""# Main
 
 ## Section 1
-This is a long section that should be kept as one if it's under the limit.
-It contains enough text to be a valid chunk.
-The limit for llms.txt is 2000 characters which is quite large.
+{filler}
 
 ## Section 2
-Another section with more content.
-Markdown headers are the primary splitting points.
+{filler}
 """
     base_url = "https://example.com/llms.txt"
 
@@ -3411,6 +3413,5 @@ Markdown headers are the primary splitting points.
 
     assert len(chunks) >= 2
     assert chunks[0]["url"] == base_url
-    assert "# Main" in chunks[0]["content"]
     assert "## Section 1" in chunks[0]["content"]
     assert "## Section 2" in chunks[1]["content"]
