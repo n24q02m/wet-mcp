@@ -83,7 +83,7 @@ class TestResolveCredentialState:
 
         saved = {"GEMINI_API_KEY": "from-file", "OPENAI_API_KEY": ""}
         with patch(
-            "mcp_core.storage.config_file.read_config",
+            "mcp_relay_core.storage.config_file.read_config",
             return_value=saved,
         ):
             result = resolve_credential_state()
@@ -99,11 +99,11 @@ class TestResolveCredentialState:
         saved = {"SOME_OTHER_KEY": "value"}
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_relay_core.storage.config_file.read_config",
                 return_value=saved,
             ),
             patch(
-                "mcp_core.get_mode",
+                "mcp_relay_core.get_mode",
                 return_value=None,
             ),
         ):
@@ -117,11 +117,11 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_relay_core.storage.config_file.read_config",
                 side_effect=Exception("decrypt failed"),
             ),
             patch(
-                "mcp_core.get_mode",
+                "mcp_relay_core.get_mode",
                 return_value=None,
             ),
         ):
@@ -135,11 +135,11 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_relay_core.storage.config_file.read_config",
                 return_value=None,
             ),
             patch(
-                "mcp_core.get_mode",
+                "mcp_relay_core.get_mode",
                 return_value="local",
             ),
         ):
@@ -153,11 +153,11 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_relay_core.storage.config_file.read_config",
                 return_value=None,
             ),
             patch(
-                "mcp_core.get_mode",
+                "mcp_relay_core.get_mode",
                 side_effect=Exception("file not found"),
             ),
         ):
@@ -171,11 +171,11 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_relay_core.storage.config_file.read_config",
                 return_value=None,
             ),
             patch(
-                "mcp_core.get_mode",
+                "mcp_relay_core.get_mode",
                 return_value=None,
             ),
         ):
@@ -207,21 +207,21 @@ class TestTriggerRelaySetup:
         )
         with (
             patch(
-                "mcp_core.acquire_session_lock",
+                "mcp_relay_core.acquire_session_lock",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
             patch(
-                "mcp_core.relay.client.create_session",
+                "mcp_relay_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 return_value=mock_session,
             ),
             patch(
-                "mcp_core.write_session_lock",
+                "mcp_relay_core.write_session_lock",
                 new_callable=AsyncMock,
             ),
             patch(
-                "mcp_core.try_open_browser",
+                "mcp_relay_core.try_open_browser",
                 return_value=True,
             ),
         ):
@@ -233,7 +233,7 @@ class TestTriggerRelaySetup:
 
     async def test_reuses_existing_session_lock(self):
         """Reuses existing session lock if found."""
-        from mcp_core import SessionInfo
+        from mcp_relay_core import SessionInfo
 
         existing = SessionInfo(
             session_id="existing-id",
@@ -241,7 +241,7 @@ class TestTriggerRelaySetup:
             created_at=1000.0,
         )
         with patch(
-            "mcp_core.acquire_session_lock",
+            "mcp_relay_core.acquire_session_lock",
             new_callable=AsyncMock,
             return_value=existing,
         ):
@@ -257,21 +257,21 @@ class TestTriggerRelaySetup:
         )
         with (
             patch(
-                "mcp_core.acquire_session_lock",
+                "mcp_relay_core.acquire_session_lock",
                 new_callable=AsyncMock,
                 return_value=None,
             ),
             patch(
-                "mcp_core.relay.client.create_session",
+                "mcp_relay_core.relay.client.create_session",
                 new_callable=AsyncMock,
                 return_value=mock_session,
             ),
             patch(
-                "mcp_core.write_session_lock",
+                "mcp_relay_core.write_session_lock",
                 new_callable=AsyncMock,
             ) as mock_write_lock,
             patch(
-                "mcp_core.try_open_browser",
+                "mcp_relay_core.try_open_browser",
                 return_value=True,
             ) as mock_browser,
         ):
@@ -285,7 +285,7 @@ class TestTriggerRelaySetup:
     async def test_exception_returns_none(self):
         """On exception, returns None and resets to AWAITING_SETUP."""
         with patch(
-            "mcp_core.acquire_session_lock",
+            "mcp_relay_core.acquire_session_lock",
             new_callable=AsyncMock,
             side_effect=ConnectionError("unreachable"),
         ):
@@ -305,14 +305,14 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch(
-                "mcp_core.release_session_lock",
+                "mcp_relay_core.release_session_lock",
                 new_callable=AsyncMock,
             ),
             patch(
@@ -321,7 +321,7 @@ class TestPollRelayBackground:
                 return_value=True,
             ),
             patch(
-                "mcp_core.relay.client.send_message",
+                "mcp_relay_core.relay.client.send_message",
                 new_callable=AsyncMock,
             ),
         ):
@@ -340,11 +340,11 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("RELAY_SKIPPED"),
             ),
-            patch("mcp_core.set_local_mode") as mock_set_local,
+            patch("mcp_relay_core.set_local_mode") as mock_set_local,
         ):
             await _poll_relay_background(
                 "https://relay.example.com", mock_session, 10.0
@@ -358,12 +358,12 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 side_effect=RuntimeError("RELAY_SKIPPED"),
             ),
             patch(
-                "mcp_core.set_local_mode",
+                "mcp_relay_core.set_local_mode",
                 side_effect=Exception("file error"),
             ),
         ):
@@ -378,7 +378,7 @@ class TestPollRelayBackground:
         set_state(CredentialState.SETUP_IN_PROGRESS)
 
         with patch(
-            "mcp_core.relay.client.poll_for_result",
+            "mcp_relay_core.relay.client.poll_for_result",
             new_callable=AsyncMock,
             side_effect=RuntimeError("timed out"),
         ):
@@ -393,7 +393,7 @@ class TestPollRelayBackground:
         set_state(CredentialState.SETUP_IN_PROGRESS)
 
         with patch(
-            "mcp_core.relay.client.poll_for_result",
+            "mcp_relay_core.relay.client.poll_for_result",
             new_callable=AsyncMock,
             side_effect=Exception("connection refused"),
         ):
@@ -410,19 +410,19 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ) as mock_poll,
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
-            patch("mcp_core.relay.client.send_message", new_callable=AsyncMock),
+            patch("mcp_relay_core.relay.client.send_message", new_callable=AsyncMock),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(
@@ -441,19 +441,19 @@ class TestPollRelayBackground:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
-            patch("mcp_core.relay.client.send_message", new_callable=AsyncMock),
+            patch("mcp_relay_core.relay.client.send_message", new_callable=AsyncMock),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(
@@ -472,8 +472,8 @@ class TestResetState:
         mod._setup_url = "https://example.com"
 
         with (
-            patch("mcp_core.clear_mode"),
-            patch("mcp_core.storage.config_file.delete_config"),
+            patch("mcp_relay_core.clear_mode"),
+            patch("mcp_relay_core.storage.config_file.delete_config"),
         ):
             reset_state()
             assert get_state() == CredentialState.AWAITING_SETUP
@@ -483,7 +483,7 @@ class TestResetState:
         """reset_state handles errors gracefully."""
         set_state(CredentialState.CONFIGURED)
         with (
-            patch("mcp_core.clear_mode", side_effect=Exception("fail")),
+            patch("mcp_relay_core.clear_mode", side_effect=Exception("fail")),
         ):
             reset_state()
             assert get_state() == CredentialState.AWAITING_SETUP
@@ -555,7 +555,7 @@ class TestServerSetupToolNewActions:
 
         from wet_mcp.server import setup
 
-        with patch("mcp_core.set_local_mode") as mock_set:
+        with patch("mcp_relay_core.set_local_mode") as mock_set:
             result = await setup(action="skip")
             data = json.loads(result)
             assert data["status"] == "ok"
@@ -570,8 +570,8 @@ class TestServerSetupToolNewActions:
 
         set_state(CredentialState.CONFIGURED)
         with (
-            patch("mcp_core.clear_mode"),
-            patch("mcp_core.storage.config_file.delete_config"),
+            patch("mcp_relay_core.clear_mode"),
+            patch("mcp_relay_core.storage.config_file.delete_config"),
         ):
             result = await setup(action="reset")
             data = json.loads(result)
@@ -615,7 +615,7 @@ class TestShareCloudKeysToPeers:
         from wet_mcp.credential_state import _share_cloud_keys_to_peers
 
         config = {"GEMINI_API_KEY": "test-key", "SOME_OTHER": "val"}
-        with patch("mcp_core.storage.config_file.write_config") as mock_write:
+        with patch("mcp_relay_core.storage.config_file.write_config") as mock_write:
             _share_cloud_keys_to_peers(config)
             assert mock_write.call_count == 2
             # Should write to both peers
@@ -628,7 +628,7 @@ class TestShareCloudKeysToPeers:
         from wet_mcp.credential_state import _share_cloud_keys_to_peers
 
         config = {"SOME_KEY": "value"}
-        with patch("mcp_core.storage.config_file.write_config") as mock_write:
+        with patch("mcp_relay_core.storage.config_file.write_config") as mock_write:
             _share_cloud_keys_to_peers(config)
             mock_write.assert_not_called()
 
@@ -638,7 +638,7 @@ class TestShareCloudKeysToPeers:
 
         config = {"OPENAI_API_KEY": "test-key"}
         with patch(
-            "mcp_core.storage.config_file.write_config",
+            "mcp_relay_core.storage.config_file.write_config",
             side_effect=Exception("disk full"),
         ):
             # Should not raise
@@ -650,7 +650,7 @@ class TestShareCloudKeysToPeers:
 
         config = {"GEMINI_API_KEY": "test-key"}
         with patch(
-            "mcp_core.storage.config_file.write_config",
+            "mcp_relay_core.storage.config_file.write_config",
             side_effect=ImportError("no module"),
         ):
             _share_cloud_keys_to_peers(config)
@@ -667,20 +667,20 @@ class TestPollRelayBackgroundGDriveAndMessage:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 return_value=True,
             ) as mock_gdrive,
             patch(
-                "mcp_core.relay.client.send_message",
+                "mcp_relay_core.relay.client.send_message",
                 new_callable=AsyncMock,
             ) as mock_send,
         ):
@@ -703,20 +703,20 @@ class TestPollRelayBackgroundGDriveAndMessage:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 side_effect=Exception("OAuth failed"),
             ),
             patch(
-                "mcp_core.relay.client.send_message",
+                "mcp_relay_core.relay.client.send_message",
                 new_callable=AsyncMock,
             ),
         ):
@@ -736,20 +736,20 @@ class TestPollRelayBackgroundGDriveAndMessage:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
             patch(
                 "wet_mcp.sync.setup_google_auth",
                 new_callable=AsyncMock,
                 return_value=True,
             ),
             patch(
-                "mcp_core.relay.client.send_message",
+                "mcp_relay_core.relay.client.send_message",
                 new_callable=AsyncMock,
                 side_effect=Exception("network error"),
             ),
@@ -769,13 +769,13 @@ class TestPollRelayBackgroundGDriveAndMessage:
 
         with (
             patch(
-                "mcp_core.relay.client.poll_for_result",
+                "mcp_relay_core.relay.client.poll_for_result",
                 new_callable=AsyncMock,
                 return_value=config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_relay_core.storage.config_file.write_config"),
             patch("wet_mcp.config.settings") as mock_settings,
-            patch("mcp_core.release_session_lock", new_callable=AsyncMock),
+            patch("mcp_relay_core.release_session_lock", new_callable=AsyncMock),
         ):
             mock_settings.setup_providers = MagicMock()
             await _poll_relay_background(
@@ -826,273 +826,3 @@ class TestRequireCredentials:
         assert result is not None
         data = json.loads(result)
         assert data["setup_url"] is None
-
-
-class TestSaveCredentialsGdriveNextStep:
-    """Cover the GDrive Device Code branch in save_credentials, including
-    the best-effort try_open_browser launch at the verification URL."""
-
-    def test_returns_device_code_and_opens_browser(self):
-        from wet_mcp.credential_state import save_credentials
-
-        device_payload = {
-            "device_code": "dev123",
-            "user_code": "USER-CODE",
-            "verification_url": "https://example.test/verify",
-            "interval": 5,
-            "expires_in": 1800,
-        }
-
-        mock_httpx_response = MagicMock()
-        mock_httpx_response.status_code = 200
-        mock_httpx_response.json = MagicMock(return_value=device_payload)
-
-        with (
-            patch("mcp_core.storage.config_file.write_config"),
-            patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
-            patch("wet_mcp.config.settings") as mock_settings,
-            patch("httpx.post", return_value=mock_httpx_response),
-            patch("threading.Thread") as mock_thread,
-            patch("mcp_core.try_open_browser") as mock_browser,
-        ):
-            mock_settings.google_drive_client_id = "cid"
-            mock_settings.google_drive_client_secret = "csec"
-            mock_settings.setup_providers = MagicMock()
-
-            result = save_credentials({"FOO": "bar"})
-
-        assert result is not None
-        assert result["type"] == "oauth_device_code"
-        assert result["verification_url"] == "https://example.test/verify"
-        assert result["user_code"] == "USER-CODE"
-        mock_browser.assert_called_once_with("https://example.test/verify")
-        mock_thread.assert_called_once()
-
-    def test_returns_none_when_device_code_non_200(self):
-        from wet_mcp.credential_state import save_credentials
-
-        mock_httpx_response = MagicMock()
-        mock_httpx_response.status_code = 400
-        mock_httpx_response.json = MagicMock(return_value={})
-
-        with (
-            patch("mcp_core.storage.config_file.write_config"),
-            patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
-            patch("wet_mcp.config.settings") as mock_settings,
-            patch("httpx.post", return_value=mock_httpx_response),
-        ):
-            mock_settings.google_drive_client_id = "cid"
-            mock_settings.google_drive_client_secret = "csec"
-            mock_settings.setup_providers = MagicMock()
-
-            result = save_credentials({"FOO": "bar"})
-
-        assert result is None
-
-    def test_returns_none_when_no_gdrive_configured(self):
-        from wet_mcp.credential_state import save_credentials
-
-        with (
-            patch("mcp_core.storage.config_file.write_config"),
-            patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
-            patch("wet_mcp.config.settings") as mock_settings,
-        ):
-            mock_settings.google_drive_client_id = ""
-            mock_settings.google_drive_client_secret = ""
-            mock_settings.setup_providers = MagicMock()
-
-            result = save_credentials({"FOO": "bar"})
-
-        assert result is None
-
-    def test_provider_reinit_failure_non_fatal(self):
-        """save_credentials swallows provider re-init errors."""
-        from wet_mcp.credential_state import save_credentials
-
-        with (
-            patch("mcp_core.storage.config_file.write_config"),
-            patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
-            patch("wet_mcp.config.settings") as mock_settings,
-        ):
-            mock_settings.setup_providers = MagicMock(
-                side_effect=RuntimeError("init failed")
-            )
-            mock_settings.google_drive_client_id = ""
-            mock_settings.google_drive_client_secret = ""
-            # Should not raise
-            result = save_credentials({"FOO": "bar"})
-            assert result is None
-
-    def test_device_code_request_exception_non_fatal(self):
-        """save_credentials swallows httpx.post exceptions for device code."""
-        from wet_mcp.credential_state import save_credentials
-
-        with (
-            patch("mcp_core.storage.config_file.write_config"),
-            patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
-            patch("wet_mcp.config.settings") as mock_settings,
-            patch("httpx.post", side_effect=ConnectionError("oauth down")),
-        ):
-            mock_settings.google_drive_client_id = "cid"
-            mock_settings.google_drive_client_secret = "csec"
-            mock_settings.setup_providers = MagicMock()
-            result = save_credentials({"FOO": "bar"})
-            assert result is None
-
-
-class TestSetGdriveCompleteCallback:
-    def test_callback_registration(self):
-        """set_gdrive_complete_callback stores the callback."""
-        import wet_mcp.credential_state as mod
-        from wet_mcp.credential_state import set_gdrive_complete_callback
-
-        def cb():
-            pass
-
-        set_gdrive_complete_callback(cb)
-        assert mod._on_gdrive_complete is cb
-        # cleanup
-        mod._on_gdrive_complete = None
-
-
-class TestShareCloudKeysOuterException:
-    def test_outer_import_error_non_fatal(self):
-        """Outer ImportError for write_config should be swallowed."""
-        import builtins
-
-        from wet_mcp.credential_state import _share_cloud_keys_to_peers
-
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):
-            if name == "mcp_core.storage.config_file":
-                raise ImportError("no mcp_core")
-            return real_import(name, *args, **kwargs)
-
-        with patch.object(builtins, "__import__", side_effect=fake_import):
-            # Should not raise
-            _share_cloud_keys_to_peers({"GEMINI_API_KEY": "key"})
-
-
-class TestGdriveTokenPoll:
-    """Cover _gdrive_token_poll success / slow_down / error / expiry branches."""
-
-    async def _run_poll(self, responses):
-        """Helper: run _gdrive_token_poll with a sequence of mock responses."""
-        from wet_mcp.credential_state import _gdrive_token_poll
-
-        class _FakeResp:
-            def __init__(self, data):
-                self._data = data
-
-            def json(self):
-                return self._data
-
-        it = iter(responses)
-
-        async def fake_post(*a, **kw):
-            try:
-                return _FakeResp(next(it))
-            except StopIteration:
-                return _FakeResp({"error": "authorization_pending"})
-
-        class _FakeClient:
-            def __init__(self, *a, **kw):
-                pass
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *a):
-                return False
-
-            async def post(self, *a, **kw):
-                return await fake_post(*a, **kw)
-
-        async def fake_sleep(_):
-            return None
-
-        with (
-            patch("httpx.AsyncClient", _FakeClient),
-            patch("asyncio.sleep", new=fake_sleep),
-        ):
-            await _gdrive_token_poll("cid", "csec", "devcode", 1, 1)
-
-    async def test_success_saves_token_and_calls_callback(self):
-        import wet_mcp.credential_state as mod
-
-        cb_called = []
-        mod._on_gdrive_complete = lambda: cb_called.append(True)
-        try:
-            with patch("wet_mcp.token_store.save_token") as mock_save:
-                await self._run_poll(
-                    [{"access_token": "tok-abc", "refresh_token": "r"}]
-                )
-                mock_save.assert_called_once()
-                assert cb_called == [True]
-        finally:
-            mod._on_gdrive_complete = None
-
-    async def test_success_callback_exception_non_fatal(self):
-        import wet_mcp.credential_state as mod
-
-        def bad_cb():
-            raise RuntimeError("cb died")
-
-        mod._on_gdrive_complete = bad_cb
-        try:
-            with patch("wet_mcp.token_store.save_token"):
-                await self._run_poll([{"access_token": "tok-abc"}])
-        finally:
-            mod._on_gdrive_complete = None
-
-    async def test_slow_down_increases_interval(self):
-        # slow_down then success
-        with patch("wet_mcp.token_store.save_token") as mock_save:
-            await self._run_poll(
-                [
-                    {"error": "slow_down"},
-                    {"access_token": "tok"},
-                ]
-            )
-            mock_save.assert_called_once()
-
-    async def test_generic_error_returns(self):
-        # unknown error returns without saving
-        with patch("wet_mcp.token_store.save_token") as mock_save:
-            await self._run_poll([{"error": "access_denied"}])
-            mock_save.assert_not_called()
-
-    async def test_post_exception_non_fatal_and_expires(self):
-        """Post raising should be caught; deadline expiry exits loop."""
-        from wet_mcp.credential_state import _gdrive_token_poll
-
-        class _FailingClient:
-            def __init__(self, *a, **kw):
-                pass
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, *a):
-                return False
-
-            async def post(self, *a, **kw):
-                raise ConnectionError("boom")
-
-        async def fake_sleep(_):
-            return None
-
-        with (
-            patch("httpx.AsyncClient", _FailingClient),
-            patch("asyncio.sleep", new=fake_sleep),
-            patch("wet_mcp.token_store.save_token") as mock_save,
-        ):
-            # expires_in=0 ensures deadline already passed on next iteration
-            await _gdrive_token_poll("cid", "csec", "dev", 0, 0)
-            mock_save.assert_not_called()

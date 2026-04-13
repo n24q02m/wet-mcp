@@ -1359,7 +1359,7 @@ async def setup(
             return json.dumps({"status": "error", "message": "Relay setup failed."})
 
         case "skip":
-            from mcp_core import set_local_mode
+            from mcp_relay_core import set_local_mode
 
             from wet_mcp.credential_state import CredentialState, set_state
 
@@ -2079,44 +2079,9 @@ async def _do_immediate_fallback_search(
     return fallback_data
 
 
-async def run_http(port: int = 0) -> None:
-    """Run wet-mcp as local HTTP server with OAuth credential flow.
-
-    Starts an HTTP server on 127.0.0.1 with a local OAuth 2.1 AS that
-    serves a credential form. When the user submits API keys, they are
-    saved to config.enc and applied to the environment immediately.
-
-    Args:
-        port: TCP port to bind. 0 means auto-find a free port.
-    """
-    from mcp_core.transport.local_server import run_local_server
-
-    from wet_mcp.credential_state import save_credentials, set_gdrive_complete_callback
-    from wet_mcp.relay_schema import RELAY_SCHEMA
-
-    await run_local_server(
-        mcp,  # ty: ignore[invalid-argument-type]
-        server_name="wet-mcp",
-        relay_schema=RELAY_SCHEMA,
-        port=port,
-        on_credentials_saved=save_credentials,
-        setup_complete_hook=set_gdrive_complete_callback,
-    )
-
-
 def main() -> None:
-    """Entry point: HTTP by default, --stdio for backward compat.
-
-    HTTP mode (default): starts HTTP server on 127.0.0.1 with local
-    OAuth 2.1 AS for credential management via browser.
-
-    Stdio mode: ``--stdio`` flag or ``MCP_TRANSPORT=stdio`` env var.
-    Used by agents that communicate over stdin/stdout.
-    """
-    if "--stdio" in sys.argv or os.environ.get("MCP_TRANSPORT") == "stdio":
-        mcp.run()
-    else:
-        asyncio.run(run_http())
+    """Entry point for the MCP server."""
+    mcp.run()
 
 
 if __name__ == "__main__":  # pragma: no cover

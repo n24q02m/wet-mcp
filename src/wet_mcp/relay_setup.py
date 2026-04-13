@@ -31,7 +31,7 @@ RELAY_TIMEOUT_S = 300.0
 def load_config_from_file() -> dict[str, str] | None:
     """Try to load config from encrypted config file. Returns None if not found."""
     try:
-        from mcp_core.storage.config_file import read_config
+        from mcp_relay_core.storage.config_file import read_config
 
         saved = read_config(SERVER_NAME)
         if saved and any(saved.get(k) for k in CLOUD_KEYS):
@@ -79,7 +79,7 @@ async def ensure_config(
     # 3. No local credentials found (or forced) -- trigger relay setup
     logger.info("Starting relay setup...")
     try:
-        from mcp_core.relay.client import create_session, poll_for_result
+        from mcp_relay_core.relay.client import create_session, poll_for_result
 
         from .relay_schema import RELAY_SCHEMA
 
@@ -98,7 +98,7 @@ async def ensure_config(
         config = await poll_for_result(relay_url, session, timeout_s=timeout)  # ty: ignore[invalid-argument-type]
 
         # Save to config file for future use
-        from mcp_core.storage.config_file import write_config
+        from mcp_relay_core.storage.config_file import write_config
 
         write_config(SERVER_NAME, config)
         logger.info("Config saved successfully")

@@ -40,7 +40,7 @@ _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
 _DRIVE_UPLOAD_BASE = "https://www.googleapis.com/upload/drive/v3"
 
-# OAuth scope: access only files created by this app
+# OAuth scope: only access files created by this app
 _SCOPE = "https://www.googleapis.com/auth/drive.file"
 
 # Device code flow grant type
@@ -630,13 +630,6 @@ async def setup_google_auth(
     verification_url = device_data["verification_url"]
     interval = device_data.get("interval", 5)
     expires_in = device_data.get("expires_in", 1800)
-
-    # Do NOT auto-open the browser from the background sync path: this
-    # function is also hit by the periodic sync loop (every SYNC_INTERVAL
-    # seconds) whenever the refresh token is missing or revoked, and we
-    # don't want to surprise an idle user with repeated tabs. The
-    # user-initiated form path (credential_state.gdrive_next_step) is the
-    # correct place to open the browser; here we just log the URL.
 
     # 2. Present code to user
     auth_message = (

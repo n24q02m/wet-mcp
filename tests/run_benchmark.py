@@ -278,14 +278,14 @@ async def main():
                 t = text
                 if is_query and isinstance(b, Qwen3EmbedBackend):
                     t = f"Instruct: Retrieve relevant technical documentation\nQuery: {text}"
-                vec = await b.embed_single(t, 768)
+                vec = await asyncio.to_thread(b.embed_single, t, 768)
                 return vec[:768] if len(vec) > 768 else vec
 
             async def _embed_batch(texts):
                 b = get_backend()
                 if not b:
                     return None
-                vecs = await b.embed_texts(texts, 768)
+                vecs = await asyncio.to_thread(b.embed_texts, texts, 768)
                 return [v[:768] if len(v) > 768 else v for v in vecs]
 
             embed_fn = _embed
