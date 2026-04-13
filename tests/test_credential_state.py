@@ -907,3 +907,192 @@ class TestSaveCredentialsGdriveNextStep:
             result = save_credentials({"FOO": "bar"})
 
         assert result is None
+
+    def test_provider_reinit_failure_non_fatal(self):
+        """save_credentials swallows provider re-init errors."""
+        from wet_mcp.credential_state import save_credentials
+
+        with (
+            patch("mcp_core.storage.config_file.write_config"),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
+            patch("wet_mcp.config.settings") as mock_settings,
+        ):
+            mock_settings.setup_providers = MagicMock(
+                side_effect=RuntimeError("init failed")
+            )
+            mock_settings.google_drive_client_id = ""
+            mock_settings.google_drive_client_secret = ""
+            # Should not raise
+            result = save_credentials({"FOO": "bar"})
+            assert result is None
+
+    def test_device_code_request_exception_non_fatal(self):
+        """save_credentials swallows httpx.post exceptions for device code."""
+        from wet_mcp.credential_state import save_credentials
+
+        with (
+            patch("mcp_core.storage.config_file.write_config"),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
+            patch("wet_mcp.config.settings") as mock_settings,
+            patch("httpx.post", side_effect=ConnectionError("oauth down")),
+        ):
+            mock_settings.google_drive_client_id = "cid"
+            mock_settings.google_drive_client_secret = "csec"
+            mock_settings.setup_providers = MagicMock()
+            result = save_credentials({"FOO": "bar"})
+            assert result is None
+
+
+class TestSetGdriveCompleteCallback:
+    def test_callback_registration(self):
+        """set_gdrive_complete_callback stores the callback."""
+        import wet_mcp.credential_state as mod
+        from wet_mcp.credential_state import set_gdrive_complete_callback
+
+        def cb():
+            pass
+
+        set_gdrive_complete_callback(cb)
+        assert mod._on_gdrive_complete is cb
+        # cleanup
+        mod._on_gdrive_complete = None
+
+
+class TestShareCloudKeysOuterException:
+    def test_outer_import_error_non_fatal(self):
+        """Outer ImportError for write_config should be swallowed."""
+        import builtins
+
+        from wet_mcp.credential_state import _share_cloud_keys_to_peers
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "mcp_core.storage.config_file":
+                raise ImportError("no mcp_core")
+            return real_import(name, *args, **kwargs)
+
+        with patch.object(builtins, "__import__", side_effect=fake_import):
+            # Should not raise
+            _share_cloud_keys_to_peers({"GEMINI_API_KEY": "key"})
+
+
+class TestGdriveTokenPoll:
+    """Cover _gdrive_token_poll success / slow_down / error / expiry branches."""
+
+    async def _run_poll(self, responses):
+        """Helper: run _gdrive_token_poll with a sequence of mock responses."""
+        from wet_mcp.credential_state import _gdrive_token_poll
+
+        class _FakeResp:
+            def __init__(self, data):
+                self._data = data
+
+            def json(self):
+                return self._data
+
+        it = iter(responses)
+
+        async def fake_post(*a, **kw):
+            try:
+                return _FakeResp(next(it))
+            except StopIteration:
+                return _FakeResp({"error": "authorization_pending"})
+
+        class _FakeClient:
+            def __init__(self, *a, **kw):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def post(self, *a, **kw):
+                return await fake_post(*a, **kw)
+
+        async def fake_sleep(_):
+            return None
+
+        with (
+            patch("httpx.AsyncClient", _FakeClient),
+            patch("asyncio.sleep", new=fake_sleep),
+        ):
+            await _gdrive_token_poll("cid", "csec", "devcode", 1, 1)
+
+    async def test_success_saves_token_and_calls_callback(self):
+        import wet_mcp.credential_state as mod
+
+        cb_called = []
+        mod._on_gdrive_complete = lambda: cb_called.append(True)
+        try:
+            with patch("wet_mcp.token_store.save_token") as mock_save:
+                await self._run_poll(
+                    [{"access_token": "tok-abc", "refresh_token": "r"}]
+                )
+                mock_save.assert_called_once()
+                assert cb_called == [True]
+        finally:
+            mod._on_gdrive_complete = None
+
+    async def test_success_callback_exception_non_fatal(self):
+        import wet_mcp.credential_state as mod
+
+        def bad_cb():
+            raise RuntimeError("cb died")
+
+        mod._on_gdrive_complete = bad_cb
+        try:
+            with patch("wet_mcp.token_store.save_token"):
+                await self._run_poll([{"access_token": "tok-abc"}])
+        finally:
+            mod._on_gdrive_complete = None
+
+    async def test_slow_down_increases_interval(self):
+        # slow_down then success
+        with patch("wet_mcp.token_store.save_token") as mock_save:
+            await self._run_poll(
+                [
+                    {"error": "slow_down"},
+                    {"access_token": "tok"},
+                ]
+            )
+            mock_save.assert_called_once()
+
+    async def test_generic_error_returns(self):
+        # unknown error returns without saving
+        with patch("wet_mcp.token_store.save_token") as mock_save:
+            await self._run_poll([{"error": "access_denied"}])
+            mock_save.assert_not_called()
+
+    async def test_post_exception_non_fatal_and_expires(self):
+        """Post raising should be caught; deadline expiry exits loop."""
+        from wet_mcp.credential_state import _gdrive_token_poll
+
+        class _FailingClient:
+            def __init__(self, *a, **kw):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def post(self, *a, **kw):
+                raise ConnectionError("boom")
+
+        async def fake_sleep(_):
+            return None
+
+        with (
+            patch("httpx.AsyncClient", _FailingClient),
+            patch("asyncio.sleep", new=fake_sleep),
+            patch("wet_mcp.token_store.save_token") as mock_save,
+        ):
+            # expires_in=0 ensures deadline already passed on next iteration
+            await _gdrive_token_poll("cid", "csec", "dev", 0, 0)
+            mock_save.assert_not_called()
