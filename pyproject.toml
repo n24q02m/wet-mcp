@@ -52,7 +52,7 @@ dependencies = [
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
     # Relay setup (zero-env-config)
-    "n24q02m-mcp-core>=1.0.0b4",
+    "n24q02m-mcp-core>=1.0.0",
     # Google Drive sync
     "google-api-python-client>=2.194.0",
     "google-auth>=2.49.2",
