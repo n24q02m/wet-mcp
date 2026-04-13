@@ -361,6 +361,13 @@ def save_credentials(config: dict[str, str]) -> dict | None:
 
                 threading.Thread(target=_poll_gdrive_token, daemon=True).start()
 
+                # Auto-launch the default browser at Google's device-code page.
+                # Best-effort -- headless hosts silently no-op and the user
+                # still sees the URL rendered in the credential form.
+                from mcp_core import try_open_browser
+
+                try_open_browser(device_data["verification_url"])
+
                 return {
                     "type": "oauth_device_code",
                     "verification_url": device_data["verification_url"],

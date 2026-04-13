@@ -631,6 +631,14 @@ async def setup_google_auth(
     interval = device_data.get("interval", 5)
     expires_in = device_data.get("expires_in", 1800)
 
+    # Auto-launch the default browser at Google's device-code page.
+    try:
+        from mcp_core import try_open_browser
+
+        try_open_browser(verification_url)
+    except Exception:
+        pass
+
     # 2. Present code to user
     auth_message = (
         f"Google Drive Authorization\n"
