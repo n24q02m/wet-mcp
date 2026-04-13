@@ -94,7 +94,7 @@ def is_safe_local_path(
         return None
 
     # 4. Check against allowed directories
-    if allowed_dirs:
+    if allowed_dirs is not None:
         if not any(p.is_relative_to(d.resolve()) for d in allowed_dirs):
             logger.warning(f"Blocked path outside allowed dirs: {p}")
             return None
