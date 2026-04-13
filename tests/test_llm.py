@@ -8,7 +8,19 @@ import pytest
 from pydantic import SecretStr
 
 from wet_mcp.config import settings
-from wet_mcp.llm import analyze_media, get_llm_config
+from wet_mcp.llm import (
+    _AUDIO_INPUT_MODELS,
+    _AUDIO_OUTPUT_MODELS,
+    _VISION_MODELS,
+    _detect_provider,
+    _has_llm_provider,
+    _read_and_truncate,
+    _strip_provider,
+    analyze_media,
+    encode_image,
+    get_llm_config,
+    get_model_capabilities,
+)
 
 
 @pytest.fixture
@@ -221,7 +233,6 @@ def test_analyze_media_path_traversal(mock_settings, tmp_path):
 
 async def test_encode_image_valid(tmp_path):
     """Test encode_image with a valid image file."""
-    from wet_mcp.llm import encode_image
 
     img_path = tmp_path / "test.png"
     img_path.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00")
@@ -235,7 +246,6 @@ async def test_encode_image_valid(tmp_path):
 
 async def test_encode_image_not_found(tmp_path):
     """Test encode_image with a non-existent file raises FileNotFoundError."""
-    from wet_mcp.llm import encode_image
 
     with pytest.raises(FileNotFoundError):
         await encode_image(str(tmp_path / "nonexistent.png"))
@@ -243,7 +253,6 @@ async def test_encode_image_not_found(tmp_path):
 
 async def test_encode_image_empty(tmp_path):
     """Test encode_image with an empty file."""
-    from wet_mcp.llm import encode_image
 
     img_path = tmp_path / "empty.png"
     img_path.write_bytes(b"")
@@ -253,7 +262,6 @@ async def test_encode_image_empty(tmp_path):
 
 async def test_read_and_truncate(tmp_path):
     """Test _read_and_truncate reads and truncates properly."""
-    from wet_mcp.llm import _read_and_truncate
 
     # Test small file
     txt_path = tmp_path / "small.txt"
@@ -309,10 +317,44 @@ def test_analyze_media_tilde_download_dir(mock_settings, tmp_path, monkeypatch):
     assert "Access denied" not in result
 
 
-def test_get_model_capabilities():
-    """Test capability detection with hardcoded maps."""
-    from wet_mcp.llm import get_model_capabilities
 
+def test_get_model_capabilities_comprehensive():
+    """Test all hardcoded models for vision and audio input."""
+    for model in _VISION_MODELS:
+        caps = get_model_capabilities(f"provider/{model}")
+        assert caps["vision"] is True, f"Model {model} should have vision"
+
+    for model in _AUDIO_INPUT_MODELS:
+        caps = get_model_capabilities(model)
+        assert caps["audio_input"] is True, f"Model {model} should have audio input"
+
+
+def test_get_model_capabilities_audio_output():
+    """Test audio output capability (mocking the currently empty set)."""
+    with patch("wet_mcp.llm._AUDIO_OUTPUT_MODELS", {"test-audio-model"}):
+        caps = get_model_capabilities("test-audio-model")
+        assert caps["audio_output"] is True
+
+        caps = get_model_capabilities("other-model")
+        assert caps["audio_output"] is False
+
+
+def test_get_model_capabilities_edge_cases():
+    """Test edge cases for model naming."""
+    # Multiple slashes - should take everything after the first slash
+    assert get_model_capabilities("provider/part1/part2")["vision"] is False
+
+    # Empty string
+    caps = get_model_capabilities("")
+    assert not any(caps.values())
+
+    # Whitespace
+    caps = get_model_capabilities("  gemini-2.5-flash  ")
+    assert not any(caps.values())
+
+
+def test_get_model_capabilities_legacy():
+    """Test capability detection with hardcoded maps (legacy cases)."""
     # Vision + audio model
     caps = get_model_capabilities("gemini/gemini-3-flash-preview")
     assert caps == {
@@ -337,28 +379,19 @@ def test_get_model_capabilities():
         "audio_output": False,
     }
 
-
-def test_get_model_capabilities_bare_name():
-    """Test capability detection with bare model names (no provider prefix)."""
-    from wet_mcp.llm import get_model_capabilities
-
-    caps = get_model_capabilities("gemini-2.5-flash")
-    assert caps["vision"] is True
-    assert caps["audio_input"] is True
-
-
 def test_strip_provider():
     """Test provider prefix stripping."""
-    from wet_mcp.llm import _strip_provider
-
     assert _strip_provider("gemini/gemini-3-flash-preview") == "gemini-3-flash-preview"
     assert _strip_provider("openai/gpt-4") == "gpt-4"
     assert _strip_provider("bare-model") == "bare-model"
+    assert _strip_provider("a/b/c") == "b/c"
+    assert _strip_provider("/b") == "b"
+    assert _strip_provider("b/") == ""
+    assert _strip_provider("/") == ""
 
 
 def test_detect_provider():
     """Test provider detection from model name."""
-    from wet_mcp.llm import _detect_provider
 
     assert _detect_provider("gemini/gemini-3-flash-preview") == "gemini"
     assert _detect_provider("openai/gpt-4") == "openai"
@@ -368,7 +401,6 @@ def test_detect_provider():
 
 def test_has_llm_provider():
     """Test LLM provider detection."""
-    from wet_mcp.llm import _has_llm_provider
 
     with patch.dict(os.environ, {}, clear=True):
         assert _has_llm_provider() is False
