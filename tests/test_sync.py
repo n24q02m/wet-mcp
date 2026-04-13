@@ -680,69 +680,6 @@ class TestSetupGoogleAuth:
 
             assert await sync.setup_google_auth() is False
 
-    @pytest.mark.asyncio
-    async def test_opens_browser_and_times_out_on_poll(self):
-        """setup_google_auth fires try_open_browser at verification URL and
-        exits False when polling exhausts the deadline."""
-        device_resp = MagicMock()
-        device_resp.status_code = 200
-        device_resp.json = MagicMock(
-            return_value={
-                "device_code": "dev",
-                "user_code": "USER",
-                "verification_url": "https://example.test/verify",
-                "interval": 0,
-                "expires_in": 0,
-            }
-        )
-
-        with (
-            patch("wet_mcp.sync.settings.google_drive_client_id", "cid"),
-            patch("wet_mcp.sync.settings.google_drive_client_secret", "csec"),
-            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
-            patch("mcp_core.try_open_browser") as mock_browser,
-        ):
-            mock_instance = AsyncMock()
-            mock_instance.post = AsyncMock(return_value=device_resp)
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await sync.setup_google_auth()
-            assert result is False
-            mock_browser.assert_called_once_with("https://example.test/verify")
-
-    @pytest.mark.asyncio
-    async def test_browser_open_failure_is_swallowed(self):
-        """setup_google_auth keeps going when try_open_browser raises."""
-        device_resp = MagicMock()
-        device_resp.status_code = 200
-        device_resp.json = MagicMock(
-            return_value={
-                "device_code": "dev",
-                "user_code": "USER",
-                "verification_url": "https://example.test/verify",
-                "interval": 0,
-                "expires_in": 0,
-            }
-        )
-
-        with (
-            patch("wet_mcp.sync.settings.google_drive_client_id", "cid"),
-            patch("wet_mcp.sync.settings.google_drive_client_secret", "csec"),
-            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
-            patch(
-                "mcp_core.try_open_browser",
-                side_effect=RuntimeError("no display"),
-            ),
-        ):
-            mock_instance = AsyncMock()
-            mock_instance.post = AsyncMock(return_value=device_resp)
-            mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
-            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            # Must not raise; returns False after deadline.
-            assert await sync.setup_google_auth() is False
-
     async def test_exception(self):
         token = {"access_token": "valid"}
 

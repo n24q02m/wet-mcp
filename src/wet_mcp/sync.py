@@ -631,13 +631,12 @@ async def setup_google_auth(
     interval = device_data.get("interval", 5)
     expires_in = device_data.get("expires_in", 1800)
 
-    # Auto-launch the default browser at Google's device-code page.
-    try:
-        from mcp_core import try_open_browser
-
-        try_open_browser(verification_url)
-    except Exception:
-        pass
+    # Do NOT auto-open the browser from the background sync path: this
+    # function is also hit by the periodic sync loop (every SYNC_INTERVAL
+    # seconds) whenever the refresh token is missing or revoked, and we
+    # don't want to surprise an idle user with repeated tabs. The
+    # user-initiated form path (credential_state.gdrive_next_step) is the
+    # correct place to open the browser; here we just log the URL.
 
     # 2. Present code to user
     auth_message = (
