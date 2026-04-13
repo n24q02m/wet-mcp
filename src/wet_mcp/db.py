@@ -791,7 +791,9 @@ class DocsDB:
             # This avoids the N+1 query problem by batching multiple (url, version_id, chunk_index) tuples.
             # We use sorted(set()) to ensure uniqueness and improve cache locality.
             _unique_keys = sorted(set(_adj_keys))
-            _batch_size = (32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999) // 3
+            _batch_size = (
+                32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
+            ) // 3
 
             for i in range(0, len(_unique_keys), _batch_size):
                 _batch = _unique_keys[i : i + _batch_size]

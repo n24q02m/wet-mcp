@@ -3377,6 +3377,7 @@ def test_apply_version_to_url_other_site():
     result = _apply_version_to_url(url, "3.12")
     assert result == url
 
+
 def test_chunk_llms_txt_parameters():
     """Verify chunk_llms_txt calls chunk_markdown with specific parameters."""
     content = "# Title\n\nSome content."
