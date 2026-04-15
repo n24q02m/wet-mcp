@@ -1911,6 +1911,18 @@ async def try_llms_txt(base_url: str) -> str | None:
     return None
 
 
+# ⚡ Bolt Optimization: Pre-compile regexes at module level to avoid recompilation overhead
+# in frequently called functions like _is_toc_only and _strip_nav_heading_blocks.
+_TOC_LINE_RE = re.compile(
+    r"^[-*]\s*\[.+?\]\(.+?\)\s*$"  # - [Title](url) or * [Title](url)
+    r"|^\[.+?\]\(.+?\)\s*$"  # [Title](url) bare
+    r"|^https?://\S+\s*$"  # bare URL
+    r"|^>\s*[-*]?\s*\[.+?\]\(.+?\)"  # > - [Title](url) quoted
+)
+
+_ANY_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
+
+
 def _is_toc_only(content: str) -> bool:
     """Check if content is mostly a table of contents (links only).
 
@@ -1922,13 +1934,7 @@ def _is_toc_only(content: str) -> bool:
         return True
 
     # Patterns that indicate a TOC line (not actual content)
-    link_pattern = re.compile(
-        r"^[-*]\s*\[.+?\]\(.+?\)\s*$"  # - [Title](url) or * [Title](url)
-        r"|^\[.+?\]\(.+?\)\s*$"  # [Title](url) bare
-        r"|^https?://\S+\s*$"  # bare URL
-        r"|^>\s*[-*]?\s*\[.+?\]\(.+?\)"  # > - [Title](url) quoted
-    )
-    toc_lines = sum(1 for line in lines if link_pattern.match(line))
+    toc_lines = sum(1 for line in lines if _TOC_LINE_RE.match(line))
 
     # Also count heading-only lines (# Title without body)
     heading_lines = sum(1 for line in lines if line.startswith("#"))
@@ -2050,12 +2056,11 @@ def _strip_nav_heading_blocks(content: str) -> str:
     between them, they are stripped as navigation artifacts.
     """
     lines = content.splitlines()
-    heading_re = re.compile(r"^(#{1,6})\s+(.+)$")
 
     # Build heading map: line_index -> (level, text)
     headings: dict[int, tuple[int, str]] = {}
     for i, line in enumerate(lines):
-        m = heading_re.match(line.lstrip())
+        m = _ANY_HEADING_RE.match(line.lstrip())
         if m:
             headings[i] = (len(m.group(1)), m.group(2))
 
@@ -2684,6 +2689,9 @@ _KNOWN_FRAMEWORKS = frozenset(
     {"react", "angular", "vue", "svelte", "solid", "qwik", "lit", "preact"}
 )
 
+# ⚡ Bolt Optimization: Pre-compile regex at module level
+_FRAMEWORK_DIR_RE = re.compile(r"(?:^|/)framework/(\w+)/")
+
 
 def _filter_framework_paths(paths: list[str], library_hint: str) -> list[str]:
     """Filter docs paths to matching framework variant in monorepo docs.
@@ -2692,12 +2700,11 @@ def _filter_framework_paths(paths: list[str], library_hint: str) -> list[str]:
     ``docs/framework/angular/...`` and keeps only the one matching
     the library name (e.g., ``@tanstack/react-query`` -> keep ``react``).
     """
-    framework_dir_re = re.compile(r"(?:^|/)framework/(\w+)/")
     framework_paths: dict[str, list[str]] = {}
     non_framework_paths: list[str] = []
 
     for p in paths:
-        match = framework_dir_re.search(p.lower())
+        match = _FRAMEWORK_DIR_RE.search(p.lower())
         if match and match.group(1) in _KNOWN_FRAMEWORKS:
             fw = match.group(1)
             framework_paths.setdefault(fw, []).append(p)
