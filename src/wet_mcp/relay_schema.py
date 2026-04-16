@@ -1,7 +1,5 @@
 """Config schema for relay page setup."""
 
-from __future__ import annotations
-
 from typing import Any
 
 RELAY_SCHEMA: dict[str, Any] = {
