@@ -17,8 +17,13 @@ import warnings
 
 # Fix Windows console encoding for Unicode output
 if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    import io
+    for _s in (sys.stdout, sys.stderr):
+        if _s is not None:
+            try:
+                _s.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, io.UnsupportedOperation):
+                pass
 
 # Suppress noisy ResourceWarnings from SearXNG subprocess cleanup
 warnings.filterwarnings("ignore", category=ResourceWarning)
