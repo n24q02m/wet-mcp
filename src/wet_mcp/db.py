@@ -917,24 +917,30 @@ class DocsDB:
             self._conn.execute("DELETE FROM versions")
             self._conn.execute("DELETE FROM libraries")
 
-        lines = data.strip().split("\n")
-
+        # Pre-allocate lists and cache append methods for performance
         libraries = []
         versions = []
         chunks = []
+        lib_append = libraries.append
+        ver_append = versions.append
+        chunk_append = chunks.append
 
-        for line in lines:
-            if not line.strip():
-                continue
-            obj = json.loads(line)
+        # Use list comprehension for faster JSON decoding of all lines
+        # splitlines() is more efficient than strip().split("\n")
+        all_objs = [
+            json.loads(line)
+            for line in data.splitlines()
+            if line and not line.isspace()
+        ]
+
+        for obj in all_objs:
             obj_type = obj.pop("_type", None)
-
             if obj_type == "library":
-                libraries.append(obj)
+                lib_append(obj)
             elif obj_type == "version":
-                versions.append(obj)
+                ver_append(obj)
             elif obj_type == "chunk":
-                chunks.append(obj)
+                chunk_append(obj)
 
         def _get_existing(table: str, items: list) -> set:
             if table not in {"libraries", "versions", "doc_chunks"}:
