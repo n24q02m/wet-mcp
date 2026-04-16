@@ -128,6 +128,74 @@ class TestResolveCredentialState:
             result = resolve_credential_state()
             assert result == CredentialState.AWAITING_SETUP
 
+    def test_config_file_invalid_type(self, monkeypatch):
+        """Invalid type from read_config triggers exception and falls through."""
+        for k in CLOUD_KEYS:
+            monkeypatch.delenv(k, raising=False)
+
+        with (
+            patch(
+                "mcp_core.storage.config_file.read_config",
+                return_value=["not", "a", "dict"],
+            ),
+            patch(
+                "mcp_core.get_mode",
+                return_value=None,
+            ),
+        ):
+            result = resolve_credential_state()
+            assert result == CredentialState.AWAITING_SETUP
+
+    def test_config_file_share_keys_failure_falls_through(self, monkeypatch):
+        """Failure in _share_cloud_keys_to_peers is caught and falls through."""
+        for k in CLOUD_KEYS:
+            monkeypatch.delenv(k, raising=False)
+
+        saved = {"GEMINI_API_KEY": "from-file"}
+        with (
+            patch(
+                "mcp_core.storage.config_file.read_config",
+                return_value=saved,
+            ),
+            patch(
+                "wet_mcp.credential_state._share_cloud_keys_to_peers",
+                side_effect=RuntimeError("share failed"),
+            ),
+            patch(
+                "mcp_core.get_mode",
+                return_value=None,
+            ),
+        ):
+            result = resolve_credential_state()
+            # Since _share_cloud_keys_to_peers is called inside the try block,
+            # its failure will trigger the except Exception and fallback to next step
+            # (which is local mode check, then AWAITING_SETUP)
+            assert result == CredentialState.AWAITING_SETUP
+
+    def test_config_file_import_error(self, monkeypatch):
+        """Import error for read_config is caught and falls through."""
+        for k in CLOUD_KEYS:
+            monkeypatch.delenv(k, raising=False)
+
+        import builtins
+
+        real_import = builtins.__import__
+
+        def fake_import(name, *args, **kwargs):
+            if name == "mcp_core.storage.config_file":
+                raise ImportError("mock import error")
+            return real_import(name, *args, **kwargs)
+
+        with (
+            patch.object(builtins, "__import__", side_effect=fake_import),
+            patch(
+                "mcp_core.get_mode",
+                return_value=None,
+            ),
+        ):
+            result = resolve_credential_state()
+            assert result == CredentialState.AWAITING_SETUP
+
     def test_local_mode_marker(self, monkeypatch):
         """When local mode marker is set, state = LOCAL."""
         for k in CLOUD_KEYS:
