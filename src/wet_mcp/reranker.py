@@ -39,6 +39,7 @@ class RerankerBackend(Protocol):
             top_n: Return top N results.
 
         Returns:
+
             List of (original_index, score) tuples, sorted by score descending.
         """
         ...
@@ -58,7 +59,7 @@ class CohereReranker:
 
     DEFAULT_MODEL = "rerank-v4.0-pro"
 
-    def __init__(self, model: str | None = None, api_key: str | None = None):
+    def __init__(self, model: str | None = None, api_key: str | None = None) -> None:
         self.model = model or self.DEFAULT_MODEL
         self.api_key = api_key or os.environ.get(
             "COHERE_API_KEY", os.environ.get("CO_API_KEY", "")
@@ -145,7 +146,7 @@ class Qwen3Reranker:
 
     DEFAULT_MODEL = "n24q02m/Qwen3-Reranker-0.6B-ONNX"
 
-    def __init__(self, model_name: str | None = None):
+    def __init__(self, model_name: str | None = None) -> None:
         self._model_name = model_name or self.DEFAULT_MODEL
         self._model = None
 
@@ -218,7 +219,6 @@ def init_reranker(
     backend_type: str,
     model: str | None = None,
     api_key: str | None = None,
-    **kwargs,
 ) -> RerankerBackend:
     """Initialize and cache the reranker backend.
 
@@ -226,9 +226,8 @@ def init_reranker(
         backend_type: 'cloud' or 'local'
         model: Model name (optional for cloud, defaults to rerank-v4.0-pro)
         api_key: Custom API key (cloud only)
-        **kwargs: Additional keyword arguments (ignored, for backward compatibility)
-
     Returns:
+
         Initialized reranker backend instance.
     """
     global _backend
