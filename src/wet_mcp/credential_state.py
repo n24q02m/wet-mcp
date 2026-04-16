@@ -192,21 +192,9 @@ async def _poll_relay_background(
         # Save config
         write_config(SERVER_NAME, config)
 
-        # Apply to env
-        for key, value in config.items():
-            if value and key not in os.environ:
-                os.environ[key] = value
-
-        _state = CredentialState.CONFIGURED
+        # Apply to environment, update state, and re-init providers
+        _apply_config_and_reinit(config)
         logger.info("Relay config applied successfully")
-
-        # Re-init providers
-        from wet_mcp.config import settings
-
-        settings.setup_providers()
-
-        # Share cloud keys with mnemo-mcp and CRG (same keys, avoid separate relay)
-        _share_cloud_keys_to_peers(config)
 
         # Google Drive OAuth via relay messaging (best-effort)
         session_id = getattr(session, "session_id", None)
@@ -282,32 +270,17 @@ def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
         )
 
 
-def save_credentials(config: dict[str, str]) -> dict | None:
-    """Save credentials from OAuth form to config.enc and apply to environment.
-
-    Called by the local OAuth AS when the user submits API keys via the
-    browser form. Writes to encrypted config file, applies to env vars
-    for immediate use, re-initializes providers, and shares keys with
-    sibling MCP servers.
-
-    Returns optional dict with next_step info (e.g., GDrive device code)
-    for the form to display.
-    """
+def _apply_config_and_reinit(config: dict[str, str]) -> None:
+    """Apply config to environment, update state, and re-init providers."""
     global _state
 
-    from mcp_core.storage.config_file import write_config
-
     from wet_mcp.relay_setup import apply_config
-
-    # Persist to encrypted config file
-    write_config(SERVER_NAME, config)
 
     # Apply to environment for immediate use
     apply_config(config)
 
     # Update state
     _state = CredentialState.CONFIGURED
-    logger.info("Credentials saved via local OAuth form")
 
     # Re-init providers so new keys take effect immediately
     try:
@@ -322,7 +295,12 @@ def save_credentials(config: dict[str, str]) -> dict | None:
     # Share cloud keys with sibling servers
     _share_cloud_keys_to_peers(config)
 
-    # Trigger GDrive OAuth Device Code flow if configured
+
+def _initiate_gdrive_device_flow() -> dict | None:
+    """Trigger GDrive OAuth Device Code flow if configured.
+
+    Returns optional dict with device code info for the form to display.
+    """
     try:
         from wet_mcp.config import settings as s
 
@@ -362,8 +340,6 @@ def save_credentials(config: dict[str, str]) -> dict | None:
                 threading.Thread(target=_poll_gdrive_token, daemon=True).start()
 
                 # Auto-launch the default browser at Google's device-code page.
-                # Best-effort -- headless hosts silently no-op and the user
-                # still sees the URL rendered in the credential form.
                 from mcp_core import try_open_browser
 
                 try_open_browser(device_data["verification_url"])
@@ -377,8 +353,31 @@ def save_credentials(config: dict[str, str]) -> dict | None:
         logger.opt(exception=True).debug(
             "GDrive device code request failed (non-fatal)"
         )
-
     return None
+
+
+def save_credentials(config: dict[str, str]) -> dict | None:
+    """Save credentials from OAuth form to config.enc and apply to environment.
+
+    Called by the local OAuth AS when the user submits API keys via the
+    browser form. Writes to encrypted config file, applies to env vars
+    for immediate use, re-initializes providers, and shares keys with
+    sibling MCP servers.
+
+    Returns optional dict with next_step info (e.g., GDrive device code)
+    for the form to display.
+    """
+    from mcp_core.storage.config_file import write_config
+
+    # Persist to encrypted config file
+    write_config(SERVER_NAME, config)
+
+    # Apply to environment, update state, and re-init providers
+    _apply_config_and_reinit(config)
+    logger.info("Credentials saved via local OAuth form")
+
+    # Trigger GDrive OAuth Device Code flow if configured
+    return _initiate_gdrive_device_flow()
 
 
 async def _gdrive_token_poll(
