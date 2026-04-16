@@ -7,8 +7,6 @@ Resolution order (relay only when ALL local sources are empty):
 4. LOCAL MODE        -- Fallback (ONNX embedding, SearXNG search)
 """
 
-from __future__ import annotations
-
 import os
 import sys
 
