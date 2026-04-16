@@ -1706,3 +1706,58 @@ class TestVecSearchChunkLoading:
             assert any("different topic" in c for c in all_contents)
         finally:
             db.close()
+
+
+class TestSqliteVecLoadFailure:
+    """Cover lines 178-185: handle sqlite-vec load failure gracefully."""
+
+    def test_sqlite_vec_load_failure_disables_vec(self, tmp_path):
+        """When sqlite-vec load fails, db falls back to FTS-only mode."""
+        db_path = tmp_path / "vec_fail.db"
+        mock_sqlite_vec = MagicMock()
+        mock_sqlite_vec.load.side_effect = Exception("Synthetic load failure")
+
+        with patch.dict(sys.modules, {"sqlite_vec": mock_sqlite_vec}):
+            # Ensure any cached module is bypassed
+            if "sqlite_vec" in sys.modules:
+                del sys.modules["sqlite_vec"]
+            sys.modules["sqlite_vec"] = mock_sqlite_vec
+
+            db = DocsDB(db_path, embedding_dims=1536)
+            try:
+                assert db._vec_enabled is False
+            finally:
+                db.close()
+
+    def test_enable_load_extension_failure(self, tmp_path):
+        """When enable_load_extension fails (e.g. on macOS CI), it handles it."""
+        db_path = tmp_path / "ext_fail.db"
+
+        # Mock connection to raise on enable_load_extension
+        original_connect = _db_mod.sqlite3.connect
+
+        def mock_connect(*args, **kwargs):
+            conn = original_connect(*args, **kwargs)
+            # Some sqlite3 builds don't even have this method
+            if hasattr(conn, "enable_load_extension"):
+                with patch.object(
+                    conn, "enable_load_extension", side_effect=Exception("not allowed")
+                ):
+                    return conn
+            return conn
+
+        # We need to patch sqlite3.connect inside the DocsDB context
+        # But DocsDB uses sqlite3 directly.
+        # Easier to mock the connection object after it's created if we can,
+        # but DocsDB creates it in __init__.
+
+        with patch("sqlite3.connect") as mock_conn_factory:
+            mock_conn = MagicMock()
+            # Minimal set of what DocsDB.__init__ calls
+            mock_conn.execute.return_value = MagicMock()
+            mock_conn.enable_load_extension.side_effect = Exception("not allowed")
+            mock_conn_factory.return_value = mock_conn
+
+            db = DocsDB(db_path, embedding_dims=1536)
+            assert db._vec_enabled is False
+            db.close()
