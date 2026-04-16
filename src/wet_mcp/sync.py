@@ -243,7 +243,6 @@ async def _find_or_create_folder(token: dict, folder_name: str) -> str | None:
             return saved_id
 
     # 3. Search by name on Drive (retry for eventual consistency)
-    import asyncio
 
     query = (
         f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' "
