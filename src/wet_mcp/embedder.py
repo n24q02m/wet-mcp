@@ -14,8 +14,6 @@ Backend selection (always returns a valid backend):
 Embeddings are truncated to fixed dims in server._embed().
 """
 
-from __future__ import annotations
-
 import asyncio
 import os
 from typing import Protocol
