@@ -30,28 +30,41 @@ from loguru import logger
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 1.0  # seconds, doubles each retry
 
+# Pre-defined patterns for error classification to avoid repeated allocations.
+_RETRYABLE_PATTERNS = (
+    "rate limit",
+    "rate_limit",
+    "429",
+    "quota",
+    "too many requests",
+    "500",
+    "502",
+    "503",
+    "504",
+    "timeout",
+    "timed out",
+    "connection",
+    "temporarily unavailable",
+    "unavailable",
+    "overloaded",
+)
+
+_UNSUPPORTED_DIM_PATTERNS = (
+    "dimensions",
+    "output_dimension",
+    "output_dimensionality",
+    "unexpected keyword argument",
+    "invalid argument",
+    "unsupported parameter",
+)
+
+_INVALID_KEY_PATTERNS = ("401", "403", "invalid", "unauthorized", "api key")
+
 
 def _is_retryable(exc: Exception) -> bool:
     """Check if an exception is transient and worth retrying."""
     msg = str(exc).lower()
-    retryable_patterns = [
-        "rate limit",
-        "rate_limit",
-        "429",
-        "quota",
-        "too many requests",
-        "500",
-        "502",
-        "503",
-        "504",
-        "timeout",
-        "timed out",
-        "connection",
-        "temporarily unavailable",
-        "unavailable",
-        "overloaded",
-    ]
-    return any(p in msg for p in retryable_patterns)
+    return any(p in msg for p in _RETRYABLE_PATTERNS)
 
 
 def _is_unsupported_param(exc: Exception, param: str) -> bool:
@@ -59,17 +72,7 @@ def _is_unsupported_param(exc: Exception, param: str) -> bool:
     msg = str(exc).lower()
     # "dimensions" parameter is the primary one we care about for fallback
     if param == "dimensions":
-        return any(
-            p in msg
-            for p in (
-                "dimensions",
-                "output_dimension",
-                "output_dimensionality",
-                "unexpected keyword argument",
-                "invalid argument",
-                "unsupported parameter",
-            )
-        )
+        return any(p in msg for p in _UNSUPPORTED_DIM_PATTERNS)
     return False
 
 
@@ -390,9 +393,7 @@ class CloudEmbeddingBackend:
             return 0
         except Exception as e:
             msg = str(e).lower()
-            if any(
-                p in msg for p in ("401", "403", "invalid", "unauthorized", "api key")
-            ):
+            if any(p in msg for p in _INVALID_KEY_PATTERNS):
                 logger.warning(
                     f"API key invalid for {self.model}: {e}. "
                     "Check your API_KEYS configuration."
