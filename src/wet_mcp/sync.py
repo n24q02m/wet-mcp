@@ -475,14 +475,8 @@ async def sync_pull(db_path: Path, folder_name: str) -> Path | None:
     return None
 
 
-async def sync_full(db: DocsDB) -> dict:
-    """Full sync cycle: pull -> merge -> push.
-
-    Returns:
-        Dict with sync results.
-    """
-    from wet_mcp.db import DocsDB
-
+async def _check_sync_readiness() -> dict | None:
+    """Check if sync is enabled and configured correctly."""
     if not settings.sync_enabled:
         return {"status": "disabled", "message": "Sync not configured"}
 
@@ -492,7 +486,6 @@ async def sync_full(db: DocsDB) -> dict:
             "message": "GOOGLE_DRIVE_CLIENT_ID not configured",
         }
 
-    # Check for valid token
     if not _has_token_available():
         return {
             "status": "error",
@@ -507,46 +500,16 @@ async def sync_full(db: DocsDB) -> dict:
             "message": "Google Drive token expired and refresh failed. "
             "Run setup_sync to re-authenticate.",
         }
+    return None
 
-    db_path = settings.get_db_path()
-    folder = settings.sync_folder
 
-    result: dict = {"status": "ok", "pull": None, "push": None}
+async def _pull_and_merge(db: DocsDB, db_path: Path, folder: str) -> dict:
+    """Pull remote DB and merge into local DB."""
+    from wet_mcp.db import DocsDB
 
-    # 1. Pull remote DB
     remote_db_path = await sync_pull(db_path, folder)
-    if remote_db_path:
-        try:
-            # Open remote DB and export JSONL
-            remote_db = DocsDB(remote_db_path, embedding_dims=0)
-            remote_jsonl = remote_db.export_jsonl()
-            remote_db.close()
-
-            # Import into local DB (merge mode - skip existing)
-            if remote_jsonl.strip():
-                import_result = db.import_jsonl(remote_jsonl, mode="merge")
-                result["pull"] = import_result
-                logger.info(f"Merged remote docs: {import_result}")
-            else:
-                result["pull"] = {
-                    "libraries": 0,
-                    "versions": 0,
-                    "chunks": 0,
-                    "skipped": 0,
-                }
-
-        except Exception as e:
-            logger.error(f"Merge failed: {e}")
-            result["pull"] = {"error": str(e)}
-        finally:
-            # Cleanup temp file
-            remote_db_path.unlink(missing_ok=True)
-            try:
-                remote_db_path.parent.rmdir()
-            except OSError:
-                pass
-    else:
-        result["pull"] = {
+    if not remote_db_path:
+        return {
             "libraries": 0,
             "versions": 0,
             "chunks": 0,
@@ -554,11 +517,60 @@ async def sync_full(db: DocsDB) -> dict:
             "note": "No remote DB found",
         }
 
+    try:
+        # Open remote DB and export JSONL
+        remote_db = DocsDB(remote_db_path, embedding_dims=0)
+        remote_jsonl = remote_db.export_jsonl()
+        remote_db.close()
+
+        # Import into local DB (merge mode - skip existing)
+        if remote_jsonl.strip():
+            import_result = db.import_jsonl(remote_jsonl, mode="merge")
+            logger.info(f"Merged remote docs: {import_result}")
+            return import_result
+        else:
+            return {
+                "libraries": 0,
+                "versions": 0,
+                "chunks": 0,
+                "skipped": 0,
+            }
+    except Exception as e:
+        logger.error(f"Merge failed: {e}")
+        return {"error": str(e)}
+    finally:
+        # Cleanup temp file
+        remote_db_path.unlink(missing_ok=True)
+        try:
+            remote_db_path.parent.rmdir()
+        except OSError:
+            pass
+
+
+async def sync_full(db: DocsDB) -> dict:
+    """Full sync cycle: pull -> merge -> push.
+
+    Returns:
+        Dict with sync results.
+    """
+    readiness_error = await _check_sync_readiness()
+    if readiness_error:
+        return readiness_error
+
+    db_path = settings.get_db_path()
+    folder = settings.sync_folder
+
+    # 1. Pull & Merge
+    pull_result = await _pull_and_merge(db, db_path, folder)
+
     # 2. Push local DB to remote
     push_ok = await sync_push(db_path, folder)
-    result["push"] = {"success": push_ok}
 
-    return result
+    return {
+        "status": "ok",
+        "pull": pull_result,
+        "push": {"success": push_ok},
+    }
 
 
 async def check_health() -> bool:
