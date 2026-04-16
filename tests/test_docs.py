@@ -414,13 +414,12 @@ class TestSplitPreservingCode:
         )
         chunks: list[dict] = []
         ctx = ChunkContext(title="title", heading_path="heading", url="url")
-        _split_preserving_code(
+        chunks.extend(_split_preserving_code(
             text,
-            chunks,
             ctx,
             max_chunk_size=100,
             min_chunk_size=20,
-        )
+        ))
         # Code block should be intact in one chunk
         code_chunks = [c for c in chunks if "```python" in c["content"]]
         assert len(code_chunks) >= 1
@@ -433,13 +432,12 @@ class TestSplitPreservingCode:
         )
         chunks: list[dict] = []
         ctx = ChunkContext(title="t", heading_path="h", url="u")
-        _split_preserving_code(
+        chunks.extend(_split_preserving_code(
             text,
-            chunks,
             ctx,
             max_chunk_size=200,
             min_chunk_size=20,
-        )
+        ))
         assert len(chunks) > 1
         # No chunk should exceed max by much
         for c in chunks:
@@ -452,13 +450,12 @@ class TestSplitPreservingCode:
         ctx = ChunkContext(
             title="My Title", heading_path="Section > Sub", url="https://example.com"
         )
-        _split_preserving_code(
+        chunks.extend(_split_preserving_code(
             text,
-            chunks,
             ctx,
             max_chunk_size=100,
             min_chunk_size=10,
-        )
+        ))
         assert len(chunks) >= 1
         for c in chunks:
             assert c["title"] == "My Title"
@@ -473,13 +470,13 @@ class TestSplitPreservingCode:
         ]
         text = "New content paragraph. " * 20
         ctx = ChunkContext(title="t", heading_path="h", url="u")
-        _split_preserving_code(
+        existing_chunks.extend(_split_preserving_code(
             text,
-            existing_chunks,
             ctx,
             max_chunk_size=100,
             min_chunk_size=10,
-        )
+            start_index=len(existing_chunks),
+        ))
         # New chunk indices should start from 2
         new_chunks = existing_chunks[2:]
         assert new_chunks[0]["chunk_index"] == 2

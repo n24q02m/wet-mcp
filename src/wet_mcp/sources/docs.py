@@ -18,6 +18,7 @@ import json
 import os
 import re
 import zlib
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -2209,6 +2210,56 @@ class ChunkContext:
     url: str
 
 
+def _extract_markdown_sections(
+    content: str, max_chunk_size: int
+) -> Iterator[tuple[str, str, str]]:
+    """Extract markdown sections by headings, tracking hierarchy.
+
+    Yields: (text, title, heading_path)
+    """
+    h1 = ""
+    h2 = ""
+    current_title = ""
+    heading_path = ""
+    current_lines: list[str] = []
+
+    for line in content.split("\n"):
+        heading_match = _HEADING_RE.match(line)
+        if heading_match:
+            level = len(heading_match.group(1))
+            heading_text = heading_match.group(2).strip()
+
+            if level <= 2:
+                text = "\n".join(current_lines).strip()
+                if text:
+                    yield text, current_title, heading_path
+
+                if level == 1:
+                    h1 = heading_text
+                    h2 = ""
+                else:
+                    h2 = heading_text
+                current_title = heading_text
+                heading_path = f"{h1} > {h2}" if h2 else h1
+                current_lines = []
+
+            elif level <= 4:
+                if len("\n".join(current_lines)) > max_chunk_size // 2:
+                    text = "\n".join(current_lines).strip()
+                    if text:
+                        yield text, current_title, heading_path
+                    current_lines = []
+
+                current_title = heading_text
+                heading_path = " > ".join(filter(None, [h1, h2, heading_text]))
+
+        current_lines.append(line)
+
+    text = "\n".join(current_lines).strip()
+    if text:
+        yield text, current_title, heading_path
+
+
 def chunk_markdown(
     content: str,
     url: str = "",
@@ -2230,79 +2281,38 @@ def chunk_markdown(
         return []
 
     chunks: list[dict] = []
-    current_title = ""
-    heading_path = ""
-    current_lines: list[str] = []
-
-    def _flush():
-        nonlocal current_lines
-        text = "\n".join(current_lines).strip()
+    for text, title, heading_path in _extract_markdown_sections(
+        content, max_chunk_size
+    ):
         if len(text) >= min_chunk_size:
-            # Split oversized chunks by double newline, preserving code blocks
             if len(text) > max_chunk_size:
-                ctx = ChunkContext(
-                    title=current_title, heading_path=heading_path, url=url
-                )
-                _split_preserving_code(
-                    text,
-                    chunks,
-                    ctx,
-                    max_chunk_size,
-                    min_chunk_size,
+                ctx = ChunkContext(title=title, heading_path=heading_path, url=url)
+                chunks.extend(
+                    _split_preserving_code(
+                        text, ctx, max_chunk_size, min_chunk_size, len(chunks)
+                    )
                 )
             else:
                 chunks.append(
                     {
                         "content": text,
-                        "title": current_title,
+                        "title": title,
                         "heading_path": heading_path,
                         "url": url,
                         "chunk_index": len(chunks),
                     }
                 )
-        current_lines = []
-
-    h1 = ""
-    h2 = ""
-
-    for line in content.split("\n"):
-        heading_match = _HEADING_RE.match(line)
-        if heading_match:
-            level = len(heading_match.group(1))
-            heading_text = heading_match.group(2).strip()
-
-            if level <= 2:
-                _flush()
-                if level == 1:
-                    h1 = heading_text
-                    h2 = ""
-                else:
-                    h2 = heading_text
-                current_title = heading_text
-                heading_path = f"{h1} > {h2}" if h2 else h1
-
-            elif level <= 4:
-                # Flush if current chunk is big enough
-                if len("\n".join(current_lines)) > max_chunk_size // 2:
-                    _flush()
-                current_title = heading_text
-                heading_path = " > ".join(filter(None, [h1, h2, heading_text]))
-
-        current_lines.append(line)
-
-    # Flush remaining
-    _flush()
 
     return chunks
 
 
 def _split_preserving_code(
     text: str,
-    chunks: list[dict],
     context: ChunkContext,
     max_chunk_size: int,
     min_chunk_size: int,
-) -> None:
+    start_index: int = 0,
+) -> list[dict]:
     """Split oversized text by paragraphs without breaking code blocks.
 
     Groups lines into segments separated by blank lines, but treats
@@ -2327,18 +2337,19 @@ def _split_preserving_code(
     if current_segment:
         segments.append("\n".join(current_segment))
 
+    results: list[dict] = []
     # Merge segments into chunks respecting max_chunk_size
     buffer = ""
     for seg in segments:
         if buffer and len(buffer) + len(seg) + 2 > max_chunk_size:
             if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
-                chunks.append(
+                results.append(
                     {
                         "content": buffer.strip(),
                         "title": context.title,
                         "heading_path": context.heading_path,
                         "url": context.url,
-                        "chunk_index": len(chunks),
+                        "chunk_index": start_index + len(results),
                     }
                 )
             buffer = seg
@@ -2346,15 +2357,16 @@ def _split_preserving_code(
             buffer = f"{buffer}\n\n{seg}" if buffer else seg
 
     if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
-        chunks.append(
+        results.append(
             {
                 "content": buffer.strip(),
                 "title": context.title,
                 "heading_path": context.heading_path,
                 "url": context.url,
-                "chunk_index": len(chunks),
+                "chunk_index": start_index + len(results),
             }
         )
+    return results
 
 
 def chunk_llms_txt(content: str, base_url: str = "") -> list[dict]:
