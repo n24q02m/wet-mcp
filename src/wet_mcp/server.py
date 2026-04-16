@@ -1533,6 +1533,7 @@ async def _chunk_pages(pages: list[dict]) -> list[dict]:
         chunks.extend(page_chunks)
     return chunks
 
+
 async def _try_tier_llms_txt(docs_url: str) -> list[dict] | None:
     """Tier 0: Try llms.txt (fastest, best quality)."""
     from wet_mcp.sources.docs import chunk_llms_txt, try_llms_txt
@@ -1584,7 +1585,6 @@ async def _try_tier_crawl(docs_url: str, query: str) -> tuple[list[dict], int] |
     return chunks, len(pages)
 
 
-
 async def _try_tier_readme_fallback(repo_url: str, docs_url: str) -> list[dict] | None:
     """Tier 3: Last-resort README fallback."""
     from wet_mcp.sources.docs import _fetch_github_readme
@@ -1597,7 +1597,6 @@ async def _try_tier_readme_fallback(repo_url: str, docs_url: str) -> list[dict] 
         )
         return readme_chunks
     return None
-
 
 
 async def _fetch_and_chunk_docs(
@@ -1667,6 +1666,7 @@ async def _fetch_and_chunk_docs(
 
     logger.info(f"Indexed {len(chunks)} chunks from {page_count} pages")
     return chunks, page_count
+
 
 # ---------------------------------------------------------------------------
 # Docs search (library documentation with auto-indexing)
