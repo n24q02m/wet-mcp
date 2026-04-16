@@ -1036,7 +1036,7 @@ class TestShareCloudKeysOuterException:
 
         # Passing None as config triggers AttributeError in shared = {...}
         with patch("mcp_core.storage.config_file.write_config"):
-            _share_cloud_keys_to_peers(None)
+            _share_cloud_keys_to_peers(None)  # type: ignore
 
 
 class TestGdriveTokenPoll:
