@@ -2964,6 +2964,147 @@ async def _fetch_github_readme(repo_url: str) -> list[dict] | None:
     return None
 
 
+async def _get_github_default_branch(
+    client: httpx.AsyncClient, api_base: str
+) -> str | None:
+    """Resolve the default branch name (e.g., 'main' or 'master') for a repo."""
+    try:
+        resp = await client.get(
+            api_base,
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                **_github_headers(),
+            },
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json().get("default_branch", "main")
+    except Exception:
+        return None
+
+
+async def _list_github_doc_candidates(
+    client: httpx.AsyncClient,
+    api_base: str,
+    default_branch: str,
+    library_hint: str = "",
+) -> tuple[list[str], bool] | None:
+    """List and filter candidate markdown/RST files from a GitHub repo tree."""
+    try:
+        resp = await client.get(
+            f"{api_base}/git/trees/{default_branch}?recursive=1",
+            headers={
+                "Accept": "application/vnd.github.v3+json",
+                **_github_headers(),
+            },
+        )
+        if resp.status_code != 200:
+            return None
+
+        tree = resp.json().get("tree", [])
+        candidate_paths: list[str] = []
+        for item in tree:
+            if item.get("type") != "blob":
+                continue
+            path = item.get("path", "")
+            path_lower = path.lower()
+
+            # Skip .github/ directory files (templates, workflows)
+            if path_lower.startswith(".github/"):
+                continue
+
+            # Skip known non-doc files by stem
+            fname = path.rsplit("/", 1)[-1]
+            stem = fname.rsplit(".", 1)[0].lower()
+            if stem in _SKIP_FILES:
+                continue
+
+            # Include root README.md
+            if path_lower == "readme.md" or path_lower == "readme.rst":
+                candidate_paths.append(path)
+                continue
+
+            # Only markdown and RST files
+            if not path_lower.endswith((".md", ".mdx", ".rst")):
+                continue
+
+            # Must be in a docs-like directory
+            parts = path.split("/")
+            if any(p.lower() in _DOC_DIRS for p in parts):
+                candidate_paths.append(path)
+
+        if not candidate_paths:
+            return None
+
+        # Apply smart filtering (i18n, depth priority, README last, framework)
+        return _filter_doc_paths(candidate_paths, library_hint=library_hint)
+    except Exception:
+        return None
+
+
+def _process_github_raw_content(
+    fpath: str, content: str, owner: str, repo: str, default_branch: str
+) -> tuple[dict, int] | None:
+    """Process raw file content. Returns (page_dict, original_length) or None if skipped."""
+    try:
+        # Skip files with excessive template macros
+        if _has_excessive_macros(content):
+            return None
+
+        original_len = len(content)
+        # Strip scattered macros from otherwise useful files
+        processed_content = _strip_template_macros(content)
+
+        # Convert RST to Markdown for consistent chunking
+        if fpath.lower().endswith(".rst"):
+            processed_content = _rst_to_markdown(processed_content)
+
+        # Derive title from filename
+        fname = fpath.rsplit("/", 1)[-1]
+        title = fname.rsplit(".", 1)[0].replace("-", " ").replace("_", " ")
+
+        gh_page_url = f"https://github.com/{owner}/{repo}/blob/{default_branch}/{fpath}"
+        page = {
+            "url": gh_page_url,
+            "title": title,
+            "content": processed_content,
+        }
+        return page, original_len
+    except Exception:
+        return None
+
+
+def _check_github_quality_gate(
+    owner: str,
+    repo: str,
+    pages_count: int,
+    skipped_macros: int,
+    fetch_original_bytes: int,
+    fetch_stripped_bytes: int,
+) -> bool:
+    """Evaluate if the repo should be skipped due to heavy templating.
+
+    Returns True if the repo passes the gate, False if it should be skipped.
+    """
+    total_files = skipped_macros + pages_count
+    if total_files >= 5 and skipped_macros > 0:
+        skip_ratio = skipped_macros / total_files
+        content_loss = (
+            1 - fetch_stripped_bytes / fetch_original_bytes
+            if fetch_original_bytes > 0
+            else 0
+        )
+        if skip_ratio > 0.25 or content_loss > 0.10:
+            logger.info(
+                f"Heavy templating in {owner}/{repo}: "
+                f"{skipped_macros}/{total_files} files skipped, "
+                f"{content_loss:.0%} content lost to macros. "
+                "Falling through to crawl"
+            )
+            return False
+    return True
+
+
 async def _try_github_raw_docs(
     repo_url: str,
     max_files: int = 50,
@@ -2996,77 +3137,17 @@ async def _try_github_raw_docs(
     raw_base = f"https://raw.githubusercontent.com/{owner}/{repo}"
 
     async with _safe_httpx_client(timeout=20) as client:
-        # Resolve default branch
-        try:
-            resp = await client.get(
-                api_base,
-                headers={
-                    "Accept": "application/vnd.github.v3+json",
-                    **_github_headers(),
-                },
-            )
-            if resp.status_code != 200:
-                return None
-            default_branch = resp.json().get("default_branch", "main")
-        except Exception:
+        default_branch = await _get_github_default_branch(client, api_base)
+        if not default_branch:
             return None
 
-        # Collect all candidate markdown files from tree API
-        candidate_paths: list[str] = []
-        try:
-            resp = await client.get(
-                f"{api_base}/git/trees/{default_branch}?recursive=1",
-                headers={
-                    "Accept": "application/vnd.github.v3+json",
-                    **_github_headers(),
-                },
-            )
-            if resp.status_code != 200:
-                return None
-
-            tree = resp.json().get("tree", [])
-            for item in tree:
-                if item.get("type") != "blob":
-                    continue
-                path = item.get("path", "")
-                path_lower = path.lower()
-
-                # Skip .github/ directory files (templates, workflows)
-                if path_lower.startswith(".github/"):
-                    continue
-
-                # Skip known non-doc files by stem
-                fname = path.rsplit("/", 1)[-1]
-                stem = fname.rsplit(".", 1)[0].lower()
-                if stem in _SKIP_FILES:
-                    continue
-
-                # Include root README.md
-                if path_lower == "readme.md" or path_lower == "readme.rst":
-                    candidate_paths.append(path)
-                    continue
-
-                # Only markdown and RST files
-                if not path_lower.endswith((".md", ".mdx", ".rst")):
-                    continue
-
-                # Must be in a docs-like directory
-                parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
-                    candidate_paths.append(path)
-        except Exception:
-            return None
-
-        if not candidate_paths:
-            return None
-
-        # Apply smart filtering (i18n, depth priority, README last, framework)
-        filtered_paths, has_primary = _filter_doc_paths(
-            candidate_paths, library_hint=library_hint
+        candidates = await _list_github_doc_candidates(
+            client, api_base, default_branch, library_hint=library_hint
         )
-
-        if not filtered_paths:
+        if not candidates:
             return None
+
+        filtered_paths, has_primary = candidates
 
         # If no top-level docs/ directory found, the repo likely keeps
         # user-facing docs on a separate site (e.g. react.dev, angular.dev).
@@ -3110,66 +3191,31 @@ async def _try_github_raw_docs(
             if not res:
                 continue
 
-            fpath = res["fpath"]
-            content = res["content"]
-
-            try:
-                # Skip files with excessive template macros;
-                # strip scattered macros from otherwise useful files
-                if _has_excessive_macros(content):
-                    skipped_macros += 1
-                    continue
-
-                original_len = len(content)
-                content = _strip_template_macros(content)
+            processed = _process_github_raw_content(
+                res["fpath"], res["content"], owner, repo, default_branch
+            )
+            if processed:
+                page, original_len = processed
+                pages.append(page)
                 fetch_original_bytes += original_len
-                fetch_stripped_bytes += len(content)
-
-                # Convert RST to Markdown for consistent chunking
-                if fpath.lower().endswith(".rst"):
-                    content = _rst_to_markdown(content)
-
-                # Derive title from filename
-                fname = fpath.rsplit("/", 1)[-1]
-                title = fname.rsplit(".", 1)[0].replace("-", " ").replace("_", " ")
-
-                gh_page_url = (
-                    f"https://github.com/{owner}/{repo}/blob/{default_branch}/{fpath}"
-                )
-                pages.append(
-                    {
-                        "url": gh_page_url,
-                        "title": title,
-                        "content": content,
-                    }
-                )
-            except Exception:
-                continue
+                fetch_stripped_bytes += len(page["content"])
+            else:
+                skipped_macros += 1
 
         if skipped_macros:
             logger.info(
                 f"Skipped {skipped_macros} files with excessive template macros"
             )
 
-        # Quality gate: if the repo uses heavy templating (many files skipped
-        # or significant content lost to macro stripping), fall through to
-        # Tier 2 crawl where the docs build system renders macros properly.
-        total_files = skipped_macros + len(pages)
-        if total_files >= 5 and skipped_macros > 0:
-            skip_ratio = skipped_macros / total_files
-            content_loss = (
-                1 - fetch_stripped_bytes / fetch_original_bytes
-                if fetch_original_bytes > 0
-                else 0
-            )
-            if skip_ratio > 0.25 or content_loss > 0.10:
-                logger.info(
-                    f"Heavy templating in {owner}/{repo}: "
-                    f"{skipped_macros}/{total_files} files skipped, "
-                    f"{content_loss:.0%} content lost to macros. "
-                    "Falling through to crawl"
-                )
-                return None
+        if not _check_github_quality_gate(
+            owner,
+            repo,
+            len(pages),
+            skipped_macros,
+            fetch_original_bytes,
+            fetch_stripped_bytes,
+        ):
+            return None
 
         if pages:
             logger.info(
