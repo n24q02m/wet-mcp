@@ -548,6 +548,74 @@ async def list_media(
         return json.dumps(output, ensure_ascii=False, indent=2)
 
 
+async def _fetch_media_resource(
+    url: str, client: httpx.AsyncClient, max_redirects: int = 5
+) -> tuple[httpx.Response, str]:
+    """Fetch a media resource with manual redirect handling and SSRF protection."""
+    target_url = url
+    if target_url.startswith("//"):
+        target_url = f"https:{target_url}"
+
+    redirect_count = 0
+    response = None
+
+    while redirect_count < max_redirects:
+        if not is_safe_url(target_url):
+            raise ValueError("Security Alert: Unsafe URL blocked")
+
+        response = await client.get(target_url, follow_redirects=False)
+
+        if response.is_redirect:
+            location = response.headers.get("Location")
+            if not location:
+                break
+            target_url = urljoin(target_url, location)
+            redirect_count += 1
+            continue
+        else:
+            break
+
+    if not response:
+        raise ValueError("No response received")
+
+    response.raise_for_status()
+    return response, target_url
+
+
+def _get_media_filename(url: str, content_type: str | None = None) -> str:
+    """Derive a safe filename from URL and Content-Type."""
+    import mimetypes
+    from urllib.parse import unquote
+
+    raw_name = url.split("/")[-1].split("?")[0] or "download"
+    decoded_name = unquote(raw_name)
+    # Strip any directory components to get a flat filename
+    filename = Path(decoded_name).name or "download"
+
+    # If filename has no extension, infer from Content-Type
+    if "." not in filename and content_type:
+        # Strip parameters like charset
+        mime = content_type.split(";")[0].strip()
+        ext = mimetypes.guess_extension(mime) if mime else None
+        if ext:
+            filename = f"{filename}{ext}"
+    return filename
+
+
+def _resolve_safe_media_path(filename: str, output_path: Path) -> Path:
+    """Resolve and validate a safe local path for a media file."""
+    filepath = (output_path / filename).resolve()
+
+    # Security check: Ensure the resolved path is still
+    # within the output directory
+    if not filepath.is_relative_to(output_path):
+        raise ValueError(
+            f"Security Alert: Path traversal attempt detected for {filename}"
+        )
+
+    return filepath
+
+
 async def download_media(
     media_urls: list[str],
     output_dir: str,
@@ -582,67 +650,11 @@ async def download_media(
     async def _download_one(url: str, client: httpx.AsyncClient) -> dict:
         async with semaphore:
             try:
-                # Handle protocol-relative URLs
-                target_url = url
-                if target_url.startswith("//"):
-                    target_url = f"https:{target_url}"
-
-                # Manually handle redirects to prevent SSRF bypass
-                redirect_count = 0
-                max_redirects = 5
-                response = None
-
-                while redirect_count < max_redirects:
-                    if not is_safe_url(target_url):
-                        return {
-                            "url": url,
-                            "error": "Security Alert: Unsafe URL blocked",
-                        }
-
-                    response = await client.get(target_url, follow_redirects=False)
-
-                    if response.is_redirect:
-                        location = response.headers.get("Location")
-                        if not location:
-                            break
-                        target_url = urljoin(target_url, location)
-                        redirect_count += 1
-                        continue
-                    else:
-                        break
-
-                if not response:
-                    raise ValueError("No response received")
-
-                response.raise_for_status()
-
-                # Extract filename and decode URL-encoded characters to
-                # prevent path traversal via %2F..%2F sequences.
-                import mimetypes
-                from urllib.parse import unquote
-
-                raw_name = target_url.split("/")[-1].split("?")[0] or "download"
-                decoded_name = unquote(raw_name)
-                # Strip any directory components to get a flat filename
-                filename = Path(decoded_name).name or "download"
-
-                # If filename has no extension, infer from Content-Type
-                if "." not in filename:
-                    content_type = response.headers.get("content-type", "")
-                    # Strip parameters like charset
-                    mime = content_type.split(";")[0].strip()
-                    ext = mimetypes.guess_extension(mime) if mime else None
-                    if ext:
-                        filename = f"{filename}{ext}"
-                filepath = (output_path / filename).resolve()
-
-                # Security check: Ensure the resolved path is still
-                # within the output directory
-                if not filepath.is_relative_to(output_path):
-                    raise ValueError(
-                        f"Security Alert: Path traversal attempt detected "
-                        f"for {filename}"
-                    )
+                response, final_url = await _fetch_media_resource(url, client)
+                filename = _get_media_filename(
+                    final_url, response.headers.get("content-type")
+                )
+                filepath = _resolve_safe_media_path(filename, output_path)
 
                 # Write file in thread to avoid blocking event loop
                 await asyncio.to_thread(filepath.write_bytes, response.content)
