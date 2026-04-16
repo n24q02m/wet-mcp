@@ -219,6 +219,7 @@ def init_reranker(
     backend_type: str,
     model: str | None = None,
     api_key: str | None = None,
+    **kwargs,
 ) -> RerankerBackend:
     """Initialize and cache the reranker backend.
 
@@ -226,6 +227,8 @@ def init_reranker(
         backend_type: 'cloud' or 'local'
         model: Model name (optional for cloud, defaults to rerank-v4.0-pro)
         api_key: Custom API key (cloud only)
+        **kwargs: Additional keyword arguments (ignored, for backward compatibility)
+
     Returns:
 
         Initialized reranker backend instance.
