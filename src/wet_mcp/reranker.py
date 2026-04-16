@@ -20,6 +20,7 @@ from loguru import logger
 # ---------------------------------------------------------------------------
 # Backend Protocol
 # ---------------------------------------------------------------------------
+_AUTH_ERROR_PATTERNS = ("401", "403", "invalid", "unauthorized", "api key")
 
 
 class RerankerBackend(Protocol):
@@ -118,9 +119,7 @@ class CohereReranker:
             return bool(response.results)
         except Exception as e:
             msg = str(e).lower()
-            if any(
-                p in msg for p in ("401", "403", "invalid", "unauthorized", "api key")
-            ):
+            if any(p in msg for p in _AUTH_ERROR_PATTERNS):
                 logger.warning(
                     f"API key invalid for reranker {self.model}: {e}. "
                     "Check your COHERE_API_KEY or CO_API_KEY configuration."
