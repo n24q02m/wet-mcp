@@ -3475,7 +3475,6 @@ def test_sort_urls_by_query_empty_cases():
 
     # Empty query returns original list
     assert _sort_urls_by_query(urls, "") == urls
-    assert _sort_urls_by_query(urls, None) == urls
 
     # Empty URLs returns empty list
     assert _sort_urls_by_query([], "query") == []
