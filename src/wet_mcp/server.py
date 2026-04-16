@@ -1559,19 +1559,24 @@ async def _fetch_and_chunk_docs(
     gh_pages = await _try_github_raw_docs(
         gh_target, max_files=50, library_hint=library_hint
     )
+
+    async def _process_page(page: dict) -> list[dict]:
+        p_chunks = await asyncio.to_thread(
+            chunk_markdown,
+            content=page["content"],
+            url=page.get("url", ""),
+        )
+        for c in p_chunks:
+            if not c.get("title") and page.get("title"):
+                c["title"] = page["title"]
+        return p_chunks
+
     gh_chunks: list[dict] = []
     gh_page_count = 0
     if gh_pages:
-        for page in gh_pages:
-            page_chunks = await asyncio.to_thread(
-                chunk_markdown,
-                content=page["content"],
-                url=page.get("url", ""),
-            )
-            for chunk in page_chunks:
-                if not chunk.get("title") and page.get("title"):
-                    chunk["title"] = page["title"]
-            gh_chunks.extend(page_chunks)
+        results = await asyncio.gather(*[_process_page(p) for p in gh_pages])
+        for p_chunks in results:
+            gh_chunks.extend(p_chunks)
         gh_page_count = len(gh_pages)
 
         # Quality gate: if GitHub raw produced too few meaningful chunks,
@@ -1597,16 +1602,10 @@ async def _fetch_and_chunk_docs(
         max_pages=50,
     )
     chunks: list[dict] = []
-    for page in pages:
-        page_chunks = await asyncio.to_thread(
-            chunk_markdown,
-            content=page["content"],
-            url=page.get("url", ""),
-        )
-        for chunk in page_chunks:
-            if not chunk.get("title") and page.get("title"):
-                chunk["title"] = page["title"]
-        chunks.extend(page_chunks)
+    if pages:
+        results = await asyncio.gather(*[_process_page(p) for p in pages])
+        for p_chunks in results:
+            chunks.extend(p_chunks)
 
     # If Tier 2 crawl produced no results (e.g. Cloudflare blocked) but
     # Tier 1 GitHub raw had some content (below threshold), use it instead
