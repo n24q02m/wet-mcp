@@ -254,9 +254,7 @@ async def _init_embedding_backend(mode: str) -> None:
     - CONFIGURED: cloud only — no silent local fallback
     - LOCAL (explicit skip): local only
     """
-    global _embedding_dims
     from wet_mcp.credential_state import CredentialState, get_state
-    from wet_mcp.embedder import init_backend
 
     cred_state = get_state()
 
@@ -269,17 +267,11 @@ async def _init_embedding_backend(mode: str) -> None:
     if cred_state == CredentialState.LOCAL or backend_type == "local":
         local_model = settings.resolve_local_embedding_model()
         try:
-            backend = await asyncio.to_thread(init_backend, "local", local_model)
-            native_dims = await backend.check_available()
-            if native_dims > 0:
-                if _embedding_dims == 0:
-                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                logger.info(
-                    f"Embedding: local {local_model} "
-                    f"(native={native_dims}, stored={_embedding_dims})"
-                )
-            else:
-                logger.error("Local embedding model not available")
+            dims = await _try_init_embedding("local", local_model)
+            if dims > 0:
+                _update_embedding_dims_and_log(local_model, dims, is_local=True)
+                return
+            logger.error("Local embedding model not available")
         except Exception as e:
             logger.error(f"Local embedding init failed: {e}")
         return
@@ -288,30 +280,18 @@ async def _init_embedding_backend(mode: str) -> None:
     model = settings.resolve_embedding_model()
     if model:
         try:
-            backend = await asyncio.to_thread(init_backend, "cloud", model)
-            native_dims = await backend.check_available()
-            if native_dims > 0:
-                if _embedding_dims == 0:
-                    _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                logger.info(
-                    f"Embedding: {model} "
-                    f"(native={native_dims}, stored={_embedding_dims})"
-                )
+            dims = await _try_init_embedding("cloud", model)
+            if dims > 0:
+                _update_embedding_dims_and_log(model, dims)
                 return
         except Exception as e:
             logger.warning(f"Embedding model {model} not available: {e}")
     elif mode == "sdk":
         for candidate in _EMBEDDING_CANDIDATES:
             try:
-                backend = await asyncio.to_thread(init_backend, "cloud", candidate)
-                native_dims = await backend.check_available()
-                if native_dims > 0:
-                    if _embedding_dims == 0:
-                        _embedding_dims = _DEFAULT_EMBEDDING_DIMS
-                    logger.info(
-                        f"Embedding: {candidate} "
-                        f"(native={native_dims}, stored={_embedding_dims})"
-                    )
+                dims = await _try_init_embedding("cloud", candidate)
+                if dims > 0:
+                    _update_embedding_dims_and_log(candidate, dims)
                     return
             except Exception:
                 continue
@@ -340,17 +320,13 @@ async def _init_reranker_backend(mode: str) -> None:
         logger.info("Reranking disabled")
         return
 
-    from wet_mcp.reranker import init_reranker
-
     if cred_state == CredentialState.LOCAL or rerank_backend_type == "local":
         local_model = settings.resolve_local_rerank_model()
         try:
-            reranker = await asyncio.to_thread(init_reranker, "local", local_model)
-            available = await asyncio.to_thread(reranker.check_available)
-            if available:
+            if await _try_init_reranker("local", local_model):
                 logger.info(f"Reranker: local {local_model}")
-            else:
-                logger.error("Local reranker not available")
+                return
+            logger.error("Local reranker not available")
         except Exception as e:
             logger.error(f"Local reranker init failed: {e}")
         return
@@ -359,9 +335,7 @@ async def _init_reranker_backend(mode: str) -> None:
     model = settings.resolve_rerank_model()
     if model:
         try:
-            reranker = await asyncio.to_thread(init_reranker, "cloud", model)
-            available = await asyncio.to_thread(reranker.check_available)
-            if available:
+            if await _try_init_reranker("cloud", model):
                 logger.info(f"Reranker: {model} (cloud)")
                 return
         except Exception as e:
@@ -371,6 +345,38 @@ async def _init_reranker_backend(mode: str) -> None:
 
 
 # --- Helpers ---
+
+
+async def _try_init_embedding(backend_type: str, model: str) -> int:
+    """Try to initialize embedding backend and return native dims.
+
+    Returns 0 if unavailable or failed.
+    """
+    from wet_mcp.embedder import init_backend
+
+    backend = await asyncio.to_thread(init_backend, backend_type, model)
+    return await backend.check_available()
+
+
+def _update_embedding_dims_and_log(
+    model: str, native_dims: int, is_local: bool = False
+) -> None:
+    """Update global embedding dims and log success."""
+    global _embedding_dims
+    if _embedding_dims == 0:
+        _embedding_dims = _DEFAULT_EMBEDDING_DIMS
+    prefix = "local " if is_local else ""
+    logger.info(
+        f"Embedding: {prefix}{model} (native={native_dims}, stored={_embedding_dims})"
+    )
+
+
+async def _try_init_reranker(backend_type: str, model: str) -> bool:
+    """Try to initialize reranker backend and return availability."""
+    from wet_mcp.reranker import init_reranker
+
+    reranker = await asyncio.to_thread(init_reranker, backend_type, model)
+    return await asyncio.to_thread(reranker.check_available)
 
 
 async def _embed(text: str, is_query: bool = False) -> list[float] | None:
