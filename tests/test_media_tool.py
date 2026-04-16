@@ -147,7 +147,7 @@ async def test_media_download_adds_extension_from_content_type(mock_settings, tm
 
     with (
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
-        patch("wet_mcp.sources.crawler.httpx.AsyncClient") as MockClient,
+        patch("wet_mcp.sources.crawler._safe_httpx_client") as MockClient,
         patch("wet_mcp.sources.crawler.settings") as crawler_settings,
     ):
         crawler_settings.crawler_timeout = 30

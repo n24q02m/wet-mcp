@@ -660,7 +660,7 @@ async def download_media(
                     "error": str(e),
                 }
 
-    async with httpx.AsyncClient(
+    async with _safe_httpx_client(
         timeout=settings.crawler_timeout, transport=transport, headers=headers
     ) as client:
         tasks = [_download_one(url, client) for url in media_urls]
