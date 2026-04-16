@@ -5,8 +5,10 @@ from wet_mcp.server import main
 
 def _cli() -> None:
     import sys
+
     if sys.platform == "win32":
         import io
+
         for _s in (sys.stdout, sys.stderr):
             if _s is not None:
                 try:

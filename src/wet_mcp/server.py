@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 # Fix Windows console encoding for Unicode output
 if sys.platform == "win32":
     import io
+
     for _s in (sys.stdout, sys.stderr):
         if _s is not None:
             try:
