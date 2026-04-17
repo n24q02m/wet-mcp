@@ -1561,17 +1561,27 @@ async def _fetch_and_chunk_docs(
     )
     gh_chunks: list[dict] = []
     gh_page_count = 0
+
+    # ⚡ Bolt Optimization: Use an async helper to enable concurrent thread
+    # execution. Sequential `asyncio.to_thread` calls block the event loop
+    # per iteration. Wrapping the work and using `asyncio.gather` reduces
+    # CPU-bound latency from O(sum(T_chunk)) to O(max(T_chunk)).
+    async def _process_page(p: dict) -> list[dict]:
+        p_chunks = await asyncio.to_thread(
+            chunk_markdown,
+            content=p["content"],
+            url=p.get("url", ""),
+        )
+        for chunk in p_chunks:
+            if not chunk.get("title") and p.get("title"):
+                chunk["title"] = p["title"]
+        return p_chunks
+
     if gh_pages:
-        for page in gh_pages:
-            page_chunks = await asyncio.to_thread(
-                chunk_markdown,
-                content=page["content"],
-                url=page.get("url", ""),
-            )
-            for chunk in page_chunks:
-                if not chunk.get("title") and page.get("title"):
-                    chunk["title"] = page["title"]
-            gh_chunks.extend(page_chunks)
+        tasks = [_process_page(page) for page in gh_pages]
+        results = await asyncio.gather(*tasks)
+        for r in results:
+            gh_chunks.extend(r)
         gh_page_count = len(gh_pages)
 
         # Quality gate: if GitHub raw produced too few meaningful chunks,
@@ -1597,16 +1607,11 @@ async def _fetch_and_chunk_docs(
         max_pages=50,
     )
     chunks: list[dict] = []
-    for page in pages:
-        page_chunks = await asyncio.to_thread(
-            chunk_markdown,
-            content=page["content"],
-            url=page.get("url", ""),
-        )
-        for chunk in page_chunks:
-            if not chunk.get("title") and page.get("title"):
-                chunk["title"] = page["title"]
-        chunks.extend(page_chunks)
+    if pages:
+        tasks = [_process_page(page) for page in pages]
+        results = await asyncio.gather(*tasks)
+        for r in results:
+            chunks.extend(r)
 
     # If Tier 2 crawl produced no results (e.g. Cloudflare blocked) but
     # Tier 1 GitHub raw had some content (below threshold), use it instead
