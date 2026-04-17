@@ -947,14 +947,17 @@ class TestSaveCredentialsGdriveNextStep:
 
 class TestSetGdriveCompleteCallback:
     def test_callback_registration(self):
-        """set_gdrive_complete_callback stores the callback."""
+        """set_gdrive_complete_callback stores the callback and logs."""
         import wet_mcp.credential_state as mod
         from wet_mcp.credential_state import set_gdrive_complete_callback
 
         def cb():
             pass
 
-        set_gdrive_complete_callback(cb)
+        with patch("wet_mcp.credential_state.logger") as mock_logger:
+            set_gdrive_complete_callback(cb)
+            mock_logger.debug.assert_called_with("GDrive complete callback registered")
+
         assert mod._on_gdrive_complete is cb
         # cleanup
         mod._on_gdrive_complete = None
@@ -1025,9 +1028,10 @@ class TestGdriveTokenPoll:
 
     async def test_success_saves_token_and_calls_callback(self):
         import wet_mcp.credential_state as mod
+        from wet_mcp.credential_state import set_gdrive_complete_callback
 
         cb_called = []
-        mod._on_gdrive_complete = lambda: cb_called.append(True)
+        set_gdrive_complete_callback(lambda: cb_called.append(True))
         try:
             with patch("wet_mcp.token_store.save_token") as mock_save:
                 await self._run_poll(
@@ -1040,11 +1044,12 @@ class TestGdriveTokenPoll:
 
     async def test_success_callback_exception_non_fatal(self):
         import wet_mcp.credential_state as mod
+        from wet_mcp.credential_state import set_gdrive_complete_callback
 
         def bad_cb():
             raise RuntimeError("cb died")
 
-        mod._on_gdrive_complete = bad_cb
+        set_gdrive_complete_callback(bad_cb)
         try:
             with patch("wet_mcp.token_store.save_token"):
                 await self._run_poll([{"access_token": "tok-abc"}])
