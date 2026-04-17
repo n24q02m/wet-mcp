@@ -1554,6 +1554,17 @@ async def _fetch_and_chunk_docs(
                 f"(min {_MIN_GH_CHUNKS}), falling through"
             )
 
+    async def _process_page(page: dict) -> list[dict]:
+        p_chunks = await asyncio.to_thread(
+            chunk_markdown,
+            content=page["content"],
+            url=page.get("url", ""),
+        )
+        for chunk in p_chunks:
+            if not chunk.get("title") and page.get("title"):
+                chunk["title"] = page["title"]
+        return p_chunks
+
     # Tier 1: Try GitHub raw markdown (clean content, no JS rendering)
     gh_target = repo_url or docs_url
     gh_pages = await _try_github_raw_docs(
@@ -1562,15 +1573,10 @@ async def _fetch_and_chunk_docs(
     gh_chunks: list[dict] = []
     gh_page_count = 0
     if gh_pages:
-        for page in gh_pages:
-            page_chunks = await asyncio.to_thread(
-                chunk_markdown,
-                content=page["content"],
-                url=page.get("url", ""),
-            )
-            for chunk in page_chunks:
-                if not chunk.get("title") and page.get("title"):
-                    chunk["title"] = page["title"]
+        page_chunk_results = await asyncio.gather(
+            *[_process_page(page) for page in gh_pages]
+        )
+        for page_chunks in page_chunk_results:
             gh_chunks.extend(page_chunks)
         gh_page_count = len(gh_pages)
 
@@ -1597,16 +1603,12 @@ async def _fetch_and_chunk_docs(
         max_pages=50,
     )
     chunks: list[dict] = []
-    for page in pages:
-        page_chunks = await asyncio.to_thread(
-            chunk_markdown,
-            content=page["content"],
-            url=page.get("url", ""),
+    if pages:
+        page_chunk_results = await asyncio.gather(
+            *[_process_page(page) for page in pages]
         )
-        for chunk in page_chunks:
-            if not chunk.get("title") and page.get("title"):
-                chunk["title"] = page["title"]
-        chunks.extend(page_chunks)
+        for page_chunks in page_chunk_results:
+            chunks.extend(page_chunks)
 
     # If Tier 2 crawl produced no results (e.g. Cloudflare blocked) but
     # Tier 1 GitHub raw had some content (below threshold), use it instead
