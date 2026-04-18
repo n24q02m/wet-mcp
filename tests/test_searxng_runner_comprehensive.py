@@ -41,19 +41,23 @@ from wet_mcp.searxng_runner import (
 def reset_globals():
     import web_core.search.runner as module
 
-    module._searxng_process = None
-    module._searxng_port = None
-    module._restart_count = 0
-    module._last_restart_time = 0.0
-    module._is_owner = False
-    module._startup_lock = None
+    def _reset() -> None:
+        module._searxng_process = None
+        module._searxng_port = None
+        module._restart_count = 0
+        module._last_restart_time = 0.0
+        module._is_owner = False
+        module._startup_lock = None
+        # web-core 1.2.0 added Docker fallback; reset its globals too so state
+        # does not leak across tests.
+        if hasattr(module, "_searxng_docker_container"):
+            module._searxng_docker_container = None
+        if hasattr(module, "_searxng_settings_path"):
+            module._searxng_settings_path = None
+
+    _reset()
     yield
-    module._searxng_process = None
-    module._searxng_port = None
-    module._restart_count = 0
-    module._last_restart_time = 0.0
-    module._is_owner = False
-    module._startup_lock = None
+    _reset()
 
 
 def test_get_pip_command():
@@ -541,9 +545,17 @@ async def test_ensure_searxng_locked_alive_but_unhealthy():
         patch("web_core.search.runner._force_kill_process") as mock_force_kill,
         patch("web_core.search.runner._try_reuse_existing", return_value=None),
         patch("web_core.search.runner._is_searxng_installed", return_value=True),
+        # web-core 1.2.0 tries Docker before subprocess; disable it so
+        # _start_searxng_subprocess is reached. create=True so the patch
+        # is a no-op on web-core 1.1.0 where the Docker path is absent.
+        patch(
+            "web_core.search.runner._start_docker_searxng",
+            AsyncMock(return_value=None),
+            create=True,
+        ),
         patch(
             "web_core.search.runner._start_searxng_subprocess",
-            return_value="http://127.0.0.1:8085",
+            AsyncMock(return_value="http://127.0.0.1:8085"),
         ),
     ):
         url = await _ensure_searxng_locked(auto_start=True, start_port=8080)
@@ -569,9 +581,17 @@ async def test_ensure_searxng_locked_start():
     with (
         patch("web_core.search.runner._try_reuse_existing", return_value=None),
         patch("web_core.search.runner._is_searxng_installed", return_value=True),
+        # web-core 1.2.0 tries Docker before subprocess; disable it so
+        # _start_searxng_subprocess is reached. create=True so the patch
+        # is a no-op on web-core 1.1.0 where the Docker path is absent.
+        patch(
+            "web_core.search.runner._start_docker_searxng",
+            AsyncMock(return_value=None),
+            create=True,
+        ),
         patch(
             "web_core.search.runner._start_searxng_subprocess",
-            return_value="http://127.0.0.1:8082",
+            AsyncMock(return_value="http://127.0.0.1:8082"),
         ),
     ):
         url = await _ensure_searxng_locked(auto_start=True, start_port=8080)
@@ -605,9 +625,17 @@ async def test_ensure_searxng_locked_crash_cleanup():
     with (
         patch("web_core.search.runner._try_reuse_existing", return_value=None),
         patch("web_core.search.runner._is_searxng_installed", return_value=True),
+        # web-core 1.2.0 tries Docker before subprocess; disable it so
+        # _start_searxng_subprocess is reached. create=True so the patch
+        # is a no-op on web-core 1.1.0 where the Docker path is absent.
+        patch(
+            "web_core.search.runner._start_docker_searxng",
+            AsyncMock(return_value=None),
+            create=True,
+        ),
         patch(
             "web_core.search.runner._start_searxng_subprocess",
-            return_value="http://127.0.0.1:8083",
+            AsyncMock(return_value="http://127.0.0.1:8083"),
         ),
     ):
         url = await _ensure_searxng_locked(auto_start=True, start_port=8080)
@@ -620,6 +648,14 @@ async def test_ensure_searxng_locked_install_fails():
         patch("web_core.search.runner._try_reuse_existing", return_value=None),
         patch("web_core.search.runner._is_searxng_installed", return_value=False),
         patch("web_core.search.runner._install_searxng", return_value=False),
+        # web-core 1.2.0 tries Docker before install check; disable it so the
+        # install-failed branch is reached. create=True so the patch is a
+        # no-op on web-core 1.1.0 where the Docker path is absent.
+        patch(
+            "web_core.search.runner._start_docker_searxng",
+            AsyncMock(return_value=None),
+            create=True,
+        ),
     ):
         with pytest.raises(RuntimeError, match="installation failed"):
             await _ensure_searxng_locked(auto_start=True, start_port=8080)
