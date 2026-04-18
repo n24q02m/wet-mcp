@@ -16,10 +16,17 @@ from wet_mcp.token_store import (
 
 @pytest.fixture
 def token_dir(tmp_path):
-    """Provide a temp token directory and patch settings."""
+    """Provide a temp token directory and patch settings.
+
+    Also patches subprocess.run so the real Windows icacls call cannot
+    lock down pytest tmp paths during test runs (would break cleanup).
+    """
     d = tmp_path / "tokens"
     d.mkdir()
-    with patch("wet_mcp.token_store.settings") as mock_settings:
+    with (
+        patch("wet_mcp.token_store.settings") as mock_settings,
+        patch("wet_mcp.token_store.subprocess.run"),
+    ):
         mock_settings.get_data_dir.return_value = tmp_path
         yield d
 
@@ -81,28 +88,59 @@ def test_load_oserror(token_dir):
 
 def test_save_token_creates_dir(tmp_path):
     """save_token creates token dir if it doesn't exist."""
-    with patch("wet_mcp.token_store.settings") as mock_settings:
+    with (
+        patch("wet_mcp.token_store.settings") as mock_settings,
+        patch("wet_mcp.token_store.subprocess.run"),
+    ):
         mock_settings.get_data_dir.return_value = tmp_path
         save_token("s3", {"access_token": "abc"})
         assert (tmp_path / "tokens" / "s3.json").exists()
 
 
 def test_save_token_chmod_oserror(token_dir):
-    """save_token ignores OSError from chmod."""
-    with patch.object(Path, "chmod", side_effect=OSError("perm error")):
+    """save_token ignores OSError from chmod (Unix branch)."""
+    with (
+        patch("wet_mcp.token_store.os.name", "posix"),
+        patch.object(Path, "chmod", side_effect=OSError("perm error")),
+    ):
         # Should not raise exception
         save_token("drive", {"access_token": "test"})
         assert (token_dir / "drive.json").exists()
 
 
 def test_save_token_windows_permissions(token_dir):
-    """On Windows, skip chmod calls."""
+    """On Windows, invoke icacls (not chmod) to lock down inheritance + grant."""
     with (
         patch("wet_mcp.token_store.os.name", "nt"),
+        patch("wet_mcp.token_store.subprocess.run") as mock_run,
+        patch("wet_mcp.token_store.getpass.getuser", return_value="tester"),
         patch.object(Path, "chmod") as mock_chmod,
     ):
         save_token("drive", {"access_token": "test"})
         mock_chmod.assert_not_called()
+        # One call for the directory + one for the file
+        assert mock_run.call_count == 2
+        for call_args in mock_run.call_args_list:
+            cmd = call_args[0][0]
+            assert cmd[0] == "icacls"
+            assert "/inheritance:r" in cmd
+            assert "/grant:r" in cmd
+            assert "tester:F" in cmd
+        assert load_token("drive") == {"access_token": "test"}
+
+
+def test_save_token_windows_icacls_failure_non_fatal(token_dir):
+    """icacls failure must not break save_token flow."""
+    with (
+        patch("wet_mcp.token_store.os.name", "nt"),
+        patch(
+            "wet_mcp.token_store.subprocess.run",
+            side_effect=OSError("icacls missing"),
+        ),
+        patch("wet_mcp.token_store.getpass.getuser", return_value="tester"),
+    ):
+        # Should not raise
+        save_token("drive", {"access_token": "test"})
         assert load_token("drive") == {"access_token": "test"}
 
 
