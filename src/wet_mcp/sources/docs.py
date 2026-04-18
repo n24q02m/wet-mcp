@@ -2924,6 +2924,31 @@ def _is_i18n_url(path: str, root_path: str) -> bool:
     return f"/{lang_segment}/" not in root_path.lower()
 
 
+def _score_url_by_query(url: str, query_words: frozenset[str]) -> int:
+    """Score a URL based on query term overlap in its path."""
+    path = urlparse(url).path.lower()
+    path_words = set(
+        path.replace("-", " ")
+        .replace("_", " ")
+        .replace("/", " ")
+        .replace(".", " ")
+        .split()
+    )
+    return len(query_words & path_words)
+
+
+def _sort_urls_by_query(urls: list[str], query: str) -> list[str]:
+    """Sort URLs by query term overlap (highest first)."""
+    if not query or not urls:
+        return urls
+    query_words = frozenset(query.lower().split())
+
+    def score_url(url: str) -> int:
+        return _score_url_by_query(url, query_words)
+
+    return sorted(urls, key=score_url, reverse=True)
+
+
 async def _fetch_github_readme(repo_url: str) -> list[dict] | None:
     """Fetch just the README.md from a GitHub repository.
 
@@ -3534,25 +3559,6 @@ async def fetch_docs_pages(
             seen_urls.add(full_url)
         return urls
 
-    def _sort_by_query(urls: list[str]) -> list[str]:
-        """Sort URLs by query term overlap (highest first)."""
-        if not query or not urls:
-            return urls
-        query_words = frozenset(query.lower().split())
-
-        def score_url(url: str) -> int:
-            path = urlparse(url).path.lower()
-            path_words = set(
-                path.replace("-", " ")
-                .replace("_", " ")
-                .replace("/", " ")
-                .replace(".", " ")
-                .split()
-            )
-            return len(query_words & path_words)
-
-        return sorted(urls, key=score_url, reverse=True)
-
     # Process root page results
     blocked_count = 0
     for r in root_results:
@@ -3613,7 +3619,7 @@ async def fetch_docs_pages(
         seen_urls.add(su)
 
     # Sort by query relevance
-    pending_urls = _sort_by_query(pending_urls)
+    pending_urls = _sort_urls_by_query(pending_urls, query)
 
     # --- Fetch round 1 ---
     remaining = max_pages - len(pages)
@@ -3656,7 +3662,7 @@ async def fetch_docs_pages(
     # --- Fetch round 2 (depth-2 discovery) ---
     remaining = max_pages - len(pages)
     if remaining > 0 and pending_urls:
-        pending_urls = _sort_by_query(pending_urls)
+        pending_urls = _sort_urls_by_query(pending_urls, query)
         batch2_urls = pending_urls[:remaining]
         if batch2_urls:
             logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")

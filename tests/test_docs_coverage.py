@@ -35,6 +35,8 @@ from wet_mcp.sources.docs import (
     _parse_objects_inv,
     _probe_docs_url,
     _safe_httpx_client,
+    _score_url_by_query,
+    _sort_urls_by_query,
     _strip_nav_blocks,
     _strip_nav_heading_blocks,
     _try_github_raw_docs,
@@ -3415,3 +3417,64 @@ def test_chunk_llms_txt_functional():
     assert chunks[0]["url"] == base_url
     assert "## Section 1" in chunks[0]["content"]
     assert "## Section 2" in chunks[1]["content"]
+
+
+# ---------------------------------------------------------------------------
+# _score_url_by_query / _sort_urls_by_query
+# ---------------------------------------------------------------------------
+
+
+def test_score_url_by_query_matches():
+    """Score increases with query term overlap in path."""
+    query_words = frozenset(["auth", "guide"])
+
+    # 2 matches
+    assert _score_url_by_query("https://example.com/auth/guide", query_words) == 2
+    # 1 match (case insensitive)
+    assert (
+        _score_url_by_query("https://example.com/Auth/getting-started", query_words)
+        == 1
+    )
+    # 0 matches
+    assert _score_url_by_query("https://example.com/api/reference", query_words) == 0
+
+
+def test_score_url_by_query_delimiters():
+    """Score correctly handles various path delimiters."""
+    query_words = frozenset(["user", "login"])
+
+    # Hyphens
+    assert _score_url_by_query("https://example.com/user-login", query_words) == 2
+    # Underscores
+    assert _score_url_by_query("https://example.com/user_login", query_words) == 2
+    # Dots (e.g. file extensions)
+    assert _score_url_by_query("https://example.com/user.login.html", query_words) == 2
+    # Slashes
+    assert _score_url_by_query("https://example.com/user/login/", query_words) == 2
+
+
+def test_sort_urls_by_query_ordering():
+    """URLs are sorted by score descending."""
+    urls = [
+        "https://example.com/other",
+        "https://example.com/auth/login",
+        "https://example.com/auth/getting-started",
+    ]
+    query = "auth login"
+
+    sorted_urls = _sort_urls_by_query(urls, query)
+
+    assert sorted_urls[0] == "https://example.com/auth/login"  # 2 matches
+    assert sorted_urls[1] == "https://example.com/auth/getting-started"  # 1 match
+    assert sorted_urls[2] == "https://example.com/other"  # 0 matches
+
+
+def test_sort_urls_by_query_empty_cases():
+    """Handles empty inputs gracefully."""
+    urls = ["https://example.com/page"]
+
+    # Empty query returns original list
+    assert _sort_urls_by_query(urls, "") == urls
+
+    # Empty URLs returns empty list
+    assert _sort_urls_by_query([], "query") == []
