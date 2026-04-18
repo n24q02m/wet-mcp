@@ -168,5 +168,5 @@ class WebCache:
         """Close database connection."""
         try:
             self._conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to close cache database connection: {e}")

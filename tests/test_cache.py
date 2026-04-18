@@ -5,7 +5,7 @@ deterministic cache keys and stats.
 """
 
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -246,3 +246,13 @@ class TestCacheEdgeCases:
         result = cache.get("extract", {"urls": ["big"]})
         assert result == big_content
         assert len(result) == 1024 * 1024
+
+    def test_close_exception_handling(self, tmp_path):
+        """close() silently handles exceptions."""
+        mock_conn = MagicMock()
+        mock_conn.close.side_effect = Exception("Mock close error")
+
+        with patch("sqlite3.connect", return_value=mock_conn):
+            cache = WebCache(tmp_path / "mock.db")
+            # Should not raise
+            cache.close()
