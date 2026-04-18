@@ -13,9 +13,11 @@ Token lifecycle:
 
 from __future__ import annotations
 
+import getpass
 import json
 import os
 import stat
+import subprocess
 from pathlib import Path
 
 from loguru import logger
@@ -31,6 +33,35 @@ def _get_token_dir() -> Path:
 def get_token_path(provider: str) -> Path:
     """Get path for a provider's token file."""
     return _get_token_dir() / f"{provider}.json"
+
+
+def _set_secure_permissions(path: Path) -> None:
+    """Restrict access to owner-only.
+
+    Unix: chmod 0700 for directories, 0600 for files.
+    Windows: icacls /inheritance:r + /grant:r <user>:F -- remove inherited
+    ACEs and grant full control to the current user only, so other local
+    users cannot read token files even when stored under the user profile.
+    """
+    if os.name != "nt":
+        try:
+            if path.is_dir():
+                path.chmod(stat.S_IRWXU)  # 0700
+            else:
+                path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600
+        except OSError as e:
+            logger.debug(f"chmod failed for {path}: {e}")
+        return
+
+    try:
+        user = getpass.getuser()
+        subprocess.run(
+            ["icacls", str(path), "/inheritance:r", "/grant:r", f"{user}:F"],
+            capture_output=True,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.debug(f"icacls failed for {path}: {e}")
 
 
 def load_token(provider: str) -> dict | None:
@@ -60,22 +91,10 @@ def save_token(provider: str, token: dict) -> None:
     """
     token_dir = _get_token_dir()
     token_dir.mkdir(parents=True, exist_ok=True)
-
-    # Secure directory permissions (Unix only)
-    if os.name != "nt":  # pragma: no cover
-        try:
-            token_dir.chmod(stat.S_IRWXU)  # 0700
-        except OSError:
-            pass
+    _set_secure_permissions(token_dir)
 
     path = get_token_path(provider)
     path.write_text(json.dumps(token, indent=2), encoding="utf-8")
-
-    # Secure file permissions (Unix only)
-    if os.name != "nt":  # pragma: no cover
-        try:
-            path.chmod(stat.S_IRUSR | stat.S_IWUSR)  # 0600
-        except OSError:
-            pass
+    _set_secure_permissions(path)
 
     logger.info(f"Token saved: {path}")
