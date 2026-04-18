@@ -633,16 +633,24 @@ class TestShareCloudKeysToPeers:
             mock_write.assert_not_called()
 
     def test_handles_write_error(self):
-        """Handles write_config error for individual peer."""
+        """Handles write_config error for individual peer and continues."""
         from wet_mcp.credential_state import _share_cloud_keys_to_peers
 
         config = {"OPENAI_API_KEY": "test-key"}
+
+        def side_effect(peer, shared):
+            if peer == "mnemo-mcp":
+                raise RuntimeError("mnemo failed")
+            return None
+
         with patch(
             "mcp_core.storage.config_file.write_config",
-            side_effect=Exception("disk full"),
-        ):
+            side_effect=side_effect,
+        ) as mock_write:
             # Should not raise
             _share_cloud_keys_to_peers(config)
+            # Should still attempt both peers
+            assert mock_write.call_count == 2
 
     def test_handles_import_error(self):
         """Handles import error gracefully."""
@@ -927,6 +935,50 @@ class TestSaveCredentialsGdriveNextStep:
             result = save_credentials({"FOO": "bar"})
             assert result is None
 
+    def test_poll_thread_target(self):
+        """Cover the internal _poll_gdrive_token function used as thread target."""
+        from wet_mcp.credential_state import save_credentials
+
+        device_payload = {
+            "device_code": "dev123",
+            "user_code": "USER-CODE",
+            "verification_url": "https://example.test/verify",
+            "interval": 5,
+            "expires_in": 1800,
+        }
+        mock_httpx_response = MagicMock()
+        mock_httpx_response.status_code = 200
+        mock_httpx_response.json = MagicMock(return_value=device_payload)
+
+        with (
+            patch("mcp_core.storage.config_file.write_config"),
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
+            patch("wet_mcp.config.settings") as mock_settings,
+            patch("httpx.post", return_value=mock_httpx_response),
+            patch("threading.Thread") as mock_thread,
+            patch("asyncio.run") as mock_run,
+            patch("wet_mcp.credential_state._gdrive_token_poll"),
+        ):
+            mock_settings.google_drive_client_id = "cid"
+            mock_settings.google_drive_client_secret = "csec"
+            mock_settings.setup_providers = MagicMock()
+
+            save_credentials({"FOO": "bar"})
+
+            # Capture the target function
+            target = mock_thread.call_args.kwargs["target"]
+            # It should call asyncio.run(_gdrive_token_poll(...))
+            # Use a normal MagicMock for _gdrive_token_poll instead of AsyncMock (default in some contexts)
+            # to avoid RuntimeWarnings since we aren't actually running it with asyncio.
+            with patch(
+                "wet_mcp.credential_state._gdrive_token_poll", new=MagicMock()
+            ) as mock_poll_sync:
+                target()
+                mock_poll_sync.assert_called_once_with("cid", "csec", "dev123", 5, 1800)
+
+            mock_run.assert_called_once()
+
     def test_device_code_request_exception_non_fatal(self):
         """save_credentials swallows httpx.post exceptions for device code."""
         from wet_mcp.credential_state import save_credentials
@@ -980,6 +1032,14 @@ class TestShareCloudKeysOuterException:
         with patch.object(builtins, "__import__", side_effect=fake_import):
             # Should not raise
             _share_cloud_keys_to_peers({"GEMINI_API_KEY": "key"})
+
+    def test_outer_exception_swallowed(self):
+        """Broad Exception in outer block should be swallowed."""
+        from wet_mcp.credential_state import _share_cloud_keys_to_peers
+
+        # Passing None as config triggers AttributeError in shared = {...}
+        with patch("mcp_core.storage.config_file.write_config"):
+            _share_cloud_keys_to_peers(None)  # type: ignore
 
 
 class TestGdriveTokenPoll:
@@ -1101,3 +1161,61 @@ class TestGdriveTokenPoll:
             # expires_in=0 ensures deadline already passed on next iteration
             await _gdrive_token_poll("cid", "csec", "dev", 0, 0)
             mock_save.assert_not_called()
+
+    async def test_authorization_pending_explicit(self):
+        # Cover line 431
+        with patch("wet_mcp.token_store.save_token") as mock_save:
+            await self._run_poll(
+                [
+                    {"error": "authorization_pending"},
+                    {"access_token": "ok"},
+                ]
+            )
+            mock_save.assert_called_once()
+
+    async def test_internal_exception_explicit(self):
+        # Cover line 437-438
+
+        from wet_mcp.credential_state import _gdrive_token_poll
+
+        # Trigger Exception in the loop by making post fail
+        responses = [
+            "boom",  # Will trigger exception
+            {"access_token": "ok"},
+        ]
+        it = iter(responses)
+
+        class _FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                pass
+
+            async def post(self, *a, **kw):
+                val = next(it)
+                if val == "boom":
+                    raise RuntimeError("boom")
+                # Need to return something with .json()
+                mock_resp = MagicMock()
+                mock_resp.json.return_value = val
+                return mock_resp
+
+        async def fake_sleep(_):
+            pass
+
+        t_state = [100.0]
+
+        def mock_t():
+            val = t_state[0]
+            t_state[0] += 1.0
+            return val
+
+        with (
+            patch("httpx.AsyncClient", return_value=_FakeClient()),
+            patch("asyncio.sleep", new=fake_sleep),
+            patch("wet_mcp.token_store.save_token") as mock_save,
+            patch("time.time", side_effect=mock_t),
+        ):
+            await _gdrive_token_poll("cid", "csec", "dev", 1, 1000)
+            mock_save.assert_called_once()
