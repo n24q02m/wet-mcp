@@ -1,6 +1,6 @@
 """Additional unit tests for db.py to increase coverage from 78% to 95%+.
 
-Targets uncovered lines: 27, 112, 117, 119, 142-151, 267-271, 287-291,
+Targets uncovered lines: 217-224, 27, 112, 117, 119, 142-151, 267-271, 287-291,
 328-332, 396-403, 431-435, 526-540, 550-557, 581-598, 694-697, 712-743,
 772, 804, 807, 812, 879-882, 889, 972-973.
 """
@@ -197,6 +197,23 @@ class TestChunkQualityScoreEdgeCases:
 # ---------------------------------------------------------------------------
 # sqlite-vec loading failure (lines 142-151)
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Migration: library table column (lines 217-224)
+# ---------------------------------------------------------------------------
+
+
+class TestLibraryMigration:
+    def test_migration_discovery_version_exists(self, db):
+        """Calling migration when column already exists is handled (lines 217-224)."""
+        # First call happens in fixture initialization
+        # Second call triggers OperationalError because column exists
+        db._create_libraries_table()
+        # Check if column exists
+        info = db._conn.execute("PRAGMA table_info(libraries)").fetchall()
+        cols = [c["name"] for c in info]
+        assert "discovery_version" in cols
 
 
 class TestSqliteVecLoading:
