@@ -37,7 +37,7 @@ from wet_mcp.sources.docs import (
 
 @pytest.mark.asyncio
 async def test_all_registries():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -125,7 +125,7 @@ async def test_discover_library(mock_probe, mock_get_gh):
     mock_probe.return_value = "https://docs.test"
     mock_get_gh.return_value = "http://gh"
 
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -145,7 +145,7 @@ async def test_discover_library(mock_probe, mock_get_gh):
 
 @pytest.mark.asyncio
 async def test_probe_docs_url():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -260,7 +260,7 @@ def test_sync_functions():
 
 @pytest.mark.asyncio
 async def test_try_github_raw_docs_success():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -305,7 +305,7 @@ async def test_try_github_raw_docs_success():
 
 @pytest.mark.asyncio
 async def test_try_github_raw_docs_failure():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -319,7 +319,7 @@ async def test_try_github_raw_docs_failure():
 
 @pytest.mark.asyncio
 async def test_try_sitemap_success():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -339,7 +339,7 @@ async def test_try_sitemap_success():
 
 @pytest.mark.asyncio
 async def test_try_sitemap_index():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -361,7 +361,7 @@ async def test_try_sitemap_index():
 
 @pytest.mark.asyncio
 async def test_try_objects_inv_success():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -519,7 +519,7 @@ def test_is_i18n_url():
 
 @pytest.mark.asyncio
 async def test_fetch_github_readme():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -535,7 +535,7 @@ async def test_fetch_github_readme():
 
 @pytest.mark.asyncio
 async def test_probe_docs_url_readthedocs():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
@@ -568,7 +568,7 @@ async def test_probe_docs_url_readthedocs():
 
 @pytest.mark.asyncio
 async def test_probe_docs_url_subdomain():
-    with patch("httpx.AsyncClient") as MockClient:
+    with patch("wet_mcp.sources.docs._safe_httpx_client") as MockClient:
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
