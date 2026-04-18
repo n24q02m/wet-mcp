@@ -578,15 +578,25 @@ class TestHandleRestartCrashDiagnostics:
         module._restart_count = 0
         module._last_restart_time = 0.0
 
+        expected_url = "http://127.0.0.1:8080"
         with (
             patch("web_core.search.runner._is_searxng_installed", return_value=True),
+            # web-core 1.2.0 tries Docker before subprocess; disable it so
+            # _start_searxng_subprocess is reached and returns a known URL.
+            # Use create=True so the patch is a no-op on web-core 1.1.0
+            # where the Docker path does not exist.
+            patch(
+                "web_core.search.runner._start_docker_searxng",
+                AsyncMock(return_value=None),
+                create=True,
+            ),
             patch(
                 "web_core.search.runner._start_searxng_subprocess",
-                return_value="http://127.0.0.1:8080",
+                AsyncMock(return_value=expected_url),
             ),
         ):
             url = await _handle_restart_and_start(start_port=8080)
-            assert "8080" in url
+            assert url == expected_url
 
 
 # -----------------------------------------------------------------------
