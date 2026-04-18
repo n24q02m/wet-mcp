@@ -70,8 +70,8 @@ def _require_credentials() -> str | None:
                 "state": "awaiting_setup",
                 "setup_url": url,
                 "instructions": (
-                    "API keys required. Call setup(action='open_relay') to configure via browser, "
-                    "or setup(action='skip') to opt into local-only mode."
+                    "API keys required. Call config(action='setup_open_relay') to configure via browser, "
+                    "or config(action='setup_skip') to opt into local-only mode."
                 ),
             }
         )
@@ -1116,7 +1116,8 @@ async def help(tool_name: str = "search") -> str:
 @mcp.tool(
     description=(
         "Server config and management. Actions: "
-        "status|set|cache_clear|docs_reindex. "
+        "status|set|cache_clear|docs_reindex|warmup|setup_sync|"
+        "setup_open_relay|setup_status|setup_skip|setup_reset|setup_complete. "
         "Use help tool with tool_name='config' for full docs."
     ),
     annotations=ToolAnnotations(
@@ -1132,6 +1133,7 @@ async def config(
     key: str | None = None,
     value: str | None = None,
     remote_type: str | None = None,
+    force: bool = False,
 ) -> str:
     """Server configuration and management.
 
@@ -1142,6 +1144,11 @@ async def config(
     - docs_reindex: Force re-index a library (key = library name)
     - warmup: Pre-download models and run first-time setup
     - setup_sync: Configure Google Drive sync (OAuth Device Code flow)
+    - setup_open_relay: Open browser-based setup to configure all API keys at once
+    - setup_status: Show current credential state and configured keys
+    - setup_skip: Use local ONNX models (explicit opt-in, no cloud features)
+    - setup_reset: Clear all credentials and reset state
+    - setup_complete: Re-resolve credentials from environment
     """
     match action:
         case "status":
@@ -1251,67 +1258,19 @@ async def config(
                 )
             return json.dumps({"error": f"Library '{key}' not found in index"})
 
-        case _:
-            import difflib
+        case "warmup":
+            from wet_mcp.setup_tool import run_warmup
 
-            valid_actions = ["cache_clear", "docs_reindex", "set", "status"]
-            closest = difflib.get_close_matches(action, valid_actions, n=1)
-            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-            return json.dumps(
-                {
-                    "error": f"Unknown action '{action}'.{suggestion}",
-                    "valid_actions": valid_actions,
-                }
-            )
+            result = await run_warmup()
+            return json.dumps(result, indent=2, default=str)
 
+        case "setup_sync":
+            from wet_mcp.setup_tool import run_setup_sync
 
-# ---------------------------------------------------------------------------
-# Setup (warmup + setup-sync as MCP tool)
-# ---------------------------------------------------------------------------
+            result = await run_setup_sync(remote_type or "drive")
+            return json.dumps(result, indent=2, default=str)
 
-
-@mcp.tool(
-    description=(
-        "Server setup, credentials, and warmup. Actions: "
-        "open_relay|status|skip|reset|complete|warmup|setup_sync. "
-        "open_relay: Open browser-based setup page to configure all API keys at once. "
-        "status: Show current credential state and configured keys. "
-        "skip: Use local ONNX models (explicit opt-in, no cloud). "
-        "reset: Clear all credentials and reset state. "
-        "complete: Re-resolve credentials from environment. "
-        "warmup: Pre-download models and install dependencies. "
-        "setup_sync: Configure Google Drive sync (OAuth Device Code)."
-    ),
-    annotations=ToolAnnotations(
-        title="Setup",
-        readOnlyHint=False,
-        destructiveHint=False,
-        idempotentHint=True,
-        openWorldHint=True,
-    ),
-)
-async def setup(
-    action: str,
-    key: str | None = None,
-    value: str | None = None,
-    remote_type: str | None = None,
-    force: bool = False,
-) -> str:
-    """Server setup, credentials, and warmup.
-
-    Actions:
-    - open_relay: Open browser-based setup to configure all API keys at once.
-    - status: Show current credential state and configured keys.
-    - skip: Use local ONNX models (explicit opt-in, no cloud features).
-    - reset: Clear all credentials and reset state.
-    - complete: Re-resolve credentials from environment.
-    - warmup: Pre-download models and install dependencies.
-    - setup_sync: Configure Google Drive sync (OAuth Device Code).
-    """
-    from wet_mcp.setup_tool import run_setup_sync, run_warmup
-
-    match action:
-        case "open_relay":
+        case "setup_open_relay":
             from wet_mcp.credential_state import trigger_relay_setup
 
             url = await trigger_relay_setup(force=force)
@@ -1327,15 +1286,7 @@ async def setup(
                 {"status": "error", "message": "Failed to start relay session."}
             )
 
-        case "warmup":
-            result = await run_warmup()
-            return json.dumps(result, indent=2, default=str)
-
-        case "setup_sync":
-            result = await run_setup_sync(remote_type or "drive")
-            return json.dumps(result, indent=2, default=str)
-
-        case "status":
+        case "setup_status":
             from wet_mcp import credential_state as _cs
 
             state = _cs.get_state()
@@ -1349,16 +1300,7 @@ async def setup(
                 }
             )
 
-        case "start" | "setup_relay":
-            # Backward compat aliases → redirect to open_relay
-            from wet_mcp.credential_state import trigger_relay_setup
-
-            url = await trigger_relay_setup(force=force)
-            if url:
-                return json.dumps({"status": "relay_started", "setup_url": url})
-            return json.dumps({"status": "error", "message": "Relay setup failed."})
-
-        case "skip":
+        case "setup_skip":
             from mcp_core import set_local_mode
 
             from wet_mcp.credential_state import CredentialState, set_state
@@ -1372,7 +1314,7 @@ async def setup(
                 }
             )
 
-        case "reset":
+        case "setup_reset":
             from wet_mcp.credential_state import reset_state
 
             reset_state()
@@ -1383,7 +1325,7 @@ async def setup(
                 }
             )
 
-        case "complete":
+        case "setup_complete":
             from wet_mcp.credential_state import (
                 CredentialState,
                 resolve_credential_state,
@@ -1413,12 +1355,15 @@ async def setup(
             import difflib
 
             valid_actions = [
-                "complete",
-                "open_relay",
-                "reset",
+                "cache_clear",
+                "docs_reindex",
+                "set",
+                "setup_complete",
+                "setup_open_relay",
+                "setup_reset",
+                "setup_skip",
+                "setup_status",
                 "setup_sync",
-                "skip",
-                "start",
                 "status",
                 "warmup",
             ]

@@ -3324,7 +3324,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.25.0"
+version = "2.25.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3380,7 +3380,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", specifier = ">=1.1.1" },
+    { name = "n24q02m-mcp-core", specifier = ">=1.2.0" },
     { name = "n24q02m-web-core", specifier = ">=1.1.0" },
     { name = "openai", specifier = ">=2.31.0" },
     { name = "pillow", specifier = ">=12.2.0" },

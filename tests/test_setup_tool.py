@@ -203,22 +203,22 @@ class TestRunSetupSync:
 
 
 class TestSetupMcpTool:
-    """Tests for warmup/setup_sync actions in setup tool."""
+    """Tests for warmup/setup_sync/setup_* actions in config tool."""
 
-    async def test_setup_tool_warmup_action(self):
-        """setup tool with action='warmup' calls run_warmup."""
+    async def test_config_tool_warmup_action(self):
+        """config tool with action='warmup' calls run_warmup."""
         with patch(
             "wet_mcp.setup_tool.run_warmup",
             new_callable=AsyncMock,
             return_value={"status": "ok", "steps": [], "mode": "local"},
         ):
-            from wet_mcp.server import setup
+            from wet_mcp.server import config
 
-            result = await setup(action="warmup")
+            result = await config(action="warmup")
             assert '"status": "ok"' in result
 
-    async def test_setup_tool_setup_sync_action(self):
-        """setup tool with action='setup_sync' calls run_setup_sync."""
+    async def test_config_tool_setup_sync_action(self):
+        """config tool with action='setup_sync' calls run_setup_sync."""
         with patch(
             "wet_mcp.setup_tool.run_setup_sync",
             new_callable=AsyncMock,
@@ -228,20 +228,20 @@ class TestSetupMcpTool:
                 "message": "Sync setup complete",
             },
         ):
-            from wet_mcp.server import setup
+            from wet_mcp.server import config
 
-            result = await setup(action="setup_sync", remote_type="drive")
+            result = await config(action="setup_sync", remote_type="drive")
             assert '"status": "ok"' in result
 
-    async def test_setup_tool_invalid_action(self):
-        """setup tool with invalid action returns error string."""
-        from wet_mcp.server import setup
+    async def test_config_tool_invalid_action(self):
+        """config tool with invalid action returns error string."""
+        from wet_mcp.server import config
 
-        result = await setup(action="invalid")
+        result = await config(action="invalid_xyz_action")
         assert '"error"' in result
         assert "Unknown action" in result
 
-    async def test_setup_tool_setup_sync_default_remote(self):
+    async def test_config_tool_setup_sync_default_remote(self):
         """setup_sync action without remote_type uses 'drive'."""
         with patch(
             "wet_mcp.setup_tool.run_setup_sync",
@@ -252,7 +252,34 @@ class TestSetupMcpTool:
                 "message": "Sync setup complete",
             },
         ) as mock_sync:
-            from wet_mcp.server import setup
+            from wet_mcp.server import config
 
-            await setup(action="setup_sync")
+            await config(action="setup_sync")
             mock_sync.assert_called_once_with("drive")
+
+    async def test_config_tool_dispatches_setup_status_action(self):
+        """setup_status action (formerly on setup tool) should work via config tool."""
+        with (
+            patch("wet_mcp.credential_state.get_state") as mock_get_state,
+            patch("wet_mcp.credential_state.get_setup_url", return_value=None),
+            patch("wet_mcp.credential_state.CLOUD_KEYS", []),
+        ):
+            mock_state = MagicMock()
+            mock_state.value = "configured"
+            mock_get_state.return_value = mock_state
+
+            from wet_mcp.server import config
+
+            result = await config(action="setup_status")
+            assert "unknown action" not in result.lower()
+            assert "state" in result
+
+    async def test_config_tool_dispatches_setup_reset_action(self):
+        """setup_reset action (formerly on setup tool) should work via config tool."""
+        with patch("wet_mcp.credential_state.reset_state") as mock_reset:
+            from wet_mcp.server import config
+
+            result = await config(action="setup_reset")
+            assert "unknown action" not in result.lower()
+            assert '"status": "ok"' in result
+            mock_reset.assert_called_once()

@@ -88,3 +88,19 @@ mise run dev       # uv run wet-mcp
 - `asyncio.to_thread()` cho wrapping sync operations
 - Embedding luu tai 768 dims (default). Doi provider KHONG lam hu vector table
 - Renovate: Python upgrades DISABLED
+
+## Known bugs / gotchas (phat hien 2026-04-18 E2E)
+
+1. **Setup flow 2-phase race condition**:
+   - Phase 1: user submit API keys form -> `writeConfig(SERVER_NAME, config)` -> `state=configured` (nhanh, ~5-30s)
+   - Phase 2: Google Drive OAuth Device Code flow start (async, BLOCKING user hanh dong tren `google.com/device`)
+   - Sau Phase 2, token save vao `~/.wet-mcp/tokens/google_drive.json`
+   - **Gotcha:** E2E test script KHONG duoc kill server process sau Phase 1 -- PHAI wait cho `google_drive.json` ton tai TRUOC KHI exit. Neu kill som -> OAuth token mat -> next run phai re-auth.
+   - Example fix: `phase-m-e2e-test/test_wet_full.py` phase_1 dung check `pathlib.Path(token_path).exists()` + 300s timeout after state=configured.
+
+2. **GDrive token shared voi mnemo-mcp**:
+   - Neu user auth mot account Google cho wet-mcp, mnemo-mcp co the auto-detect va skip device code flow (shared account pool ong)
+   - Chua verify chinh xac mechanism, nhung observed 2026-04-18 E2E: setup mnemo ngay sau wet -> report "configured" rat nhanh
+   - **Impact:** Tot cho UX, nhung can check xem logic share co security concern khong (token scope, privilege escalation)
+
+3. **Relay "Setup complete" browser UI**: Python core-py relay implementation works correctly (browser hien "Setup complete!" sau phase 2). KHAC voi TS consumers (notion/email) bi stuck -- see `C:\Users\n24q02m-wlap\projects\mcp-core\CLAUDE.md` Known bugs #2.

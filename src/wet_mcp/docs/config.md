@@ -79,3 +79,53 @@ With explicit remote type:
 | `remote_type` | No | `drive` | Remote type (`drive`, `dropbox`, etc.) |
 
 Returns: authorization instructions and status.
+
+### setup_open_relay
+
+Open browser-based setup page to configure all API keys at once.
+
+```json
+{"action": "setup_open_relay"}
+```
+
+Force restart of relay session:
+
+```json
+{"action": "setup_open_relay", "force": true}
+```
+
+### setup_status
+
+Show current credential state and configured keys.
+
+```json
+{"action": "setup_status"}
+```
+
+Returns: credential state (`awaiting_setup`, `configured`, `local`), setup URL, detected cloud keys.
+
+### setup_skip
+
+Opt into local-only mode (uses local ONNX models, no cloud API keys required).
+
+```json
+{"action": "setup_skip"}
+```
+
+### setup_reset
+
+Clear all credentials and reset state. Next tool call will prompt setup again.
+
+```json
+{"action": "setup_reset"}
+```
+
+### setup_complete
+
+Re-resolve credentials from environment after manual configuration.
+
+```json
+{"action": "setup_complete"}
+```
+
+Returns: updated credential state and whether backends were re-initialized.

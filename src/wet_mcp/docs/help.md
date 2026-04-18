@@ -97,6 +97,21 @@ Welcome to **WET** (Web Extended Toolkit) MCP Server.
 
 // Configure cloud sync
 {"action": "setup_sync"}
+
+// Setup: open browser to configure API keys
+{"action": "setup_open_relay"}
+
+// Setup: show credential state
+{"action": "setup_status"}
+
+// Setup: use local models only (no cloud)
+{"action": "setup_skip"}
+
+// Setup: clear credentials and reset
+{"action": "setup_reset"}
+
+// Setup: re-resolve credentials from environment
+{"action": "setup_complete"}
 ```
 
 ## Getting Full Documentation
