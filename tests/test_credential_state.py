@@ -1015,6 +1015,119 @@ class TestSetGdriveCompleteCallback:
         mod._on_gdrive_complete = None
 
 
+class TestSetGdriveFailedCallback:
+    """Failure callback wires into mcp-core's ``mark_setup_failed``.
+
+    Without this, a Google device-code terminal error (invalid_grant /
+    expired_token / access_denied) left the browser spinner waiting
+    forever because the server only knew ``idle`` / ``complete`` states.
+    """
+
+    def test_failed_callback_registration(self):
+        import wet_mcp.credential_state as mod
+        from wet_mcp.credential_state import (
+            _reset_callbacks_for_test,
+            set_gdrive_failed_callback,
+        )
+
+        _reset_callbacks_for_test()
+
+        def cb(key: str, error: str) -> None:
+            pass
+
+        with patch("wet_mcp.credential_state.logger") as mock_logger:
+            set_gdrive_failed_callback(cb)
+            mock_logger.debug.assert_called_with("GDrive failed callback registered")
+
+        assert mod._on_gdrive_failed is cb
+        _reset_callbacks_for_test()
+
+    def test_wire_callbacks_sets_both(self):
+        """wire_gdrive_callbacks populates BOTH complete + failed handlers."""
+        import wet_mcp.credential_state as mod
+        from wet_mcp.credential_state import (
+            _reset_callbacks_for_test,
+            wire_gdrive_callbacks,
+        )
+
+        _reset_callbacks_for_test()
+
+        complete_calls: list[str] = []
+        failed_calls: list[tuple[str, str]] = []
+
+        def mark_complete(key: str = "gdrive") -> None:
+            complete_calls.append(key)
+
+        def mark_failed(key: str = "gdrive", error: str = "?") -> None:
+            failed_calls.append((key, error))
+
+        wire_gdrive_callbacks(mark_complete, mark_failed)
+
+        # Trigger both through the stored callbacks.
+        assert mod._on_gdrive_complete is mark_complete
+        failed_cb = mod._on_gdrive_failed
+        complete_cb = mod._on_gdrive_complete
+        assert failed_cb is not None
+        assert complete_cb is not None
+
+        failed_cb("gdrive", "invalid_grant")
+        assert failed_calls == [("gdrive", "invalid_grant")]
+
+        complete_cb()
+        assert complete_calls == ["gdrive"]
+
+        _reset_callbacks_for_test()
+
+    def test_wire_callbacks_adapter_swallows_exception(self):
+        """mark_failed raising should not crash the poll loop."""
+        import wet_mcp.credential_state as mod
+        from wet_mcp.credential_state import (
+            _reset_callbacks_for_test,
+            wire_gdrive_callbacks,
+        )
+
+        _reset_callbacks_for_test()
+
+        def mark_complete(key: str = "gdrive") -> None:
+            pass
+
+        def mark_failed(key: str = "gdrive", error: str = "?") -> None:
+            raise RuntimeError("boom")
+
+        wire_gdrive_callbacks(mark_complete, mark_failed)
+        # Must not raise.
+        cb = mod._on_gdrive_failed
+        assert cb is not None
+        cb("gdrive", "invalid_grant")
+
+        _reset_callbacks_for_test()
+
+    def test_wire_callbacks_legacy_1arg_only_wires_complete(self):
+        """Legacy mcp-core (<1.3.0) calls ``hook(mark_complete)`` with one arg.
+
+        ``wire_gdrive_callbacks`` must still work: the complete callback
+        gets wired, the failed callback stays None, and the code degrades
+        to log-only on Google terminal errors (legacy behavior).
+        """
+        import wet_mcp.credential_state as mod
+        from wet_mcp.credential_state import (
+            _reset_callbacks_for_test,
+            wire_gdrive_callbacks,
+        )
+
+        _reset_callbacks_for_test()
+
+        def mark_complete(key: str = "gdrive") -> None:
+            pass
+
+        # Simulate legacy arity: call with mark_complete only, no mark_failed.
+        wire_gdrive_callbacks(mark_complete)
+        assert mod._on_gdrive_complete is mark_complete
+        assert mod._on_gdrive_failed is None
+
+        _reset_callbacks_for_test()
+
+
 class TestShareCloudKeysOuterException:
     def test_outer_import_error_non_fatal(self):
         """Outer ImportError for write_config should be swallowed."""
@@ -1132,6 +1245,111 @@ class TestGdriveTokenPoll:
         with patch("wet_mcp.token_store.save_token") as mock_save:
             await self._run_poll([{"error": "access_denied"}])
             mock_save.assert_not_called()
+
+    async def test_terminal_error_invokes_failed_callback(self):
+        """Google terminal error must fire _on_gdrive_failed so the browser stops polling.
+
+        Without this, the credential form's spinner waited forever on
+        "Waiting for authorization..." even though the backend had given up.
+        """
+        from wet_mcp.credential_state import (
+            _reset_callbacks_for_test,
+            set_gdrive_failed_callback,
+        )
+
+        _reset_callbacks_for_test()
+        calls: list[tuple[str, str]] = []
+
+        def on_fail(key: str, error: str) -> None:
+            calls.append((key, error))
+
+        set_gdrive_failed_callback(on_fail)
+        try:
+            with patch("wet_mcp.token_store.save_token") as mock_save:
+                await self._run_poll(
+                    [
+                        {
+                            "error": "invalid_grant",
+                            "error_description": "Bad device code",
+                        }
+                    ]
+                )
+                mock_save.assert_not_called()
+            assert len(calls) == 1
+            assert calls[0][0] == "gdrive"
+            assert "Bad device code" in calls[0][1]
+        finally:
+            _reset_callbacks_for_test()
+
+    async def test_terminal_error_without_description_uses_error_code(self):
+        """If Google omits error_description, fall back to error code."""
+        from wet_mcp.credential_state import (
+            _reset_callbacks_for_test,
+            set_gdrive_failed_callback,
+        )
+
+        _reset_callbacks_for_test()
+        calls: list[tuple[str, str]] = []
+        set_gdrive_failed_callback(lambda k, e: calls.append((k, e)))
+        try:
+            with patch("wet_mcp.token_store.save_token"):
+                await self._run_poll([{"error": "access_denied"}])
+            assert calls == [("gdrive", "access_denied")]
+        finally:
+            _reset_callbacks_for_test()
+
+    async def test_deadline_expiry_invokes_failed_callback(self):
+        """Loop expiring without success -> failed callback with 'expired'."""
+        from wet_mcp.credential_state import (
+            _gdrive_token_poll,
+            _reset_callbacks_for_test,
+            set_gdrive_failed_callback,
+        )
+
+        _reset_callbacks_for_test()
+        calls: list[tuple[str, str]] = []
+        set_gdrive_failed_callback(lambda k, e: calls.append((k, e)))
+
+        class _NoopClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            async def post(self, *a, **kw):
+                class R:
+                    def json(self):
+                        return {"error": "authorization_pending"}
+
+                return R()
+
+        async def fake_sleep(_):
+            return None
+
+        try:
+            with (
+                patch("httpx.AsyncClient", _NoopClient),
+                patch("asyncio.sleep", new=fake_sleep),
+            ):
+                # expires_in=0 makes deadline immediate so the loop never
+                # iterates and we fall through to the expiry path.
+                await _gdrive_token_poll("cid", "csec", "dev", 0, 0)
+            assert calls == [("gdrive", "expired")]
+        finally:
+            _reset_callbacks_for_test()
+
+    async def test_terminal_error_no_callback_registered_is_safe(self):
+        """Missing failed callback must not crash the poll."""
+        from wet_mcp.credential_state import _reset_callbacks_for_test
+
+        _reset_callbacks_for_test()
+        try:
+            with patch("wet_mcp.token_store.save_token"):
+                # Should not raise even without any callback registered.
+                await self._run_poll([{"error": "invalid_grant"}])
+        finally:
+            _reset_callbacks_for_test()
 
     async def test_post_exception_non_fatal_and_expires(self):
         """Post raising should be caught; deadline expiry exits loop."""
