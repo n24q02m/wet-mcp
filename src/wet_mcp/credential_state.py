@@ -33,6 +33,11 @@ class CredentialState(Enum):
 _state = CredentialState.AWAITING_SETUP
 _setup_url: str | None = None
 _on_gdrive_complete: Callable[[], None] | None = None
+# Failure callback signature matches mcp-core's mark_setup_failed: optional
+# key + error message. Wired by the HTTP server so the browser's
+# /setup-status poll receives ``error:<message>`` instead of spinning forever
+# when Google rejects the device code (invalid_grant / expired_token / etc.).
+_on_gdrive_failed: Callable[[str, str], None] | None = None
 
 
 def set_gdrive_complete_callback(cb: Callable[[], None]) -> None:
@@ -40,6 +45,62 @@ def set_gdrive_complete_callback(cb: Callable[[], None]) -> None:
     global _on_gdrive_complete
     _on_gdrive_complete = cb
     logger.debug("GDrive complete callback registered")
+
+
+def set_gdrive_failed_callback(cb: Callable[[str, str], None]) -> None:
+    """Set callback for when GDrive OAuth fails upstream (used by HTTP server).
+
+    The callback receives ``(key, error_message)`` matching the
+    ``mark_setup_failed(key, error)`` signature exposed by mcp-core's local
+    OAuth app. It is invoked by ``_gdrive_token_poll`` whenever Google
+    returns a terminal error (``invalid_grant``, ``expired_token``,
+    ``access_denied``, etc.) so the browser's ``/setup-status`` poll
+    surfaces the error and stops waiting.
+    """
+    global _on_gdrive_failed
+    _on_gdrive_failed = cb
+    logger.debug("GDrive failed callback registered")
+
+
+def wire_gdrive_callbacks(
+    mark_complete: Callable[[], None],
+    mark_failed: Callable[..., None] | None = None,
+) -> None:
+    """Wire GDrive completion + optional failure callbacks in one call.
+
+    Intended for use as ``setup_complete_hook``. mcp-core detects the hook
+    signature by arity:
+
+    - Older mcp-core (<1.3.0) passes 1 positional arg: ``hook(mark_complete)``.
+      ``mark_failed`` stays ``None`` and GDrive terminal errors go
+      server-log-only (legacy behavior).
+    - Newer mcp-core (>=1.3.0) passes 2 args: ``hook(mark_complete, mark_failed)``.
+      ``mark_failed`` wires through ``mark_setup_failed`` so the browser
+      form stops spinning and shows the error.
+
+    Making ``mark_failed`` optional here means wet-mcp stays forward-compatible
+    with both versions; no lock-step release required between wet-mcp and
+    mcp-core.
+    """
+    set_gdrive_complete_callback(mark_complete)
+
+    global _on_gdrive_failed
+
+    if mark_failed is None:
+        _on_gdrive_failed = None
+        logger.debug("GDrive complete callback wired (1-arg legacy core)")
+        return
+
+    def _cb(_key: str, error: str) -> None:
+        # mcp-core's mark_setup_failed(key, error) expects the key positionally.
+        # We always operate on "gdrive" so hardcode it here.
+        try:
+            mark_failed("gdrive", error)
+        except Exception:
+            logger.opt(exception=True).debug("mark_setup_failed call failed")
+
+    _on_gdrive_failed = _cb
+    logger.debug("GDrive complete + failed callbacks wired (2-arg)")
 
 
 def get_state() -> CredentialState:
@@ -388,11 +449,32 @@ async def _gdrive_token_poll(
     interval: int,
     expires_in: int,
 ) -> None:
-    """Background poll Google OAuth for device code token completion."""
+    """Background poll Google OAuth for device code token completion.
+
+    Terminal outcomes:
+    * ``access_token`` in response  -> save token + fire complete callback.
+    * ``authorization_pending``     -> keep polling (user hasn't approved yet).
+    * ``slow_down``                 -> increase interval + keep polling.
+    * Any other ``error`` value (``invalid_grant``, ``expired_token``,
+      ``access_denied``, etc.) -> fire failure callback with the error
+      string and stop. The failure callback wires into mcp-core's
+      ``/setup-status`` so the browser shows the message instead of
+      waiting forever.
+    * Loop exits via ``deadline`` without success -> fire failure callback
+      with ``expired`` so the browser surfaces the timeout.
+    """
     import asyncio
     import time
 
     import httpx
+
+    def _notify_failed(error: str) -> None:
+        if _on_gdrive_failed is None:
+            return
+        try:
+            _on_gdrive_failed("gdrive", error)
+        except Exception:
+            logger.opt(exception=True).debug("GDrive failed callback raised")
 
     deadline = time.time() + expires_in
     async with httpx.AsyncClient() as client:
@@ -427,15 +509,27 @@ async def _gdrive_token_poll(
                                 "GDrive complete callback failed"
                             )
                     return
-                elif data.get("error") == "authorization_pending":
+                err = data.get("error")
+                if err == "authorization_pending":
                     continue
-                elif data.get("error") == "slow_down":
+                if err == "slow_down":
                     interval += 5
-                else:
-                    logger.warning("GDrive token poll error: {}", data.get("error"))
-                    return
+                    continue
+                # Any other error from Google is terminal -- stop polling AND
+                # tell the browser so the spinner stops.
+                err_desc = data.get("error_description") or err or "unknown"
+                logger.warning(
+                    "GDrive token poll terminal error: {} ({})",
+                    err,
+                    err_desc,
+                )
+                _notify_failed(str(err_desc))
+                return
             except Exception:
                 logger.opt(exception=True).debug("GDrive token poll request failed")
+        # Deadline exceeded without success -> surface timeout.
+        logger.warning("GDrive device code flow expired before user approved")
+        _notify_failed("expired")
 
 
 def set_state(state: CredentialState) -> None:
@@ -457,3 +551,13 @@ def reset_state() -> None:
         delete_config(SERVER_NAME)
     except Exception:
         logger.opt(exception=True).warning("Reset state failed")
+
+
+def _reset_callbacks_for_test() -> None:
+    """Test helper: clear callbacks so tests start from a known state.
+
+    Not exported from the public API; tests import it directly.
+    """
+    global _on_gdrive_complete, _on_gdrive_failed
+    _on_gdrive_complete = None
+    _on_gdrive_failed = None

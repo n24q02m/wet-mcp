@@ -2038,7 +2038,7 @@ async def run_http(port: int = 0) -> None:
     """
     from mcp_core.transport.local_server import run_local_server
 
-    from wet_mcp.credential_state import save_credentials, set_gdrive_complete_callback
+    from wet_mcp.credential_state import save_credentials, wire_gdrive_callbacks
     from wet_mcp.relay_schema import RELAY_SCHEMA
 
     await run_local_server(
@@ -2047,7 +2047,11 @@ async def run_http(port: int = 0) -> None:
         relay_schema=RELAY_SCHEMA,
         port=port,
         on_credentials_saved=save_credentials,
-        setup_complete_hook=set_gdrive_complete_callback,
+        # 2-arg hook: receive BOTH mark_setup_complete and mark_setup_failed
+        # so GDrive device code failures (Google invalid_grant / expired /
+        # denied) propagate to the browser form instead of leaving it
+        # stuck on "Waiting for authorization..." forever.
+        setup_complete_hook=wire_gdrive_callbacks,
     )
 
 
