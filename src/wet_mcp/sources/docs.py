@@ -1921,14 +1921,7 @@ def _is_toc_only(content: str) -> bool:
     if not lines:
         return True
 
-    # Patterns that indicate a TOC line (not actual content)
-    link_pattern = re.compile(
-        r"^[-*]\s*\[.+?\]\(.+?\)\s*$"  # - [Title](url) or * [Title](url)
-        r"|^\[.+?\]\(.+?\)\s*$"  # [Title](url) bare
-        r"|^https?://\S+\s*$"  # bare URL
-        r"|^>\s*[-*]?\s*\[.+?\]\(.+?\)"  # > - [Title](url) quoted
-    )
-    toc_lines = sum(1 for line in lines if link_pattern.match(line))
+    toc_lines = sum(1 for line in lines if _TOC_LINE_RE.match(line))
 
     # Also count heading-only lines (# Title without body)
     heading_lines = sum(1 for line in lines if line.startswith("#"))
@@ -1990,6 +1983,17 @@ _NAV_LINK_LINE_RE = re.compile(
     r"^\s*[-*]\s+(?:\[.*?\]\s*)?\[.*?\]\(https?://.*?\)\s*$"
     r"|^\s*\d+\.\s+\[.*?\]\(https?://.*?\)\s*$",
 )
+
+# Patterns that indicate a TOC line (not actual content)
+_TOC_LINE_RE = re.compile(
+    r"^[-*]\s*\[.+?\]\(.+?\)\s*$"  # - [Title](url) or * [Title](url)
+    r"|^\[.+?\]\(.+?\)\s*$"  # [Title](url) bare
+    r"|^https?://\S+\s*$"  # bare URL
+    r"|^>\s*[-*]?\s*\[.+?\]\(.+?\)"  # > - [Title](url) quoted
+)
+
+_ANY_HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
+
 # MkDocs UI artifacts that leak into crawled markdown
 _MKDOCS_UI_RE = re.compile(
     r"^\s*(?:"
@@ -2050,12 +2054,11 @@ def _strip_nav_heading_blocks(content: str) -> str:
     between them, they are stripped as navigation artifacts.
     """
     lines = content.splitlines()
-    heading_re = re.compile(r"^(#{1,6})\s+(.+)$")
 
     # Build heading map: line_index -> (level, text)
     headings: dict[int, tuple[int, str]] = {}
     for i, line in enumerate(lines):
-        m = heading_re.match(line.lstrip())
+        m = _ANY_HEADING_RE.match(line.lstrip())
         if m:
             headings[i] = (len(m.group(1)), m.group(2))
 
@@ -2679,6 +2682,8 @@ _I18N_LANG_CODES = frozenset(
 # Template/macro pattern (Jinja2, mkdocs-macros, etc.)
 _TEMPLATE_MACRO_RE = re.compile(r"\{\{.*?\}\}")
 
+_FRAMEWORK_DIR_RE = re.compile(r"(?:^|/)framework/(\w+)/")
+
 # Frameworks commonly used in monorepo docs with framework/* subdirectories
 _KNOWN_FRAMEWORKS = frozenset(
     {"react", "angular", "vue", "svelte", "solid", "qwik", "lit", "preact"}
@@ -2692,12 +2697,11 @@ def _filter_framework_paths(paths: list[str], library_hint: str) -> list[str]:
     ``docs/framework/angular/...`` and keeps only the one matching
     the library name (e.g., ``@tanstack/react-query`` -> keep ``react``).
     """
-    framework_dir_re = re.compile(r"(?:^|/)framework/(\w+)/")
     framework_paths: dict[str, list[str]] = {}
     non_framework_paths: list[str] = []
 
     for p in paths:
-        match = framework_dir_re.search(p.lower())
+        match = _FRAMEWORK_DIR_RE.search(p.lower())
         if match and match.group(1) in _KNOWN_FRAMEWORKS:
             fw = match.group(1)
             framework_paths.setdefault(fw, []).append(p)
