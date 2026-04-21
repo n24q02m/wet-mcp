@@ -32,7 +32,6 @@ from web_core.search.runner import (
 from wet_mcp.config import settings
 from wet_mcp.searxng_runner import (
     ensure_searxng,
-    stop_searxng,
 )
 
 
@@ -670,7 +669,6 @@ def test_get_startup_lock():
 
 def test_cleanup_process():
     import web_core.search.runner as module
-    from web_core.search.runner import _cleanup_process
 
     mock_proc = MagicMock()
     module._searxng_process = mock_proc
@@ -694,7 +692,6 @@ def test_cleanup_process():
 
 def test_cleanup_process_not_owner():
     import web_core.search.runner as module
-    from web_core.search.runner import _cleanup_process
 
     mock_proc = MagicMock()
     module._searxng_process = mock_proc
