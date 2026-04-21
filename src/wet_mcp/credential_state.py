@@ -1,18 +1,36 @@
 """Non-blocking credential state management for wet-mcp.
 
 State machine: awaiting_setup -> setup_in_progress -> (configured | local)
-Reset: configured/local -> awaiting_setup (via setup tool)
+Reset: configured/local -> awaiting_setup (via setup tool).
+
+When no credentials are present, ``trigger_relay_setup`` spawns a LOCAL HTTP
+credential form on ``http://127.0.0.1:<random>`` via
+``mcp_core.start_local_server_background`` with the wet-mcp relay schema.
+The user pastes API keys into that local form; ``save_credentials`` persists
+to ``config.enc`` and -- when a Google Drive client is configured -- kicks
+off the device-code flow. GDrive progress is surfaced to the form through
+``setup_complete_hook``.
+
+This fallback is LOCAL-ONLY. We never hit the remote relay URL here -- that
+is reserved for explicit ``MCP_MODE`` HTTP deployments. See
+``~/.claude/skills/mcp-dev/references/mode-matrix.md`` section
+``stdio proxy`` for the canonical rule.
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Callable
 from enum import Enum
+from typing import Any
 
 from loguru import logger
 
 SERVER_NAME = "wet-mcp"
+
+# Grace window so the browser renders "Setup complete!" before the local spawn closes.
+_SPAWN_CLEANUP_S = 5.0
 
 CLOUD_KEYS = [
     "JINA_AI_API_KEY",
@@ -32,6 +50,7 @@ class CredentialState(Enum):
 # Module-level state
 _state = CredentialState.AWAITING_SETUP
 _setup_url: str | None = None
+_active_handle: Any | None = None  # LocalServerHandle
 _on_gdrive_complete: Callable[[], None] | None = None
 # Failure callback signature matches mcp-core's mark_setup_failed: optional
 # key + error message. Wired by the HTTP server so the browser's
@@ -82,7 +101,16 @@ def wire_gdrive_callbacks(
     with both versions; no lock-step release required between wet-mcp and
     mcp-core.
     """
-    set_gdrive_complete_callback(mark_complete)
+
+    def _complete_then_cleanup() -> None:
+        try:
+            mark_complete()
+        finally:
+            # GDrive finished: stop the local credential-form spawn so the
+            # stdio parent process isn't holding an idle HTTP server.
+            _schedule_spawn_cleanup()
+
+    set_gdrive_complete_callback(_complete_then_cleanup)
 
     global _on_gdrive_failed
 
@@ -168,154 +196,102 @@ def resolve_credential_state() -> CredentialState:
     return _state
 
 
-async def trigger_relay_setup(
-    *, force: bool = False, timeout: float | None = None
-) -> str | None:
-    """Start relay session (lazy trigger). Returns setup URL or None.
+async def _close_active_handle() -> None:
+    """Best-effort close of the module-level local credential-form handle."""
+    global _active_handle
 
-    Uses SessionLock to reuse existing sessions across parallel processes.
-    Tries to open browser automatically.
-    Does NOT block -- returns URL immediately for the tool to include in response.
+    handle = _active_handle
+    _active_handle = None
+    if handle is None:
+        return
+    try:
+        await handle.close()
+    except Exception:
+        logger.opt(exception=True).debug(
+            "Best-effort close of credential-form handle failed"
+        )
+
+
+def _schedule_spawn_cleanup(grace_s: float = _SPAWN_CLEANUP_S) -> None:
+    """Schedule detached cleanup of the local credential-form spawn."""
+    if _active_handle is None:
+        return
+
+    async def _delayed_close() -> None:
+        try:
+            await asyncio.sleep(grace_s)
+            await _close_active_handle()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.opt(exception=True).debug("Delayed spawn cleanup failed")
+
+    try:
+        task = asyncio.create_task(_delayed_close())
+        task.add_done_callback(lambda _t: None)
+    except RuntimeError:
+        # No running loop; nothing to do -- the handle will be cleaned up on reset.
+        pass
+
+
+async def trigger_relay_setup(
+    *,
+    force: bool = False,
+    timeout: float | None = None,  # noqa: ARG001
+) -> str | None:
+    """Spawn a local credential form (stdio fallback) and return its URL.
+
+    The spawn is LOCAL ONLY -- ``mcp_core.start_local_server_background``
+    binds ``127.0.0.1:<random>`` and renders the wet-mcp relay schema in a
+    browser form. ``timeout`` is accepted for backward compatibility but
+    unused (the local form has no poll deadline).
+
+    Returns the local setup URL or ``None`` if the spawn could not start.
     """
-    global _state, _setup_url
+    global _state, _setup_url, _active_handle
 
     if not force and _state not in (CredentialState.AWAITING_SETUP,):
+        return _setup_url
+
+    # Reuse a live spawn instead of binding a second port.
+    if _active_handle is not None and _setup_url:
+        _state = CredentialState.SETUP_IN_PROGRESS
         return _setup_url
 
     _state = CredentialState.SETUP_IN_PROGRESS
 
     try:
-        # Check for existing session via lock
-        from mcp_core import acquire_session_lock
-
-        existing = await acquire_session_lock(SERVER_NAME)
-        if existing:
-            _setup_url = existing.relay_url
-            logger.info("Reusing existing relay session")
-            return _setup_url
-
-        # Create new session
-        from mcp_core.relay.client import create_session
+        from fastmcp import FastMCP
+        from mcp_core import start_local_server_background, try_open_browser
 
         from wet_mcp.relay_schema import RELAY_SCHEMA
 
-        relay_base = os.environ.get("MCP_RELAY_URL", "https://wet-mcp.n24q02m.com")
-        session = await create_session(relay_base, SERVER_NAME, RELAY_SCHEMA)  # ty: ignore[invalid-argument-type]
+        stub_mcp = FastMCP(f"{SERVER_NAME}-setup")
 
-        # Save session lock for parallel processes
-        import time
-
-        from mcp_core import SessionInfo, write_session_lock
-
-        await write_session_lock(
-            SERVER_NAME,
-            SessionInfo(
-                session_id=session.session_id,
-                relay_url=session.relay_url,
-                created_at=time.time(),
-            ),
+        handle = await start_local_server_background(
+            stub_mcp,
+            server_name=SERVER_NAME,
+            relay_schema=RELAY_SCHEMA,
+            port=0,
+            host="127.0.0.1",
+            on_credentials_saved=save_credentials,
+            setup_complete_hook=wire_gdrive_callbacks,
         )
 
-        _setup_url = session.relay_url
+        _active_handle = handle
+        _setup_url = f"http://{handle.host}:{handle.port}/"
 
-        # Try to open browser (best-effort)
-        from mcp_core import try_open_browser
+        try_open_browser(_setup_url)
 
-        try_open_browser(session.relay_url)
-
-        logger.info("Relay session created: {}", session.relay_url)
-
-        # Start background poll task (non-blocking)
-        import asyncio
-
-        asyncio.create_task(_poll_relay_background(relay_base, session, timeout))
-
+        logger.info("Local credential form ready at {}", _setup_url)
         return _setup_url
 
     except Exception as e:
         logger.debug("Relay setup failed: {}. Server continues in awaiting_setup.", e)
         _state = CredentialState.AWAITING_SETUP
+        await _close_active_handle()
+        _setup_url = None
         return None
-
-
-async def _poll_relay_background(
-    relay_base: str, session: object, timeout: float | None
-) -> None:
-    """Background task that polls relay and applies config when user submits."""
-    global _state
-    try:
-        from mcp_core.relay.client import poll_for_result
-        from mcp_core.storage.config_file import write_config
-
-        poll_timeout = timeout if timeout is not None else 300.0
-        config = await poll_for_result(relay_base, session, timeout_s=poll_timeout)  # ty: ignore[invalid-argument-type]
-
-        # Save config
-        write_config(SERVER_NAME, config)
-
-        # Apply to env
-        for key, value in config.items():
-            if value and key not in os.environ:
-                os.environ[key] = value
-
-        _state = CredentialState.CONFIGURED
-        logger.info("Relay config applied successfully")
-
-        # Re-init providers
-        from wet_mcp.config import settings
-
-        settings.setup_providers()
-
-        # Share cloud keys with mnemo-mcp and CRG (same keys, avoid separate relay)
-        _share_cloud_keys_to_peers(config)
-
-        # Google Drive OAuth via relay messaging (best-effort)
-        session_id = getattr(session, "session_id", None)
-        if session_id:
-            try:
-                from wet_mcp.sync import setup_google_auth
-
-                await setup_google_auth(relay_url=relay_base, session_id=session_id)
-            except Exception:
-                logger.opt(exception=True).debug(
-                    "GDrive OAuth via relay failed (non-fatal)"
-                )
-
-        # Notify browser: setup complete
-        if session_id:
-            try:
-                from mcp_core.relay.client import send_message
-
-                await send_message(
-                    relay_base,
-                    session_id,
-                    {
-                        "type": "complete",
-                        "text": "Setup complete! API keys configured. You can close this tab.",
-                    },
-                )
-            except Exception:
-                logger.opt(exception=True).debug("Failed to send completion message")
-
-        # Release session lock
-        from mcp_core import release_session_lock
-
-        await release_session_lock(SERVER_NAME)
-
-    except RuntimeError as ex:
-        if "RELAY_SKIPPED" in str(ex):
-            _state = CredentialState.LOCAL
-            try:
-                from mcp_core import set_local_mode
-
-                set_local_mode(SERVER_NAME)
-            except Exception:
-                logger.opt(exception=True).warning("Failed to set local mode")
-        else:
-            _state = CredentialState.AWAITING_SETUP
-    except Exception:
-        logger.exception("Relay polling failed")
-        _state = CredentialState.AWAITING_SETUP
 
 
 def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
@@ -439,6 +415,9 @@ def save_credentials(config: dict[str, str]) -> dict | None:
             "GDrive device code request failed (non-fatal)"
         )
 
+    # No GDrive: cloud-only setup is done -- schedule local spawn cleanup so
+    # the browser renders "Setup complete!" then the local server closes.
+    _schedule_spawn_cleanup()
     return None
 
 
@@ -496,8 +475,18 @@ async def _gdrive_token_poll(
                     # Save token
                     from wet_mcp.token_store import save_token
 
-                    save_token("google_drive", data)
-                    logger.info("GDrive OAuth token saved successfully")
+                    try:
+                        save_token("google_drive", data)
+                        logger.info("GDrive OAuth token saved successfully")
+                    except Exception as exc:
+                        logger.opt(exception=True).warning(
+                            "GDrive token save FAILED after successful exchange: {}. "
+                            "Token lost; device_code cannot be re-exchanged. "
+                            "User must restart setup.",
+                            exc,
+                        )
+                        _notify_failed(f"save_token failed: {exc}")
+                        return
                     logger.info(
                         "GDrive authorized. Sync will start on next server restart."
                     )
@@ -543,6 +532,16 @@ def reset_state() -> None:
     global _state, _setup_url
     _state = CredentialState.AWAITING_SETUP
     _setup_url = None
+
+    # Close any active local credential-form spawn; fire-and-forget so callers
+    # don't need to be async.
+    if _active_handle is not None:
+        try:
+            task = asyncio.create_task(_close_active_handle())
+            task.add_done_callback(lambda _t: None)
+        except RuntimeError:
+            pass
+
     try:
         from mcp_core import clear_mode
         from mcp_core.storage.config_file import delete_config
