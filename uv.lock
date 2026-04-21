@@ -722,12 +722,13 @@ wheels = [
 
 [[package]]
 name = "fastmcp"
-version = "3.2.3"
+version = "3.2.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
     { name = "cyclopts" },
     { name = "exceptiongroup" },
+    { name = "griffelib" },
     { name = "httpx" },
     { name = "jsonref" },
     { name = "jsonschema-path" },
@@ -747,9 +748,9 @@ dependencies = [
     { name = "watchfiles" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b9/42/7eed0a38e3b7a386805fecacf8a5a9353a2b3040395ef9e30e585d8549ac/fastmcp-3.2.3.tar.gz", hash = "sha256:4f02ae8b00227285a0cf6544dea1db29b022c8cdd8d3dfdec7118540210ae60a", size = 26328743, upload-time = "2026-04-09T22:05:03.402Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/13/29544fbc6dfe45ea38046af0067311e0bad7acc7d1f2ad38bb08f2409fe2/fastmcp-3.2.4.tar.gz", hash = "sha256:083ecb75b44a4169e7fc0f632f94b781bdb0ff877c6b35b9877cbb566fd4d4d1", size = 28746127, upload-time = "2026-04-14T01:42:24.174Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f5/48/84b6dcba793178a44b9d99b4def6cd62f870dcfc5bb7b9153ac390135812/fastmcp-3.2.3-py3-none-any.whl", hash = "sha256:cc50af6eed1f62ed8b6ebf4987286d8d1d006f08d5bec739d5c7fb76160e0911", size = 707260, upload-time = "2026-04-09T22:05:01.225Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/76/b310d52fa0e30d39bd937eb58ec2c1f1ea1b5f519f0575e9dd9612f01deb/fastmcp-3.2.4-py3-none-any.whl", hash = "sha256:e6c9c429171041455e47ab94bb3f83c4657622a0ec28922f6940053959bd58a9", size = 728599, upload-time = "2026-04-14T01:42:26.85Z" },
 ]
 
 [[package]]
@@ -964,6 +965,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/d9/c4/2570fc07f34a39f2caf0bf9f24b0a1a0a47bc2e8e465b2c2424821389dfc/greenlet-3.3.2-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:1a9172f5bf6bd88e6ba5a84e0a68afeac9dc7b6b412b245dd64f52d83c81e55b", size = 1640455, upload-time = "2026-02-20T20:21:10.261Z" },
     { url = "https://files.pythonhosted.org/packages/91/39/5ef5aa23bc545aa0d31e1b9b55822b32c8da93ba657295840b6b34124009/greenlet-3.3.2-cp313-cp313-win_amd64.whl", hash = "sha256:a7945dd0eab63ded0a48e4dcade82939783c172290a7903ebde9e184333ca124", size = 230961, upload-time = "2026-02-20T20:16:58.461Z" },
     { url = "https://files.pythonhosted.org/packages/62/6b/a89f8456dcb06becff288f563618e9f20deed8dd29beea14f9a168aef64b/greenlet-3.3.2-cp313-cp313-win_arm64.whl", hash = "sha256:394ead29063ee3515b4e775216cb756b2e3b4a7e55ae8fd884f17fa579e6b327", size = 230221, upload-time = "2026-02-20T20:17:37.152Z" },
+]
+
+[[package]]
+name = "griffelib"
+version = "2.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9d/82/74f4a3310cdabfbb10da554c3a672847f1ed33c6f61dd472681ce7f1fe67/griffelib-2.0.2.tar.gz", hash = "sha256:3cf20b3bc470e83763ffbf236e0076b1211bac1bc67de13daf494640f2de707e", size = 166461, upload-time = "2026-03-27T11:34:51.091Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/11/8c/c9138d881c79aa0ea9ed83cbd58d5ca75624378b38cee225dcf5c42cc91f/griffelib-2.0.2-py3-none-any.whl", hash = "sha256:925c857658fb1ba40c0772c37acbc2ab650bd794d9c1b9726922e36ea4117ea1", size = 142357, upload-time = "2026-03-27T11:34:46.275Z" },
 ]
 
 [[package]]
@@ -1707,7 +1717,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.4.3"
+version = "1.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1720,9 +1730,9 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/cb/6b/a1d150bde068eacf56dfc8f7bc5043990c031899ffb7f6d7fc557395d009/n24q02m_mcp_core-1.4.3.tar.gz", hash = "sha256:9738e83a465cbaf0d18b460f977779b471149d0fd1b3d56f7e2cb080ec3e6e6b", size = 146834, upload-time = "2026-04-20T03:59:03.002Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/46/8c9649ea93f74a3acb341d37e68255fc4a5513e584f8cb4cbf1d7133d80a/n24q02m_mcp_core-1.5.0.tar.gz", hash = "sha256:bcfe9c3775be202775f968a5ce2d749408ea422f764ed1faee174566848d2843", size = 152477, upload-time = "2026-04-21T05:28:25.152Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/46/6e/ff2ba5f28e341fa617d6e13ec856b0ef18b2b5cd0048145c2ad4d54d1c6d/n24q02m_mcp_core-1.4.3-py3-none-any.whl", hash = "sha256:359f56cbb349cd365a7e681b3064a855e9a32e97cfad412ef4e798e779ea352f", size = 89331, upload-time = "2026-04-20T03:59:04.11Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/64/d4256c78febde9ab675a27b103319bdc80249d59075b18f67b7fc6b8bc42/n24q02m_mcp_core-1.5.0-py3-none-any.whl", hash = "sha256:02de010f34c4ee51c4f30e6c5b5eb30c7d5599fbf00f25ee25ad95d1f7b0a644", size = 92819, upload-time = "2026-04-21T05:28:26.355Z" },
 ]
 
 [[package]]
@@ -3324,7 +3334,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.26.0"
+version = "2.26.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3372,7 +3382,7 @@ requires-dist = [
     { name = "crawl4ai" },
     { name = "cryptography", specifier = ">=46.0.7" },
     { name = "diskcache", specifier = ">=5.6.3" },
-    { name = "fastmcp", specifier = ">=3.2.3,<4" },
+    { name = "fastmcp", specifier = ">=3.2.4,<4" },
     { name = "google-api-python-client", specifier = ">=2.194.0" },
     { name = "google-auth", specifier = ">=2.49.2" },
     { name = "google-genai", specifier = ">=1.73.1" },
@@ -3382,7 +3392,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", specifier = ">=1.4.3,<2" },
+    { name = "n24q02m-mcp-core", specifier = ">=1.5.0,<2" },
     { name = "n24q02m-web-core", specifier = ">=1.2.0" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "pillow", specifier = ">=12.2.0" },
