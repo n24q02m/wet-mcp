@@ -235,14 +235,14 @@ class TestSigtermThenKill:
         from web_core.search.runner import _sigterm_then_kill
 
         with patch("os.kill", side_effect=ProcessLookupError):
-            result = _sigterm_then_kill(9999, "test")
+            result = await _sigterm_then_kill(9999, "test")
             assert result is True
 
     async def test_sigterm_permission_error_on_kill(self):
         from web_core.search.runner import _sigterm_then_kill
 
         with patch("os.kill", side_effect=PermissionError):
-            result = _sigterm_then_kill(9999, "test")
+            result = await _sigterm_then_kill(9999, "test")
             assert result is True
 
     async def test_sigterm_graceful_exit_after_check(self):
@@ -260,8 +260,8 @@ class TestSigtermThenKill:
                     raise ProcessLookupError  # Process died
                 return None  # Still alive
 
-        with patch("os.kill", side_effect=kill_side_effect), patch("time.sleep"):
-            result = _sigterm_then_kill(1234)
+        with patch("os.kill", side_effect=kill_side_effect), patch("asyncio.sleep"):
+            result = await _sigterm_then_kill(1234)
             assert result is True
 
     async def test_sigterm_permission_error_on_check(self):
@@ -278,8 +278,8 @@ class TestSigtermThenKill:
                 raise PermissionError  # Can't check, treat as done
             return None
 
-        with patch("os.kill", side_effect=kill_side_effect), patch("time.sleep"):
-            result = _sigterm_then_kill(1234)
+        with patch("os.kill", side_effect=kill_side_effect), patch("asyncio.sleep"):
+            result = await _sigterm_then_kill(1234)
             assert result is True
 
     @pytest.mark.skipif(
@@ -298,8 +298,8 @@ class TestSigtermThenKill:
             if sig == signal.SIGKILL:
                 return None  # SIGKILL succeeds
 
-        with patch("os.kill", side_effect=kill_side_effect), patch("time.sleep"):
-            result = _sigterm_then_kill(1234, "test-proc")
+        with patch("os.kill", side_effect=kill_side_effect), patch("asyncio.sleep"):
+            result = await _sigterm_then_kill(1234, "test-proc")
             assert result is True
 
     @pytest.mark.skipif(
@@ -318,8 +318,8 @@ class TestSigtermThenKill:
             if sig == signal.SIGKILL:
                 raise ProcessLookupError  # Already dead
 
-        with patch("os.kill", side_effect=kill_side_effect), patch("time.sleep"):
-            result = _sigterm_then_kill(1234)
+        with patch("os.kill", side_effect=kill_side_effect), patch("asyncio.sleep"):
+            result = await _sigterm_then_kill(1234)
             assert result is True
 
 
@@ -335,7 +335,7 @@ class TestForceKillProcess:
 
         proc = MagicMock(spec=subprocess.Popen)
         proc.poll.return_value = 0  # Already dead
-        _force_kill_process(proc)  # Should return immediately
+        await _force_kill_process(proc)  # Should return immediately
 
     @pytest.mark.skipif(
         sys.platform == "win32",
@@ -356,7 +356,7 @@ class TestForceKillProcess:
             patch("os.getpgid", return_value=1234),
         ):
             mock_sys.platform = "linux"
-            _force_kill_process(proc)
+            await _force_kill_process(proc)
             proc.terminate.assert_called_once()
 
     @pytest.mark.skipif(
@@ -389,7 +389,7 @@ class TestForceKillProcess:
                     raise PermissionError("denied")
 
             with patch("os.killpg", side_effect=killpg_side_effect):
-                _force_kill_process(proc)
+                await _force_kill_process(proc)
                 proc.kill.assert_called_once()
 
     @pytest.mark.skipif(
@@ -411,7 +411,7 @@ class TestForceKillProcess:
             patch("os.getpgid", return_value=1234),
         ):
             mock_sys.platform = "linux"
-            _force_kill_process(proc)  # Should log warning but not crash
+            await _force_kill_process(proc)  # Should log warning but not crash
 
     async def test_force_kill_windows_path(self):
         """Cover lines 469-474: Windows path."""
@@ -427,7 +427,7 @@ class TestForceKillProcess:
             patch("web_core.search.runner._sigterm_then_kill", return_value=True),
         ):
             mock_sys.platform = "win32"
-            _force_kill_process(proc)
+            await _force_kill_process(proc)
 
     @pytest.mark.skipif(
         sys.platform == "win32",
@@ -445,7 +445,7 @@ class TestForceKillProcess:
             mock_sys.platform = "linux"
             with patch("os.killpg", side_effect=RuntimeError("unexpected")):
                 with patch("os.getpgid", return_value=1234):
-                    _force_kill_process(proc)  # Should not crash
+                    await _force_kill_process(proc)  # Should not crash
 
 
 class TestKillStalePortProcess:
@@ -460,7 +460,7 @@ class TestKillStalePortProcess:
             patch("subprocess.run", side_effect=RuntimeError("netstat failed")),
         ):
             mock_sys.platform = "win32"
-            _kill_stale_port_process(8080)  # Should not crash
+            await _kill_stale_port_process(8080)  # Should not crash
 
     async def test_kill_stale_port_windows_invalid_pid(self):
         """Cover lines 503: ValueError on pid parse."""
@@ -474,7 +474,7 @@ class TestKillStalePortProcess:
             patch("subprocess.run", return_value=mock_result),
         ):
             mock_sys.platform = "win32"
-            _kill_stale_port_process(8080)  # Should not crash
+            await _kill_stale_port_process(8080)  # Should not crash
 
     async def test_kill_stale_port_unix_lsof_not_found_fuser_fallback(self):
         """Cover lines 525-534: lsof not found, falls back to fuser."""
@@ -495,7 +495,7 @@ class TestKillStalePortProcess:
             patch("subprocess.run", side_effect=run_side_effect),
         ):
             mock_sys.platform = "linux"
-            _kill_stale_port_process(8080)
+            await _kill_stale_port_process(8080)
 
     async def test_kill_stale_port_unix_lsof_not_found_fuser_not_found(self):
         """Cover lines 534: both lsof and fuser not found."""
@@ -509,7 +509,7 @@ class TestKillStalePortProcess:
             patch("subprocess.run", side_effect=run_side_effect),
         ):
             mock_sys.platform = "linux"
-            _kill_stale_port_process(8080)  # Should not crash
+            await _kill_stale_port_process(8080)  # Should not crash
 
     async def test_kill_stale_port_unix_general_exception(self):
         """Cover lines 536-537: general exception on lsof."""
@@ -520,7 +520,7 @@ class TestKillStalePortProcess:
             patch("subprocess.run", side_effect=RuntimeError("unexpected")),
         ):
             mock_sys.platform = "linux"
-            _kill_stale_port_process(8080)  # Should not crash
+            await _kill_stale_port_process(8080)  # Should not crash
 
     async def test_kill_stale_port_unix_invalid_pid(self):
         """Cover lines 523: ValueError on pid parse from lsof."""
@@ -535,7 +535,7 @@ class TestKillStalePortProcess:
             patch("subprocess.run", return_value=mock_result),
         ):
             mock_sys.platform = "linux"
-            _kill_stale_port_process(8080)  # Should not crash
+            await _kill_stale_port_process(8080)  # Should not crash
 
 
 class TestCleanupProcessSettingsFile:
