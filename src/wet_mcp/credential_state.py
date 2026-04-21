@@ -319,8 +319,13 @@ def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
         )
 
 
-def save_credentials(config: dict[str, str]) -> dict | None:
+def save_credentials(config: dict[str, str], _context: dict[str, str]) -> dict | None:
     """Save credentials from OAuth form to config.enc and apply to environment.
+
+    ``_context`` carries the per-authorize ``sub`` (for future multi-user
+    extensions). Wet-mcp is single-user by design — optional API keys live in
+    one shared ``config.enc`` on the host running the server, so the subject
+    is intentionally unused here.
 
     Called by the local OAuth AS when the user submits API keys via the
     browser form. Writes to encrypted config file, applies to env vars

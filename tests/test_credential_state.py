@@ -546,7 +546,7 @@ class TestSaveCredentialsGdriveNextStep:
             mock_settings.google_drive_client_secret = "csec"
             mock_settings.setup_providers = MagicMock()
 
-            result = save_credentials({"FOO": "bar"})
+            result = save_credentials({"FOO": "bar"}, {"sub": "test-sub"})
 
         assert result is not None
         assert result["type"] == "oauth_device_code"
@@ -573,7 +573,7 @@ class TestSaveCredentialsGdriveNextStep:
             mock_settings.google_drive_client_secret = "csec"
             mock_settings.setup_providers = MagicMock()
 
-            result = save_credentials({"FOO": "bar"})
+            result = save_credentials({"FOO": "bar"}, {"sub": "test-sub"})
 
         assert result is None
 
@@ -590,7 +590,7 @@ class TestSaveCredentialsGdriveNextStep:
             mock_settings.google_drive_client_secret = ""
             mock_settings.setup_providers = MagicMock()
 
-            result = save_credentials({"FOO": "bar"})
+            result = save_credentials({"FOO": "bar"}, {"sub": "test-sub"})
 
         assert result is None
 
@@ -610,7 +610,7 @@ class TestSaveCredentialsGdriveNextStep:
             mock_settings.google_drive_client_id = ""
             mock_settings.google_drive_client_secret = ""
             # Should not raise
-            result = save_credentials({"FOO": "bar"})
+            result = save_credentials({"FOO": "bar"}, {"sub": "test-sub"})
             assert result is None
 
     def test_poll_thread_target(self):
@@ -642,7 +642,7 @@ class TestSaveCredentialsGdriveNextStep:
             mock_settings.google_drive_client_secret = "csec"
             mock_settings.setup_providers = MagicMock()
 
-            save_credentials({"FOO": "bar"})
+            save_credentials({"FOO": "bar"}, {"sub": "test-sub"})
 
             # Capture the target function
             target = mock_thread.call_args.kwargs["target"]
@@ -671,7 +671,7 @@ class TestSaveCredentialsGdriveNextStep:
             mock_settings.google_drive_client_id = "cid"
             mock_settings.google_drive_client_secret = "csec"
             mock_settings.setup_providers = MagicMock()
-            result = save_credentials({"FOO": "bar"})
+            result = save_credentials({"FOO": "bar"}, {"sub": "test-sub"})
             assert result is None
 
 
