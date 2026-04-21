@@ -2,7 +2,6 @@
 
 import importlib.util
 import os
-import sys
 from pathlib import Path
 
 from loguru import logger
@@ -94,10 +93,11 @@ class Settings(BaseSettings):
     crawler_timeout: int = 60
 
     # SearXNG Management
-    # Auto-start disabled on Windows: SearXNG requires lxml (C build tools)
-    # and subprocess management that doesn't work reliably on Windows.
-    # Windows users: set SEARXNG_URL to an external instance (Docker/VM).
-    wet_auto_searxng: bool = sys.platform != "win32"
+    # web-core runner tries Docker fallback first, then subprocess install.
+    # On Windows, Docker path handles lxml/build-tool constraints that would
+    # otherwise block the subprocess path -- so auto-start works cross-platform
+    # as long as Docker Desktop OR build tools are available.
+    wet_auto_searxng: bool = True
     wet_searxng_port: int = 41592
 
     # Tool execution timeout (seconds, 0 = no timeout)
