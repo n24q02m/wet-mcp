@@ -53,13 +53,36 @@ def _set_secure_permissions(path: Path) -> None:
             logger.debug(f"chmod failed for {path}: {e}")
         return
 
+    # Windows: fully-qualify user as DOMAIN\user so icacls does not collide
+    # with the local machine account when username matches hostname.
     try:
         user = getpass.getuser()
-        subprocess.run(
-            ["icacls", str(path), "/inheritance:r", "/grant:r", f"{user}:F"],
+        if not user:
+            logger.warning(
+                f"Cannot determine current user for icacls on {path}; leaving default ACL"
+            )
+            return
+        domain = os.environ.get("USERDOMAIN", "")
+        principal = f"{domain}\\{user}" if domain else user
+        result = subprocess.run(
+            ["icacls", str(path), "/inheritance:r", "/grant:r", f"{principal}:F"],
             capture_output=True,
             check=False,
         )
+        if result.returncode != 0:
+            stderr_text = (
+                result.stderr.decode("utf-8", errors="ignore") if result.stderr else ""
+            )
+            logger.warning(
+                f"icacls failed for {path} (principal={principal}): {stderr_text.strip()} "
+                f"-- ACL may be inaccessible, rolling back /inheritance:r"
+            )
+            # Best-effort rollback: re-enable inheritance so dir is at least accessible
+            subprocess.run(
+                ["icacls", str(path), "/inheritance:e"],
+                capture_output=True,
+                check=False,
+            )
     except (OSError, subprocess.SubprocessError) as e:
         logger.debug(f"icacls failed for {path}: {e}")
 

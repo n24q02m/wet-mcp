@@ -108,14 +108,20 @@ def test_save_token_chmod_oserror(token_dir):
         assert (token_dir / "drive.json").exists()
 
 
-def test_save_token_windows_permissions(token_dir):
-    """On Windows, invoke icacls (not chmod) to lock down inheritance + grant."""
+def test_save_token_windows_permissions(token_dir, monkeypatch):
+    """On Windows, invoke icacls (not chmod) to lock down inheritance + grant.
+
+    Principal is DOMAIN\\user (fully qualified) so icacls does not collide with
+    the machine account when username matches hostname.
+    """
+    monkeypatch.setenv("USERDOMAIN", "TESTDOM")
     with (
         patch("wet_mcp.token_store.os.name", "nt"),
         patch("wet_mcp.token_store.subprocess.run") as mock_run,
         patch("wet_mcp.token_store.getpass.getuser", return_value="tester"),
         patch.object(Path, "chmod") as mock_chmod,
     ):
+        mock_run.return_value.returncode = 0
         save_token("drive", {"access_token": "test"})
         mock_chmod.assert_not_called()
         # One call for the directory + one for the file
@@ -125,8 +131,29 @@ def test_save_token_windows_permissions(token_dir):
             assert cmd[0] == "icacls"
             assert "/inheritance:r" in cmd
             assert "/grant:r" in cmd
-            assert "tester:F" in cmd
+            assert "TESTDOM\\tester:F" in cmd
         assert load_token("drive") == {"access_token": "test"}
+
+
+def test_save_token_windows_icacls_failure_rollback(token_dir, monkeypatch):
+    """When icacls /grant fails, rollback inheritance so dir stays accessible."""
+    monkeypatch.setenv("USERDOMAIN", "TESTDOM")
+    with (
+        patch("wet_mcp.token_store.os.name", "nt"),
+        patch("wet_mcp.token_store.subprocess.run") as mock_run,
+        patch("wet_mcp.token_store.getpass.getuser", return_value="tester"),
+        patch.object(Path, "chmod"),
+    ):
+        # Simulate grant failure -> returncode=5
+        mock_run.return_value.returncode = 5
+        mock_run.return_value.stderr = b"No mapping"
+        save_token("drive", {"access_token": "test"})
+        # Expect: dir grant fail -> dir rollback; file grant fail -> file rollback = 4 calls
+        assert mock_run.call_count == 4
+        rollback_cmds = [
+            c for c in mock_run.call_args_list if "/inheritance:e" in c[0][0]
+        ]
+        assert len(rollback_cmds) == 2, "Expected 2 rollback calls (/inheritance:e)"
 
 
 def test_save_token_windows_icacls_failure_non_fatal(token_dir):
