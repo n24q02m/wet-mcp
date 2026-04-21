@@ -107,6 +107,8 @@ async def search(
     active_url = await _ensure_searxng_healthy(searxng_url)
 
     try:
+        import dataclasses
+
         results = await _wc_search(
             active_url,
             query,
@@ -119,7 +121,7 @@ async def search(
         )
 
         output = {
-            "results": [r.to_dict() for r in results],
+            "results": [dataclasses.asdict(r) for r in results],
             "total": len(results),
             "query": query,
         }
@@ -147,7 +149,7 @@ async def search(
                     exclude_domains=exclude_domains,
                 )
                 output = {
-                    "results": [r.to_dict() for r in results],
+                    "results": [dataclasses.asdict(r) for r in results],
                     "total": len(results),
                     "query": query,
                 }
