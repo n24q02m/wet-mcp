@@ -32,7 +32,6 @@ from web_core.search.runner import (
 from wet_mcp.config import settings
 from wet_mcp.searxng_runner import (
     ensure_searxng,
-    stop_searxng,
 )
 
 
@@ -282,7 +281,7 @@ def test_get_settings_path(tmp_path):
     sys.platform == "win32",
     reason="Unix-only: requires SIGKILL/killpg/getpgid",
 )
-def test_force_kill_process():
+async def test_force_kill_process():
     proc = MagicMock(spec=subprocess.Popen)
     proc.poll.return_value = None
     proc.pid = 1234
@@ -293,25 +292,25 @@ def test_force_kill_process():
         patch("os.getpgid", return_value=1234),
     ):
         # Graceful
-        _force_kill_process(proc)
+        await _force_kill_process(proc)
         mock_killpg.assert_called_with(1234, signal.SIGTERM)
         proc.wait.assert_called_with(timeout=3)
 
         # Force kill
         proc.wait.side_effect = [subprocess.TimeoutExpired(cmd="test", timeout=3), None]
-        _force_kill_process(proc)
+        await _force_kill_process(proc)
         mock_killpg.assert_any_call(1234, signal.SIGKILL)
 
 
 @pytest.mark.skipif(
     sys.platform == "win32", reason="Unix lsof/fuser unavailable on Windows"
 )
-def test_kill_stale_port_process():
+async def test_kill_stale_port_process():
     with (
         patch("sys.platform", "linux"),
         patch("subprocess.run") as mock_run,
         patch("os.kill") as mock_kill,
-        patch("time.sleep"),
+        patch("asyncio.sleep"),
     ):
         mock_run_result = MagicMock()
         mock_run_result.returncode = 0
@@ -326,7 +325,7 @@ def test_kill_stale_port_process():
 
         mock_kill.side_effect = kill_side_effect
 
-        _kill_stale_port_process(8080)
+        await _kill_stale_port_process(8080)
         mock_kill.assert_any_call(1234, signal.SIGTERM)
 
     # Windows
@@ -334,7 +333,7 @@ def test_kill_stale_port_process():
         patch("sys.platform", "win32"),
         patch("subprocess.run") as mock_run,
         patch("os.kill") as mock_kill,
-        patch("time.sleep"),
+        patch("asyncio.sleep"),
     ):
         mock_run_result = MagicMock()
         mock_run_result.stdout = "  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       1234\n"
@@ -346,7 +345,7 @@ def test_kill_stale_port_process():
 
         mock_kill.side_effect = kill_side_effect_win
 
-        _kill_stale_port_process(8080)
+        await _kill_stale_port_process(8080)
         mock_kill.assert_any_call(1234, signal.SIGTERM)
 
 
@@ -677,10 +676,11 @@ def test_cleanup_process():
     module._searxng_port = 8080
 
     with (
-        patch("web_core.search.runner._force_kill_process") as mock_kill,
+        patch("web_core.search.runner._force_kill_process_sync") as mock_kill,
         patch("web_core.search.runner._remove_discovery") as mock_remove,
     ):
-        stop_searxng()
+        # We know from test error _cleanup_process is NOT a coroutine function in reality.
+        _cleanup_process()
 
         mock_kill.assert_called_with(mock_proc)
         mock_remove.assert_called_once()
@@ -701,6 +701,7 @@ def test_cleanup_process_not_owner():
         patch("web_core.search.runner._force_kill_process") as mock_kill,
         patch("web_core.search.runner._remove_discovery") as mock_remove,
     ):
+        # We know from test error _cleanup_process is NOT a coroutine function in reality.
         _cleanup_process()
 
         mock_kill.assert_not_called()
