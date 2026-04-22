@@ -22,7 +22,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends git \
 # Strip [tool.uv.sources] local path overrides so uv resolves from PyPI
 COPY pyproject.toml uv.lock ./
 RUN sed -i '/^\[tool\.uv\.sources\]/,/^$/d' pyproject.toml && \
-    uv lock --upgrade-package mcp-relay-core && \
     cp uv.lock /tmp/uv.lock.docker
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev

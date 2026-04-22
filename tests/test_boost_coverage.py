@@ -27,6 +27,36 @@ import pytest
 class TestEnsureConfig:
     """Cover ensure_config: env vars priority, config file, relay, timeout, skip."""
 
+    @pytest.fixture(autouse=True)
+    def _relay_url(self, monkeypatch):
+        """Default MCP_RELAY_URL for all remote-relay-path tests.
+
+        Per mode-matrix 2.5, wet-mcp remote-relay mode requires explicit
+        MCP_RELAY_URL (no DEFAULT_RELAY_URL fallback). Tests that exercise
+        the create_session path need this set. Tests that return early
+        (env vars / config file) are unaffected by this fixture.
+        """
+        monkeypatch.setenv("MCP_RELAY_URL", "https://relay.example.com")
+
+    async def test_missing_relay_url_raises(self, monkeypatch):
+        """Remote-relay path without MCP_RELAY_URL must raise per matrix 2.5."""
+        from wet_mcp.relay_setup import ensure_config
+
+        for key in [
+            "GEMINI_API_KEY",
+            "OPENAI_API_KEY",
+            "JINA_AI_API_KEY",
+            "COHERE_API_KEY",
+            "MCP_RELAY_URL",
+        ]:
+            monkeypatch.delenv(key, raising=False)
+
+        with (
+            patch("wet_mcp.relay_setup.load_config_from_file", return_value=None),
+            pytest.raises(RuntimeError, match="MCP_RELAY_URL"),
+        ):
+            await ensure_config(force=True)
+
     async def test_env_vars_skip_relay(self, monkeypatch):
         """When env vars have cloud keys, relay is skipped entirely."""
         from wet_mcp.relay_setup import ensure_config
@@ -349,6 +379,11 @@ class TestLoadConfigFromFile:
 
 class TestEnsureConfigForced:
     """Coverage for ensure_config(force=True) -- manual relay setup."""
+
+    @pytest.fixture(autouse=True)
+    def _relay_url(self, monkeypatch):
+        """MCP_RELAY_URL is required for remote-relay mode per matrix 2.5."""
+        monkeypatch.setenv("MCP_RELAY_URL", "https://relay.example.com")
 
     async def test_relay_skipped_returns_none(self):
         """When user skips, returns None."""

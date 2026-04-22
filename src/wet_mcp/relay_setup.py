@@ -14,7 +14,6 @@ import sys
 
 from loguru import logger
 
-DEFAULT_RELAY_URL = "https://wet-mcp.n24q02m.com"
 SERVER_NAME = "wet-mcp"
 
 CLOUD_KEYS = [
@@ -76,14 +75,26 @@ async def ensure_config(
             apply_config(config)
             return config
 
-    # 3. No local credentials found (or forced) -- trigger relay setup
+    # 3. No local credentials found (or forced) -- trigger relay setup.
+    # Per mode-matrix 2.5, wet-mcp default is `http local relay`; `remote-relay`
+    # mode requires user-supplied URL (no centralized wet-mcp.n24q02m.com).
+    # Surface the misconfiguration as a hard failure BEFORE the broad try/except
+    # so the caller (run_remote_relay -> main) propagates it rather than silently
+    # falling back to local mode.
+    relay_url = os.environ.get("MCP_RELAY_URL")
+    if not relay_url:
+        raise RuntimeError(
+            "MCP_RELAY_URL env var is required for remote-relay mode. "
+            "wet-mcp default mode is 'http local relay' (no remote URL needed). "
+            "For self-host remote-relay, set MCP_RELAY_URL=https://<your-instance>."
+        )
+
     logger.info("Starting relay setup...")
     try:
         from mcp_core.relay.client import create_session, poll_for_result
 
         from .relay_schema import RELAY_SCHEMA
 
-        relay_url = os.environ.get("MCP_RELAY_URL", DEFAULT_RELAY_URL)
         session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)  # ty: ignore[invalid-argument-type]
 
         timeout_msg = f", {int(timeout)}s timeout" if timeout else ""

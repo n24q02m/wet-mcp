@@ -2055,19 +2055,78 @@ async def run_http(port: int = 0) -> None:
     )
 
 
-def main() -> None:
-    """Entry point: HTTP by default, --stdio for backward compat.
+async def run_remote_relay() -> None:
+    """Run wet-mcp in remote-relay mode (self-host deployment).
 
-    HTTP mode (default): starts HTTP server on 127.0.0.1 with local
-    OAuth 2.1 AS for credential management via browser.
+    Fetch credentials via a remote relay server (``MCP_RELAY_URL``) using
+    ``create_session`` + ``poll_for_result`` from mcp-core, then serve the
+    MCP protocol over Streamable HTTP on ``127.0.0.1:<port>``.
 
-    Stdio mode: ``--stdio`` flag or ``MCP_TRANSPORT=stdio`` env var.
-    Used by agents that communicate over stdin/stdout.
+    Unlike the default ``http local relay`` mode, this path does NOT serve
+    a credential form locally -- the user pastes API keys into the remote
+    relay's browser form (URL printed to stderr) and the encrypted payload
+    flows back through ECDH + AES-256-GCM.
     """
+    from wet_mcp.relay_setup import apply_config, ensure_config
+
+    # Block until the relay session completes (user submits creds at the
+    # remote URL printed below, 5-minute default window). `force=True`
+    # skips the "already have creds" shortcut so the relay flow always
+    # runs.  A finite timeout is required -- poll_for_result treats None
+    # as an invalid deadline and raises before the user can react.
+    try:
+        timeout = float(os.environ.get("MCP_RELAY_TIMEOUT_S", "300"))
+    except ValueError:
+        timeout = 300.0
+    config = await ensure_config(force=True, timeout=timeout)
+    if config is None:
+        logger.warning(
+            "Remote relay produced no credentials; continuing in LOCAL mode "
+            "(ONNX embedding + SearXNG). Set API keys via env vars to re-enable cloud."
+        )
+    else:
+        apply_config(config)
+
+    # Serve MCP protocol only. No /authorize form -- creds already settled.
+    host = os.environ.get("MCP_HOST", "127.0.0.1")
+    try:
+        port = int(os.environ.get("MCP_PORT", "0"))
+    except ValueError:
+        port = 0
+    mcp.settings.host = host
+    mcp.settings.port = port
+    logger.info(
+        f"Starting MCP Streamable HTTP on {host}:{port or '<auto>'}{mcp.settings.streamable_http_path}"
+    )
+    await mcp.run_streamable_http_async()
+
+
+def main() -> None:
+    """Entry point: HTTP by default, --stdio for stdio, MCP_MODE for modes.
+
+    HTTP mode (default): starts local server on 127.0.0.1 with paste-cred
+    form + OAuth 2.1 AS for credential management via browser.
+
+    Stdio mode: ``--stdio`` flag or ``MCP_TRANSPORT=stdio`` env var. Used
+    by agents that communicate over stdin/stdout.
+
+    Remote-relay mode: ``MCP_MODE=remote-relay`` + ``MCP_RELAY_URL=<url>``
+    points the credential flow at a (self-hosted or production) relay
+    server; wet-mcp serves MCP protocol only once creds are received.
+    """
+    mode = (os.environ.get("MCP_MODE") or "").strip().lower()
+
     if "--stdio" in sys.argv or os.environ.get("MCP_TRANSPORT") == "stdio":
         mcp.run()
-    else:
+    elif mode == "remote-relay":
+        asyncio.run(run_remote_relay())
+    elif mode in ("", "local-relay"):
         asyncio.run(run_http())
+    else:
+        raise SystemExit(
+            f"Unsupported MCP_MODE={mode!r}. Supported: local-relay (default), "
+            "remote-relay, or set MCP_TRANSPORT=stdio / pass --stdio."
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

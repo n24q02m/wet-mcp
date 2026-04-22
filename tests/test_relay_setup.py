@@ -5,11 +5,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from wet_mcp.relay_schema import RELAY_SCHEMA
 from wet_mcp.relay_setup import (
-    DEFAULT_RELAY_URL,
     apply_config,
     ensure_config,
     load_config_from_file,
 )
+
+# Test URL used when exercising the create_session path. Matches the
+# MCP_RELAY_URL env var set by per-test fixtures (no production default
+# per mode-matrix 2.5).
+TEST_RELAY_URL = "https://relay.example.com"
 
 
 class TestRelaySchema:
@@ -102,9 +106,10 @@ class TestApplyConfig:
 class TestEnsureConfigForced:
     """Tests for ensure_config(force=True) -- manual relay setup."""
 
-    async def test_calls_create_session(self):
+    async def test_calls_create_session(self, monkeypatch):
+        monkeypatch.setenv("MCP_RELAY_URL", TEST_RELAY_URL)
         mock_session = MagicMock(
-            relay_url="https://example.com/setup/abc",
+            relay_url=f"{TEST_RELAY_URL}/authorize?s=abc",
             session_id="test-session-id",
         )
         mock_config = {"GEMINI_API_KEY": "AIza_test_key"}
@@ -131,13 +136,12 @@ class TestEnsureConfigForced:
             mock_httpx.return_value.__aenter__ = AsyncMock(return_value=AsyncMock())
             mock_httpx.return_value.__aexit__ = AsyncMock()
             result = await ensure_config(force=True, timeout=None)
-            mock_create.assert_called_once_with(
-                DEFAULT_RELAY_URL, "wet-mcp", RELAY_SCHEMA
-            )
+            mock_create.assert_called_once_with(TEST_RELAY_URL, "wet-mcp", RELAY_SCHEMA)
             assert result == mock_config
 
-    async def test_returns_none_on_exception(self):
+    async def test_returns_none_on_exception(self, monkeypatch):
         """When relay server is unreachable, returns None."""
+        monkeypatch.setenv("MCP_RELAY_URL", TEST_RELAY_URL)
         with patch(
             "mcp_core.relay.client.create_session",
             new_callable=AsyncMock,
@@ -145,3 +149,11 @@ class TestEnsureConfigForced:
         ):
             result = await ensure_config(force=True, timeout=None)
             assert result is None
+
+    async def test_missing_relay_url_raises(self, monkeypatch):
+        """Remote-relay without MCP_RELAY_URL must raise per matrix 2.5."""
+        import pytest
+
+        monkeypatch.delenv("MCP_RELAY_URL", raising=False)
+        with pytest.raises(RuntimeError, match="MCP_RELAY_URL"):
+            await ensure_config(force=True, timeout=None)
