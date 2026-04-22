@@ -6,11 +6,17 @@
 # ========================
 # Stage 1: Builder
 # ========================
-FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim@sha256:531f855bda2c73cd6ef67d56b733b357cea384185b3022bd09f05e002cd144ca AS builder
+# Use python:3.13-slim (Debian bookworm) which tracks the latest 3.13 patch
+# (currently 3.13.13). The astral-sh/uv Docker image still pins an older
+# build with uv 0.9.30 + Python 3.13.11, which does not satisfy
+# requires-python = ">=3.13.13" from web-core 1.3.5.
+# Copy the uv binary from the standalone uv image (always latest).
+FROM python:3.13-slim-bookworm@sha256:bada92bcc2794014c291cd97ac3604eb907746b9d3f4b4ff5a8a1ffeff40ceff AS builder
+COPY --from=ghcr.io/astral-sh/uv:latest@sha256:240fb85ab0f263ef12f492d8476aa3a2e4e1e333f7d67fbdd923d00a506a516a /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=automatic
+    UV_PYTHON_DOWNLOADS=never
 
 WORKDIR /app
 
