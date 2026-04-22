@@ -168,9 +168,17 @@ class TestMainDispatch:
         monkeypatch.delenv("MCP_MODE", raising=False)
         monkeypatch.delenv("MCP_TRANSPORT", raising=False)
 
-        with patch("wet_mcp.server.mcp") as mock_mcp:
+        with (
+            patch(
+                "mcp_core.transport.run_smart_stdio_proxy",
+                return_value=0,
+            ) as mock_proxy,
+            pytest.raises(SystemExit, match="0"),
+        ):
             main()
-            mock_mcp.run.assert_called_once()
+        mock_proxy.assert_called_once()
+        args = mock_proxy.call_args[0]
+        assert args[0] == "wet-mcp"
 
     def test_mcp_transport_stdio_runs_mcp(self, monkeypatch):
         from wet_mcp.server import main
@@ -179,9 +187,17 @@ class TestMainDispatch:
         monkeypatch.setenv("MCP_TRANSPORT", "stdio")
         monkeypatch.delenv("MCP_MODE", raising=False)
 
-        with patch("wet_mcp.server.mcp") as mock_mcp:
+        with (
+            patch(
+                "mcp_core.transport.run_smart_stdio_proxy",
+                return_value=0,
+            ) as mock_proxy,
+            pytest.raises(SystemExit, match="0"),
+        ):
             main()
-            mock_mcp.run.assert_called_once()
+        mock_proxy.assert_called_once()
+        args = mock_proxy.call_args[0]
+        assert args[0] == "wet-mcp"
 
     def test_remote_relay_mode_runs_remote_relay(self, monkeypatch):
         from wet_mcp.server import main

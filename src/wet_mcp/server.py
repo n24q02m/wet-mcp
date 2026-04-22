@@ -2117,7 +2117,10 @@ def main() -> None:
     mode = (os.environ.get("MCP_MODE") or "").strip().lower()
 
     if "--stdio" in sys.argv or os.environ.get("MCP_TRANSPORT") == "stdio":
-        mcp.run()
+        from mcp_core.transport import run_smart_stdio_proxy
+
+        daemon_cmd = [sys.executable, "-m", "wet_mcp"]
+        sys.exit(run_smart_stdio_proxy("wet-mcp", daemon_cmd))
     elif mode == "remote-relay":
         asyncio.run(run_remote_relay())
     elif mode in ("", "local-relay"):

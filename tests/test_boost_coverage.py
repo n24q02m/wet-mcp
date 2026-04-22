@@ -2470,13 +2470,14 @@ class TestSearxngRunnerExtras:
             assert "pip" in cmd
             assert "-m" in cmd
 
-    def test_force_kill_already_dead(self):
+    @pytest.mark.asyncio
+    async def test_force_kill_already_dead(self):
         """Force kill on already dead process is no-op."""
         from web_core.search.runner import _force_kill_process
 
         mock_proc = MagicMock()
         mock_proc.poll.return_value = 0  # Already dead
-        _force_kill_process(mock_proc)
+        await _force_kill_process(mock_proc)
         # Should not call terminate/kill
 
 
