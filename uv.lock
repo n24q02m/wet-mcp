@@ -1739,7 +1739,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-web-core"
-version = "1.3.3"
+version = "1.3.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
@@ -1753,9 +1753,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/68/fd61748e87971e5b79d60bdb8d76dac00664687428ea370c76ab4b2e5e64/n24q02m_web_core-1.3.3.tar.gz", hash = "sha256:6e45bd6e79ad58bca8c71a70232f6431f55f3d43fa171c6bee38b5bdc62838e0", size = 200484, upload-time = "2026-04-22T01:32:10.939Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0f/fe/e9e4d5073e180ee57c58dcdcf680127af2bea8d37c4f60d21fe0d01f94d3/n24q02m_web_core-1.3.5.tar.gz", hash = "sha256:a40feb03cc76eb9e08af4c4bb9de484a48a18899c61db799f5ec594ac8b35256", size = 200812, upload-time = "2026-04-22T02:05:23.22Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/00/988b822c1370a562853d7c5e0e83f405d9f66b2cb68b26f5ca3e1206e77c/n24q02m_web_core-1.3.3-py3-none-any.whl", hash = "sha256:a23eab2ef425d0af6b48bc106664f0b4d4b22403219704142b4c6394cadf795c", size = 55394, upload-time = "2026-04-22T01:32:09.578Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/29/e46c626bc2ab3084fe5cc6e99078d0de8447e5baa2f8f7bc32be505108e6/n24q02m_web_core-1.3.5-py3-none-any.whl", hash = "sha256:9ad64a9ab99f74a67020957ef1217739c7b3a08e2b7a79dbec0d819da025aa1f", size = 55601, upload-time = "2026-04-22T02:05:21.796Z" },
 ]
 
 [[package]]
@@ -3396,7 +3396,7 @@ requires-dist = [
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
     { name = "n24q02m-mcp-core", specifier = ">=1.5.1" },
-    { name = "n24q02m-web-core", specifier = ">=1.3.3" },
+    { name = "n24q02m-web-core", specifier = ">=1.3.5" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pydantic" },
