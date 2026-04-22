@@ -17,10 +17,10 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-requires-python = "==3.13.*"
+requires-python = ">=3.13.13,<3.14"
 dependencies = [
     # Shared web infrastructure (SSRF, SearXNG, URL utils)
-    "n24q02m-web-core>=1.3.1",
+    "n24q02m-web-core>=1.3.3",
     # MCP Server
     "mcp[cli]",
     # Web Crawling
@@ -40,7 +40,7 @@ dependencies = [
     # Vector search for docs
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
-    "qwen3-embed>=1.8.0",
+    "qwen3-embed>=1.9.0",
     "pillow>=12.2.0",
     "diskcache>=5.6.3",
     "cryptography>=46.0.7",
