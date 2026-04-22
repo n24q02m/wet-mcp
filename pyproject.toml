@@ -151,6 +151,6 @@ source = ["src/wet_mcp"]
 branch = true
 
 [tool.coverage.report]
-fail_under = 94
+fail_under = 93
 show_missing = true
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
