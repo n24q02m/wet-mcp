@@ -62,7 +62,7 @@ mise run dev       # uv run wet-mcp
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
 - Sync: `SYNC_ENABLED` (default false), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
 - Sync dung Google Drive API truc tiep (httpx). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`
-- Relay: `MCP_RELAY_URL` (default `https://wet-mcp.n24q02m.com`)
+- Relay: `MCP_RELAY_URL` (required for remote-relay mode, no default — wet-mcp default is local-relay per matrix)
 - Infisical: project `531b3027-70ca-4761-b149-9ec8fea80d4f`
 
 ## Release & Deploy
