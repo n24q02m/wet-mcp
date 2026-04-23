@@ -1732,7 +1732,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.6.2"
+version = "1.6.3"
 source = { editable = "../mcp-core/packages/core-py" }
 dependencies = [
     { name = "authlib" },
@@ -3369,7 +3369,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.26.6"
+version = "2.26.7"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
