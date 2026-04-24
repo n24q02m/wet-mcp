@@ -337,3 +337,29 @@ def test_safe_local_path_empty_allowed_dirs(tmp_path):
     f = tmp_path / "test.txt"
     f.write_text("hello")
     assert is_safe_local_path(str(f), allowed_dirs=[]) is None
+
+
+def test_safe_local_path_blocks_sensitive_file(tmp_path):
+    """Verify that known sensitive files are blocked, even if in allowed_dirs."""
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    ssh_dir = allowed / ".ssh"
+    ssh_dir.mkdir()
+    f = ssh_dir / "id_rsa"
+    f.write_text("private key data")
+
+    # Despite being in allowed_dirs, it should be blocked due to defense in depth
+    assert is_safe_local_path(str(f), allowed_dirs=[allowed]) is None
+
+
+def test_safe_local_path_filters_root_dir(tmp_path):
+    """Verify that root directories in allowed_dirs are ignored for safety."""
+    f = tmp_path / "test.txt"
+    f.write_text("hello")
+
+    # Passing the root directory should result in filtering it out.
+    # Since only the root directory is allowed, it will fall back to denying the path.
+    from pathlib import Path
+
+    root_dir = Path("/")
+    assert is_safe_local_path(str(f), allowed_dirs=[root_dir]) is None
