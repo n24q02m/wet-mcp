@@ -20,9 +20,11 @@ is reserved for explicit ``MCP_MODE`` HTTP deployments. See
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from collections.abc import Callable
 from enum import Enum
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -319,13 +321,47 @@ def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
         )
 
 
-def save_credentials(config: dict[str, str], _context: dict[str, str]) -> dict | None:
+def _sub_data_dir(sub: str) -> Path:
+    """Per-sub data directory under ``WET_DATA_DIR`` (or ``~/.wet-mcp``).
+
+    Used by remote multi-user mode (``PUBLIC_URL`` set): each authenticated
+    JWT subject gets its own credential bucket, isolated from other users
+    that authorized concurrently against the same wet-mcp deployment.
+    """
+    base = Path(os.environ.get("WET_DATA_DIR", str(Path.home() / ".wet-mcp")))
+    d = base / "subs" / sub
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def store_for_sub(sub: str, config: dict[str, str]) -> None:
+    """Persist a credential dict for a specific JWT ``sub``.
+
+    Plain JSON (not config.enc): remote multi-user deployments rely on the
+    host filesystem permissions plus mcp-core's per-sub directory scoping
+    rather than the local single-user encrypted store.
+    """
+    (_sub_data_dir(sub) / "config.json").write_text(json.dumps(config))
+
+
+def read_for_sub(sub: str) -> dict[str, str]:
+    """Load the credential dict previously stored for ``sub``.
+
+    Returns an empty dict when no credentials have been saved for the
+    subject yet (first /authorize for a brand-new user).
+    """
+    p = _sub_data_dir(sub) / "config.json"
+    return json.loads(p.read_text()) if p.exists() else {}
+
+
+def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:
     """Save credentials from OAuth form to config.enc and apply to environment.
 
-    ``_context`` carries the per-authorize ``sub`` (for future multi-user
-    extensions). Wet-mcp is single-user by design — optional API keys live in
-    one shared ``config.enc`` on the host running the server, so the subject
-    is intentionally unused here.
+    ``context`` carries the per-authorize ``sub`` issued by mcp-core's local
+    OAuth AS. In remote multi-user mode (``PUBLIC_URL`` set) we route the
+    credentials into a per-sub bucket via :func:`store_for_sub` so concurrent
+    users do not overwrite each other. In single-user mode the subject is
+    ignored and a single ``config.enc`` on the host is reused.
 
     Called by the local OAuth AS when the user submits API keys via the
     browser form. Writes to encrypted config file, applies to env vars
@@ -336,6 +372,17 @@ def save_credentials(config: dict[str, str], _context: dict[str, str]) -> dict |
     for the form to display.
     """
     global _state
+
+    # Remote multi-user branch: scope credential storage by JWT sub so
+    # concurrent /authorize sessions do not clobber each other.
+    if os.environ.get("PUBLIC_URL"):
+        sub = context.get("sub") if context else None
+        if not sub:
+            raise RuntimeError("multi-user mode: SubjectContext sub required")
+        store_for_sub(sub, config)
+        _state = CredentialState.CONFIGURED
+        logger.info(f"Credentials saved for sub={sub} via remote multi-user form")
+        return None
 
     from mcp_core.storage.config_file import write_config
 

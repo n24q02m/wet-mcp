@@ -2027,24 +2027,38 @@ async def _do_immediate_fallback_search(
 
 
 async def run_http(port: int = 0) -> None:
-    """Run wet-mcp as local HTTP server with OAuth credential flow.
+    """Run wet-mcp as HTTP server. Local single-user (default) or remote
+    multi-user (when PUBLIC_URL env set).
 
-    Starts an HTTP server on 127.0.0.1 with a local OAuth 2.1 AS that
-    serves a credential form. When the user submits API keys, they are
-    saved to config.enc and applied to the environment immediately.
-
-    Args:
-        port: TCP port to bind. 0 means auto-find a free port.
+    Local mode binds 127.0.0.1 with a single shared ``config.enc``. Remote
+    multi-user mode binds 0.0.0.0:8080, requires ``MCP_DCR_SERVER_SECRET``
+    as proof of intentional multi-user deployment, and scopes credentials
+    per JWT ``sub`` (see ``credential_state.store_for_sub``).
     """
     from mcp_core.transport.local_server import run_local_server
 
     from wet_mcp.credential_state import save_credentials, wire_gdrive_callbacks
     from wet_mcp.relay_schema import RELAY_SCHEMA
 
+    public_url = os.environ.get("PUBLIC_URL")
+    if public_url:
+        if not os.environ.get("MCP_DCR_SERVER_SECRET"):
+            raise SystemExit(
+                "wet-mcp refuses to start: PUBLIC_URL set but "
+                "MCP_DCR_SERVER_SECRET missing. Multi-user remote mode "
+                "requires the DCR secret as proof of intentional multi-user "
+                "deployment (prevents accidental single-user credential leak)."
+            )
+        host = "0.0.0.0"
+        port = int(os.environ.get("MCP_PORT", "8080"))
+    else:
+        host = "127.0.0.1"
+
     await run_local_server(
         mcp,  # ty: ignore[invalid-argument-type]
         server_name="wet-mcp",
         relay_schema=RELAY_SCHEMA,
+        host=host,
         port=port,
         on_credentials_saved=save_credentials,
         # 2-arg hook: receive BOTH mark_setup_complete and mark_setup_failed
@@ -2053,52 +2067,6 @@ async def run_http(port: int = 0) -> None:
         # stuck on "Waiting for authorization..." forever.
         setup_complete_hook=wire_gdrive_callbacks,
     )
-
-
-async def run_remote_relay() -> None:
-    """Run wet-mcp in remote-relay mode (self-host deployment).
-
-    Fetch credentials via a remote relay server (``MCP_RELAY_URL``) using
-    ``create_session`` + ``poll_for_result`` from mcp-core, then serve the
-    MCP protocol over Streamable HTTP on ``127.0.0.1:<port>``.
-
-    Unlike the default ``http local relay`` mode, this path does NOT serve
-    a credential form locally -- the user pastes API keys into the remote
-    relay's browser form (URL printed to stderr) and the encrypted payload
-    flows back through ECDH + AES-256-GCM.
-    """
-    from wet_mcp.relay_setup import apply_config, ensure_config
-
-    # Block until the relay session completes (user submits creds at the
-    # remote URL printed below, 5-minute default window). `force=True`
-    # skips the "already have creds" shortcut so the relay flow always
-    # runs.  A finite timeout is required -- poll_for_result treats None
-    # as an invalid deadline and raises before the user can react.
-    try:
-        timeout = float(os.environ.get("MCP_RELAY_TIMEOUT_S", "300"))
-    except ValueError:
-        timeout = 300.0
-    config = await ensure_config(force=True, timeout=timeout)
-    if config is None:
-        logger.warning(
-            "Remote relay produced no credentials; continuing in LOCAL mode "
-            "(ONNX embedding + SearXNG). Set API keys via env vars to re-enable cloud."
-        )
-    else:
-        apply_config(config)
-
-    # Serve MCP protocol only. No /authorize form -- creds already settled.
-    host = os.environ.get("MCP_HOST", "127.0.0.1")
-    try:
-        port = int(os.environ.get("MCP_PORT", "0"))
-    except ValueError:
-        port = 0
-    mcp.settings.host = host
-    mcp.settings.port = port
-    logger.info(
-        f"Starting MCP Streamable HTTP on {host}:{port or '<auto>'}{mcp.settings.streamable_http_path}"
-    )
-    await mcp.run_streamable_http_async()
 
 
 def main() -> None:
@@ -2122,13 +2090,17 @@ def main() -> None:
         daemon_cmd = [sys.executable, "-m", "wet_mcp"]
         sys.exit(run_smart_stdio_proxy("wet-mcp", daemon_cmd))
     elif mode == "remote-relay":
-        asyncio.run(run_remote_relay())
+        raise SystemExit(
+            "MCP_MODE=remote-relay is deprecated since 2026-04-25 (single-user "
+            "MCP_RELAY_URL pattern). For multi-user remote: set PUBLIC_URL + "
+            "MCP_DCR_SERVER_SECRET and run with default mode."
+        )
     elif mode in ("", "local-relay"):
         asyncio.run(run_http())
     else:
         raise SystemExit(
-            f"Unsupported MCP_MODE={mode!r}. Supported: local-relay (default), "
-            "remote-relay, or set MCP_TRANSPORT=stdio / pass --stdio."
+            f"Unsupported MCP_MODE={mode!r}. Supported: local-relay (default) "
+            "or set MCP_TRANSPORT=stdio / pass --stdio."
         )
 
 
