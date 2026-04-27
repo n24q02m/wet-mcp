@@ -374,7 +374,10 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
     global _state
 
     # Remote multi-user branch: scope credential storage by JWT sub so
-    # concurrent /authorize sessions do not clobber each other.
+    # concurrent /authorize sessions do not clobber each other. The GDrive
+    # device-code flow ALSO needs to be per-sub: token lands in
+    # ``~/.wet-mcp/subs/<sub>/tokens/google_drive.json`` so user A's
+    # refresh-token is invisible to user B sharing the same deployment.
     if os.environ.get("PUBLIC_URL"):
         sub = context.get("sub") if context else None
         if not sub:
@@ -382,6 +385,56 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
         store_for_sub(sub, config)
         _state = CredentialState.CONFIGURED
         logger.info(f"Credentials saved for sub={sub} via remote multi-user form")
+
+        # Mirror the single-user GDrive trigger but pin token storage to
+        # this sub. Without this branch, multi-user mode silently skipped
+        # GDrive auth entirely (cross-user token leak gap, spec 04-25 #134).
+        try:
+            from wet_mcp.config import settings as s
+
+            if s.google_drive_client_id and s.google_drive_client_secret:
+                import httpx
+
+                response = httpx.post(
+                    "https://oauth2.googleapis.com/device/code",
+                    data={
+                        "client_id": s.google_drive_client_id,
+                        "scope": "https://www.googleapis.com/auth/drive.file",
+                    },
+                    timeout=15.0,
+                )
+                if response.status_code == 200:
+                    device_data = response.json()
+                    logger.info(
+                        "GDrive device code (sub={}), user_code={}",
+                        sub,
+                        device_data.get("user_code"),
+                    )
+                    import asyncio
+                    import threading
+
+                    def _poll() -> None:
+                        asyncio.run(
+                            _gdrive_token_poll(
+                                s.google_drive_client_id,
+                                s.google_drive_client_secret,
+                                device_data["device_code"],
+                                device_data.get("interval", 5),
+                                device_data.get("expires_in", 1800),
+                                sub=sub,
+                            )
+                        )
+
+                    threading.Thread(target=_poll, daemon=True).start()
+                    return {
+                        "type": "oauth_device_code",
+                        "verification_url": device_data["verification_url"],
+                        "user_code": device_data["user_code"],
+                    }
+        except Exception:
+            logger.opt(exception=True).debug(
+                "Multi-user GDrive device code request failed (non-fatal)"
+            )
         return None
 
     from mcp_core.storage.config_file import write_config
@@ -479,6 +532,7 @@ async def _gdrive_token_poll(
     device_code: str,
     interval: int,
     expires_in: int,
+    sub: str | None = None,
 ) -> None:
     """Background poll Google OAuth for device code token completion.
 
@@ -524,11 +578,16 @@ async def _gdrive_token_poll(
                 )
                 data = resp.json()
                 if "access_token" in data:
-                    # Save token
-                    from wet_mcp.token_store import save_token
+                    # Save token. In multi-user remote mode (``sub`` is
+                    # set), use the per-sub bucket so concurrent users
+                    # do not share a single GDrive refresh-token.
+                    from wet_mcp.token_store import save_token, save_token_for_sub
 
                     try:
-                        save_token("google_drive", data)
+                        if sub:
+                            save_token_for_sub(sub, "google_drive", data)
+                        else:
+                            save_token("google_drive", data)
                         logger.info("GDrive OAuth token saved successfully")
                     except Exception as exc:
                         logger.opt(exception=True).warning(

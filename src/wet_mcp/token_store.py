@@ -26,13 +26,33 @@ from wet_mcp.config import settings
 
 
 def _get_token_dir() -> Path:
-    """Get directory for token storage (~/.wet-mcp/tokens/)."""
+    """Get directory for token storage (~/.wet-mcp/tokens/).
+
+    Single-user (default) layout. Multi-user remote mode uses
+    :func:`_get_token_dir_for_sub` instead so concurrent JWT subjects
+    do not share GDrive tokens.
+    """
     return settings.get_data_dir() / "tokens"
 
 
 def get_token_path(provider: str) -> Path:
     """Get path for a provider's token file."""
     return _get_token_dir() / f"{provider}.json"
+
+
+def _get_token_dir_for_sub(sub: str) -> Path:
+    """Per-sub token directory (``~/.wet-mcp/subs/<sub>/tokens``).
+
+    Multi-user remote mode (``PUBLIC_URL`` set) keys every artifact by
+    JWT ``sub`` so user A's GDrive refresh-token is not visible to
+    user B sharing the same wet-mcp deployment.
+    """
+    return settings.get_data_dir() / "subs" / sub / "tokens"
+
+
+def get_token_path_for_sub(sub: str, provider: str) -> Path:
+    """Get path for a provider's token file scoped to a specific JWT sub."""
+    return _get_token_dir_for_sub(sub) / f"{provider}.json"
 
 
 def _set_secure_permissions(path: Path) -> None:
@@ -121,3 +141,37 @@ def save_token(provider: str, token: dict) -> None:
     _set_secure_permissions(path)
 
     logger.info(f"Token saved: {path}")
+
+
+def save_token_for_sub(sub: str, provider: str, token: dict) -> None:
+    """Save OAuth token under the per-sub directory.
+
+    Used by multi-user remote mode so concurrent users do not share a
+    single GDrive refresh-token. Same 0600 / 0700 hardening as the
+    single-user path.
+    """
+    token_dir = _get_token_dir_for_sub(sub)
+    token_dir.mkdir(parents=True, exist_ok=True)
+    _set_secure_permissions(token_dir)
+
+    path = get_token_path_for_sub(sub, provider)
+    path.write_text(json.dumps(token, indent=2), encoding="utf-8")
+    _set_secure_permissions(path)
+
+    logger.info(f"Token saved (sub={sub}): {path}")
+
+
+def load_token_for_sub(sub: str, provider: str) -> dict | None:
+    """Load a per-sub OAuth token. Returns None when absent or malformed."""
+    path = get_token_path_for_sub(sub, provider)
+    try:
+        if not path.exists():
+            return None
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict) and "access_token" in data:
+            return data
+        logger.warning(f"Invalid token format in {path}")
+        return None
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Failed to load token from {path}: {e}")
+        return None
