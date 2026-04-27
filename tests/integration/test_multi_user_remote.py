@@ -40,9 +40,7 @@ def test_save_credentials_uses_sub_when_public_url_set(tmp_path, monkeypatch):
 
 
 @pytest.mark.integration
-def test_save_credentials_multi_user_triggers_gdrive_per_sub(
-    tmp_path, monkeypatch
-):
+def test_save_credentials_multi_user_triggers_gdrive_per_sub(tmp_path, monkeypatch):
     """Multi-user branch starts the device-code flow when a Google client
     is configured, returning ``oauth_device_code`` for the relay form and
     persisting tokens under the per-sub directory rather than the shared
