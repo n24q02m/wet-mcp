@@ -63,9 +63,18 @@ _DEFAULT_MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
 
 def _is_root_or_system_dir(p: Path) -> bool:
-    """Check if the given path is a root or system-level directory."""
+    """Check if the given path is a root or system-level directory.
+
+    Treats any filesystem root (``/``, ``C:\\``, ``D:\\``, UNC roots, etc.)
+    as overly permissive via the OS-agnostic ``p == p.parent`` check —
+    str-based ``"/"`` matching missed Windows roots, leaving the test
+    ``test_safe_local_path_filters_root_dir`` failing on Windows even
+    though the security intent applies cross-platform.
+    """
+    if p == p.parent:
+        return True
     p_str = str(p)
-    return p_str == "/" or p_str in (
+    return p_str in (
         "/etc",
         "/var",
         "/usr",
