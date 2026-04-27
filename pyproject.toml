@@ -62,6 +62,10 @@ dependencies = [
     # Production WSGI server for embedded SearXNG on Windows
     # (Werkzeug dev server deadlocks under concurrent engine requests)
     "waitress>=3.0.2; sys_platform == 'win32'",
+    # greenlet 3.5.0 (pulled transitively via patchright) ships no
+    # manylinux_*_aarch64 wheels and has no source dist, so the Docker
+    # arm64 build fails. Cap below until upstream re-publishes arm64.
+    "greenlet<3.5.0",
 ]
 
 [dependency-groups]
