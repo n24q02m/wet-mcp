@@ -1749,7 +1749,7 @@ wheels = [
 [[package]]
 name = "n24q02m-mcp-core"
 version = "1.8.1"
-source = { editable = "../mcp-core/packages/core-py" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
     { name = "cryptography" },
@@ -1761,28 +1761,9 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "authlib", specifier = ">=1.7.0" },
-    { name = "cryptography", specifier = ">=47.0.0" },
-    { name = "fastmcp", specifier = ">=3.2.4" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "loguru", specifier = ">=0.7.3" },
-    { name = "platformdirs", specifier = ">=4.9.6" },
-    { name = "pydantic", specifier = ">=2.9,<2.14" },
-    { name = "starlette", specifier = ">=1.0.0" },
-    { name = "tomli-w", specifier = ">=1.2.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.0.3" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
-    { name = "pytest-cov", specifier = ">=7.1.0" },
-    { name = "pytest-timeout", specifier = ">=2.4.0" },
-    { name = "ruff", specifier = ">=0.15.12" },
-    { name = "ty", specifier = ">=0.0.32" },
+sdist = { url = "https://files.pythonhosted.org/packages/44/e3/1d89681a18eb6c340580733b6a9ff0c23597309d351a273782d861d5a323/n24q02m_mcp_core-1.8.1.tar.gz", hash = "sha256:a4037220a4214770d5b1ad791f48deedeb4db27e43af0cf5d34ea7357cf9ee5b", size = 163104, upload-time = "2026-04-27T12:50:51.562Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/35/d6/8f51811003216683e1f60fe3f4525f57fc631b15d1170e37440588a806cd/n24q02m_mcp_core-1.8.1-py3-none-any.whl", hash = "sha256:8b433ce0a3e25918b0202cf22ac26809488b927765edf6aa159426219e5a3e11", size = 99934, upload-time = "2026-04-27T12:50:52.883Z" },
 ]
 
 [[package]]
@@ -3385,7 +3366,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.28.0b2"
+version = "2.28.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3445,7 +3426,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", editable = "../mcp-core/packages/core-py" },
+    { name = "n24q02m-mcp-core", specifier = ">=1.8.0" },
     { name = "n24q02m-web-core", specifier = ">=1.3.6" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "pillow", specifier = ">=12.2.0" },
