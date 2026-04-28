@@ -164,7 +164,7 @@ All environment variables are **optional**. The server works in local mode (ONNX
 | Variable | Required | Default | Description |
 |:---------|:---------|:--------|:------------|
 | `LOG_LEVEL` | No | `INFO` | Logging level |
-| `MCP_RELAY_URL` | No | `https://wet-mcp.n24q02m.com` | Relay server URL for zero-config setup |
+| `MCP_RELAY_URL` | No | _(none — local relay by default)_ | Set this to your self-hosted relay URL (e.g., `https://your-host/...`) to opt into remote-relay mode. When unset, the server boots the relay locally on a random `127.0.0.1:<port>` for the user-pastes-credentials flow. |
 
 ## Authentication
 
