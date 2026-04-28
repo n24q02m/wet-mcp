@@ -1403,7 +1403,7 @@ wheels = [
 
 [[package]]
 name = "langgraph"
-version = "1.1.9"
+version = "1.1.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
@@ -1413,9 +1413,9 @@ dependencies = [
     { name = "pydantic" },
     { name = "xxhash" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8c/d5/9d9c65d5500a1ca7ea63d6d65aecfb248037018a74d7d4ef52e276bb4e4b/langgraph-1.1.9.tar.gz", hash = "sha256:bc5a49d5a5e71fda1f9c53c06c62f4caec9a95545b739d130a58b6ab3269e274", size = 560717, upload-time = "2026-04-21T13:43:06.809Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/9a/b3/7dec224369c7938eb3227ff69542a0d0f517862a0d27945b8c395f2a781f/langgraph-1.1.10.tar.gz", hash = "sha256:3115beb58203283c98d8752a90c034f3432177d2979a1fe205f76e5f1b744500", size = 560685, upload-time = "2026-04-27T17:19:10.426Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/16/58/0380420e66619d12c992c1f8cfda0c7a04e8f0fe8a84752245b9e7b1cba7/langgraph-1.1.9-py3-none-any.whl", hash = "sha256:7db13ceecde4ea643df6c097dcc9e534895dcd9fcc6500eeff2f2cde0fab16b2", size = 173744, upload-time = "2026-04-21T13:43:05.513Z" },
+    { url = "https://files.pythonhosted.org/packages/80/07/057dc1aa7991115fca53f1fa6573a7cc0dd296c05360c672cc67fdb6245b/langgraph-1.1.10-py3-none-any.whl", hash = "sha256:8a4f163f72f4401648d0c11b48ee906947d938ba8cf1f474540fe591534f0d17", size = 173750, upload-time = "2026-04-27T17:19:09.073Z" },
 ]
 
 [[package]]
@@ -1433,15 +1433,15 @@ wheels = [
 
 [[package]]
 name = "langgraph-prebuilt"
-version = "1.0.11"
+version = "1.0.12"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "langchain-core" },
     { name = "langgraph-checkpoint" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8d/bb/0e0b3eb33b1f2f32f8810a49aa24b7d11a5b0ed45f679386095946a59557/langgraph_prebuilt-1.0.11.tar.gz", hash = "sha256:0e71545f706a134b6a80a2a56916562797b499e3e4ab6eed5ce89396ac03d322", size = 171759, upload-time = "2026-04-24T18:18:34.528Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/8b/5fff4c63bbfef1475d577e13f5970f91955a4069d8dc4adbaeef92f36732/langgraph_prebuilt-1.0.12.tar.gz", hash = "sha256:edcb11ff29996def816243f267fb2c85c0a2e4fb618c275f3d238aee8dd6a5ec", size = 172831, upload-time = "2026-04-27T17:14:27.152Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f6/8c/f4c574cb75ae9b8a474215d03a029ea723c919f65771ca1c82fe532d0297/langgraph_prebuilt-1.0.11-py3-none-any.whl", hash = "sha256:7afbaf5d64959e452976664c75bb8ec24098d3510cf9c205919baf443e7342ec", size = 36832, upload-time = "2026-04-24T18:18:33.586Z" },
+    { url = "https://files.pythonhosted.org/packages/53/75/1e6e6fd478a1b1e643de03505570103dcb89c57c429c0fd3084d521e522e/langgraph_prebuilt-1.0.12-py3-none-any.whl", hash = "sha256:ab83822d2724d434d3536dc127b86c7d16fe3fb8dc02a89a683bc77b2e55f6e9", size = 37195, upload-time = "2026-04-27T17:14:25.788Z" },
 ]
 
 [[package]]
@@ -1748,7 +1748,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.8.1"
+version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1761,14 +1761,14 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/44/e3/1d89681a18eb6c340580733b6a9ff0c23597309d351a273782d861d5a323/n24q02m_mcp_core-1.8.1.tar.gz", hash = "sha256:a4037220a4214770d5b1ad791f48deedeb4db27e43af0cf5d34ea7357cf9ee5b", size = 163104, upload-time = "2026-04-27T12:50:51.562Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/55/08/db4700b412cfffdf7a07b27412e83368d8456d661bfddd09b681e1a337e7/n24q02m_mcp_core-1.9.0.tar.gz", hash = "sha256:5bf4e27091ad92c0fe3cc1a9a483f0737221d62189919ea00de4b7a61410a84d", size = 164515, upload-time = "2026-04-28T03:16:47.741Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/35/d6/8f51811003216683e1f60fe3f4525f57fc631b15d1170e37440588a806cd/n24q02m_mcp_core-1.8.1-py3-none-any.whl", hash = "sha256:8b433ce0a3e25918b0202cf22ac26809488b927765edf6aa159426219e5a3e11", size = 99934, upload-time = "2026-04-27T12:50:52.883Z" },
+    { url = "https://files.pythonhosted.org/packages/ec/2f/c5c0c6261e30a78410a04226b718ab6a15f2795a7450d1282d5d49107a25/n24q02m_mcp_core-1.9.0-py3-none-any.whl", hash = "sha256:d9a6d11b89d06e11df607b743507980d3fb15d4e46ee6ad84202fcc8e341d93e", size = 100661, upload-time = "2026-04-28T03:16:46.187Z" },
 ]
 
 [[package]]
 name = "n24q02m-web-core"
-version = "1.3.6"
+version = "1.3.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
@@ -1782,9 +1782,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ee/3d/b98d26e18bd840eb4345abef4a5431bd12c82c36ce36cb6f9ac093977aec/n24q02m_web_core-1.3.6.tar.gz", hash = "sha256:9cb1409bd9701884c362e4b5760f31a2c94b26221a5358da9e4dd4937b6575e1", size = 201095, upload-time = "2026-04-24T04:10:44.966Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/8b/9330c2a2259281676e0385c1f8c9d6d709c0173f50dc930ddb79cba83903/n24q02m_web_core-1.3.8.tar.gz", hash = "sha256:3126fccd617139688edbd89921b1eadbc5407df19f5c5d07cd877b96fae14ea9", size = 203531, upload-time = "2026-04-28T01:50:17.269Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7b/09/8cfe1f8f84bab0b8251ac5ce7e4ca48b72853c9cebdc8096c9c9c3ea6b57/n24q02m_web_core-1.3.6-py3-none-any.whl", hash = "sha256:70eab4d3fa5db9dfca4c2b617f981189b7b5884217a3ab4e2ed3e1b088423572", size = 55670, upload-time = "2026-04-24T04:10:43.617Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/08/3713e4c45e1a992af664a06761e04d9219be3be37e5e81b00de26faa55ce/n24q02m_web_core-1.3.8-py3-none-any.whl", hash = "sha256:7c38f2c5c88d5097fc8c8c5c85e97344954584c32ea1bb90c2827e1ccde40a61", size = 55650, upload-time = "2026-04-28T01:50:18.431Z" },
 ]
 
 [[package]]
@@ -3366,7 +3366,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.28.0"
+version = "2.28.2"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3426,8 +3426,8 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", specifier = ">=1.8.0" },
-    { name = "n24q02m-web-core", specifier = ">=1.3.6" },
+    { name = "n24q02m-mcp-core", specifier = ">=1.9.0" },
+    { name = "n24q02m-web-core", specifier = ">=1.3.8" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pydantic" },
