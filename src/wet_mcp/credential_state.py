@@ -174,8 +174,6 @@ def resolve_credential_state() -> CredentialState:
                     os.environ[key] = value
             logger.info("Config loaded from encrypted file")
             _state = CredentialState.CONFIGURED
-            # Propagate shared cloud keys to sibling servers on every startup
-            _share_cloud_keys_to_peers(saved)
             return _state
     except Exception:
         logger.opt(exception=True).debug("Failed to read config")
@@ -294,31 +292,6 @@ async def trigger_relay_setup(
         await _close_active_handle()
         _setup_url = None
         return None
-
-
-def _share_cloud_keys_to_peers(config: dict[str, str]) -> None:
-    """Write shared cloud API keys to mnemo-mcp and CRG config files.
-
-    wet-mcp, mnemo-mcp, and better-code-review-graph all use the same
-    cloud embedding/LLM keys. Sharing avoids needing separate relay sessions
-    for each server — one relay configures all three.
-    """
-    try:
-        from mcp_core.storage.config_file import write_config
-
-        shared = {k: v for k, v in config.items() if k in CLOUD_KEYS and v}
-        if not shared:
-            return
-        for peer in ("mnemo-mcp", "better-code-review-graph"):
-            try:
-                write_config(peer, shared)
-                logger.debug("Shared cloud keys to {}", peer)
-            except Exception:
-                logger.opt(exception=True).debug("Failed to share keys to {}", peer)
-    except Exception:
-        logger.opt(exception=True).debug(
-            "_share_cloud_keys_to_peers failed (non-fatal)"
-        )
 
 
 def _sub_data_dir(sub: str) -> Path:
@@ -460,9 +433,6 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
         logger.opt(exception=True).debug(
             "Provider re-init after save failed (non-fatal)"
         )
-
-    # Share cloud keys with sibling servers
-    _share_cloud_keys_to_peers(config)
 
     # Trigger GDrive OAuth Device Code flow if configured
     try:
