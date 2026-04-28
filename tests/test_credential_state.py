@@ -414,61 +414,42 @@ class TestServerSetupToolNewActions:
             mock_settings.setup_providers.assert_called_once()
 
 
-class TestShareCloudKeysToPeers:
-    """Tests for _share_cloud_keys_to_peers helper."""
+class TestCredentialIsolation:
+    """save_credentials must NOT write to peer MCP server configs.
 
-    def test_shares_cloud_keys(self):
-        """Shares matching cloud keys to peer servers."""
-        from wet_mcp.credential_state import _share_cloud_keys_to_peers
+    Replaces the prior `_share_cloud_keys_to_peers` helper which intentionally
+    propagated cloud keys to mnemo-mcp + crg. The transparent-bridge
+    architecture mandates per-server credential isolation: each server
+    presents its own relay form and persists only its own keys, so a
+    compromised key in one server never leaks into another.
+    """
 
-        config = {"GEMINI_API_KEY": "test-key", "SOME_OTHER": "val"}
-        with patch("mcp_core.storage.config_file.write_config") as mock_write:
-            _share_cloud_keys_to_peers(config)
-            assert mock_write.call_count == 2
-            # Should write to both peers
-            calls = [c.args[0] for c in mock_write.call_args_list]
-            assert "mnemo-mcp" in calls
-            assert "better-code-review-graph" in calls
+    def test_save_credentials_does_not_write_to_peers(self):
+        """save_credentials must touch only wet-mcp's own config."""
+        from wet_mcp.credential_state import save_credentials
 
-    def test_skips_when_no_cloud_keys(self):
-        """Skips when config has no matching cloud keys."""
-        from wet_mcp.credential_state import _share_cloud_keys_to_peers
+        config = {
+            "GEMINI_API_KEY": "test-key",
+            "JINA_AI_API_KEY": "jina",
+        }
 
-        config = {"SOME_KEY": "value"}
-        with patch("mcp_core.storage.config_file.write_config") as mock_write:
-            _share_cloud_keys_to_peers(config)
-            mock_write.assert_not_called()
-
-    def test_handles_write_error(self):
-        """Handles write_config error for individual peer and continues."""
-        from wet_mcp.credential_state import _share_cloud_keys_to_peers
-
-        config = {"OPENAI_API_KEY": "test-key"}
-
-        def side_effect(peer, shared):
-            if peer == "mnemo-mcp":
-                raise RuntimeError("mnemo failed")
-            return None
-
-        with patch(
-            "mcp_core.storage.config_file.write_config",
-            side_effect=side_effect,
-        ) as mock_write:
-            # Should not raise
-            _share_cloud_keys_to_peers(config)
-            # Should still attempt both peers
-            assert mock_write.call_count == 2
-
-    def test_handles_import_error(self):
-        """Handles import error gracefully."""
-        from wet_mcp.credential_state import _share_cloud_keys_to_peers
-
-        config = {"GEMINI_API_KEY": "test-key"}
-        with patch(
-            "mcp_core.storage.config_file.write_config",
-            side_effect=ImportError("no module"),
+        with (
+            patch("mcp_core.storage.config_file.write_config") as mock_write_config,
+            patch("wet_mcp.relay_setup.apply_config"),
+            patch("wet_mcp.config.settings"),
         ):
-            _share_cloud_keys_to_peers(config)
+            save_credentials(config, {"sub": "local-user"})
+
+            written_servers = [c.args[0] for c in mock_write_config.call_args_list]
+            assert all(s == "wet-mcp" for s in written_servers), written_servers
+            for peer in ("mnemo-mcp", "better-code-review-graph", "imagine-mcp"):
+                assert peer not in written_servers
+
+    def test_no_share_cloud_keys_to_peers_function_exists(self):
+        """Defensive: regression guard against re-introducing peer sharing."""
+        import wet_mcp.credential_state as mod
+
+        assert not hasattr(mod, "_share_cloud_keys_to_peers")
 
 
 class TestRequireCredentials:
@@ -536,7 +517,6 @@ class TestSaveCredentialsGdriveNextStep:
         with (
             patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("httpx.post", return_value=mock_httpx_response),
             patch("threading.Thread") as mock_thread,
@@ -565,7 +545,6 @@ class TestSaveCredentialsGdriveNextStep:
         with (
             patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("httpx.post", return_value=mock_httpx_response),
         ):
@@ -583,7 +562,6 @@ class TestSaveCredentialsGdriveNextStep:
         with (
             patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
             patch("wet_mcp.config.settings") as mock_settings,
         ):
             mock_settings.google_drive_client_id = ""
@@ -601,7 +579,6 @@ class TestSaveCredentialsGdriveNextStep:
         with (
             patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
             patch("wet_mcp.config.settings") as mock_settings,
         ):
             mock_settings.setup_providers = MagicMock(
@@ -631,7 +608,6 @@ class TestSaveCredentialsGdriveNextStep:
         with (
             patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("httpx.post", return_value=mock_httpx_response),
             patch("threading.Thread") as mock_thread,
@@ -664,7 +640,6 @@ class TestSaveCredentialsGdriveNextStep:
         with (
             patch("mcp_core.storage.config_file.write_config"),
             patch("wet_mcp.relay_setup.apply_config"),
-            patch("wet_mcp.credential_state._share_cloud_keys_to_peers"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("httpx.post", side_effect=ConnectionError("oauth down")),
         ):
@@ -810,33 +785,6 @@ class TestSetGdriveFailedCallback:
         assert mod._on_gdrive_failed is None
 
         _reset_callbacks_for_test()
-
-
-class TestShareCloudKeysOuterException:
-    def test_outer_import_error_non_fatal(self):
-        """Outer ImportError for write_config should be swallowed."""
-        import builtins
-
-        from wet_mcp.credential_state import _share_cloud_keys_to_peers
-
-        real_import = builtins.__import__
-
-        def fake_import(name, *args, **kwargs):
-            if name == "mcp_core.storage.config_file":
-                raise ImportError("no mcp_core")
-            return real_import(name, *args, **kwargs)
-
-        with patch.object(builtins, "__import__", side_effect=fake_import):
-            # Should not raise
-            _share_cloud_keys_to_peers({"GEMINI_API_KEY": "key"})
-
-    def test_outer_exception_swallowed(self):
-        """Broad Exception in outer block should be swallowed."""
-        from wet_mcp.credential_state import _share_cloud_keys_to_peers
-
-        # Passing None as config triggers AttributeError in shared = {...}
-        with patch("mcp_core.storage.config_file.write_config"):
-            _share_cloud_keys_to_peers(None)  # type: ignore
 
 
 class TestGdriveTokenPoll:
