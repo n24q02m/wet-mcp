@@ -133,7 +133,7 @@ When environment variables are set, the relay is skipped entirely.
 
 No manual configuration needed. On first start:
 
-1. The server prints a setup URL to stderr (e.g., `https://wet-mcp.n24q02m.com/setup/...`)
+1. The server prints a setup URL to stderr (e.g., `http://127.0.0.1:<port>/authorize`). The port is allocated dynamically on each start, and `wet-mcp` runs the relay locally by default — no public n24q02m.com subdomain is provisioned for wet/mnemo/crg/imagine. To run a self-hosted remote relay, set `MCP_RELAY_URL=https://your-host/...`.
 2. Open the URL in any browser
 3. Fill in your API keys on the guided form:
    - **Jina AI API Key** -- enables search, extraction, embedding, reranking ([get key](https://jina.ai/api-key))
