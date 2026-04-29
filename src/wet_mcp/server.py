@@ -456,6 +456,15 @@ mcp = FastMCP(
     lifespan=_lifespan,
 )
 
+# Register the standard `config__open_relay` MCP tool so an LLM can re-trigger
+# the relay form after the daemon is already running (Transparent Bridge v2).
+# Helper lives in mcp-core >=1.11.0; see ``register_open_relay_tool`` docstring.
+from mcp_core.relay.tool_helpers import register_open_relay_tool  # noqa: E402
+
+from wet_mcp.relay_schema import RELAY_SCHEMA  # noqa: E402
+
+register_open_relay_tool(mcp, "wet-mcp", RELAY_SCHEMA)
+
 # Grace period (seconds) given to a cancelled task to clean up resources
 # (e.g. close browser tabs) before we abandon it entirely.
 _CANCEL_GRACE_PERIOD = 5.0

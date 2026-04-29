@@ -51,7 +51,7 @@ dependencies = [
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
     # Relay setup (zero-env-config)
-    "n24q02m-mcp-core>=1.10.0",
+    "n24q02m-mcp-core>=1.11.0",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance
     # downgrading to CVE-vulnerable 2.x (5 CVEs including critical SSRF).
     # Must stay >=3.2.3,<4 until mcp-core bumps its own floor past 3.x.
