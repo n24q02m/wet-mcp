@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.13.13, <3.14"
+requires-python = "==3.13.*"
 resolution-markers = [
     "sys_platform == 'win32'",
     "sys_platform != 'win32'",
@@ -1749,11 +1749,12 @@ wheels = [
 [[package]]
 name = "n24q02m-mcp-core"
 version = "1.10.0"
-source = { registry = "https://pypi.org/simple" }
+source = { editable = "../mcp-core/packages/core-py" }
 dependencies = [
     { name = "authlib" },
     { name = "cryptography" },
     { name = "fastmcp" },
+    { name = "filelock" },
     { name = "httpx" },
     { name = "loguru" },
     { name = "platformdirs" },
@@ -1761,14 +1762,34 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bf/76/7db8d34e2b0e452d16cd2275f540d0538d4e5f4140c88ebf0c9d97361f50/n24q02m_mcp_core-1.10.0.tar.gz", hash = "sha256:761f2545d252927d1090bf8222dba566f3789ee4f38e172c2c128ebdd7881f30", size = 177223, upload-time = "2026-04-28T15:24:02.064Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d7/f9/b0d79f041ae9af5ffbea4250a29c72f6bf90a8ad1a40ea342af114cbc7dd/n24q02m_mcp_core-1.10.0-py3-none-any.whl", hash = "sha256:8965068bf98597181f3f8944d00d2295b17eceafa1f500fee325a0c5bfd08688", size = 107410, upload-time = "2026-04-28T15:24:00.297Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "authlib", specifier = ">=1.7.0" },
+    { name = "cryptography", specifier = ">=47.0.0" },
+    { name = "fastmcp", specifier = ">=3.2.4" },
+    { name = "filelock", specifier = ">=3.16.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "loguru", specifier = ">=0.7.3" },
+    { name = "platformdirs", specifier = ">=4.9.6" },
+    { name = "pydantic", specifier = ">=2.9,<2.13" },
+    { name = "starlette", specifier = ">=1.0.0" },
+    { name = "tomli-w", specifier = ">=1.2.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.3" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+    { name = "pytest-timeout", specifier = ">=2.4.0" },
+    { name = "ruff", specifier = ">=0.15.12" },
+    { name = "ty", specifier = ">=0.0.32" },
 ]
 
 [[package]]
 name = "n24q02m-web-core"
-version = "1.3.8"
+version = "1.3.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
@@ -1782,9 +1803,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/75/8b/9330c2a2259281676e0385c1f8c9d6d709c0173f50dc930ddb79cba83903/n24q02m_web_core-1.3.8.tar.gz", hash = "sha256:3126fccd617139688edbd89921b1eadbc5407df19f5c5d07cd877b96fae14ea9", size = 203531, upload-time = "2026-04-28T01:50:17.269Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b6/4f/d96c8b45ea5c3edf92c9f27818eead72af002bae283d91def35aa5a72cc4/n24q02m_web_core-1.3.9.tar.gz", hash = "sha256:3b1faa571b88ee69875e2b474692e520631f00e4277d4c54d97603035aa5690f", size = 203782, upload-time = "2026-04-29T04:49:57.04Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/08/3713e4c45e1a992af664a06761e04d9219be3be37e5e81b00de26faa55ce/n24q02m_web_core-1.3.8-py3-none-any.whl", hash = "sha256:7c38f2c5c88d5097fc8c8c5c85e97344954584c32ea1bb90c2827e1ccde40a61", size = 55650, upload-time = "2026-04-28T01:50:18.431Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/d6/a7307c9f076155d777db7d348b078c985454ab5e226f7a3dd8c51c4026e5/n24q02m_web_core-1.3.9-py3-none-any.whl", hash = "sha256:4f7ef790b02a621ccb1fdbed7c4f8c6c3ffd26e748937d76c7d22f238b295b4d", size = 55648, upload-time = "2026-04-29T04:49:55.919Z" },
 ]
 
 [[package]]
@@ -3366,7 +3387,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.28.3"
+version = "2.28.4"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3426,7 +3447,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", specifier = ">=1.10.0" },
+    { name = "n24q02m-mcp-core", editable = "../mcp-core/packages/core-py" },
     { name = "n24q02m-web-core", specifier = ">=1.3.8" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "pillow", specifier = ">=12.2.0" },
