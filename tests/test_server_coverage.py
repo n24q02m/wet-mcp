@@ -1128,19 +1128,13 @@ async def test_discover_docs_url_with_language():
 
 
 def test_main_entry_point():
-    """main() in stdio mode uses run_smart_stdio_proxy."""
+    """main() in stdio mode runs FastMCP stdio server directly (no bridge)."""
     with (
-        patch(
-            "mcp_core.transport.run_smart_stdio_proxy",
-            return_value=0,
-        ) as mock_proxy,
+        patch.object(server.mcp, "run") as mock_run,
         patch.dict(os.environ, {"MCP_TRANSPORT": "stdio"}),
-        pytest.raises(SystemExit, match="0"),
     ):
         server.main()
-    mock_proxy.assert_called_once()
-    args = mock_proxy.call_args[0]
-    assert args[0] == "wet-mcp"
+    mock_run.assert_called_once_with(transport="stdio")
 
 
 # ---------------------------------------------------------------------------

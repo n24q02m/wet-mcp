@@ -99,42 +99,30 @@ class TestMainDispatch:
     """main() routes to correct entry point based on MCP_MODE."""
 
     def test_stdio_flag_runs_mcp(self, monkeypatch):
+        """--stdio flag routes main() to FastMCP stdio server directly."""
+        from wet_mcp import server
         from wet_mcp.server import main
 
         monkeypatch.setattr(sys, "argv", ["wet-mcp", "--stdio"])
         monkeypatch.delenv("MCP_MODE", raising=False)
         monkeypatch.delenv("MCP_TRANSPORT", raising=False)
 
-        with (
-            patch(
-                "mcp_core.transport.run_smart_stdio_proxy",
-                return_value=0,
-            ) as mock_proxy,
-            pytest.raises(SystemExit, match="0"),
-        ):
+        with patch.object(server.mcp, "run") as mock_run:
             main()
-        mock_proxy.assert_called_once()
-        args = mock_proxy.call_args[0]
-        assert args[0] == "wet-mcp"
+        mock_run.assert_called_once_with(transport="stdio")
 
     def test_mcp_transport_stdio_runs_mcp(self, monkeypatch):
+        """MCP_TRANSPORT=stdio routes main() to FastMCP stdio server directly."""
+        from wet_mcp import server
         from wet_mcp.server import main
 
         monkeypatch.setattr(sys, "argv", ["wet-mcp"])
         monkeypatch.setenv("MCP_TRANSPORT", "stdio")
         monkeypatch.delenv("MCP_MODE", raising=False)
 
-        with (
-            patch(
-                "mcp_core.transport.run_smart_stdio_proxy",
-                return_value=0,
-            ) as mock_proxy,
-            pytest.raises(SystemExit, match="0"),
-        ):
+        with patch.object(server.mcp, "run") as mock_run:
             main()
-        mock_proxy.assert_called_once()
-        args = mock_proxy.call_args[0]
-        assert args[0] == "wet-mcp"
+        mock_run.assert_called_once_with(transport="stdio")
 
     def test_remote_relay_mode_raises_deprecation(self, monkeypatch):
         """MCP_MODE=remote-relay was deprecated 2026-04-26 (single-user pattern)."""
