@@ -61,7 +61,7 @@ class TestLoadConfigFromFile:
 
     def test_returns_none_when_no_file(self):
         with patch(
-            "mcp_core.storage.config_file.read_config",
+            "mcp_core.storage.per_plugin_store.PerPluginStore.load",
             return_value=None,
         ):
             result = load_config_from_file()
@@ -126,7 +126,7 @@ class TestEnsureConfigForced:
                 return_value=mock_config,
             ),
             patch(
-                "mcp_core.storage.config_file.write_config",
+                "mcp_core.storage.per_plugin_store.PerPluginStore.save",
             ),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("httpx.AsyncClient") as mock_httpx,

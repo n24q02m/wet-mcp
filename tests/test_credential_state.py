@@ -75,13 +75,13 @@ class TestResolveCredentialState:
         assert result == CredentialState.CONFIGURED
 
     def test_config_file_configured(self, monkeypatch):
-        """When config file has cloud keys, apply to env and state = CONFIGURED."""
+        """When per-plugin store has cloud keys, apply to env and state = CONFIGURED."""
         for k in CLOUD_KEYS:
             monkeypatch.delenv(k, raising=False)
 
         saved = {"GEMINI_API_KEY": "from-file", "OPENAI_API_KEY": ""}
         with patch(
-            "mcp_core.storage.config_file.read_config",
+            "mcp_core.storage.per_plugin_store.PerPluginStore.load",
             return_value=saved,
         ):
             result = resolve_credential_state()
@@ -97,7 +97,7 @@ class TestResolveCredentialState:
         saved = {"SOME_OTHER_KEY": "value"}
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_core.storage.per_plugin_store.PerPluginStore.load",
                 return_value=saved,
             ),
             patch(
@@ -115,7 +115,7 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_core.storage.per_plugin_store.PerPluginStore.load",
                 side_effect=Exception("decrypt failed"),
             ),
             patch(
@@ -133,7 +133,7 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_core.storage.per_plugin_store.PerPluginStore.load",
                 return_value=None,
             ),
             patch(
@@ -151,7 +151,7 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_core.storage.per_plugin_store.PerPluginStore.load",
                 return_value=None,
             ),
             patch(
@@ -169,7 +169,7 @@ class TestResolveCredentialState:
 
         with (
             patch(
-                "mcp_core.storage.config_file.read_config",
+                "mcp_core.storage.per_plugin_store.PerPluginStore.load",
                 return_value=None,
             ),
             patch(
@@ -280,7 +280,7 @@ class TestResetState:
 
         with (
             patch("mcp_core.clear_mode"),
-            patch("mcp_core.storage.config_file.delete_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.clear"),
         ):
             reset_state()
             assert get_state() == CredentialState.AWAITING_SETUP
@@ -378,7 +378,7 @@ class TestServerSetupToolNewActions:
         set_state(CredentialState.CONFIGURED)
         with (
             patch("mcp_core.clear_mode"),
-            patch("mcp_core.storage.config_file.delete_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.clear"),
         ):
             result = await config(action="setup_reset")
             data = json.loads(result)
@@ -425,25 +425,32 @@ class TestCredentialIsolation:
     """
 
     def test_save_credentials_does_not_write_to_peers(self):
-        """save_credentials must touch only wet-mcp's own config."""
+        """save_credentials must touch only wet-mcp's own PerPluginStore."""
         from wet_mcp.credential_state import save_credentials
 
-        config = {
+        creds = {
             "GEMINI_API_KEY": "test-key",
             "JINA_AI_API_KEY": "jina",
         }
 
+        saved_plugins: list[str] = []
+
+        def _track_save(self_store, payload):  # noqa: N802
+            saved_plugins.append(self_store.plugin_name)
+
         with (
-            patch("mcp_core.storage.config_file.write_config") as mock_write_config,
+            patch(
+                "mcp_core.storage.per_plugin_store.PerPluginStore.save",
+                _track_save,
+            ),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("wet_mcp.config.settings"),
         ):
-            save_credentials(config, {"sub": "local-user"})
+            save_credentials(creds, {"sub": "local-user"})
 
-            written_servers = [c.args[0] for c in mock_write_config.call_args_list]
-            assert all(s == "wet-mcp" for s in written_servers), written_servers
-            for peer in ("mnemo-mcp", "better-code-review-graph", "imagine-mcp"):
-                assert peer not in written_servers
+            assert all(p == "wet" for p in saved_plugins), saved_plugins
+            for peer in ("mnemo", "better-code-review-graph", "imagine"):
+                assert peer not in saved_plugins
 
     def test_no_share_cloud_keys_to_peers_function_exists(self):
         """Defensive: regression guard against re-introducing peer sharing."""
@@ -515,7 +522,7 @@ class TestSaveCredentialsGdriveNextStep:
         mock_httpx_response.json = MagicMock(return_value=device_payload)
 
         with (
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("httpx.post", return_value=mock_httpx_response),
@@ -543,7 +550,7 @@ class TestSaveCredentialsGdriveNextStep:
         mock_httpx_response.json = MagicMock(return_value={})
 
         with (
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("httpx.post", return_value=mock_httpx_response),
@@ -560,7 +567,7 @@ class TestSaveCredentialsGdriveNextStep:
         from wet_mcp.credential_state import save_credentials
 
         with (
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("wet_mcp.config.settings") as mock_settings,
         ):
@@ -577,7 +584,7 @@ class TestSaveCredentialsGdriveNextStep:
         from wet_mcp.credential_state import save_credentials
 
         with (
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("wet_mcp.config.settings") as mock_settings,
         ):
@@ -606,7 +613,7 @@ class TestSaveCredentialsGdriveNextStep:
         mock_httpx_response.json = MagicMock(return_value=device_payload)
 
         with (
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("httpx.post", return_value=mock_httpx_response),
@@ -638,7 +645,7 @@ class TestSaveCredentialsGdriveNextStep:
         from wet_mcp.credential_state import save_credentials
 
         with (
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("wet_mcp.relay_setup.apply_config"),
             patch("wet_mcp.config.settings") as mock_settings,
             patch("httpx.post", side_effect=ConnectionError("oauth down")),

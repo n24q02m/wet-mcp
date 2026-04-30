@@ -7,29 +7,34 @@ When no credentials are present, ``trigger_relay_setup`` spawns a LOCAL HTTP
 credential form on ``http://127.0.0.1:<random>`` via
 ``mcp_core.start_local_server_background`` with the wet-mcp relay schema.
 The user pastes API keys into that local form; ``save_credentials`` persists
-to ``config.enc`` and -- when a Google Drive client is configured -- kicks
-off the device-code flow. GDrive progress is surfaced to the form through
-``setup_complete_hook``.
+to ``~/.wet-mcp/config.json`` via PerPluginStore and -- when a Google Drive
+client is configured -- kicks off the device-code flow. GDrive progress is
+surfaced to the form through ``setup_complete_hook``.
 
 This fallback is LOCAL-ONLY. We never hit the remote relay URL here -- that
 is reserved for explicit ``MCP_MODE`` HTTP deployments. See
 ``~/.claude/skills/mcp-dev/references/mode-matrix.md`` section
 ``stdio proxy`` for the canonical rule.
+
+Storage: migrated from shared mcp_core.storage.config_file (config.enc) to
+per-plugin mcp_core.storage.per_plugin_store.PerPluginStore so each plugin
+has isolated credential files (~/.<plugin>-mcp/config.json). Multi-user HTTP
+mode uses PerPluginStore("wet", sub) for per-JWT-sub isolation.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 from collections.abc import Callable
 from enum import Enum
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
+from mcp_core.storage.per_plugin_store import PerPluginStore
 
 SERVER_NAME = "wet-mcp"
+PLUGIN_NAME = "wet"
 
 # Grace window so the browser renders "Setup complete!" before the local spawn closes.
 _SPAWN_CLEANUP_S = 5.0
@@ -162,17 +167,15 @@ def resolve_credential_state() -> CredentialState:
         _state = CredentialState.CONFIGURED
         return _state
 
-    # 2. Check config file
+    # 2. Check per-plugin credential store
     try:
-        from mcp_core.storage.config_file import read_config
-
-        saved = read_config(SERVER_NAME)
+        saved = PerPluginStore(PLUGIN_NAME).load()
         if saved and any(saved.get(k) for k in CLOUD_KEYS):
             # Apply to env vars
             for key, value in saved.items():
                 if value and key not in os.environ:
                     os.environ[key] = value
-            logger.info("Config loaded from encrypted file")
+            logger.info("Config loaded from per-plugin store (~/.wet-mcp/config.json)")
             _state = CredentialState.CONFIGURED
             return _state
     except Exception:
@@ -294,27 +297,14 @@ async def trigger_relay_setup(
         return None
 
 
-def _sub_data_dir(sub: str) -> Path:
-    """Per-sub data directory under ``WET_DATA_DIR`` (or ``~/.wet-mcp``).
-
-    Used by remote multi-user mode (``PUBLIC_URL`` set): each authenticated
-    JWT subject gets its own credential bucket, isolated from other users
-    that authorized concurrently against the same wet-mcp deployment.
-    """
-    base = Path(os.environ.get("WET_DATA_DIR", str(Path.home() / ".wet-mcp")))
-    d = base / "subs" / sub
-    d.mkdir(parents=True, exist_ok=True)
-    return d
-
-
 def store_for_sub(sub: str, config: dict[str, str]) -> None:
     """Persist a credential dict for a specific JWT ``sub``.
 
-    Plain JSON (not config.enc): remote multi-user deployments rely on the
-    host filesystem permissions plus mcp-core's per-sub directory scoping
-    rather than the local single-user encrypted store.
+    Delegates to PerPluginStore(PLUGIN_NAME, sub) which writes to
+    ~/.wet-mcp/subs/<sub>/config.json with AES-GCM encryption keyed
+    from CREDENTIAL_SECRET env var.
     """
-    (_sub_data_dir(sub) / "config.json").write_text(json.dumps(config))
+    PerPluginStore(PLUGIN_NAME, sub).save(config)
 
 
 def read_for_sub(sub: str) -> dict[str, str]:
@@ -323,8 +313,7 @@ def read_for_sub(sub: str) -> dict[str, str]:
     Returns an empty dict when no credentials have been saved for the
     subject yet (first /authorize for a brand-new user).
     """
-    p = _sub_data_dir(sub) / "config.json"
-    return json.loads(p.read_text()) if p.exists() else {}
+    return PerPluginStore(PLUGIN_NAME, sub).load() or {}
 
 
 def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:
@@ -410,12 +399,10 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
             )
         return None
 
-    from mcp_core.storage.config_file import write_config
-
     from wet_mcp.relay_setup import apply_config
 
-    # Persist to encrypted config file
-    write_config(SERVER_NAME, config)
+    # Persist to per-plugin store (~/.wet-mcp/config.json)
+    PerPluginStore(PLUGIN_NAME).save(config)
 
     # Apply to environment for immediate use
     apply_config(config)
@@ -625,10 +612,9 @@ def reset_state() -> None:
 
     try:
         from mcp_core import clear_mode
-        from mcp_core.storage.config_file import delete_config
 
         clear_mode(SERVER_NAME)
-        delete_config(SERVER_NAME)
+        PerPluginStore(PLUGIN_NAME).clear()
     except Exception:
         logger.opt(exception=True).warning("Reset state failed")
 

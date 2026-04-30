@@ -216,7 +216,7 @@ class TestEnsureConfig:
                 new_callable=AsyncMock,
                 return_value=mock_config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
@@ -269,7 +269,7 @@ class TestEnsureConfig:
                 new_callable=AsyncMock,
                 return_value=mock_config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
@@ -317,7 +317,7 @@ class TestEnsureConfig:
                 new_callable=AsyncMock,
                 return_value=mock_config,
             ),
-            patch("mcp_core.storage.config_file.write_config"),
+            patch("mcp_core.storage.per_plugin_store.PerPluginStore.save"),
             patch("httpx.AsyncClient") as mock_httpx,
             patch("wet_mcp.config.settings") as mock_settings,
             patch("wet_mcp.relay_setup.apply_config") as mock_apply,
@@ -347,7 +347,7 @@ class TestLoadConfigFromFile:
 
         saved = {"GEMINI_API_KEY": "test-key", "OPENAI_API_KEY": ""}
         with patch(
-            "mcp_core.storage.config_file.read_config",
+            "mcp_core.storage.per_plugin_store.PerPluginStore.load",
             return_value=saved,
         ):
             result = load_config_from_file()
@@ -359,7 +359,7 @@ class TestLoadConfigFromFile:
 
         saved = {"SOME_OTHER_KEY": "value"}
         with patch(
-            "mcp_core.storage.config_file.read_config",
+            "mcp_core.storage.per_plugin_store.PerPluginStore.load",
             return_value=saved,
         ):
             result = load_config_from_file()
@@ -370,7 +370,7 @@ class TestLoadConfigFromFile:
         from wet_mcp.relay_setup import load_config_from_file
 
         with patch(
-            "mcp_core.storage.config_file.read_config",
+            "mcp_core.storage.per_plugin_store.PerPluginStore.load",
             side_effect=Exception("disk error"),
         ):
             result = load_config_from_file()
