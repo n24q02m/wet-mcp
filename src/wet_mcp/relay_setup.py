@@ -2,9 +2,12 @@
 
 Resolution order (relay only when ALL local sources are empty):
 1. ENV VARS          -- User explicitly set (highest priority, skip everything)
-2. RELAY CONFIG      -- Saved from previous relay setup (~/.config/mcp/config.enc)
+2. RELAY CONFIG      -- Saved from previous relay setup (~/.wet-mcp/config.json)
 3. RELAY SETUP       -- Interactive, ONLY when steps 1-2 are ALL empty (120s timeout)
 4. LOCAL MODE        -- Fallback (ONNX embedding, SearXNG search)
+
+Storage: migrated from mcp_core.storage.config_file (shared config.enc) to
+mcp_core.storage.per_plugin_store.PerPluginStore("wet") for per-plugin isolation.
 """
 
 from __future__ import annotations
@@ -13,8 +16,10 @@ import os
 import sys
 
 from loguru import logger
+from mcp_core.storage.per_plugin_store import PerPluginStore
 
 SERVER_NAME = "wet-mcp"
+PLUGIN_NAME = "wet"
 
 CLOUD_KEYS = [
     "JINA_AI_API_KEY",
@@ -28,13 +33,15 @@ RELAY_TIMEOUT_S = 300.0
 
 
 def load_config_from_file() -> dict[str, str] | None:
-    """Try to load config from encrypted config file. Returns None if not found."""
-    try:
-        from mcp_core.storage.config_file import read_config
+    """Try to load config from per-plugin store. Returns None if not found.
 
-        saved = read_config(SERVER_NAME)
+    Name kept for backward compatibility; storage has migrated from
+    shared config.enc to ~/.wet-mcp/config.json via PerPluginStore.
+    """
+    try:
+        saved = PerPluginStore(PLUGIN_NAME).load()
         if saved and any(saved.get(k) for k in CLOUD_KEYS):
-            logger.info("Config loaded from file")
+            logger.info("Config loaded from per-plugin store (~/.wet-mcp/config.json)")
             return saved
         return None
     except Exception:
@@ -108,10 +115,8 @@ async def ensure_config(
 
         config = await poll_for_result(relay_url, session, timeout_s=timeout)  # ty: ignore[invalid-argument-type]
 
-        # Save to config file for future use
-        from mcp_core.storage.config_file import write_config
-
-        write_config(SERVER_NAME, config)
+        # Save to per-plugin store for future use (~/.wet-mcp/config.json)
+        PerPluginStore(PLUGIN_NAME).save(config)
         logger.info("Config saved successfully")
 
         apply_config(config)
