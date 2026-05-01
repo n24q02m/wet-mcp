@@ -20,7 +20,7 @@ classifiers = [
 requires-python = "==3.13.*"
 dependencies = [
     # Shared web infrastructure (SSRF, SearXNG, URL utils)
-    "n24q02m-web-core>=1.3.8",
+    "n24q02m-web-core>=1.3.9",
     # MCP Server
     "mcp[cli]",
     # Web Crawling
@@ -35,15 +35,15 @@ dependencies = [
     # LLM + Embedding (native SDKs)
     "cohere>=6.1.0",
     "httpx>=0.28.1",
-    "google-genai>=1.73.1",
-    "openai>=2.32.0",
+    "google-genai>=1.74.0",
+    "openai>=2.33.0",
     # Vector search for docs
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
-    "qwen3-embed>=1.9.0",
+    "qwen3-embed>=1.9.1",
     "pillow>=12.2.0",
     "diskcache>=5.6.3",
-    "cryptography>=46.0.7",
+    "cryptography>=47.0.0",
     # Document conversion (PDF, DOCX, PPTX → Markdown)
     "markitdown[pdf,docx,pptx,xlsx]",
     # Schema validation for structured extraction
@@ -57,15 +57,15 @@ dependencies = [
     # Must stay >=3.2.3,<4 until mcp-core bumps its own floor past 3.x.
     "fastmcp>=3.2.4,<4",
     # Google Drive sync
-    "google-api-python-client>=2.194.0",
-    "google-auth>=2.49.2",
+    "google-api-python-client>=2.195.0",
+    "google-auth>=2.50.0",
     # Production WSGI server for embedded SearXNG on Windows
     # (Werkzeug dev server deadlocks under concurrent engine requests)
     "waitress>=3.0.2; sys_platform == 'win32'",
     # greenlet 3.5.0 (pulled transitively via patchright) ships no
     # manylinux_*_aarch64 wheels and has no source dist, so the Docker
     # arm64 build fails. Cap below until upstream re-publishes arm64.
-    "greenlet<3.5.0",
+    "greenlet<3.5.1",
 ]
 
 [dependency-groups]
