@@ -2317,10 +2317,11 @@ def _split_preserving_code(
     in_code_block = False
 
     for line in lines:
-        if _CODE_FENCE_RE.match(line.strip()):
+        # ⚡ Bolt Optimization: Avoid compiled regex and .strip() string allocation
+        if line.lstrip().startswith("```"):
             in_code_block = not in_code_block
 
-        if not in_code_block and line.strip() == "" and current_segment:
+        if not in_code_block and (not line or line.isspace()) and current_segment:
             # Paragraph boundary — flush segment
             segments.append("\n".join(current_segment))
             current_segment = []
