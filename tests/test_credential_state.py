@@ -1,20 +1,18 @@
 """Tests for wet_mcp.credential_state -- non-blocking credential state machine."""
 
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from wet_mcp.credential_state import (
     CLOUD_KEYS,
-    SERVER_NAME,
     CredentialState,
     get_setup_url,
     get_state,
     reset_state,
     resolve_credential_state,
     set_state,
-    trigger_relay_setup,
 )
 
 
@@ -181,92 +179,14 @@ class TestResolveCredentialState:
             assert result == CredentialState.AWAITING_SETUP
 
 
-class TestTriggerRelaySetup:
-    """Tests for trigger_relay_setup -- local HTTP fallback (no remote relay)."""
+class TestNoTriggerRelaySetup:
+    """Regression guard: ``trigger_relay_setup`` was removed in stdio-pure
+    refactor (spec 2026-05-01). The browser-form flow is HTTP-only now."""
 
-    async def test_skips_when_configured(self):
-        """Does not trigger when already CONFIGURED."""
-        set_state(CredentialState.CONFIGURED)
-        result = await trigger_relay_setup()
-        assert result is None  # No URL since no setup_url was set
-
-    async def test_skips_when_local(self):
-        """Does not trigger when LOCAL."""
-        set_state(CredentialState.LOCAL)
-        result = await trigger_relay_setup()
-        assert result is None
-
-    async def test_force_spawns_local_form(self):
-        """force=True spawns a local credential form even when CONFIGURED."""
-        set_state(CredentialState.CONFIGURED)
-        mock_handle = MagicMock(host="127.0.0.1", port=52001)
-
-        with (
-            patch(
-                "mcp_core.start_local_server_background",
-                new_callable=AsyncMock,
-                return_value=mock_handle,
-                create=True,
-            ) as mock_start,
-            patch("mcp_core.try_open_browser", return_value=True),
-        ):
-            result = await trigger_relay_setup(force=True)
-            assert result == "http://127.0.0.1:52001/"
-            assert get_state() == CredentialState.SETUP_IN_PROGRESS
-            mock_start.assert_awaited_once()
-
-    async def test_reuses_active_handle(self):
-        """If an active handle already exists, reuse its URL."""
+    def test_trigger_relay_setup_function_does_not_exist(self):
         import wet_mcp.credential_state as mod
 
-        mod._state = CredentialState.AWAITING_SETUP
-        mod._active_handle = MagicMock()
-        mod._setup_url = "http://127.0.0.1:52002/"
-
-        with patch(
-            "mcp_core.start_local_server_background",
-            new_callable=AsyncMock,
-            create=True,
-        ) as mock_start:
-            result = await trigger_relay_setup()
-            assert result == "http://127.0.0.1:52002/"
-            mock_start.assert_not_awaited()
-
-        mod._active_handle = None
-
-    async def test_creates_new_spawn(self):
-        """AWAITING_SETUP with no handle -> spawn local form, open browser."""
-        mock_handle = MagicMock(host="127.0.0.1", port=52003)
-
-        with (
-            patch(
-                "mcp_core.start_local_server_background",
-                new_callable=AsyncMock,
-                return_value=mock_handle,
-                create=True,
-            ) as mock_start,
-            patch("mcp_core.try_open_browser", return_value=True) as mock_browser,
-        ):
-            result = await trigger_relay_setup()
-            assert result == "http://127.0.0.1:52003/"
-            mock_start.assert_awaited_once()
-            call_kwargs = mock_start.await_args.kwargs
-            assert call_kwargs["server_name"] == SERVER_NAME
-            assert call_kwargs["host"] == "127.0.0.1"
-            assert call_kwargs["port"] == 0
-            mock_browser.assert_called_once_with("http://127.0.0.1:52003/")
-
-    async def test_exception_returns_none(self):
-        """On spawn failure, returns None and resets to AWAITING_SETUP."""
-        with patch(
-            "mcp_core.start_local_server_background",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("bind failed"),
-            create=True,
-        ):
-            result = await trigger_relay_setup()
-            assert result is None
-            assert get_state() == CredentialState.AWAITING_SETUP
+        assert not hasattr(mod, "trigger_relay_setup")
 
 
 class TestResetState:
@@ -312,49 +232,21 @@ class TestServerSetupToolNewActions:
         assert data["state"] == "configured"
         assert "GEMINI_API_KEY" in data["cloud_keys_in_env"]
 
-    async def test_start_action_when_configured(self):
-        """setup_open_relay returns error when CONFIGURED and no force (relay skips)."""
+    async def test_setup_open_relay_action_removed(self):
+        """``setup_open_relay`` was deleted in stdio-pure refactor (2026-05-01).
+
+        Calling it should fall through to the unknown-action handler with a
+        fuzzy-match suggestion list that no longer contains
+        ``setup_open_relay``.
+        """
         import json
 
         from wet_mcp.server import config
 
-        set_state(CredentialState.CONFIGURED)
         result = await config(action="setup_open_relay")
         data = json.loads(result)
-        assert data["status"] == "error"
-
-    async def test_start_action_force(self):
-        """setup_open_relay with force triggers relay."""
-        import json
-
-        from wet_mcp.server import config
-
-        set_state(CredentialState.CONFIGURED)
-        with patch(
-            "wet_mcp.credential_state.trigger_relay_setup",
-            new_callable=AsyncMock,
-            return_value="https://relay.example.com/setup/abc",
-        ):
-            result = await config(action="setup_open_relay", force=True)
-            data = json.loads(result)
-            assert data["status"] == "relay_started"
-            assert data["setup_url"] == "https://relay.example.com/setup/abc"
-
-    async def test_start_action_failure(self):
-        """setup_open_relay returns error when relay fails."""
-        import json
-
-        from wet_mcp.server import config
-
-        set_state(CredentialState.AWAITING_SETUP)
-        with patch(
-            "wet_mcp.credential_state.trigger_relay_setup",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            result = await config(action="setup_open_relay")
-            data = json.loads(result)
-            assert data["status"] == "error"
+        assert "error" in data
+        assert "setup_open_relay" not in data["valid_actions"]
 
     async def test_skip_action(self):
         """setup_skip action sets LOCAL mode."""
@@ -477,8 +369,11 @@ class TestRequireCredentials:
         assert data["error"] == "Credentials not configured"
         assert data["state"] == "awaiting_setup"
         assert data["setup_url"] == "https://relay.example.com/setup/abc"
-        assert "open_relay" in data["instructions"]
-        assert "set_env" not in data["instructions"]
+        # Stdio-pure refactor: instructions reference env vars and HTTP
+        # opt-in flags instead of the removed `setup_open_relay` action.
+        assert "MCP_TRANSPORT=http" in data["instructions"]
+        assert "JINA_AI_API_KEY" in data["instructions"]
+        assert "setup_open_relay" not in data["instructions"]
 
     def test_returns_none_when_configured(self):
         """Returns None when state is CONFIGURED."""

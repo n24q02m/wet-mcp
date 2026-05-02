@@ -70,8 +70,12 @@ def _require_credentials() -> str | None:
                 "state": "awaiting_setup",
                 "setup_url": url,
                 "instructions": (
-                    "API keys required. Call config(action='setup_open_relay') to configure via browser, "
-                    "or config(action='setup_skip') to opt into local-only mode."
+                    "API keys required. Set one of "
+                    "JINA_AI_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY / "
+                    "COHERE_API_KEY in the environment, or run wet-mcp in "
+                    "HTTP mode (--http / MCP_TRANSPORT=http) to configure "
+                    "via browser, or call config(action='setup_skip') to "
+                    "opt into local-only mode."
                 ),
             }
         )
@@ -143,9 +147,33 @@ async def _lifespan_startup() -> asyncio.Task | None:
     logger.info("Starting WET MCP Server...")
 
     # Non-blocking credential resolution (fast, <10ms)
-    from wet_mcp.credential_state import resolve_credential_state
+    from wet_mcp.credential_state import (
+        CredentialState,
+        get_state,
+        resolve_credential_state,
+        set_state,
+    )
 
     resolve_credential_state()
+
+    # Stdio mode has no in-process credential form, so AWAITING_SETUP would
+    # block every tool call forever. Promote it to LOCAL so basic SearXNG
+    # search + local ONNX embed/rerank work with zero env. Tools that
+    # require specific upstream API creds (e.g. GDrive sync) still return
+    # a helpful runtime error if their env var is missing.
+    is_stdio = (
+        "--stdio" in sys.argv or os.environ.get("MCP_TRANSPORT") in (None, "", "stdio")
+    ) and not (
+        "--http" in sys.argv
+        or os.environ.get("MCP_TRANSPORT") == "http"
+        or os.environ.get("TRANSPORT_MODE") == "http"
+    )
+    if is_stdio and get_state() == CredentialState.AWAITING_SETUP:
+        logger.info(
+            "Stdio mode with no creds; running in LOCAL mode "
+            "(SearXNG + local ONNX embed/rerank, no cloud keys required)."
+        )
+        set_state(CredentialState.LOCAL)
 
     # 1. Setup provider mode (sdk or local)
     from wet_mcp.config import settings
@@ -457,13 +485,13 @@ mcp = FastMCP(
 )
 
 # Register the standard `config__open_relay` MCP tool so an LLM can re-trigger
-# the relay form after the daemon is already running (Transparent Bridge v2).
-# Helper lives in mcp-core >=1.11.0; see ``register_open_relay_tool`` docstring.
+# the relay form when the server is reachable over HTTP. Helper lives in
+# mcp-core >=1.13.0b4; signature: (mcp, server_name, public_url). Pass
+# ``PUBLIC_URL`` (or ``None`` in stdio mode -> tool returns
+# ``status: 'stdio_unsupported'``).
 from mcp_core.relay.tool_helpers import register_open_relay_tool  # noqa: E402
 
-from wet_mcp.relay_schema import RELAY_SCHEMA  # noqa: E402
-
-register_open_relay_tool(mcp, "wet-mcp", RELAY_SCHEMA)
+register_open_relay_tool(mcp, "wet-mcp", os.environ.get("PUBLIC_URL"))
 
 # Grace period (seconds) given to a cancelled task to clean up resources
 # (e.g. close browser tabs) before we abandon it entirely.
@@ -1126,7 +1154,7 @@ async def help(tool_name: str = "search") -> str:
     description=(
         "Server config and management. Actions: "
         "status|set|cache_clear|docs_reindex|warmup|setup_sync|"
-        "setup_open_relay|setup_status|setup_skip|setup_reset|setup_complete. "
+        "setup_status|setup_skip|setup_reset|setup_complete. "
         "Use help tool with tool_name='config' for full docs."
     ),
     annotations=ToolAnnotations(
@@ -1153,7 +1181,6 @@ async def config(
     - docs_reindex: Force re-index a library (key = library name)
     - warmup: Pre-download models and run first-time setup
     - setup_sync: Configure Google Drive sync (OAuth Device Code flow)
-    - setup_open_relay: Open browser-based setup to configure all API keys at once
     - setup_status: Show current credential state and configured keys
     - setup_skip: Use local ONNX models (explicit opt-in, no cloud features)
     - setup_reset: Clear all credentials and reset state
@@ -1279,22 +1306,6 @@ async def config(
             result = await run_setup_sync(remote_type or "drive")
             return json.dumps(result, indent=2, default=str)
 
-        case "setup_open_relay":
-            from wet_mcp.credential_state import trigger_relay_setup
-
-            url = await trigger_relay_setup(force=force)
-            if url:
-                return json.dumps(
-                    {
-                        "status": "relay_started",
-                        "setup_url": url,
-                        "message": "Browser opened. Configure API keys in the form, then submit.",
-                    }
-                )
-            return json.dumps(
-                {"status": "error", "message": "Failed to start relay session."}
-            )
-
         case "setup_status":
             from mcp_core.storage.per_plugin_store import PerPluginStore
 
@@ -1380,7 +1391,6 @@ async def config(
                 "docs_reindex",
                 "set",
                 "setup_complete",
-                "setup_open_relay",
                 "setup_reset",
                 "setup_skip",
                 "setup_status",
@@ -2047,16 +2057,16 @@ async def _do_immediate_fallback_search(
     return fallback_data
 
 
-async def run_http(port: int = 0) -> None:
+async def run_http_server(port: int = 0) -> None:
     """Run wet-mcp as HTTP server. Local single-user (default) or remote
-    multi-user (when PUBLIC_URL env set).
+    multi-user (when ``PUBLIC_URL`` env set).
 
     Local mode binds 127.0.0.1 with a single shared ``config.enc``. Remote
     multi-user mode binds 0.0.0.0:8080, requires ``MCP_DCR_SERVER_SECRET``
     as proof of intentional multi-user deployment, and scopes credentials
     per JWT ``sub`` (see ``credential_state.store_for_sub``).
     """
-    from mcp_core.transport.local_server import run_local_server
+    from mcp_core.transport.local_server import run_http_server as _run_http
 
     from wet_mcp.credential_state import save_credentials, wire_gdrive_callbacks
     from wet_mcp.relay_schema import RELAY_SCHEMA
@@ -2075,7 +2085,7 @@ async def run_http(port: int = 0) -> None:
     else:
         host = "127.0.0.1"
 
-    await run_local_server(
+    await _run_http(
         mcp,  # ty: ignore[invalid-argument-type]
         server_name="wet-mcp",
         relay_schema=RELAY_SCHEMA,
@@ -2091,39 +2101,35 @@ async def run_http(port: int = 0) -> None:
 
 
 def main() -> None:
-    """Entry point: HTTP by default, --stdio for stdio, MCP_MODE for modes.
+    """Entry point: stdio by default, ``--http`` (or env) opts into HTTP.
 
-    HTTP mode (default): starts local server on 127.0.0.1 with paste-cred
-    form + OAuth 2.1 AS for credential management via browser.
+    Stdio mode (default): runs FastMCP over stdin/stdout for direct MCP
+    client integration (Claude Code, Cursor, VS Code Copilot, ...).
+    Stdio reads credentials from env vars only; wet-mcp's basic SearXNG
+    search works with zero env, while tools that require upstream API
+    keys (e.g. Google Drive sync) return a helpful error if their env
+    vars are missing -- no boot-time exit.
 
-    Stdio mode: ``--stdio`` flag or ``MCP_TRANSPORT=stdio`` env var. Used
-    by agents that communicate over stdin/stdout.
+    HTTP mode: opt-in via ``--http`` flag, ``MCP_TRANSPORT=http``, or
+    ``TRANSPORT_MODE=http``. HTTP is always multi-user-capable: setting
+    ``PUBLIC_URL`` (with ``MCP_DCR_SERVER_SECRET`` for proof of intent)
+    binds 0.0.0.0:8080 and scopes credentials per JWT ``sub``;
+    otherwise it binds 127.0.0.1 for single-user local browser setup.
 
-    Remote-relay mode: ``MCP_MODE=remote-relay`` + ``MCP_RELAY_URL=<url>``
-    points the credential flow at a (self-hosted or production) relay
-    server; wet-mcp serves MCP protocol only once creds are received.
+    See ``~/projects/.superpower/mcp-core/specs/2026-05-01-stdio-pure-http-multiuser.md``.
     """
-    mode = (os.environ.get("MCP_MODE") or "").strip().lower()
+    http_requested = (
+        "--http" in sys.argv
+        or os.environ.get("MCP_TRANSPORT") == "http"
+        or os.environ.get("TRANSPORT_MODE") == "http"
+    )
 
-    if "--stdio" in sys.argv or os.environ.get("MCP_TRANSPORT") == "stdio":
-        # Stdio mode: run FastMCP stdio server directly. No bridge layer.
-        # Universal MCP client compatibility (Claude Code, Cursor, VS Code Copilot, etc.).
-        # See: ~/projects/.superpower/mcp-core/specs/2026-04-30-multi-mode-stdio-http-architecture.md
-        mcp.run(transport="stdio")
+    if http_requested:
+        asyncio.run(run_http_server())
         return
-    elif mode == "remote-relay":
-        raise SystemExit(
-            "MCP_MODE=remote-relay is deprecated since 2026-04-25 (single-user "
-            "MCP_RELAY_URL pattern). For multi-user remote: set PUBLIC_URL + "
-            "MCP_DCR_SERVER_SECRET and run with default mode."
-        )
-    elif mode in ("", "local-relay"):
-        asyncio.run(run_http())
-    else:
-        raise SystemExit(
-            f"Unsupported MCP_MODE={mode!r}. Supported: local-relay (default) "
-            "or set MCP_TRANSPORT=stdio / pass --stdio."
-        )
+
+    # Default: stdio. No bridge layer, no daemon discovery.
+    mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":  # pragma: no cover
