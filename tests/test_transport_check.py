@@ -1,0 +1,190 @@
+"""Tests for ``wet_mcp.transport_check`` and the search-tool uvx gate.
+
+Per spec ``2026-05-01-stdio-pure-http-multiuser.md`` §4.1.1: stdio uvx
+mode must reject ``web.search`` / ``research`` / ``docs`` / ``similar``
+because the bundled web-core SearXNG runner cannot install or start
+SearXNG inside a pip-less uvx tool venv. Other actions (``extract`` /
+``crawl`` / ``map`` / ``media``) hit upstream HTTP directly and remain
+available.
+"""
+
+from __future__ import annotations
+
+import sys
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+import wet_mcp.transport_check as tc
+
+
+@pytest.fixture
+def _allow_real_uvx_detection(monkeypatch):
+    """Undo the global ``_disable_uvx_tool_venv_detection`` fixture.
+
+    Re-binds ``is_uvx_tool_venv`` in both the transport_check module and
+    the server module to point at the real implementation again, so a
+    test can monkeypatch the underlying signals (``sys.executable``,
+    ``importlib.util.find_spec``) and observe the genuine outcome.
+    """
+    import wet_mcp.server as srv
+
+    # Resolve the real function via the module ``__dict__`` source rather
+    # than the live attribute, so we don't accidentally restore a stub
+    # already installed by the autouse fixture.
+    real_fn = tc._detect_uvx_tool_venv
+
+    def real_is_uvx_tool_venv() -> bool:
+        return real_fn()
+
+    monkeypatch.setattr(tc, "is_uvx_tool_venv", real_is_uvx_tool_venv)
+    monkeypatch.setattr(srv, "is_uvx_tool_venv", real_is_uvx_tool_venv)
+    tc.reset_cache()
+    yield
+    tc.reset_cache()
+
+
+# ---------------------------------------------------------------------------
+# is_uvx_tool_venv() detection
+# ---------------------------------------------------------------------------
+
+
+def test_is_uvx_tool_venv_true_when_executable_under_uv_tools(
+    _allow_real_uvx_detection, monkeypatch, tmp_path
+):
+    """``sys.executable`` containing ``uv/tools/`` triggers detection."""
+    fake_exe = tmp_path / "uv" / "tools" / "wet-mcp" / "Scripts" / "python.exe"
+    fake_exe.parent.mkdir(parents=True)
+    fake_exe.touch()
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    # Pretend pip *is* importable so the path check is the only signal.
+    monkeypatch.setattr(
+        tc.importlib.util, "find_spec", lambda name: object() if name == "pip" else None
+    )
+
+    assert tc.is_uvx_tool_venv() is True
+
+
+def test_is_uvx_tool_venv_true_when_pip_missing(
+    _allow_real_uvx_detection, monkeypatch, tmp_path
+):
+    """``find_spec('pip') is None`` triggers detection on its own."""
+    # Path does NOT contain uv/tools.
+    fake_exe = tmp_path / "normal" / "venv" / "bin" / "python"
+    fake_exe.parent.mkdir(parents=True)
+    fake_exe.touch()
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    monkeypatch.setattr(tc.importlib.util, "find_spec", lambda name: None)
+
+    assert tc.is_uvx_tool_venv() is True
+
+
+def test_is_uvx_tool_venv_false_for_normal_venv(
+    _allow_real_uvx_detection, monkeypatch, tmp_path
+):
+    """Normal venv with pip installed and no uv/tools path -> False."""
+    fake_exe = tmp_path / "project" / ".venv" / "bin" / "python"
+    fake_exe.parent.mkdir(parents=True)
+    fake_exe.touch()
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    monkeypatch.setattr(
+        tc.importlib.util, "find_spec", lambda name: object() if name == "pip" else None
+    )
+
+    assert tc.is_uvx_tool_venv() is False
+
+
+def test_is_uvx_tool_venv_memoizes(_allow_real_uvx_detection, monkeypatch, tmp_path):
+    """Result is cached after the first call."""
+    fake_exe = tmp_path / "uv" / "tools" / "wet-mcp" / "bin" / "python"
+    fake_exe.parent.mkdir(parents=True)
+    fake_exe.touch()
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    monkeypatch.setattr(
+        tc.importlib.util, "find_spec", lambda name: object() if name == "pip" else None
+    )
+
+    first = tc.is_uvx_tool_venv()
+
+    # Flip both signals; cached result must persist.
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "other" / "python"))
+    monkeypatch.setattr(tc.importlib.util, "find_spec", lambda name: None)
+
+    second = tc.is_uvx_tool_venv()
+    assert first == second is True
+
+
+# ---------------------------------------------------------------------------
+# search() short-circuit on uvx detection
+# ---------------------------------------------------------------------------
+
+
+def _force_uvx(monkeypatch, value: bool):
+    """Force ``is_uvx_tool_venv`` to return ``value`` in every live binding.
+
+    ``test_server_timeout.py`` deletes and reimports ``wet_mcp.server``
+    under heavy mocking, so two distinct copies of that module can coexist
+    in ``sys.modules`` for the rest of the run. Patch every copy reachable
+    from ``sys.modules`` (and ``transport_check``) and return the freshly
+    resolved module so tests use the live version.
+    """
+    import sys
+
+    monkeypatch.setattr(tc, "is_uvx_tool_venv", lambda: value)
+    if "wet_mcp.server" not in sys.modules:
+        import wet_mcp.server  # noqa: F401
+    srv = sys.modules["wet_mcp.server"]
+    monkeypatch.setattr(srv, "is_uvx_tool_venv", lambda: value)
+    return srv
+
+
+@pytest.mark.parametrize("action", ["search", "research", "docs", "similar"])
+@pytest.mark.asyncio
+async def test_search_actions_rejected_in_uvx_mode(monkeypatch, action):
+    """All four SearXNG-dependent actions return the spec error in uvx."""
+    srv = _force_uvx(monkeypatch, True)
+
+    # ``docs`` requires ``library``; ``similar`` requires a URL query. Pass
+    # values that would normally make it past input validation so we know
+    # the rejection comes from the uvx gate, not from missing parameters.
+    kwargs = {"query": "https://example.com"}
+    if action == "docs":
+        kwargs["library"] = "fastapi"
+
+    result = await srv.search(action=action, **kwargs)
+
+    assert result.startswith(f"Error: action '{action}' requires SearXNG")
+    assert "Method 3 stdio Docker" in result
+    assert "Method 2 HTTP Docker" in result
+
+
+@pytest.mark.asyncio
+async def test_search_action_proceeds_when_not_uvx(monkeypatch):
+    """In a normal venv, ``search`` reaches ``ensure_searxng`` as before."""
+    srv = _force_uvx(monkeypatch, False)
+
+    with (
+        patch.object(srv, "ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch.object(srv, "searxng_search", new_callable=AsyncMock) as mock_search,
+    ):
+        mock_ensure.return_value = "http://localhost:8080"
+        mock_search.return_value = "Search Results"
+
+        result = await srv.search(action="search", query="hello world")
+
+        assert "Search Results" in result
+        mock_ensure.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_extract_action_works_regardless_of_uvx(monkeypatch):
+    """``extract`` action stays available in uvx mode (no SearXNG dep)."""
+    srv = _force_uvx(monkeypatch, True)
+
+    with patch.object(srv, "_extract", new_callable=AsyncMock) as mock_extract:
+        mock_extract.return_value = "Extracted Content"
+
+        result = await srv.extract(action="extract", urls=["https://example.com"])
+
+        assert "Extracted Content" in result
+        mock_extract.assert_called_once()
