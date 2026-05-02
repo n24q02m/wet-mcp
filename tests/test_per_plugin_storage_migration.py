@@ -9,7 +9,12 @@ from unittest.mock import patch
 
 
 def test_loads_from_new_path(tmp_path, monkeypatch):
-    """After migration, resolve_credential_state reads from PerPluginStore."""
+    """After migration, resolve_credential_state reads from PerPluginStore.
+
+    Per spec 2026-05-01-stdio-pure-http-multiuser.md §4.1 + OQ3, the
+    PerPluginStore fallback only fires in HTTP mode (stdio reads env vars
+    ONLY). This test exercises the HTTP-mode persistence path.
+    """
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
 
     # Clear all cloud-key env vars so resolve falls through to store
@@ -17,6 +22,9 @@ def test_loads_from_new_path(tmp_path, monkeypatch):
 
     for k in CLOUD_KEYS:
         monkeypatch.delenv(k, raising=False)
+
+    # Mark HTTP mode so the per-plugin store fallback path is exercised.
+    monkeypatch.setenv("MCP_TRANSPORT", "http")
 
     # Pre-populate via PerPluginStore
     from mcp_core.storage.per_plugin_store import PerPluginStore

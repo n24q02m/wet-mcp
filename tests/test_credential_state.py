@@ -73,9 +73,15 @@ class TestResolveCredentialState:
         assert result == CredentialState.CONFIGURED
 
     def test_config_file_configured(self, monkeypatch):
-        """When per-plugin store has cloud keys, apply to env and state = CONFIGURED."""
+        """When per-plugin store has cloud keys IN HTTP MODE, apply to env and state = CONFIGURED.
+
+        Per spec 2026-05-01 §4.1 + OQ3, PerPluginStore fallback is HTTP-mode
+        only. Stdio mode reads env vars ONLY.
+        """
         for k in CLOUD_KEYS:
             monkeypatch.delenv(k, raising=False)
+        # Mark as HTTP mode so the per-plugin store fallback path is exercised.
+        monkeypatch.setenv("MCP_TRANSPORT", "http")
 
         saved = {"GEMINI_API_KEY": "from-file", "OPENAI_API_KEY": ""}
         with patch(

@@ -1748,8 +1748,8 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.13.0b4"
-source = { registry = "https://pypi.org/simple" }
+version = "1.13.0b5"
+source = { editable = "../mcp-core/packages/core-py" }
 dependencies = [
     { name = "authlib" },
     { name = "cryptography" },
@@ -1762,9 +1762,29 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0a/65/916107fa1ff9636fd0b2ef37a7d8e7c6bd94f1f51ed9e616903ffd13771c/n24q02m_mcp_core-1.13.0b4.tar.gz", hash = "sha256:5ccd0a909bb434cd0b5d4bdacb19a962cca986c095b5a47869cf54ab27f81727", size = 185547, upload-time = "2026-05-02T06:02:37.875Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/30/d4/e25b5e3c994b4b8618e57570dfdf3f787be54f38d10c5644ab623f0cfc8c/n24q02m_mcp_core-1.13.0b4-py3-none-any.whl", hash = "sha256:e73be2e0d6649bff1d73dfaea9147501ad821709118c962a35b35aa64a7ce940", size = 118637, upload-time = "2026-05-02T06:02:36.536Z" },
+
+[package.metadata]
+requires-dist = [
+    { name = "authlib", specifier = ">=1.7.0" },
+    { name = "cryptography", specifier = ">=47.0.0" },
+    { name = "fastmcp", specifier = ">=3.2.4" },
+    { name = "filelock", specifier = ">=3.16.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "loguru", specifier = ">=0.7.3" },
+    { name = "platformdirs", specifier = ">=4.9.6" },
+    { name = "pydantic", specifier = ">=2.12.5,<2.13" },
+    { name = "starlette", specifier = ">=1.0.0" },
+    { name = "tomli-w", specifier = ">=1.2.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.0.3" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
+    { name = "pytest-timeout", specifier = ">=2.4.0" },
+    { name = "ruff", specifier = ">=0.15.12" },
+    { name = "ty", specifier = ">=0.0.33" },
 ]
 
 [[package]]
@@ -3367,7 +3387,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.29.0b4"
+version = "2.29.0b5"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3427,7 +3447,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", specifier = ">=1.13.0b4" },
+    { name = "n24q02m-mcp-core", editable = "../mcp-core/packages/core-py" },
     { name = "n24q02m-web-core", specifier = ">=1.3.8" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "pillow", specifier = ">=12.2.0" },
