@@ -1,8 +1,13 @@
 # WET (Web Extended Toolkit) -- Agent Setup Guide
 
+> **2026-05-02 Update (v&lt;auto&gt;+)**: Plugin install (Option 1) uses stdio mode. Basic SearXNG search works without env; advanced features (GDrive sync, Brave, Serper, Gemini) need optional env vars OR HTTP mode for OAuth flows.
+> The previous "Zero-Config Relay" auto-spawn pattern has been removed.
+
 > Give this file to your AI agent to automatically set up wet-mcp.
 
-## Option 1: Claude Code Plugin (Recommended)
+## Option 1: Claude Code Plugin (stdio default)
+
+Plugin install uses **stdio mode**. Basic SearXNG web search works **without any env vars** -- ONNX local embedding and reranking are bundled. Advanced features require optional API keys.
 
 ```bash
 # Install from marketplace (includes skills: /fact-check, /compare)
@@ -10,9 +15,25 @@
 /plugin install wet-mcp@n24q02m-plugins
 ```
 
-No further configuration needed. The server auto-configures via relay on first run.
+Optional env vars in `~/.claude/settings.local.json`:
 
-## Option 2: MCP Direct
+```json
+{
+  "mcpServers": {
+    "wet-mcp": {
+      "env": {
+        "BRAVE_API_KEY": "your-brave-key",
+        "SERPER_API_KEY": "your-serper-key",
+        "GEMINI_API_KEY": "AIza..."
+      }
+    }
+  }
+}
+```
+
+Without env vars: SearXNG metasearch + content extraction + library docs + ONNX embedding work out of the box. With env vars: cloud embedding/reranking, Gemini LLM analysis, premium search providers.
+
+## Option 2: MCP Direct (stdio)
 
 **Python 3.13 required** -- Python 3.14+ is NOT supported due to SearXNG incompatibility.
 
@@ -25,7 +46,11 @@ Add to `~/.claude/settings.local.json` under `"mcpServers"`:
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp"]
+      "args": ["--python", "3.13", "wet-mcp"],
+      "env": {
+        "BRAVE_API_KEY": "your-brave-key",
+        "GEMINI_API_KEY": "AIza..."
+      }
     }
   }
 }
@@ -39,6 +64,9 @@ Add to `~/.codex/config.toml`:
 [mcp_servers.wet]
 command = "uvx"
 args = ["--python", "3.13", "wet-mcp"]
+[mcp_servers.wet.env]
+BRAVE_API_KEY = "your-brave-key"
+GEMINI_API_KEY = "AIza..."
 ```
 
 ### OpenCode (opencode.json)
@@ -50,13 +78,17 @@ Add to `opencode.json` in the project root:
   "mcpServers": {
     "wet": {
       "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp"]
+      "args": ["--python", "3.13", "wet-mcp"],
+      "env": {
+        "BRAVE_API_KEY": "your-brave-key",
+        "GEMINI_API_KEY": "AIza..."
+      }
     }
   }
 }
 ```
 
-## Option 3: Docker
+## Option 3: Docker (stdio)
 
 ```bash
 docker run -i --rm \
@@ -66,6 +98,8 @@ docker run -i --rm \
   -e GEMINI_API_KEY \
   -e OPENAI_API_KEY \
   -e COHERE_API_KEY \
+  -e BRAVE_API_KEY \
+  -e SERPER_API_KEY \
   -e GITHUB_TOKEN \
   n24q02m/wet-mcp:latest
 ```
@@ -91,6 +125,45 @@ Or as an MCP server config:
 }
 ```
 
+## Why upgrade to HTTP mode?
+
+Stdio mode is the default and works for most personal/single-user scenarios. Consider switching to HTTP mode (Option 4) when you need:
+
+- **claude.ai web compatibility** -- HTTP transport is required to connect plugins to claude.ai web client (stdio only works with desktop clients)
+- **One server shared across N Claude Code sessions** -- single daemon serves all sessions instead of spawning a fresh stdio process per session (lower memory, shared cache)
+- **Browser-based GDrive OAuth flow** -- HTTP mode performs the Google Device Code flow via the bundled public client; no manual `GOOGLE_DRIVE_CLIENT_ID` setup required
+- **Multi-device credential sync** -- self-host the HTTP server once, log in from multiple machines without re-pasting API keys
+- **Multi-user team sharing** -- single self-hosted instance supports N users with per-JWT-sub credential isolation
+- **Always-on persistent process** -- ideal for webhooks, scheduled agents, or background automation
+
+## Option 4: Self-Host HTTP Mode (multi-user)
+
+HTTP mode runs as a persistent multi-user server with browser-based credential setup. GDrive OAuth uses a **bundled public Google Desktop client** (`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`) per Google's official Desktop OAuth pattern -- no user-side OAuth registration is required. Users authenticate via the device-code flow in their browser.
+
+```bash
+docker run -d --name wet-mcp-http \
+  -p 8084:8084 \
+  -v wet-data:/data \
+  -e MCP_TRANSPORT=http \
+  -e PUBLIC_URL=https://wet.example.com \
+  -e MCP_DCR_SERVER_SECRET=your-random-secret \
+  n24q02m/wet-mcp:latest
+```
+
+Configure MCP client to connect:
+
+```json
+{
+  "mcpServers": {
+    "wet": {
+      "url": "https://wet.example.com/mcp"
+    }
+  }
+}
+```
+
+On first call, the client redirects to the relay form. Fill in API keys (all optional) and -- if `SYNC_ENABLED=true` -- complete the GDrive device-code flow in your browser using the bundled public client. Each user receives an isolated credential vault keyed by JWT sub.
+
 ## Environment Variables
 
 All environment variables are **optional**. The server works in local mode (ONNX embedding + SearXNG) with zero configuration.
@@ -103,6 +176,8 @@ All environment variables are **optional**. The server works in local mode (ONNX
 | `GEMINI_API_KEY` | No | -- | Google Gemini key: LLM (structured extraction, media analysis) + embedding |
 | `OPENAI_API_KEY` | No | -- | OpenAI key: LLM + embedding (lower priority than Gemini) |
 | `COHERE_API_KEY` | No | -- | Cohere key: embedding + reranking |
+| `BRAVE_API_KEY` | No | -- | Brave Search API key (premium search provider) |
+| `SERPER_API_KEY` | No | -- | Serper search API key (premium search provider) |
 | `GITHUB_TOKEN` | No | auto-detect | GitHub token for docs discovery (60 -> 5000 req/hr). Auto-detected from `gh auth token` |
 
 ### Embedding and Reranking
@@ -154,8 +229,8 @@ All environment variables are **optional**. The server works in local mode (ONNX
 | Variable | Required | Default | Description |
 |:---------|:---------|:--------|:------------|
 | `SYNC_ENABLED` | No | `false` | Enable Google Drive sync |
-| `GOOGLE_DRIVE_CLIENT_ID` | No | -- | OAuth client ID (required for sync) |
-| `GOOGLE_DRIVE_CLIENT_SECRET` | No | -- | OAuth client secret (required for sync) |
+| `GOOGLE_DRIVE_CLIENT_ID` | No | bundled public client | OAuth client ID. HTTP mode auto-uses bundled public Desktop client |
+| `GOOGLE_DRIVE_CLIENT_SECRET` | No | bundled public secret | OAuth client secret (Desktop public client per Google docs) |
 | `SYNC_FOLDER` | No | `wet-mcp` | Google Drive folder name |
 | `SYNC_INTERVAL` | No | `300` | Auto-sync interval in seconds (0=manual) |
 
@@ -164,42 +239,26 @@ All environment variables are **optional**. The server works in local mode (ONNX
 | Variable | Required | Default | Description |
 |:---------|:---------|:--------|:------------|
 | `LOG_LEVEL` | No | `INFO` | Logging level |
-| `MCP_RELAY_URL` | No | _(none — local relay by default)_ | Set this to your self-hosted relay URL (e.g., `https://your-host/...`) to opt into remote-relay mode. When unset, the server boots the relay locally on a random `127.0.0.1:<port>` for the user-pastes-credentials flow. |
+| `MCP_TRANSPORT` | No | `stdio` | Transport: `stdio` (default) or `http` |
+| `PUBLIC_URL` | No | -- | HTTP mode: public URL of the server (required for multi-user OAuth) |
+| `MCP_DCR_SERVER_SECRET` | No | -- | HTTP mode: random secret for Dynamic Client Registration JWT signing |
 
 ## Authentication
 
-### Zero-Config Relay
+### Stdio Mode (default)
 
-> **Recommended.** The relay is the primary setup method. Credentials are encrypted end-to-end and stored locally. Environment variables are supported for backward compatibility.
+Set API keys directly as environment variables. Basic SearXNG search works without any env. Advanced features (cloud embedding, Gemini LLM, premium search) activate when corresponding keys are set. Credentials live only in the local process environment.
 
-On first run without any API keys in environment:
+### HTTP Mode (optional, multi-user)
 
-1. Server starts and creates a relay session
-2. A setup URL is printed to stderr
-3. Open the URL in any browser
-4. Fill in API keys on the guided form (all optional)
-5. Credentials are encrypted and stored locally at `~/.config/mcp/config.enc`
-6. Subsequent runs load saved credentials automatically
+After connecting an MCP client to the HTTP endpoint, the client redirects to the relay form on first call:
 
-The relay form has 4 optional fields:
-- **Jina AI API Key** -- search + extraction + embedding + reranking
-- **Gemini API Key** -- LLM + embedding (free tier available)
-- **OpenAI API Key** -- LLM + embedding
-- **Cohere API Key** -- embedding + reranking
+1. Open the relay URL in any browser
+2. Fill in API keys on the guided form (all optional)
+3. If `SYNC_ENABLED=true`, complete the GDrive device-code flow using the bundled public Desktop client (no user OAuth registration needed)
+4. Credentials are encrypted per-JWT-sub and isolated per user
 
-Leave all empty to use pure local mode (ONNX models + SearXNG).
-
-### Google Drive Sync (Optional)
-
-After relay setup, if `GOOGLE_DRIVE_CLIENT_ID` is configured, the server starts OAuth Device Code flow:
-
-1. A URL and code are displayed
-2. Visit the URL and enter the code
-3. OAuth token is saved at `~/.wet-mcp/tokens/google_drive.json`
-
-### Environment Variables (Recommended)
-
-Set API keys directly as environment variables to skip relay entirely.
+Each user receives an isolated credential vault keyed by JWT sub.
 
 ## Verification
 
