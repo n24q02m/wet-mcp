@@ -198,8 +198,13 @@ async def _lifespan_startup() -> asyncio.Task | None:
     # startup latency on the first search call. If this instance finds an
     # existing healthy SearXNG (started by another MCP server instance), it
     # reuses it instead of spawning a new subprocess.
+    #
+    # Stdio uvx mode skips warmup entirely: the search/research/docs/similar
+    # actions are gated by `is_uvx_tool_venv()` and return a clear error
+    # pointing to Docker mode. Warming SearXNG in uvx mode wastes a Docker
+    # spawn the user will never get value from.
     warmup_task: asyncio.Task | None = None
-    if settings.wet_auto_searxng:
+    if settings.wet_auto_searxng and not is_uvx_tool_venv():
         warmup_task = asyncio.create_task(_warmup_searxng())
 
     # 2. Initialize web cache
