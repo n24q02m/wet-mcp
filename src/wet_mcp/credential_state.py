@@ -148,7 +148,11 @@ def resolve_credential_state() -> CredentialState:
 
     Checks (in order):
     1. ENV VARS -- if any CLOUD_KEYS present, state = CONFIGURED
-    2. CONFIG FILE -- if saved config has cloud keys, apply to env, state = CONFIGURED
+    2. CONFIG FILE -- HTTP MODE ONLY -- if saved config has cloud keys,
+       apply to env, state = CONFIGURED. Stdio mode skips this per spec
+       2026-05-01-stdio-pure-http-multiuser.md §4.1 + OQ3 ("Stdio mode
+       reads credentials from env vars ONLY"). PerPluginStore is HTTP-mode
+       persistence for resilience across server restarts.
     3. LOCAL MODE MARKER -- if user explicitly skipped, state = LOCAL
     4. NOTHING -- state = AWAITING_SETUP (server starts fast, relay triggered lazily)
 
@@ -162,19 +166,33 @@ def resolve_credential_state() -> CredentialState:
         _state = CredentialState.CONFIGURED
         return _state
 
-    # 2. Check per-plugin credential store
-    try:
-        saved = PerPluginStore(PLUGIN_NAME).load()
-        if saved and any(saved.get(k) for k in CLOUD_KEYS):
-            # Apply to env vars
-            for key, value in saved.items():
-                if value and key not in os.environ:
-                    os.environ[key] = value
-            logger.info("Config loaded from per-plugin store (~/.wet-mcp/config.json)")
-            _state = CredentialState.CONFIGURED
-            return _state
-    except Exception:
-        logger.opt(exception=True).debug("Failed to read config")
+    # 2. Per-plugin store fallback ONLY in HTTP mode (per spec §4.1 + OQ3:
+    # stdio reads env vars ONLY, PerPluginStore is HTTP-mode persistence
+    # for resilience across server restarts). wet-mcp has optional creds
+    # (basic SearXNG search works without env), so AWAITING_SETUP is an
+    # acceptable end state for stdio mode.
+    import sys
+
+    is_http = (
+        "--http" in sys.argv
+        or os.environ.get("MCP_TRANSPORT") == "http"
+        or os.environ.get("TRANSPORT_MODE") == "http"
+    )
+    if is_http:
+        try:
+            saved = PerPluginStore(PLUGIN_NAME).load()
+            if saved and any(saved.get(k) for k in CLOUD_KEYS):
+                # Apply to env vars
+                for key, value in saved.items():
+                    if value and key not in os.environ:
+                        os.environ[key] = value
+                logger.info(
+                    "Config loaded from per-plugin store (~/.wet-mcp/config.json)"
+                )
+                _state = CredentialState.CONFIGURED
+                return _state
+        except Exception:
+            logger.opt(exception=True).debug("Failed to read config")
 
     # 3. Check local mode marker
     try:
