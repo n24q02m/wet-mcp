@@ -113,15 +113,17 @@ def _chunk_quality_score(content: str) -> float:
     elif length > 200:
         score += 1.0
 
-    # ⚡ Bolt Optimization: Single-pass loop avoids allocating two temporary lists
+    # ⚡ Bolt Optimization: Single-pass loop avoids allocating two temporary lists.
+    # Using splitlines() and isspace() avoids creating string copies via strip().
     # Link-heavy content is usually navigation/TOC, not docs
     lines_count = 0
     link_lines = 0
     for ln in content.splitlines():
-        if ln.strip():
-            lines_count += 1
-            if _LINK_LINE_RE.match(ln):
-                link_lines += 1
+        if not ln or ln.isspace():
+            continue
+        lines_count += 1
+        if _LINK_LINE_RE.match(ln):
+            link_lines += 1
     if lines_count:
         ratio = link_lines / lines_count
         if ratio > 0.5:
