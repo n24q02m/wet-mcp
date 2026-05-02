@@ -97,6 +97,55 @@ async def test_lifespan():
 
 
 @pytest.mark.asyncio
+async def test_lifespan_skips_searxng_warmup_in_uvx_tool_venv():
+    """Stdio uvx mode must NOT spawn SearXNG warmup task: search actions are
+    gated to return a clear error message instead.  Spawning the Docker
+    container during startup wastes resources for a feature the user can
+    never use in this transport.
+    """
+    mock_fastmcp = MagicMock()
+    with (
+        patch("wet_mcp.server.WebCache"),
+        patch("wet_mcp.server.DocsDB"),
+        patch(
+            "wet_mcp.server.shutdown_crawler", new_callable=AsyncMock
+        ) as mock_shutdown,
+        patch("wet_mcp.server.stop_searxng"),
+        patch(
+            "wet_mcp.credential_state.resolve_credential_state",
+        ),
+        patch("wet_mcp.server.is_uvx_tool_venv", return_value=True),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock) as mock_warmup,
+    ):
+        async with server._lifespan(mock_fastmcp):
+            pass
+
+        mock_warmup.assert_not_called()
+        mock_shutdown.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_runs_searxng_warmup_outside_uvx():
+    """Non-uvx transports (Docker / dev .venv) keep the eager warmup."""
+    mock_fastmcp = MagicMock()
+    with (
+        patch("wet_mcp.server.WebCache"),
+        patch("wet_mcp.server.DocsDB"),
+        patch("wet_mcp.server.shutdown_crawler", new_callable=AsyncMock),
+        patch("wet_mcp.server.stop_searxng"),
+        patch(
+            "wet_mcp.credential_state.resolve_credential_state",
+        ),
+        patch("wet_mcp.server.is_uvx_tool_venv", return_value=False),
+        patch("wet_mcp.server._warmup_searxng", new_callable=AsyncMock) as mock_warmup,
+    ):
+        async with server._lifespan(mock_fastmcp):
+            pass
+
+        mock_warmup.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_init_embedding_backend():
     with patch("wet_mcp.embedder.init_backend") as mock_init:
         mock_backend = MagicMock()
