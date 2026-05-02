@@ -238,9 +238,40 @@ async def run_warmup() -> dict:
 async def run_setup_sync(remote_type: str = "drive") -> dict:
     """Run Google Drive sync setup (OAuth Device Code flow).
 
-    Returns a structured dict with setup results.
+    Returns a structured dict with setup results. When the upstream Google
+    Drive env vars (``GOOGLE_DRIVE_CLIENT_ID`` / ``..._CLIENT_SECRET``) are
+    missing this returns an explicit ``missing_env`` error so stdio users
+    understand which env var to set, instead of a generic
+    "authentication failed" message.
     """
     try:
+        from wet_mcp.config import settings
+
+        if (
+            not settings.google_drive_client_id
+            or not settings.google_drive_client_secret
+        ):
+            missing = [
+                name
+                for name, value in (
+                    ("GOOGLE_DRIVE_CLIENT_ID", settings.google_drive_client_id),
+                    ("GOOGLE_DRIVE_CLIENT_SECRET", settings.google_drive_client_secret),
+                )
+                if not value
+            ]
+            return {
+                "status": "error",
+                "provider": "google_drive",
+                "error": (
+                    "Google Drive sync requires upstream OAuth credentials. "
+                    f"Missing env var(s): {', '.join(missing)}. "
+                    "Set them in the wet-mcp environment (stdio mode reads "
+                    "creds from env only) or configure via the HTTP setup "
+                    "form (run with --http / MCP_TRANSPORT=http)."
+                ),
+                "missing_env": missing,
+            }
+
         from wet_mcp.sync import setup_google_auth
 
         success = await setup_google_auth()

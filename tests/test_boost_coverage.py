@@ -1814,7 +1814,13 @@ class TestServerConfigTool:
 
 
 class TestServerSetupTool:
-    """Cover setup_* actions in config tool (warmup, setup_sync, setup_open_relay)."""
+    """Cover setup_* actions in config tool (warmup, setup_sync).
+
+    The ``setup_open_relay`` action and its underlying
+    ``trigger_relay_setup`` were removed in the stdio-pure refactor
+    (spec 2026-05-01). Only env-var (stdio) and HTTP browser-form
+    (HTTP mode) remain as credential entry paths.
+    """
 
     async def test_setup_warmup(self):
         """Warmup action delegates to run_warmup."""
@@ -1841,33 +1847,6 @@ class TestServerSetupTool:
             result = await config(action="setup_sync")
             data = json.loads(result)
             assert data["status"] == "ok"
-
-    async def test_setup_relay(self):
-        """setup_open_relay action delegates to trigger_relay_setup."""
-        from wet_mcp.server import config
-
-        with patch(
-            "wet_mcp.credential_state.trigger_relay_setup",
-            new_callable=AsyncMock,
-            return_value="https://relay.example.com/setup/abc",
-        ):
-            result = await config(action="setup_open_relay")
-            data = json.loads(result)
-            assert data["status"] == "relay_started"
-            assert "setup_url" in data
-
-    async def test_setup_relay_failure(self):
-        """setup_open_relay returns error when relay setup fails."""
-        from wet_mcp.server import config
-
-        with patch(
-            "wet_mcp.credential_state.trigger_relay_setup",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            result = await config(action="setup_open_relay")
-            data = json.loads(result)
-            assert data["status"] == "error"
 
     async def test_setup_invalid_action(self):
         """Invalid config action returns error with suggestions."""

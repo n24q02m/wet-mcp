@@ -80,20 +80,6 @@ With explicit remote type:
 
 Returns: authorization instructions and status.
 
-### setup_open_relay
-
-Open browser-based setup page to configure all API keys at once.
-
-```json
-{"action": "setup_open_relay"}
-```
-
-Force restart of relay session:
-
-```json
-{"action": "setup_open_relay", "force": true}
-```
-
 ### setup_status
 
 Show current credential state and configured keys.

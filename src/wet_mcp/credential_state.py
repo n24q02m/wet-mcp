@@ -3,18 +3,13 @@
 State machine: awaiting_setup -> setup_in_progress -> (configured | local)
 Reset: configured/local -> awaiting_setup (via setup tool).
 
-When no credentials are present, ``trigger_relay_setup`` spawns a LOCAL HTTP
-credential form on ``http://127.0.0.1:<random>`` via
-``mcp_core.start_local_server_background`` with the wet-mcp relay schema.
-The user pastes API keys into that local form; ``save_credentials`` persists
-to ``~/.wet-mcp/config.json`` via PerPluginStore and -- when a Google Drive
-client is configured -- kicks off the device-code flow. GDrive progress is
-surfaced to the form through ``setup_complete_hook``.
-
-This fallback is LOCAL-ONLY. We never hit the remote relay URL here -- that
-is reserved for explicit ``MCP_MODE`` HTTP deployments. See
-``~/.claude/skills/mcp-dev/references/mode-matrix.md`` section
-``stdio proxy`` for the canonical rule.
+In stdio mode credentials come exclusively from environment variables
+(no in-process credential form); wet-mcp's basic SearXNG search works
+with zero env, while tools that need upstream API keys (Jina / Gemini /
+OpenAI / Cohere / GDrive) return a runtime error if their env vars are
+missing. The browser-form / paste-cred flow lives only in HTTP mode --
+see ``run_http_server`` in ``wet_mcp.server`` -- which is opt-in via
+``--http`` / ``MCP_TRANSPORT=http`` / ``TRANSPORT_MODE=http``.
 
 Storage: migrated from shared mcp_core.storage.config_file (config.enc) to
 per-plugin mcp_core.storage.per_plugin_store.PerPluginStore so each plugin
@@ -235,66 +230,6 @@ def _schedule_spawn_cleanup(grace_s: float = _SPAWN_CLEANUP_S) -> None:
     except RuntimeError:
         # No running loop; nothing to do -- the handle will be cleaned up on reset.
         pass
-
-
-async def trigger_relay_setup(
-    *,
-    force: bool = False,
-    timeout: float | None = None,  # noqa: ARG001
-) -> str | None:
-    """Spawn a local credential form (stdio fallback) and return its URL.
-
-    The spawn is LOCAL ONLY -- ``mcp_core.start_local_server_background``
-    binds ``127.0.0.1:<random>`` and renders the wet-mcp relay schema in a
-    browser form. ``timeout`` is accepted for backward compatibility but
-    unused (the local form has no poll deadline).
-
-    Returns the local setup URL or ``None`` if the spawn could not start.
-    """
-    global _state, _setup_url, _active_handle
-
-    if not force and _state not in (CredentialState.AWAITING_SETUP,):
-        return _setup_url
-
-    # Reuse a live spawn instead of binding a second port.
-    if _active_handle is not None and _setup_url:
-        _state = CredentialState.SETUP_IN_PROGRESS
-        return _setup_url
-
-    _state = CredentialState.SETUP_IN_PROGRESS
-
-    try:
-        from fastmcp import FastMCP
-        from mcp_core import start_local_server_background, try_open_browser
-
-        from wet_mcp.relay_schema import RELAY_SCHEMA
-
-        stub_mcp = FastMCP(f"{SERVER_NAME}-setup")
-
-        handle = await start_local_server_background(
-            stub_mcp,
-            server_name=SERVER_NAME,
-            relay_schema=RELAY_SCHEMA,
-            port=0,
-            host="127.0.0.1",
-            on_credentials_saved=save_credentials,
-            setup_complete_hook=wire_gdrive_callbacks,
-        )
-
-        _active_handle = handle
-        _setup_url = f"http://{handle.host}:{handle.port}/"
-
-        try_open_browser(_setup_url)
-
-        logger.info("Local credential form ready at {}", _setup_url)
-        return _setup_url
-
-    except Exception as e:
-        logger.debug("Relay setup failed: {}. Server continues in awaiting_setup.", e)
-        _state = CredentialState.AWAITING_SETUP
-        await _close_active_handle()
-        _setup_url = None
-        return None
 
 
 def store_for_sub(sub: str, config: dict[str, str]) -> None:
