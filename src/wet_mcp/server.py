@@ -33,6 +33,7 @@ from wet_mcp.sources.crawler import (
     sitemap as _sitemap,
 )
 from wet_mcp.sources.searxng import search as searxng_search
+from wet_mcp.transport_check import is_uvx_tool_venv, uvx_searxng_blocked_error
 
 # Configure logging
 logger.remove()
@@ -618,6 +619,17 @@ async def search(  # noqa: PLR0913
     blocked = _require_credentials()
     if blocked:
         return blocked
+
+    # Stdio uvx tool venv lacks pip, so the web-core SearXNG runner cannot
+    # install/start a local SearXNG instance, and its hardcoded
+    # ``localhost:8080`` fallback is wrong for our pinned Docker port.
+    # Per spec ``2026-05-01-stdio-pure-http-multiuser.md`` §4.1.1, reject
+    # SearXNG-dependent actions with a clear error pointing at Method 3
+    # (stdio Docker) or Method 2 (HTTP Docker). Other actions on the
+    # ``extract`` tool (``extract`` / ``crawl`` / ``map`` / ``media``) hit
+    # upstream via ``httpx`` directly and remain available.
+    if action in ("search", "research", "docs", "similar") and is_uvx_tool_venv():
+        return uvx_searxng_blocked_error(action)
 
     match action:
         case "search":

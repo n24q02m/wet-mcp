@@ -8,6 +8,30 @@ pytest_plugins = ["conftest_e2e"]
 
 
 @pytest.fixture(autouse=True)
+def _disable_uvx_tool_venv_detection(monkeypatch):
+    """Default ``is_uvx_tool_venv`` to ``False`` for all tests.
+
+    The real detection inspects the dev ``.venv`` (which also lacks pip in
+    uv-managed projects) and would otherwise short-circuit search-tool
+    tests. Tests that exercise the uvx detection itself reset
+    ``transport_check._UVX_TOOL_VENV_CACHE`` and patch the underlying
+    signals directly.
+    """
+    import sys
+
+    import wet_mcp.transport_check as tc
+
+    monkeypatch.setattr(tc, "is_uvx_tool_venv", lambda: False)
+    # ``test_server_timeout.py`` re-imports ``wet_mcp.server`` under heavy
+    # mocking; patch every live copy registered in ``sys.modules`` so
+    # subsequent tests still see ``False``.
+    for mod_name, mod in list(sys.modules.items()):
+        if mod_name == "wet_mcp.server" and hasattr(mod, "is_uvx_tool_venv"):
+            monkeypatch.setattr(mod, "is_uvx_tool_venv", lambda: False)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _set_credential_state_configured():
     """Set credential state to CONFIGURED for all tests.
 
