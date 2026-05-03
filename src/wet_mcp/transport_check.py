@@ -16,6 +16,7 @@ they hit upstream HTTP directly via ``httpx`` and require no SearXNG.
 from __future__ import annotations
 
 import importlib.util
+import os
 import sys
 from pathlib import Path
 
@@ -25,17 +26,24 @@ _UVX_TOOL_VENV_CACHE: bool | None = None
 def is_uvx_tool_venv() -> bool:
     """Return True when the current interpreter lives in a uvx tool venv.
 
-    Detection is positive on either of two independent signals:
+    Detection is layered to avoid false positives:
 
-    1. ``sys.executable`` contains the ``uv/tools/`` segment used by uv on
-       Linux/Mac (``~/.local/share/uv/tools/<name>/...``) or Windows
+    1. **Docker short-circuit**: if ``/.dockerenv`` exists (every Docker
+       container has this marker file), return ``False`` immediately. The
+       wet-mcp Docker image uses ``uv sync`` which produces a venv WITHOUT
+       pip — that signal would otherwise trigger detection #3 below and
+       reject SearXNG-dependent actions even though Method 3 stdio Docker
+       has full Docker daemon access.
+    2. **Path-based positive**: ``sys.executable`` contains the
+       ``uv/tools/`` segment used by uv on Linux/Mac
+       (``~/.local/share/uv/tools/<name>/...``) or Windows
        (``%APPDATA%/uv/tools/<name>/...``).
-    2. ``importlib.util.find_spec("pip")`` returns ``None`` — uv tool venvs
-       deliberately omit pip, while normal venvs (and Docker images that
-       run ``uv sync``) keep it.
+    3. **Module-based fallback**: ``importlib.util.find_spec("pip")``
+       returns ``None`` — uv tool venvs deliberately omit pip, while
+       normal pip-managed venvs keep it. Only checked if not in Docker.
 
-    Either signal alone is sufficient; both together is the common case.
-    Result is memoized for the lifetime of the process.
+    Either path/module signal alone is sufficient. Result is memoized for
+    the lifetime of the process.
     """
     global _UVX_TOOL_VENV_CACHE
     if _UVX_TOOL_VENV_CACHE is not None:
@@ -45,8 +53,24 @@ def is_uvx_tool_venv() -> bool:
     return _UVX_TOOL_VENV_CACHE
 
 
+def _is_in_docker() -> bool:
+    """Detect Docker container runtime via the standard ``/.dockerenv`` marker.
+
+    Docker creates this file in every container regardless of base image,
+    so it is the most reliable cross-distro signal. Podman creates it too
+    when running with Docker compatibility mode.
+    """
+    return os.path.exists("/.dockerenv")
+
+
 def _detect_uvx_tool_venv() -> bool:
     """Run the actual detection (no caching). Exposed for tests."""
+    # Docker short-circuit: containers running ``uv sync`` images would
+    # otherwise trip the no-pip fallback even though they have Docker
+    # daemon access for SearXNG.
+    if _is_in_docker():
+        return False
+
     # Path-based check: uv installs tool venvs under a "uv/tools/" directory
     # on every platform. ``Path.parts`` works regardless of separator quirks.
     try:
