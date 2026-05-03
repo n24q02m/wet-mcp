@@ -20,6 +20,7 @@ mode uses PerPluginStore("wet", sub) for per-JWT-sub isolation.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import os
 from collections.abc import Callable
 from enum import Enum
@@ -30,6 +31,22 @@ from mcp_core.storage.per_plugin_store import PerPluginStore
 
 SERVER_NAME = "wet-mcp"
 PLUGIN_NAME = "wet"
+
+# Per-request JWT subject context for HTTP multi-user mode.
+#
+# Set by the ``auth_scope`` middleware in ``run_http_server`` AFTER mcp-core
+# verifies the JWT, BEFORE the ASGI tool handler runs. Tool handlers read
+# this via ``credentials_for_current_request()`` to look up the right
+# per-sub PerPluginStore bucket. ``contextvars.ContextVar`` is asyncio-task
+# isolated, so concurrent tool calls from different users do not bleed
+# credentials across each other.
+#
+# Stays ``None`` in stdio / single-user HTTP mode — both fall back to
+# environment variables (or the shared local PerPluginStore via the
+# ``resolve_credential_state`` startup path).
+_current_sub: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "wet_current_sub", default=None
+)
 
 # Grace window so the browser renders "Setup complete!" before the local spawn closes.
 _SPAWN_CLEANUP_S = 5.0
@@ -267,6 +284,41 @@ def read_for_sub(sub: str) -> dict[str, str]:
     subject yet (first /authorize for a brand-new user).
     """
     return PerPluginStore(PLUGIN_NAME, sub).load() or {}
+
+
+def set_current_sub(sub: str | None) -> None:
+    """Set the JWT ``sub`` for the current request (HTTP multi-user mode).
+
+    Called by the ``auth_scope`` middleware in ``run_http_server`` so per-
+    tool-call handlers can resolve credentials for the right user via
+    :func:`credentials_for_current_request`. Pass ``None`` to clear.
+    """
+    _current_sub.set(sub)
+
+
+def get_current_sub() -> str | None:
+    """Return the JWT ``sub`` set by the current HTTP request, if any."""
+    return _current_sub.get()
+
+
+def credentials_for_current_request() -> dict[str, str]:
+    """Return the credential dict applicable to the current request.
+
+    HTTP multi-user mode: the ``auth_scope`` middleware sets ``_current_sub``
+    from the verified JWT before the tool handler runs. We look up that
+    user's per-sub PerPluginStore bucket and return its contents (empty
+    dict if the user has not completed setup yet — caller should branch
+    to AWAITING_SETUP error).
+
+    Stdio / single-user HTTP / no-JWT contexts: ``_current_sub`` is ``None``
+    and we fall back to the process environment (already populated from
+    env vars or, for HTTP single-user, from PerPluginStore by
+    :func:`resolve_credential_state`).
+    """
+    sub = _current_sub.get()
+    if sub is None:
+        return {k: v for k, v in os.environ.items() if k in CLOUD_KEYS and v}
+    return read_for_sub(sub)
 
 
 def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:

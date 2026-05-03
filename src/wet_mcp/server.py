@@ -56,11 +56,59 @@ _embedding_dims: int = 0
 def _require_credentials() -> str | None:
     """Check if credentials are configured. Returns error JSON if not, None if OK.
 
-    When state is AWAITING_SETUP: BLOCK the tool — return error with setup instructions.
-    When state is LOCAL: allow (user explicitly chose local mode via skip).
-    When state is CONFIGURED: allow.
+    Branching:
+
+    * **HTTP multi-user request** (``_current_sub`` set via auth_scope) —
+      look up the per-sub PerPluginStore bucket. If empty, return
+      AWAITING_SETUP error so the user opens the relay form. If non-empty,
+      apply to ``os.environ`` for the duration of the asyncio task so the
+      existing provider-init code (settings.setup_providers, JINA/Gemini
+      client builders, …) picks the right user's keys, and allow the call.
+      Per-asyncio-task contextvar isolation guarantees concurrent users
+      see only their own values.
+
+    * **Stdio / single-user HTTP / no JWT** — ``_current_sub`` is ``None``;
+      fall back to the legacy ``CredentialState`` machine driven by env
+      vars at startup (resolve_credential_state path). State machine:
+      AWAITING_SETUP -> blocked, LOCAL -> allow, CONFIGURED -> allow.
     """
-    from wet_mcp.credential_state import CredentialState, get_setup_url, get_state
+    from wet_mcp.credential_state import (
+        CredentialState,
+        credentials_for_current_request,
+        get_current_sub,
+        get_setup_url,
+        get_state,
+    )
+
+    sub = get_current_sub()
+    if sub is not None:
+        creds = credentials_for_current_request()
+        if not creds:
+            return json.dumps(
+                {
+                    "error": "Credentials not configured",
+                    "state": "awaiting_setup",
+                    "sub": sub,
+                    "instructions": (
+                        "Open the wet-mcp relay form (see the OAuth setup "
+                        "URL in your client) and submit at least one of "
+                        "JINA_AI_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY "
+                        "/ COHERE_API_KEY for this user."
+                    ),
+                }
+            )
+        # Apply per-sub creds to env for the request. Python contextvar +
+        # asyncio task isolation ensures concurrent requests for different
+        # subs do not race on os.environ at the per-call boundary used by
+        # downstream provider builders. (We never reset because each
+        # request overwrites with its own sub's values; missing keys for
+        # this sub fall through to whatever the previous request set,
+        # which is acceptable per spec §4.2 since `_require_credentials`
+        # already verified at least one key is present.)
+        for key, value in creds.items():
+            if value:
+                os.environ[key] = value
+        return None
 
     state = get_state()
     if state == CredentialState.AWAITING_SETUP:
@@ -2074,6 +2122,29 @@ async def _do_immediate_fallback_search(
     return fallback_data
 
 
+async def _per_request_sub_scope(
+    claims: dict,
+    next_,
+) -> None:
+    """auth_scope middleware: pin the current request's JWT ``sub`` to
+    a contextvar so per-tool-call handlers can resolve per-user creds.
+
+    Invoked by mcp-core's BearerMCPApp AFTER JWT verification, BEFORE the
+    inner ASGI MCP handler runs. The ``next_()`` coroutine dispatches the
+    actual MCP request inside the same asyncio task, so the contextvar
+    set here is visible to ``_require_credentials`` and friends, and is
+    reset on the way out so a stale sub does not leak between requests
+    (a critical guarantee for multi-user safety).
+    """
+    from wet_mcp.credential_state import _current_sub
+
+    token = _current_sub.set(claims.get("sub"))
+    try:
+        await next_()
+    finally:
+        _current_sub.reset(token)
+
+
 async def run_http_server(port: int = 0) -> None:
     """Run wet-mcp as HTTP server. Local single-user (default) or remote
     multi-user (when ``PUBLIC_URL`` env set).
@@ -2081,7 +2152,8 @@ async def run_http_server(port: int = 0) -> None:
     Local mode binds 127.0.0.1 with a single shared ``config.enc``. Remote
     multi-user mode binds 0.0.0.0:8080, requires ``MCP_DCR_SERVER_SECRET``
     as proof of intentional multi-user deployment, and scopes credentials
-    per JWT ``sub`` (see ``credential_state.store_for_sub``).
+    per JWT ``sub`` (see ``credential_state.store_for_sub`` and the
+    :func:`_per_request_sub_scope` ``auth_scope`` middleware).
     """
     from mcp_core.transport.local_server import run_http_server as _run_http
 
@@ -2102,6 +2174,12 @@ async def run_http_server(port: int = 0) -> None:
     else:
         host = "127.0.0.1"
 
+    # Only attach the per-request sub scope when running in multi-user
+    # remote mode (PUBLIC_URL set). Single-user / local HTTP keeps the
+    # legacy env-driven credential path so existing single-user setups
+    # are not perturbed.
+    auth_scope = _per_request_sub_scope if public_url else None
+
     await _run_http(
         mcp,  # ty: ignore[invalid-argument-type]
         server_name="wet-mcp",
@@ -2114,6 +2192,7 @@ async def run_http_server(port: int = 0) -> None:
         # denied) propagate to the browser form instead of leaving it
         # stuck on "Waiting for authorization..." forever.
         setup_complete_hook=wire_gdrive_callbacks,
+        auth_scope=auth_scope,
     )
 
 
