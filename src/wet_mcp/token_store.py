@@ -175,3 +175,10 @@ def load_token_for_sub(sub: str, provider: str) -> dict | None:
     except (json.JSONDecodeError, OSError) as e:
         logger.warning(f"Failed to load token from {path}: {e}")
         return None
+
+
+# Spec naming alias: the HTTP multi-user wiring spec
+# (``2026-05-01-stdio-pure-http-multiuser.md``) refers to ``read_token_for_sub``
+# as the mirror of ``save_token_for_sub``. Keep both names available so
+# call sites can use whichever reads more clearly in context.
+read_token_for_sub = load_token_for_sub
