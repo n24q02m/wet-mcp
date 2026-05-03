@@ -1748,7 +1748,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.13.0b7"
+version = "1.13.0b9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1762,9 +1762,9 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4f/46/e60f6a535043caf93df0ba91086bc613ce8205b4776508b3d0972f972f1e/n24q02m_mcp_core-1.13.0b7.tar.gz", hash = "sha256:5b39457b638f19a463ddae388b8d2e8767e78a33fcf424383730e3043e6e4c38", size = 188748, upload-time = "2026-05-03T12:08:07.455Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b2/83/62231d50dc150328f58c78fac135962e5a7641a00035d1e2b332d7b340a2/n24q02m_mcp_core-1.13.0b9.tar.gz", hash = "sha256:45ca969044f84a06db37d54705f03928dfaf53fd23ab3d13b4e59b86a70e4f3f", size = 192382, upload-time = "2026-05-03T14:27:54.192Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d0/2a/250105b2bef539a91968f60a4493c52be970e9179b7380d6897734831c51/n24q02m_mcp_core-1.13.0b7-py3-none-any.whl", hash = "sha256:06b74ddf4f1847b81665487ca69e463b13b73214fa79d9800a12af571d1b1d9c", size = 121709, upload-time = "2026-05-03T12:08:05.608Z" },
+    { url = "https://files.pythonhosted.org/packages/50/89/7fac8548690857aa6932af2987a9ff19bce595cc975b890c8d83eff27381/n24q02m_mcp_core-1.13.0b9-py3-none-any.whl", hash = "sha256:32ebc4b96b12b8c033bf0f50a938c891020e393a67e5bebde6944f6d4a555eae", size = 123359, upload-time = "2026-05-03T14:27:55.796Z" },
 ]
 
 [[package]]
@@ -3367,7 +3367,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.29.0b12"
+version = "2.29.0b13"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3427,7 +3427,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", specifier = ">=1.13.0b7" },
+    { name = "n24q02m-mcp-core", specifier = ">=1.13.0b9" },
     { name = "n24q02m-web-core", specifier = ">=1.3.8" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "pillow", specifier = ">=12.2.0" },
