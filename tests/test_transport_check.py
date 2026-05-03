@@ -49,6 +49,30 @@ def _allow_real_uvx_detection(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def test_is_uvx_tool_venv_false_in_docker(
+    _allow_real_uvx_detection, monkeypatch, tmp_path
+):
+    """Docker short-circuit: even with no pip + uv venv path, container = False.
+
+    The wet-mcp Docker image uses ``uv sync`` which produces a venv WITHOUT
+    pip. Without the Docker short-circuit, that signal would trip the
+    pip-missing fallback and incorrectly reject SearXNG-dependent actions
+    inside Method 3 stdio Docker (where Docker daemon access enables
+    SearXNG via the host socket mount).
+    """
+    # Inside Docker, even pip-missing AND uv tools path must NOT be detected
+    # as a uvx tool venv.
+    fake_exe = tmp_path / "app" / ".venv" / "bin" / "python"
+    fake_exe.parent.mkdir(parents=True)
+    fake_exe.touch()
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    monkeypatch.setattr(tc.importlib.util, "find_spec", lambda name: None)
+    # Simulate /.dockerenv presence — the standard Docker container marker.
+    monkeypatch.setattr(tc, "_is_in_docker", lambda: True)
+
+    assert tc.is_uvx_tool_venv() is False
+
+
 def test_is_uvx_tool_venv_true_when_executable_under_uv_tools(
     _allow_real_uvx_detection, monkeypatch, tmp_path
 ):
@@ -57,6 +81,8 @@ def test_is_uvx_tool_venv_true_when_executable_under_uv_tools(
     fake_exe.parent.mkdir(parents=True)
     fake_exe.touch()
     monkeypatch.setattr(sys, "executable", str(fake_exe))
+    # Force not-in-Docker so the path-based signal can fire.
+    monkeypatch.setattr(tc, "_is_in_docker", lambda: False)
     # Pretend pip *is* importable so the path check is the only signal.
     monkeypatch.setattr(
         tc.importlib.util, "find_spec", lambda name: object() if name == "pip" else None
@@ -74,6 +100,7 @@ def test_is_uvx_tool_venv_true_when_pip_missing(
     fake_exe.parent.mkdir(parents=True)
     fake_exe.touch()
     monkeypatch.setattr(sys, "executable", str(fake_exe))
+    monkeypatch.setattr(tc, "_is_in_docker", lambda: False)
     monkeypatch.setattr(tc.importlib.util, "find_spec", lambda name: None)
 
     assert tc.is_uvx_tool_venv() is True
@@ -87,6 +114,7 @@ def test_is_uvx_tool_venv_false_for_normal_venv(
     fake_exe.parent.mkdir(parents=True)
     fake_exe.touch()
     monkeypatch.setattr(sys, "executable", str(fake_exe))
+    monkeypatch.setattr(tc, "_is_in_docker", lambda: False)
     monkeypatch.setattr(
         tc.importlib.util, "find_spec", lambda name: object() if name == "pip" else None
     )
@@ -100,6 +128,7 @@ def test_is_uvx_tool_venv_memoizes(_allow_real_uvx_detection, monkeypatch, tmp_p
     fake_exe.parent.mkdir(parents=True)
     fake_exe.touch()
     monkeypatch.setattr(sys, "executable", str(fake_exe))
+    monkeypatch.setattr(tc, "_is_in_docker", lambda: False)
     monkeypatch.setattr(
         tc.importlib.util, "find_spec", lambda name: object() if name == "pip" else None
     )
