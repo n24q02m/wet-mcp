@@ -2,6 +2,22 @@
   "name": "wet-mcp",
   "description": "Web search, content extraction, and media download",
   "version": "2.29.0",
+  "userConfig": {
+    "JINA_AI_API_KEY": {
+      "type": "string",
+      "title": "Jina AI API key (optional)",
+      "description": "Optional cloud reranker key. Without it, server uses local ONNX rerank. https://jina.ai/api-dashboard/",
+      "sensitive": true,
+      "required": false
+    },
+    "GEMINI_API_KEY": {
+      "type": "string",
+      "title": "Gemini API key (optional)",
+      "description": "Optional cloud embedding fallback. https://ai.google.dev/",
+      "sensitive": true,
+      "required": false
+    }
+  },
   "author": {
     "name": "n24q02m",
     "url": "https://github.com/n24q02m"
@@ -25,7 +41,9 @@
         "wet-mcp"
       ],
       "env": {
-        "MCP_TRANSPORT": "stdio"
+        "MCP_TRANSPORT": "stdio",
+        "JINA_AI_API_KEY": "${user_config.JINA_AI_API_KEY}",
+        "GEMINI_API_KEY": "${user_config.GEMINI_API_KEY}"
       }
     }
   }

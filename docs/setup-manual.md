@@ -25,29 +25,32 @@ All MCP servers across this stack share this priority hierarchy. Note: 2 plugins
 
 For Claude Code users, the plugin approach is the simplest. Plugin install uses **stdio mode** -- basic SearXNG web search works **without any env vars**. Advanced features require optional API keys.
 
-1. Open Claude Code
-2. Run the following commands:
+### Step 0: Credential prompt
+
+When you run `/plugin install wet-mcp@n24q02m-plugins`, Claude Code prompts for the optional fields declared in `plugin.json` `userConfig`:
+
+| Field | Required | Sensitive | Notes |
+|:------|:---------|:----------|:------|
+| `JINA_AI_API_KEY` | No | Yes | Optional cloud reranker. Without it, the server uses local ONNX. https://jina.ai/api-dashboard/ |
+| `GEMINI_API_KEY` | No | Yes | Optional cloud embedding fallback / Gemini LLM analysis. https://ai.google.dev/ |
+
+You may leave both empty -- wet-mcp falls back to bundled local ONNX embedding/reranking. Sensitive values are kept in the system keychain (or `~/.claude/.credentials.json` fallback) and persist across `/plugin update`. Claude Code substitutes each value into the `mcpServers.wet.env` block via `${user_config.<KEY>}` -- you do not edit `env` manually.
+
+> Other optional env vars (`BRAVE_API_KEY`, `SERPER_API_KEY`, `OPENAI_API_KEY`, `COHERE_API_KEY`, `GITHUB_TOKEN`, `SYNC_ENABLED`, etc.) are not part of the install prompt; if you need them, add them manually to `mcpServers.wet.env` in your settings.
+
+### Steps
+
+1. Open Claude Code.
+2. Install the plugin (Claude Code prompts for `JINA_AI_API_KEY` + `GEMINI_API_KEY` -- press Enter to skip):
    ```bash
    /plugin marketplace add n24q02m/claude-plugins
    /plugin install wet-mcp@n24q02m-plugins
    ```
-3. (Optional) Set env vars for advanced features in `~/.claude/settings.local.json`:
-   ```json
-   {
-     "mcpServers": {
-       "wet-mcp": {
-         "env": {
-           "BRAVE_API_KEY": "your-brave-key",
-           "SERPER_API_KEY": "your-serper-key",
-           "GEMINI_API_KEY": "AIza..."
-         }
-       }
-     }
-   }
-   ```
-4. Restart Claude Code -- the server starts automatically when CC launches
+3. Restart Claude Code -- the server starts automatically when CC launches with the values injected.
 
 Without env vars: basic SearXNG metasearch, content extraction, library docs, ONNX local embedding/reranking all work. With env vars: cloud embedding/reranking (faster), Gemini LLM analysis, premium search providers.
+
+> **HTTP transport (Method 3)** is a separate install path; the `userConfig` prompt only covers stdio Method 1.
 
 ## Method 2: Docker stdio (fallback)
 
