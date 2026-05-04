@@ -45,62 +45,7 @@ Optional env vars in `~/.claude/settings.local.json`:
 
 Without env vars: SearXNG metasearch + content extraction + library docs + ONNX embedding work out of the box. With env vars: cloud embedding/reranking, Gemini LLM analysis, premium search providers.
 
-## Option 2: MCP Direct (stdio)
-
-**Python 3.13 required** -- Python 3.14+ is NOT supported due to SearXNG incompatibility.
-
-### Claude Code (settings.json)
-
-Add to `~/.claude/settings.local.json` under `"mcpServers"`:
-
-```json
-{
-  "mcpServers": {
-    "wet": {
-      "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp"],
-      "env": {
-        "BRAVE_API_KEY": "your-brave-key",
-        "GEMINI_API_KEY": "AIza..."
-      }
-    }
-  }
-}
-```
-
-### Codex CLI (config.toml)
-
-Add to `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.wet]
-command = "uvx"
-args = ["--python", "3.13", "wet-mcp"]
-[mcp_servers.wet.env]
-BRAVE_API_KEY = "your-brave-key"
-GEMINI_API_KEY = "AIza..."
-```
-
-### OpenCode (opencode.json)
-
-Add to `opencode.json` in the project root:
-
-```json
-{
-  "mcpServers": {
-    "wet": {
-      "command": "uvx",
-      "args": ["--python", "3.13", "wet-mcp"],
-      "env": {
-        "BRAVE_API_KEY": "your-brave-key",
-        "GEMINI_API_KEY": "AIza..."
-      }
-    }
-  }
-}
-```
-
-## Option 3: Docker (stdio)
+## Option 2: Docker stdio (fallback)
 
 ```bash
 docker run -i --rm \
@@ -139,7 +84,7 @@ Or as an MCP server config:
 
 ## Why upgrade to HTTP mode?
 
-Stdio mode is the default and works for most personal/single-user scenarios. Consider switching to HTTP mode (Option 4) when you need:
+Stdio mode is the default and works for most personal/single-user scenarios. Consider switching to HTTP mode (Option 3) when you need:
 
 - **claude.ai web compatibility** -- HTTP transport is required to connect plugins to claude.ai web client (stdio only works with desktop clients)
 - **One server shared across N Claude Code sessions** -- single daemon serves all sessions instead of spawning a fresh stdio process per session (lower memory, shared cache)
@@ -148,7 +93,9 @@ Stdio mode is the default and works for most personal/single-user scenarios. Con
 - **Multi-user team sharing** -- single self-hosted instance supports N users with per-JWT-sub credential isolation
 - **Always-on persistent process** -- ideal for webhooks, scheduled agents, or background automation
 
-## Option 4: Self-Host HTTP Mode (multi-user)
+## Option 3: Docker HTTP (recommended)
+
+### 3.2. Self-host with docker-compose
 
 HTTP mode runs as a persistent multi-user server with browser-based credential setup. GDrive OAuth uses a **bundled public Google Desktop client** (`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`) per Google's official Desktop OAuth pattern -- no user-side OAuth registration is required. Users authenticate via the device-code flow in their browser.
 
