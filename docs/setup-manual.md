@@ -49,58 +49,7 @@ For Claude Code users, the plugin approach is the simplest. Plugin install uses 
 
 Without env vars: basic SearXNG metasearch, content extraction, library docs, ONNX local embedding/reranking all work. With env vars: cloud embedding/reranking (faster), Gemini LLM analysis, premium search providers.
 
-## Method 2: uvx Direct (stdio)
-
-1. Add to your MCP client configuration file:
-
-   **Claude Code** (`~/.claude/settings.local.json`):
-   ```json
-   {
-     "mcpServers": {
-       "wet": {
-         "command": "uvx",
-         "args": ["--python", "3.13", "wet-mcp"],
-         "env": {
-           "BRAVE_API_KEY": "your-brave-key",
-           "GEMINI_API_KEY": "AIza..."
-         }
-       }
-     }
-   }
-   ```
-
-   **Codex CLI** (`~/.codex/config.toml`):
-   ```toml
-   [mcp_servers.wet]
-   command = "uvx"
-   args = ["--python", "3.13", "wet-mcp"]
-   [mcp_servers.wet.env]
-   BRAVE_API_KEY = "your-brave-key"
-   GEMINI_API_KEY = "AIza..."
-   ```
-
-   **OpenCode** (`opencode.json` in project root):
-   ```json
-   {
-     "mcpServers": {
-       "wet": {
-         "command": "uvx",
-         "args": ["--python", "3.13", "wet-mcp"],
-         "env": {
-           "BRAVE_API_KEY": "your-brave-key",
-           "GEMINI_API_KEY": "AIza..."
-         }
-       }
-     }
-   }
-   ```
-
-2. Restart your MCP client
-3. On first run, the server auto-installs SearXNG, Playwright chromium, and downloads embedding models (~1.1GB)
-
-All env vars are optional. Without any env, basic SearXNG search + ONNX local embedding still work.
-
-## Method 3: Docker (stdio)
+## Method 2: Docker stdio (fallback)
 
 1. Pull the image:
    ```bash
@@ -137,27 +86,9 @@ All env vars are optional. Without any env, basic SearXNG search + ONNX local em
    }
    ```
 
-## Method 4: Build from Source
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/n24q02m/wet-mcp.git
-   cd wet-mcp
-   ```
-
-2. Install dependencies:
-   ```bash
-   uv sync
-   ```
-
-3. Run the server:
-   ```bash
-   uv run wet-mcp
-   ```
-
 ## Why upgrade to HTTP mode?
 
-Stdio mode is the default and works for most personal/single-user scenarios. Consider switching to HTTP mode (Method 5) when you need:
+Stdio mode is the default and works for most personal/single-user scenarios. Consider switching to HTTP mode (Method 3 self-host) when you need:
 
 - **claude.ai web compatibility** -- HTTP transport is required to connect plugins to claude.ai web client (stdio only works with desktop clients)
 - **One server shared across N Claude Code sessions** -- single daemon serves all sessions instead of spawning a fresh stdio process per session (lower memory, shared cache)
@@ -166,7 +97,9 @@ Stdio mode is the default and works for most personal/single-user scenarios. Con
 - **Multi-user team sharing** -- single self-hosted instance supports N users with per-JWT-sub credential isolation
 - **Always-on persistent process** -- ideal for webhooks, scheduled agents, or background automation
 
-## Method 5: Self-Host HTTP Mode (multi-user)
+## Method 3: Docker HTTP (recommended)
+
+### 3.2. Self-host with docker-compose
 
 HTTP mode runs as a persistent multi-user server with browser-based credential setup. GDrive OAuth uses a **bundled public Google Desktop client** (`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`) per Google's official Desktop OAuth pattern -- no user-side OAuth registration is required. Users authenticate via the device-code flow in their browser.
 
