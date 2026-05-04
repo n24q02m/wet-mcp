@@ -21,27 +21,26 @@ All MCP servers across this stack share this priority hierarchy. Note: 2 plugins
 
 Plugin install uses **stdio mode**. Basic SearXNG web search works **without any env vars** -- ONNX local embedding and reranking are bundled. Advanced features require optional API keys.
 
+### Step 0: Credential prompt
+
+When the install command runs, Claude Code prompts for the optional fields declared in `plugin.json` `userConfig`:
+
+| Field | Required | Sensitive | Source |
+|:------|:---------|:----------|:-------|
+| `JINA_AI_API_KEY` | No | Yes | https://jina.ai/api-dashboard/ |
+| `GEMINI_API_KEY` | No | Yes | https://ai.google.dev/ |
+
+Press Enter to skip either field; the server falls back to local ONNX. Claude Code substitutes the values into `mcpServers.wet.env` via `${user_config.<KEY>}` and stores the sensitive values in the system keychain (persists across `/plugin update`). You do not edit `env` manually.
+
+### Steps
+
 ```bash
 # Install from marketplace (includes skills: /fact-check, /compare)
 /plugin marketplace add n24q02m/claude-plugins
 /plugin install wet-mcp@n24q02m-plugins
 ```
 
-Optional env vars in `~/.claude/settings.local.json`:
-
-```json
-{
-  "mcpServers": {
-    "wet-mcp": {
-      "env": {
-        "BRAVE_API_KEY": "your-brave-key",
-        "SERPER_API_KEY": "your-serper-key",
-        "GEMINI_API_KEY": "AIza..."
-      }
-    }
-  }
-}
-```
+> Other optional env vars (`BRAVE_API_KEY`, `SERPER_API_KEY`, `OPENAI_API_KEY`, `COHERE_API_KEY`, `GITHUB_TOKEN`, `SYNC_ENABLED`, etc.) are not part of the `userConfig` prompt; add them manually to `mcpServers.wet.env` in your settings if needed.
 
 Without env vars: SearXNG metasearch + content extraction + library docs + ONNX embedding work out of the box. With env vars: cloud embedding/reranking, Gemini LLM analysis, premium search providers.
 
