@@ -45,6 +45,15 @@ RELAY_SCHEMA: dict[str, Any] = {
             "helpText": "Embedding + Reranking.",
             "required": False,
         },
+        {
+            "key": "GITHUB_TOKEN",
+            "label": "GitHub Personal Access Token",
+            "type": "password",
+            "placeholder": "ghp_...",
+            "helpUrl": "https://github.com/settings/tokens",
+            "helpText": "Optional. Bumps GitHub API rate limit (60->5000 req/hr) for library docs discovery.",
+            "required": False,
+        },
     ],
     "capabilityInfo": [
         {

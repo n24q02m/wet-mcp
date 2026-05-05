@@ -16,6 +16,27 @@
       "description": "Optional cloud embedding fallback. https://ai.google.dev/",
       "sensitive": true,
       "required": false
+    },
+    "OPENAI_API_KEY": {
+      "type": "string",
+      "title": "OpenAI API key (optional)",
+      "description": "Optional cloud LLM + embedding fallback (lower priority than Gemini). https://platform.openai.com/api-keys",
+      "sensitive": true,
+      "required": false
+    },
+    "COHERE_API_KEY": {
+      "type": "string",
+      "title": "Cohere API key (optional)",
+      "description": "Optional cloud embedding + reranking fallback. https://dashboard.cohere.com/api-keys",
+      "sensitive": true,
+      "required": false
+    },
+    "GITHUB_TOKEN": {
+      "type": "string",
+      "title": "GitHub personal access token (optional)",
+      "description": "Optional. Bumps GitHub API rate limit (60->5000 req/hr) for library docs discovery. https://github.com/settings/tokens",
+      "sensitive": true,
+      "required": false
     }
   },
   "author": {
@@ -43,7 +64,10 @@
       "env": {
         "MCP_TRANSPORT": "stdio",
         "JINA_AI_API_KEY": "${user_config.JINA_AI_API_KEY}",
-        "GEMINI_API_KEY": "${user_config.GEMINI_API_KEY}"
+        "GEMINI_API_KEY": "${user_config.GEMINI_API_KEY}",
+        "OPENAI_API_KEY": "${user_config.OPENAI_API_KEY}",
+        "COHERE_API_KEY": "${user_config.COHERE_API_KEY}",
+        "GITHUB_TOKEN": "${user_config.GITHUB_TOKEN}"
       }
     }
   }
