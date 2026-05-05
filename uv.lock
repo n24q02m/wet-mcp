@@ -1769,7 +1769,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-web-core"
-version = "1.3.10b2"
+version = "1.3.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
@@ -1783,9 +1783,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e5/ca/b505e1cb05a2f03b1b0e24a692864dfa1bfa37892535ab9e5ca915770f88/n24q02m_web_core-1.3.10b2.tar.gz", hash = "sha256:e4ef5f36f9d3c9edf49f22c2ec6a6b7a12d06ebf988523e1088c9ddc08f28def", size = 206002, upload-time = "2026-05-05T03:25:04.039Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/90/24/e66df6e7b9d47958106cc3e3cfab1c71da7be1f578c23f69026453143aa9/n24q02m_web_core-1.3.10.tar.gz", hash = "sha256:9d7f2d3cc1459f5603f8f1dca879471bae6d8ce8d82fd31377a8de8d16edc12a", size = 206008, upload-time = "2026-05-05T03:42:23.608Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c8/a5/066b30c77cd00a3c31d0dd9ced8bc464079a2621f25d7ee79cfeecf37522/n24q02m_web_core-1.3.10b2-py3-none-any.whl", hash = "sha256:7965ef3d5a272fc0b19121f453862f4f5f40c2aa0aed767ad2fb4b24c4c62e49", size = 56360, upload-time = "2026-05-05T03:25:04.956Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/c0/787fa222b5129637688261e9595b6dd7ef7cd434e3a0ba359a6294093e0f/n24q02m_web_core-1.3.10-py3-none-any.whl", hash = "sha256:e4c310dc6e30b0841bfaf7fd1988fcf9c51b51d2835c2f2fbc06ccf639a0301c", size = 56343, upload-time = "2026-05-05T03:42:24.963Z" },
 ]
 
 [[package]]
@@ -3367,7 +3367,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "2.29.0"
+version = "2.30.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
