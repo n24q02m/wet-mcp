@@ -25,18 +25,17 @@ All MCP servers across this stack share this priority hierarchy. Note: 2 plugins
 
 For Claude Code users, the plugin approach is the simplest. Plugin install uses **stdio mode** -- basic SearXNG web search works **without any env vars**. Advanced features require optional API keys.
 
-### Step 0: Credential prompt
+### Credential prompts at install
 
-When you run `/plugin install wet-mcp@n24q02m-plugins`, Claude Code prompts for the optional fields declared in `plugin.json` `userConfig`:
+When you run `/plugin install`, Claude Code prompts you for the following credentials (declared in `userConfig` per CC docs). Sensitive values are stored in your system keychain and persist across `/plugin update`:
 
-| Field | Required | Sensitive | Notes |
-|:------|:---------|:----------|:------|
-| `JINA_AI_API_KEY` | No | Yes | Optional cloud reranker. Without it, the server uses local ONNX. https://jina.ai/api-dashboard/ |
-| `GEMINI_API_KEY` | No | Yes | Optional cloud embedding fallback / Gemini LLM analysis. https://ai.google.dev/ |
-
-You may leave both empty -- wet-mcp falls back to bundled local ONNX embedding/reranking. Sensitive values are kept in the system keychain (or `~/.claude/.credentials.json` fallback) and persist across `/plugin update`. Claude Code substitutes each value into the `mcpServers.wet.env` block via `${user_config.<KEY>}` -- you do not edit `env` manually.
-
-> Other optional env vars (`BRAVE_API_KEY`, `SERPER_API_KEY`, `OPENAI_API_KEY`, `COHERE_API_KEY`, `GITHUB_TOKEN`, `SYNC_ENABLED`, etc.) are not part of the install prompt; if you need them, add them manually to `mcpServers.wet.env` in your settings.
+| Field | Required | Where to obtain |
+|---|---|---|
+| `JINA_AI_API_KEY` | Optional | https://jina.ai/api-key (highest priority embedding+reranking) |
+| `GEMINI_API_KEY` | Optional | https://aistudio.google.com/apikey |
+| `OPENAI_API_KEY` | Optional | https://platform.openai.com/api-keys |
+| `COHERE_API_KEY` | Optional | https://dashboard.cohere.com/api-keys |
+| `GITHUB_TOKEN` | Optional | https://github.com/settings/tokens (bumps GitHub rate limit 60->5000/hr for library docs discovery) |
 
 ### Steps
 
@@ -49,8 +48,6 @@ You may leave both empty -- wet-mcp falls back to bundled local ONNX embedding/r
 3. Restart Claude Code -- the server starts automatically when CC launches with the values injected.
 
 Without env vars: basic SearXNG metasearch, content extraction, library docs, ONNX local embedding/reranking all work. With env vars: cloud embedding/reranking (faster), Gemini LLM analysis, premium search providers.
-
-> **HTTP transport (Method 3)** is a separate install path; the `userConfig` prompt only covers stdio Method 1.
 
 ## Method 2: Docker stdio (fallback)
 
@@ -101,6 +98,8 @@ Stdio mode is the default and works for most personal/single-user scenarios. Con
 - **Always-on persistent process** -- ideal for webhooks, scheduled agents, or background automation
 
 ## Method 3: Docker HTTP (recommended)
+
+> **Switching transport vs. setting credentials**: The `userConfig` prompt only configures credentials for stdio mode (Method 1 / Option 1). To switch transport to HTTP, override `mcpServers` in your client settings per the snippets below -- this is a separate path from `userConfig` and is not driven by the install prompt.
 
 ### 3.2. Self-host with docker-compose
 
