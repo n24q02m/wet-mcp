@@ -919,14 +919,16 @@ class DocsDB:
             self._conn.execute("DELETE FROM versions")
             self._conn.execute("DELETE FROM libraries")
 
-        lines = data.strip().split("\n")
+        lines = data.split("\n")
 
         libraries = []
         versions = []
         chunks = []
 
         for line in lines:
-            if not line.strip():
+            # ⚡ Bolt Optimization: Use `not line or line.isspace()` for truthiness
+            # checking instead of `.strip()` to avoid allocating memory for new string slices.
+            if not line or line.isspace():
                 continue
             obj = json.loads(line)
             obj_type = obj.pop("_type", None)
