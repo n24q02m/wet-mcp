@@ -779,17 +779,6 @@ async def search(  # noqa: PLR0913
                     pass
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
-            if not result.startswith("Error"):
-                try:
-                    _data = json.loads(result)
-                    result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except json.JSONDecodeError:
-                    # Expected if result is plain text
-                    pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting search tool JSON result"
-                    )
             return result
 
         case "research":
@@ -824,17 +813,6 @@ async def search(  # noqa: PLR0913
                 await asyncio.to_thread(
                     _web_cache.set, "research", cache_params, result
                 )
-            if not result.startswith("Error"):
-                try:
-                    _data = json.loads(result)
-                    result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except json.JSONDecodeError:
-                    # Expected if result is plain text
-                    pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting research tool JSON result"
-                    )
             return result
 
         case "docs":
@@ -960,17 +938,6 @@ async def extract(
             )
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
-            if not result.startswith("Error"):
-                try:
-                    _data = json.loads(result)
-                    result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except json.JSONDecodeError:
-                    # Expected if result is plain text
-                    pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting extract tool JSON result"
-                    )
             return result
 
         case "batch":
@@ -1158,17 +1125,6 @@ async def media(  # noqa: PLR0913
                 analyze_media(media_path=url, prompt=prompt),
                 "media.analyze",
             )
-            if not result.startswith("Error"):
-                try:
-                    _data = json.loads(result)
-                    result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except json.JSONDecodeError:
-                    # Expected if result is plain text
-                    pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting analyze tool JSON result"
-                    )
             return result
 
         case _:
