@@ -165,6 +165,43 @@ def _download_local_reranker(settings_obj) -> dict:
         raise
 
 
+async def _warmup_cloud_models(steps: list[dict]) -> dict | None:
+    """Check cloud models if API keys are configured and return early if ready.
+
+    Returns:
+        Structured warmup dict if cloud models are ready, None otherwise.
+    """
+    mode = settings.setup_providers()
+    if mode != "sdk":
+        return None
+
+    cloud_result = await _validate_cloud_models(settings)
+    if cloud_result["cloud_ready"]:
+        steps.append(
+            {
+                "step": "cloud_models",
+                "status": "ok",
+                "provider_mode": mode,
+            }
+        )
+        return {
+            "status": "ok",
+            "mode": "cloud",
+            "steps": steps,
+            "embedding": cloud_result["embedding"],
+            "reranker": cloud_result.get("reranker"),
+        }
+
+    steps.append(
+        {
+            "step": "cloud_models",
+            "status": "fallback",
+            "message": "Cloud models not available, falling back to local",
+        }
+    )
+    return None
+
+
 async def run_warmup() -> dict:
     """Pre-download models and run setup to avoid first-run delays.
 
@@ -195,31 +232,9 @@ async def run_warmup() -> dict:
         )
 
     # 2. Check cloud models if API keys are configured
-    mode = settings.setup_providers()
-    if mode == "sdk":
-        cloud_result = await _validate_cloud_models(settings)
-        if cloud_result["cloud_ready"]:
-            steps.append(
-                {
-                    "step": "cloud_models",
-                    "status": "ok",
-                    "provider_mode": mode,
-                }
-            )
-            return {
-                "status": "ok",
-                "mode": "cloud",
-                "steps": steps,
-                "embedding": cloud_result["embedding"],
-                "reranker": cloud_result.get("reranker"),
-            }
-        steps.append(
-            {
-                "step": "cloud_models",
-                "status": "fallback",
-                "message": "Cloud models not available, falling back to local",
-            }
-        )
+    cloud_ready_result = await _warmup_cloud_models(steps)
+    if cloud_ready_result:
+        return cloud_ready_result
 
     # 3. Download local models
     embed_result = await asyncio.to_thread(_download_local_embedding, settings)
