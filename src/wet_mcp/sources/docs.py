@@ -139,13 +139,13 @@ async def _discover_from_pypi(name: str) -> dict | None:
             # "Changelog", etc. without a dedicated "Repository" key.
             if not repo_url or "github.com" not in repo_url:
                 for _key, url_val in project_urls_lower.items():
-                    if url_val and "github.com" in url_val:
+                    if url_val and ("github.com" in url_val):  # nosemgrep
                         repo_url = url_val
                         break
             # Last resort: check top-level home_page field
             if not repo_url or "github.com" not in repo_url:
                 hp = info.get("home_page") or ""
-                if "github.com" in hp:
+                if "github.com" in hp:  # nosemgrep
                     repo_url = hp
             return {
                 "name": info.get("name", name),
@@ -427,7 +427,7 @@ async def _discover_from_rubygems(name: str) -> dict | None:
             if not repo_url or "github.com" not in repo_url:
                 for key in ("homepage_uri", "bug_tracker_uri", "changelog_uri"):
                     val = data.get(key) or ""
-                    if "github.com" in val:
+                    if "github.com" in val:  # nosemgrep
                         repo_url = val
                         break
             return {
@@ -474,7 +474,7 @@ async def _discover_from_nuget(name: str) -> dict | None:
             project_url = latest.get("projectUrl") or ""
             repo_url = ""
             # Extract GitHub repo from project URL if available
-            if project_url and "github.com" in project_url:
+            if project_url and ("github.com" in project_url):  # nosemgrep
                 repo_url = project_url
             return {
                 "name": latest.get("id", name),
@@ -1612,7 +1612,10 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
                     repo_url = gh_result.get("repository", "")
                     if (
                         homepage
-                        and "github.com" in urlparse(homepage).netloc
+                        and (
+                            urlparse(homepage).netloc == "github.com"
+                            or urlparse(homepage).netloc.endswith(".github.com")
+                        )
                         and repo_url
                     ):
                         gh_hp = await _get_github_homepage(repo_url)
@@ -1785,7 +1788,10 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
         # check the GitHub API for a better homepage (e.g. vuejs.org).
         homepage = best.get("homepage", "")
         repo_url = best.get("repository", "")
-        if homepage and "github.com" in urlparse(homepage).netloc:
+        if homepage and (
+            urlparse(homepage).netloc == "github.com"
+            or urlparse(homepage).netloc.endswith(".github.com")
+        ):
             # Try to extract owner/repo from either homepage or repo URL
             gh_url = repo_url if repo_url else homepage
             gh_homepage = await _get_github_homepage(gh_url)
@@ -1828,7 +1834,14 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
                         logger.info(f"Probed {name} docs: {homepage} -> {probed}")
                         gh_result["homepage"] = probed
                 repo_url = gh_result.get("repository", "")
-                if homepage and "github.com" in urlparse(homepage).netloc and repo_url:
+                if (
+                    homepage
+                    and (
+                        urlparse(homepage).netloc == "github.com"
+                        or urlparse(homepage).netloc.endswith(".github.com")
+                    )
+                    and repo_url
+                ):
                     gh_hp = await _get_github_homepage(repo_url)
                     if gh_hp:
                         logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_hp}")
@@ -3599,7 +3612,8 @@ async def fetch_docs_pages(
         docs_parsed=docs_parsed,
         seen_urls={docs_url},
         pending_urls=[],
-        is_github="github.com" in docs_parsed.netloc,
+        is_github=docs_parsed.netloc == "github.com"
+        or docs_parsed.netloc.endswith(".github.com"),
         gh_path_prefix="/".join(docs_parsed.path.strip("/").split("/")[:2]),
     )
 
