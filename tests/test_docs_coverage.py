@@ -3478,3 +3478,68 @@ def test_sort_urls_by_query_empty_cases():
 
     # Empty URLs returns empty list
     assert _sort_urls_by_query([], "query") == []
+
+
+@pytest.mark.asyncio
+async def test_discover_from_npm_deprecated_toplevel():
+    """NPM package with top-level deprecated flag."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "name": "deprecated-pkg",
+        "deprecated": "This package is no longer maintained",
+        "dist-tags": {"latest": "1.0.0"},
+        "versions": {"1.0.0": {}},
+    }
+    mock_client = AsyncMock()
+    mock_client.get.return_value = mock_response
+    mock_client.__aenter__.return_value = mock_client
+    with patch("wet_mcp.sources.docs._safe_httpx_client", return_value=mock_client):
+        from wet_mcp.sources.docs import _discover_from_npm
+
+        result = await _discover_from_npm("deprecated-pkg")
+    assert result is not None
+    assert result.get("deprecated") is True
+
+
+@pytest.mark.asyncio
+async def test_discover_from_npm_deprecated_version():
+    """NPM package with version-level deprecated flag."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "name": "deprecated-pkg",
+        "dist-tags": {"latest": "1.0.0"},
+        "versions": {"1.0.0": {"deprecated": "Use something else"}},
+    }
+    mock_client = AsyncMock()
+    mock_client.get.return_value = mock_response
+    mock_client.__aenter__.return_value = mock_client
+    with patch("wet_mcp.sources.docs._safe_httpx_client", return_value=mock_client):
+        from wet_mcp.sources.docs import _discover_from_npm
+
+        result = await _discover_from_npm("deprecated-pkg")
+    assert result is not None
+    assert result.get("deprecated") is True
+
+
+@pytest.mark.asyncio
+async def test_discover_from_npm_squatted_pattern():
+    """NPM package with squatted name pattern in URL."""
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.json.return_value = {
+        "name": "squatted-pkg",
+        "homepage": "https://github.com/npm/deprecate-holder",
+        "dist-tags": {"latest": "1.0.0"},
+        "versions": {"1.0.0": {}},
+    }
+    mock_client = AsyncMock()
+    mock_client.get.return_value = mock_response
+    mock_client.__aenter__.return_value = mock_client
+    with patch("wet_mcp.sources.docs._safe_httpx_client", return_value=mock_client):
+        from wet_mcp.sources.docs import _discover_from_npm
+
+        result = await _discover_from_npm("squatted-pkg")
+    assert result is not None
+    assert result.get("deprecated") is True

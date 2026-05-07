@@ -73,10 +73,14 @@ async def _discover_from_npm(name: str) -> dict | None:
             data = resp.json()
 
             # Detect deprecated packages (npm deprecate-holder, squatted names)
-            is_deprecated = False
+            is_deprecated = bool(data.get("deprecated"))
             dist_tags = data.get("dist-tags", {})
             latest_ver = dist_tags.get("latest", "")
-            if latest_ver and isinstance(data.get("versions"), dict):
+            if (
+                not is_deprecated
+                and latest_ver
+                and isinstance(data.get("versions"), dict)
+            ):
                 ver_info = data["versions"].get(latest_ver, {})
                 if ver_info.get("deprecated"):
                     is_deprecated = True
@@ -94,6 +98,14 @@ async def _discover_from_npm(name: str) -> dict | None:
                 and not repo_url.startswith("git+")
             ):
                 repo_url = f"https://github.com/{repo_url}"
+
+            # Additional check for squatted/placeholder patterns in URLs
+            if not is_deprecated:
+                hp = data.get("homepage") or ""
+                all_urls = f"{hp} {repo_url or ""}".lower()
+                if any(p in all_urls for p in ("deprecate-holder", "placeholder")):
+                    is_deprecated = True
+
             return {
                 "name": data.get("name", name),
                 "description": data.get("description", ""),
