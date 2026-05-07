@@ -15,6 +15,7 @@ from wet_mcp.llm import (
     _has_llm_provider,
     _read_and_truncate,
     _strip_provider,
+    acompletion,
     analyze_media,
     encode_image,
     get_llm_config,
@@ -409,3 +410,53 @@ def test_has_llm_provider():
 
     with patch.dict(os.environ, {"XAI_API_KEY": "test"}, clear=True):
         assert _has_llm_provider() is True
+
+
+@pytest.mark.asyncio
+async def test_acompletion_fallback_skips_error():
+    """Test that acompletion skips failed fallbacks and continues to the next one."""
+
+    # We mock _gemini_completion to fail (triggering fallback)
+    # We mock _openai_completion to fail on first call and succeed on second call
+
+    with (
+        patch(
+            "wet_mcp.llm._gemini_completion", side_effect=Exception("Primary failed")
+        ),
+        patch("wet_mcp.llm._openai_completion") as mock_openai,
+    ):
+        # Mocking the side effect to fail then succeed
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "Fallback success"
+        mock_openai.side_effect = [Exception("First fallback failed"), mock_response]
+
+        result = await acompletion(
+            model="gemini/primary",
+            messages=[{"role": "user", "content": "hi"}],
+            fallbacks=["openai/fail", "openai/success"],
+        )
+
+        assert result.choices[0].message.content == "Fallback success"
+        assert mock_openai.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_acompletion_all_fallbacks_fail():
+    """Test that acompletion raises the original exception if all fallbacks fail."""
+
+    primary_error = Exception("Primary failed")
+
+    with (
+        patch("wet_mcp.llm._gemini_completion", side_effect=primary_error),
+        patch(
+            "wet_mcp.llm._openai_completion", side_effect=Exception("Fallback failed")
+        ),
+    ):
+        with pytest.raises(Exception) as excinfo:
+            await acompletion(
+                model="gemini/primary",
+                messages=[{"role": "user", "content": "hi"}],
+                fallbacks=["openai/fail1", "openai/fail2"],
+            )
+
+        assert excinfo.value is primary_error
