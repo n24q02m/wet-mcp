@@ -47,6 +47,11 @@ _DEFAULT_EMBEDDING_DIMS = 768
 # Reranking: retrieve more candidates than final limit, then rerank.
 _RERANK_CANDIDATE_MULTIPLIER = 3
 
+# Security: enforce hard limits to prevent resource exhaustion
+_MAX_EXTRACT_URLS = 20
+_MAX_CRAWL_PAGES = 100
+_MAX_DEPTH = 5
+
 # Module-level state (set during lifespan)
 _web_cache: WebCache | None = None
 _docs_db: DocsDB | None = None
@@ -891,6 +896,114 @@ async def search(  # noqa: PLR0913
 # ---------------------------------------------------------------------------
 
 
+async def _handle_extract_action(urls: list[str], format: str, stealth: bool) -> str:
+    """Handle "extract" action for the extract tool."""
+    urls = urls[:_MAX_EXTRACT_URLS]
+    cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "extract", cache_params)
+        if cached:
+            return cached
+    result = await _with_timeout(
+        _extract(urls=urls, format=format, stealth=stealth),
+        "extract",
+    )
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
+    if not result.startswith("Error"):
+        try:
+            _data = json.loads(result)
+            result = json.dumps(_data, ensure_ascii=False, indent=2)
+        except json.JSONDecodeError:
+            # Expected if result is plain text
+            pass
+        except Exception:
+            logger.exception("Unexpected error formatting extract tool JSON result")
+    return result
+
+
+async def _handle_batch_action(urls: list[str], format: str, stealth: bool) -> str:
+    """Handle "batch" action for the extract tool."""
+    from wet_mcp.sources.crawler import batch_extract
+
+    return await _with_timeout(
+        batch_extract(urls=urls, format=format, stealth=stealth),
+        "batch",
+    )
+
+
+async def _handle_crawl_action(
+    urls: list[str], depth: int, max_pages: int, format: str, stealth: bool
+) -> str:
+    """Handle "crawl" action for the extract tool."""
+    urls = urls[:_MAX_EXTRACT_URLS]
+    cache_params = {
+        "urls": sorted(urls),
+        "depth": depth,
+        "max_pages": max_pages,
+    }
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "crawl", cache_params)
+        if cached:
+            return cached
+    result = await _with_timeout(
+        _crawl(
+            urls=urls,
+            depth=depth,
+            max_pages=max_pages,
+            format=format,
+            stealth=stealth,
+        ),
+        "crawl",
+    )
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "crawl", cache_params, result)
+    return result
+
+
+async def _handle_map_action(urls: list[str], depth: int, max_pages: int) -> str:
+    """Handle "map" action for the extract tool."""
+    urls = urls[:_MAX_EXTRACT_URLS]
+    cache_params = {
+        "urls": sorted(urls),
+        "depth": depth,
+        "max_pages": max_pages,
+    }
+    if _web_cache:
+        cached = await asyncio.to_thread(_web_cache.get, "map", cache_params)
+        if cached:
+            return cached
+    result = await _with_timeout(
+        _sitemap(urls=urls, depth=depth, max_pages=max_pages),
+        "map",
+    )
+    if _web_cache and not result.startswith("Error"):
+        await asyncio.to_thread(_web_cache.set, "map", cache_params, result)
+    return result
+
+
+async def _handle_convert_action(paths: list[str]) -> str:
+    """Handle "convert" action for the extract tool."""
+    from wet_mcp.sources.crawler import convert_local_files
+
+    return await _with_timeout(
+        convert_local_files(paths=paths),
+        "convert",
+    )
+
+
+async def _handle_structured_action(
+    urls: list[str], schema: dict, prompt: str | None, stealth: bool
+) -> str:
+    """Handle "extract_structured" action for the extract tool."""
+    from wet_mcp.sources.structured import extract_structured
+
+    return await _with_timeout(
+        extract_structured(urls=urls, schema=schema, prompt=prompt, stealth=stealth),
+        "extract_structured",
+    )
+
+
 @mcp.tool(
     annotations=ToolAnnotations(
         readOnlyHint=True,
@@ -930,10 +1043,6 @@ async def extract(
 
     Use `help` tool with tool_name="extract" for full parameter documentation.
     """
-    # Security: enforce hard limits to prevent resource exhaustion
-    _MAX_EXTRACT_URLS = 20
-    _MAX_CRAWL_PAGES = 100
-    _MAX_DEPTH = 5
 
     blocked = _require_credentials()
     if blocked:
@@ -946,113 +1055,43 @@ async def extract(
         case "extract":
             if not urls:
                 return 'Error: urls is required for extract action. Example: extract(action="extract", urls=["https://example.com/page"])'
-            urls = urls[:_MAX_EXTRACT_URLS]
-            cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
-            if _web_cache:
-                cached = await asyncio.to_thread(
-                    _web_cache.get, "extract", cache_params
-                )
-                if cached:
-                    return cached
-            result = await _with_timeout(
-                _extract(urls=urls, format=format, stealth=stealth),
-                "extract",
+            return await _handle_extract_action(
+                urls=urls, format=format, stealth=stealth
             )
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
-            if not result.startswith("Error"):
-                try:
-                    _data = json.loads(result)
-                    result = json.dumps(_data, ensure_ascii=False, indent=2)
-                except json.JSONDecodeError:
-                    # Expected if result is plain text
-                    pass
-                except Exception:
-                    logger.exception(
-                        "Unexpected error formatting extract tool JSON result"
-                    )
-            return result
 
         case "batch":
             if not urls:
                 return 'Error: urls is required for batch action. Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])'
-            from wet_mcp.sources.crawler import batch_extract
-
-            return await _with_timeout(
-                batch_extract(urls=urls, format=format, stealth=stealth),
-                "batch",
-            )
+            return await _handle_batch_action(urls=urls, format=format, stealth=stealth)
 
         case "crawl":
             if not urls:
                 return 'Error: urls is required for crawl action. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)'
-            urls = urls[:_MAX_EXTRACT_URLS]
-            cache_params = {
-                "urls": sorted(urls),
-                "depth": depth,
-                "max_pages": max_pages,
-            }
-            if _web_cache:
-                cached = await asyncio.to_thread(_web_cache.get, "crawl", cache_params)
-                if cached:
-                    return cached
-            result = await _with_timeout(
-                _crawl(
-                    urls=urls,
-                    depth=depth,
-                    max_pages=max_pages,
-                    format=format,
-                    stealth=stealth,
-                ),
-                "crawl",
+            return await _handle_crawl_action(
+                urls=urls,
+                depth=depth,
+                max_pages=max_pages,
+                format=format,
+                stealth=stealth,
             )
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "crawl", cache_params, result)
-            return result
 
         case "map":
             if not urls:
                 return 'Error: urls is required for map action. Example: extract(action="map", urls=["https://example.com"])'
-            urls = urls[:_MAX_EXTRACT_URLS]
-            cache_params = {
-                "urls": sorted(urls),
-                "depth": depth,
-                "max_pages": max_pages,
-            }
-            if _web_cache:
-                cached = await asyncio.to_thread(_web_cache.get, "map", cache_params)
-                if cached:
-                    return cached
-            result = await _with_timeout(
-                _sitemap(urls=urls, depth=depth, max_pages=max_pages),
-                "map",
-            )
-            if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "map", cache_params, result)
-            return result
+            return await _handle_map_action(urls=urls, depth=depth, max_pages=max_pages)
 
         case "convert":
             if not paths:
                 return 'Error: paths is required for convert action. Example: extract(action="convert", paths=["/home/user/report.pdf"])'
-            from wet_mcp.sources.crawler import convert_local_files
-
-            return await _with_timeout(
-                convert_local_files(paths=paths),
-                "convert",
-            )
+            return await _handle_convert_action(paths=paths)
 
         case "extract_structured":
             if not urls:
                 return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
             if not schema:
                 return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
-            from wet_mcp.sources.structured import extract_structured
-
-            return await _with_timeout(
-                extract_structured(
-                    urls=urls, schema=schema, prompt=prompt, stealth=stealth
-                ),
-                "extract_structured",
+            return await _handle_structured_action(
+                urls=urls, schema=schema, prompt=prompt, stealth=stealth
             )
 
         case _:
