@@ -679,30 +679,36 @@ class DocsDB:
         fts_scores: dict[str, float] = {}
         fts_chunks: dict[str, dict] = {}
 
-        for fts_query in fts_queries:
+        if fts_queries:
             try:
-                fts_sql = """
-                    SELECT c.*,
-                           l.name AS _library_name,
-                           bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
-                    FROM doc_chunks_fts f
-                    JOIN doc_chunks c ON f.id = c.id
-                    LEFT JOIN libraries l ON c.library_id = l.id
-                    WHERE doc_chunks_fts MATCH ?
-                """
-                fts_params: list = [fts_query]
+                subqueries = []
+                fts_params: list = []
+                for fts_query in fts_queries:
+                    sq = f"""
+                        SELECT * FROM (
+                            SELECT c.*,
+                                   l.name AS _library_name,
+                                   bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
+                            FROM doc_chunks_fts f
+                            JOIN doc_chunks c ON f.id = c.id
+                            LEFT JOIN libraries l ON c.library_id = l.id
+                            WHERE doc_chunks_fts MATCH ?
+                            {" AND c.library_id = ?" if library_id else ""}
+                            {" AND c.version_id = ?" if version_id else ""}
+                            ORDER BY bm25_score LIMIT ?
+                        )
+                    """
+                    fts_params.append(fts_query)
+                    if library_id:
+                        fts_params.append(library_id)
+                    if version_id:
+                        fts_params.append(version_id)
+                    fts_params.append(candidate_limit)
+                    subqueries.append(sq)
 
-                if library_id:
-                    fts_sql += " AND c.library_id = ?"
-                    fts_params.append(library_id)
-                if version_id:
-                    fts_sql += " AND c.version_id = ?"
-                    fts_params.append(version_id)
-
-                fts_sql += " ORDER BY bm25_score LIMIT ?"
-                fts_params.append(candidate_limit)
-
-                rows = self._conn.execute(fts_sql, fts_params).fetchall()
+                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                full_fts_sql = " UNION ALL ".join(subqueries)
+                rows = self._conn.execute(full_fts_sql, fts_params).fetchall()
                 for row in rows:
                     chunk = dict(row)
                     cid = chunk["id"]
@@ -711,13 +717,8 @@ class DocsDB:
                     if cid not in fts_scores or score > fts_scores[cid]:
                         fts_scores[cid] = score
                         fts_chunks[cid] = chunk
-                # Stop once we have enough candidates across all tiers
-                if len(fts_scores) >= candidate_limit:
-                    break
             except Exception as e:
                 logger.debug(f"FTS search error: {e}")
-                continue
-
         # Min-max normalize FTS scores to 0-1
         if fts_scores:
             min_f = min(fts_scores.values())
