@@ -1119,6 +1119,17 @@ def _normalize_language(language: str) -> str:
     return _LANGUAGE_ALIASES.get(lang, lang)
 
 
+def _is_github_url(url: str) -> bool:
+    """Check if a URL points to GitHub using robust domain verification."""
+    if not url:
+        return False
+    try:
+        netloc = urlparse(url).netloc.lower()
+        return netloc == "github.com" or netloc.endswith(".github.com")
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Well-known docs — ONLY for genuinely ambiguous names, monorepo
 # sub-frameworks, and non-library tools/platforms that no registry can
@@ -1562,7 +1573,7 @@ def _score_discovery_result(r: dict, name: str) -> int:
         score += 5
         # Non-GitHub homepage = established project with custom domain
         parsed_hp = urlparse(homepage)
-        if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
+        if parsed_hp.netloc and not _is_github_url(homepage):
             lib_norm = name.lower().replace("-", "")
             if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
                 score += 1  # Auto-generated docs, minimal boost
@@ -1647,11 +1658,11 @@ async def _pre_upgrade_discovery_results(results: list[dict]) -> None:
     for i, r in enumerate(results):
         homepage = r.get("homepage") or ""
         repo_url = r.get("repository") or ""
-        hp_is_github = "github.com" in homepage
+        hp_is_github = _is_github_url(homepage)
         # Upgrade when NO homepage at all, OR homepage IS a GitHub URL
         if (not homepage or hp_is_github) and (repo_url or homepage):
-            gh_url = repo_url if "github.com" in repo_url else homepage
-            if "github.com" in gh_url:
+            gh_url = repo_url if _is_github_url(repo_url) else homepage
+            if _is_github_url(gh_url):
                 upgrade_tasks.append(_get_github_homepage(gh_url))
                 upgrade_indices.append(i)
 
@@ -1672,7 +1683,7 @@ async def _finalize_discovery_result(best: dict, name: str, score: int) -> dict:
     # check the GitHub API for a better homepage (e.g. vuejs.org).
     homepage = best.get("homepage", "")
     repo_url = best.get("repository", "")
-    if homepage and "github.com" in urlparse(homepage).netloc:
+    if homepage and _is_github_url(homepage):
         # Try to extract owner/repo from either homepage or repo URL
         gh_url = repo_url if repo_url else homepage
         gh_homepage = await _get_github_homepage(gh_url)
@@ -1708,7 +1719,7 @@ async def _discover_via_github_search_with_upgrades(
 
     # Probe for better docs URL
     homepage = gh_result.get("homepage", "")
-    if homepage and "github.com" not in urlparse(homepage).netloc:
+    if homepage and not _is_github_url(homepage):
         probed = await _probe_docs_url(homepage, name, registry="github")
         if probed != homepage:
             logger.info(f"Probed {name} docs: {homepage} -> {probed}")
@@ -1716,7 +1727,7 @@ async def _discover_via_github_search_with_upgrades(
 
     # Try to upgrade GitHub-only homepage via API
     repo_url = gh_result.get("repository", "")
-    if homepage and "github.com" in urlparse(homepage).netloc and repo_url:
+    if homepage and _is_github_url(homepage) and repo_url:
         gh_hp = await _get_github_homepage(repo_url)
         if gh_hp:
             logger.info(f"Upgraded {name} homepage: {homepage} -> {gh_hp}")
