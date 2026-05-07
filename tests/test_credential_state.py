@@ -537,7 +537,9 @@ class TestSaveCredentialsGdriveNextStep:
                 "wet_mcp.credential_state._gdrive_token_poll", new=MagicMock()
             ) as mock_poll_sync:
                 target()
-                mock_poll_sync.assert_called_once_with("cid", "csec", "dev123", 5, 1800)
+                mock_poll_sync.assert_called_once_with(
+                    "cid", "csec", "dev123", 5, 1800, sub=None
+                )
 
             mock_run.assert_called_once()
 
