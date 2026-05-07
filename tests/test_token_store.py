@@ -9,8 +9,12 @@ import pytest
 from wet_mcp.token_store import (
     _get_token_dir,
     get_token_path,
+    get_token_path_for_sub,
     load_token,
+    load_token_for_sub,
+    read_token_for_sub,
     save_token,
+    save_token_for_sub,
 )
 
 
@@ -180,3 +184,29 @@ def test_save_token_unix_permissions(token_dir):
         save_token("drive", {"access_token": "test"})
         # Verify chmod was called (once for dir, once for file)
         assert mock_chmod.call_count == 2
+
+
+def test_save_and_load_token_for_sub(token_dir):
+    """Test save_token_for_sub and load_token_for_sub flow."""
+    sub = "user_123"
+    token = {"access_token": "sub_token_abc", "token_type": "Bearer"}
+    save_token_for_sub(sub, "drive", token)
+
+    # Verify path structure
+    path = get_token_path_for_sub(sub, "drive")
+    assert "/subs/user_123/tokens/drive.json" in str(path.as_posix())
+    assert path.exists()
+
+    # Load back
+    loaded = load_token_for_sub(sub, "drive")
+    assert loaded == token
+
+
+def test_load_missing_token_for_sub(token_dir):
+    """load_token_for_sub returns None if file doesn't exist."""
+    assert load_token_for_sub("no_user", "drive") is None
+
+
+def test_read_token_for_sub_alias():
+    """Verify read_token_for_sub is indeed an alias of load_token_for_sub."""
+    assert read_token_for_sub is load_token_for_sub
