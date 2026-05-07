@@ -807,6 +807,207 @@ async def _get_github_homepage(url: str) -> str | None:
     return None
 
 
+# Generic package names that collide with unrelated RTD projects
+_GENERIC_NAMES = frozenset(
+    {
+        "core",
+        "react",
+        "cli",
+        "common",
+        "utils",
+        "types",
+        "client",
+        "server",
+        "api",
+        "app",
+        "config",
+        "test",
+        "ui",
+        "web",
+    }
+)
+
+# Domains to skip for docs. subdomain probing (host-level docs, not project docs)
+_SKIP_DOCS_SUBDOMAIN = {
+    "github.com",
+    "github.io",
+    "gitlab.com",
+    "bitbucket.org",
+    "pypi.org",
+    "npmjs.com",
+    "npmjs.org",
+    "crates.io",
+}
+
+# Registries where ReadTheDocs is unlikely/rare
+_RTD_SKIP_REGISTRIES = {"npm", "crates", "go"}
+
+# Path segments that indicate login/auth pages (false positive redirects)
+_AUTH_SEGMENTS = (
+    "/login",
+    "/signin",
+    "/signup",
+    "/account",
+    "/auth",
+    "/register",
+)
+
+
+def _get_doc_candidates(
+    homepage: str, lib_name: str, registry: str
+) -> list[tuple[str, str]]:
+    """Generate potential documentation URLs for a library."""
+    parsed = urlparse(homepage)
+    netloc = parsed.netloc
+    base_domain = netloc.removeprefix("www.") if netloc.startswith("www.") else netloc
+
+    # Normalize lib name for probing
+    scope_part = ""
+    pkg_part = lib_name.lower().lstrip("@")
+    if "/" in pkg_part:
+        scope_part = pkg_part.split("/")[0]
+        pkg_part = pkg_part.split("/")[-1]
+    clean_name = pkg_part
+
+    candidates: list[tuple[str, str]] = [("original", homepage)]
+
+    # 1. docs.{domain} subdomain
+    if not base_domain.startswith("docs.") and base_domain not in _SKIP_DOCS_SUBDOMAIN:
+        candidates.append(("docs_subdomain", f"https://docs.{base_domain}/"))
+
+    # 2. ReadTheDocs
+    if (
+        "readthedocs" not in base_domain
+        and clean_name not in _GENERIC_NAMES
+        and registry not in _RTD_SKIP_REGISTRIES
+    ):
+        rtd_name = scope_part or clean_name
+        if len(rtd_name) > 4:
+            candidates.append(
+                ("readthedocs", f"https://{rtd_name}.readthedocs.io/en/latest/")
+            )
+
+    # 3. {homepage}/docs/ path
+    if len(parsed.path.strip("/")) <= 1:
+        docs_path_url = f"{parsed.scheme}://{parsed.netloc}/docs/"
+        candidates.append(("docs_path", docs_path_url))
+
+    return candidates
+
+
+def _validate_rtd_inventory(
+    inv_content: bytes, lib_name: str, clean_name_norm: str
+) -> bool:
+    """Validate ReadTheDocs objects.inv matches the library name and has content."""
+    inv_text = inv_content[:500].decode("utf-8", errors="replace")
+    proj_match = re.search(r"^# Project:\s*(.+)$", inv_text, re.MULTILINE)
+    if proj_match:
+        proj_name = (
+            proj_match.group(1)
+            .strip()
+            .lower()
+            .replace("-", "")
+            .replace("_", "")
+            .replace(" ", "")
+        )
+        if clean_name_norm not in proj_name:
+            logger.debug(
+                f"RTD project '{proj_match.group(1).strip()}' doesn't match '{lib_name}', skipping"
+            )
+            return False
+
+    # Count objects: real docs have 50+, squatters < 30
+    try:
+        hdr_pos = 0
+        for _ in range(4):
+            hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
+        decompressed = zlib.decompress(inv_content[hdr_pos:])
+        obj_count = len(decompressed.split(b"\n")) - 1
+        if obj_count < 50:
+            logger.debug(
+                f"RTD {lib_name}: only {obj_count} objects, likely squatter — skipping"
+            )
+            return False
+    except Exception:
+        return False
+    return True
+
+
+async def _check_doc_candidate(
+    client: httpx.AsyncClient,
+    label: str,
+    url: str,
+    lib_name: str,
+    clean_name_norm: str,
+    original_netloc: str,
+) -> tuple[str, str, int, bool] | None:
+    """Probe and validate a single documentation candidate URL."""
+    try:
+        resp = await client.get(url)
+        if resp.status_code != 200:
+            return None
+        content = resp.text
+        content_len = len(content)
+        if content_len < 500:
+            return None
+
+        final_url = str(resp.url)
+        final_parsed = urlparse(final_url)
+        final_path = final_parsed.path.lower()
+
+        if any(seg in final_path for seg in _AUTH_SEGMENTS):
+            return None
+
+        if final_parsed.netloc == original_netloc and label not in (
+            "docs_path",
+            "original",
+        ):
+            if not final_path.startswith("/docs") and "docs" not in final_parsed.netloc:
+                return None
+
+        has_inv = False
+        inv_url = final_url.rstrip("/") + "/objects.inv"
+        try:
+            inv_resp = await client.get(inv_url)
+            if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
+                b"# Sphinx inventory version"
+            ):
+                if label == "readthedocs":
+                    if not _validate_rtd_inventory(
+                        inv_resp.content, lib_name, clean_name_norm
+                    ):
+                        return None
+                has_inv = True
+        except Exception:
+            pass
+
+        if label == "readthedocs" and not has_inv:
+            return None
+
+        return (label, final_url, content_len, has_inv)
+    except Exception:
+        return None
+
+
+def _score_doc_candidate(label: str, size: int, has_inv: bool) -> int:
+    """Calculate a quality score for a validated documentation URL."""
+    score = 0
+    if has_inv:
+        score += 100  # Sphinx docs = gold standard
+    if size > 10000:
+        score += 10
+    elif size > 2000:
+        score += 5
+    elif size > 500:
+        score += 2
+
+    if label == "docs_subdomain":
+        score += 3
+    if label == "original":
+        score += 5
+    return score
+
+
 async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> str:
     """Probe for a better documentation URL than the project homepage.
 
@@ -825,190 +1026,27 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     project name — must match the library name to prevent false positives
     (e.g., ``chi.readthedocs.io`` being an unrelated Python project).
     """
-    parsed = urlparse(homepage)
-    netloc = parsed.netloc
-    base_domain = netloc.removeprefix("www.") if netloc.startswith("www.") else netloc
-    # Normalize lib name for probing:
-    # "@nestjs/core" → scope="nestjs", pkg="core"
-    # "solid-js" → scope="", pkg="solid-js"
-    scope_part = ""
-    pkg_part = lib_name.lower().lstrip("@")
-    if "/" in pkg_part:
-        scope_part = pkg_part.split("/")[0]
-        pkg_part = pkg_part.split("/")[-1]
-    clean_name = pkg_part
-    # Normalized for matching (no hyphens/underscores)
-    clean_name_norm = clean_name.replace("-", "").replace("_", "")
-    # Generic package names that collide with unrelated RTD projects
-    _GENERIC_NAMES = frozenset(
-        {
-            "core",
-            "react",
-            "cli",
-            "common",
-            "utils",
-            "types",
-            "client",
-            "server",
-            "api",
-            "app",
-            "config",
-            "test",
-            "ui",
-            "web",
-        }
+    original_netloc = urlparse(homepage).netloc
+    clean_name_norm = (
+        lib_name.lower().lstrip("@").split("/")[-1].replace("-", "").replace("_", "")
     )
 
-    candidates: list[tuple[str, str]] = []
-
-    # 1. docs.{domain} subdomain — skip for generic hosting domains
-    # (docs.github.com is GitHub's own docs, not project docs)
-    # (docs.pypi.org is PyPI's own API docs, not project docs)
-    _skip_docs_subdomain = {
-        "github.com",
-        "github.io",
-        "gitlab.com",
-        "bitbucket.org",
-        "pypi.org",
-        "npmjs.com",
-        "npmjs.org",
-        "crates.io",
-    }
-    if not base_domain.startswith("docs.") and base_domain not in _skip_docs_subdomain:
-        candidates.append(("docs_subdomain", f"https://docs.{base_domain}/"))
-
-    # 2. ReadTheDocs: probe {name}.readthedocs.io when not already on RTD.
-    # Skip for generic package names and very short names (<=4 chars).
-    # Skip for non-Python registries (npm, crates, go) — RTD is almost
-    # exclusively used by Python projects, so probing for React/Rust/Go
-    # libs would match unrelated Python packages with the same name.
-    # Validated via objects.inv: project name must match + object count >= 50
-    # to reject squatter/placeholder projects (real docs have 50+ objects).
-    _rtd_skip_registries = {"npm", "crates", "go"}
-    if (
-        "readthedocs" not in base_domain
-        and clean_name not in _GENERIC_NAMES
-        and registry not in _rtd_skip_registries
-    ):
-        rtd_name = scope_part or clean_name
-        if len(rtd_name) > 4:
-            candidates.append(
-                ("readthedocs", f"https://{rtd_name}.readthedocs.io/en/latest/")
-            )
-
-    # 3. {homepage}/docs/ path (only if homepage has no path or short path)
-    if len(parsed.path.strip("/")) <= 1:
-        docs_path_url = f"{parsed.scheme}://{parsed.netloc}/docs/"
-        candidates.append(("docs_path", docs_path_url))
-
+    candidates = _get_doc_candidates(homepage, lib_name, registry)
     if not candidates:
         return homepage
 
-    # Include the original homepage as a candidate so it competes fairly.
-    # This prevents ReadTheDocs/docs subdomain from incorrectly overriding
-    # an already-good docs URL (e.g. docs.djangoproject.com → django.readthedocs.io).
-    candidates.insert(0, ("original", homepage))
-
-    async def _check(
-        client: httpx.AsyncClient, label: str, url: str
-    ) -> tuple[str, str, int, bool] | None:
-        try:
-            resp = await client.get(url)
-            if resp.status_code != 200:
-                return None
-            content = resp.text
-            content_len = len(content)
-            # Must be substantial HTML/text, not an error page
-            if content_len < 500:
-                return None
-            final_url = str(resp.url)
-            # Reject login/auth/account pages (false positive redirects)
-            final_path = urlparse(final_url).path.lower()
-            _auth_segments = (
-                "/login",
-                "/signin",
-                "/signup",
-                "/account",
-                "/auth",
-                "/register",
-            )
-            if any(seg in final_path for seg in _auth_segments):
-                return None
-            # Avoid redirect loops back to the original homepage
-            if urlparse(final_url).netloc == parsed.netloc and label not in (
-                "docs_path",
-                "original",
-            ):
-                final_parsed = urlparse(final_url)
-                if not final_parsed.path.startswith("/docs"):
-                    if "docs" not in final_parsed.netloc:
-                        return None
-            # Check for objects.inv (Sphinx docs indicator)
-            has_inv = False
-            inv_url = final_url.rstrip("/") + "/objects.inv"
-            try:
-                inv_resp = await client.get(inv_url)
-                if inv_resp.status_code == 200 and inv_resp.content[:30].startswith(
-                    b"# Sphinx inventory version"
-                ):
-                    # For ReadTheDocs: validate project name matches lib
-                    # and has enough objects (>= 50) to be real docs,
-                    # not a squatter/placeholder project.
-                    if label == "readthedocs":
-                        inv_content = inv_resp.content
-                        inv_text = inv_content[:500].decode("utf-8", errors="replace")
-                        proj_match = re.search(
-                            r"^# Project:\s*(.+)$", inv_text, re.MULTILINE
-                        )
-                        if proj_match:
-                            proj_name = (
-                                proj_match.group(1)
-                                .strip()
-                                .lower()
-                                .replace("-", "")
-                                .replace("_", "")
-                                .replace(" ", "")
-                            )
-                            if clean_name_norm not in proj_name:
-                                logger.debug(
-                                    f"RTD project '{proj_match.group(1).strip()}'"
-                                    f" doesn't match '{lib_name}', skipping"
-                                )
-                                return None
-                        # Count objects: real docs have 50+, squatters < 30
-                        try:
-                            # Find end of header (4 lines starting with #)
-                            hdr_pos = 0
-                            for _ in range(4):
-                                hdr_pos = inv_content.index(b"\n", hdr_pos) + 1
-                            decompressed = zlib.decompress(inv_content[hdr_pos:])
-                            obj_count = len(decompressed.split(b"\n")) - 1
-                            if obj_count < 50:
-                                logger.debug(
-                                    f"RTD {lib_name}: only {obj_count} "
-                                    f"objects, likely squatter — skipping"
-                                )
-                                return None
-                        except Exception:
-                            # Can't count objects — reject for safety
-                            return None
-                    has_inv = True
-            except Exception:
-                pass
-            # ReadTheDocs without objects.inv is unreliable — skip
-            if label == "readthedocs" and not has_inv:
-                return None
-            return (label, final_url, content_len, has_inv)
-        except Exception:
-            return None
-
     async with _safe_httpx_client(timeout=10, follow_redirects=True) as client:
         results = await asyncio.gather(
-            *[_check(client, label, url) for label, url in candidates],
+            *[
+                _check_doc_candidate(
+                    client, label, url, lib_name, clean_name_norm, original_netloc
+                )
+                for label, url in candidates
+            ],
             return_exceptions=True,
         )
 
-    valid = [r for r in results if isinstance(r, tuple)]
+    valid = [r for r in results if isinstance(r, tuple) and r is not None]
     if not valid:
         return homepage
 
@@ -1016,22 +1054,7 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     best: tuple[str, str] | None = None
     best_score = 0
     for label, final_url, size, has_inv in valid:
-        score = 0
-        if has_inv:
-            score += 100  # Sphinx docs = gold standard
-        if size > 10000:
-            score += 10
-        elif size > 2000:
-            score += 5
-        elif size > 500:
-            score += 2
-        # docs subdomain gets small bonus (same org, high confidence)
-        if label == "docs_subdomain":
-            score += 3
-        # Original homepage gets bonus — it's the registry-provided URL,
-        # only replace if an alternative is strictly superior.
-        if label == "original":
-            score += 5
+        score = _score_doc_candidate(label, size, has_inv)
         if score > best_score:
             best_score = score
             best = (label, final_url)
@@ -1046,7 +1069,6 @@ async def _probe_docs_url(homepage: str, lib_name: str, registry: str = "") -> s
     return homepage
 
 
-# ---------------------------------------------------------------------------
 # Language → registry mapping for targeted discovery
 # ---------------------------------------------------------------------------
 
