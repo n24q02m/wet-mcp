@@ -22,7 +22,7 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
 
 from wet_mcp.config import settings
-from wet_mcp.security import is_safe_url
+from wet_mcp.security import is_safe_local_path, is_safe_url
 from wet_mcp.security import safe_httpx_client as _safe_httpx_client
 
 # Document extensions that markitdown handles better than Crawl4AI
@@ -207,6 +207,53 @@ def _detect_document_content_type(content_type: str) -> bool:
     return any(ct in content_type for ct in doc_types)
 
 
+async def _extract_local_file(url: str) -> dict:
+    """Extract content from a local file via markitdown.
+
+    Args:
+        url: file:// URL
+
+    Returns:
+        dict with {url, title, content} or {url, error}
+    """
+    try:
+        from urllib.parse import unquote
+
+        # Parse path from file:// URL
+        if not url.startswith("file://"):
+            return {"url": url, "error": "Invalid file URL"}
+
+        path_str = unquote(url[7:])
+        # On Windows, file:///C:/path becomes /C:/path, need to strip leading slash
+        if (
+            os.name == "nt"
+            and path_str.startswith("/")
+            and len(path_str) > 2
+            and path_str[2] == ":"
+        ):
+            path_str = path_str[1:]
+
+        allowed_dirs = _get_allowed_dirs()
+        safe_path = is_safe_local_path(
+            path_str,
+            allowed_dirs=allowed_dirs,
+            max_size=settings.convert_max_file_size,
+        )
+
+        if safe_path is None:
+            return {"url": url, "error": f"Path rejected or unsafe: {path_str}"}
+
+        content = await asyncio.to_thread(_convert_file, safe_path)
+        return {
+            "url": url,
+            "title": safe_path.name,
+            "content": content,
+        }
+    except Exception as e:
+        logger.error(f"Error extracting local file {url}: {e}")
+        return {"url": url, "error": str(e)}
+
+
 async def _extract_with_markitdown(url: str) -> dict:
     """Download document and convert to Markdown via markitdown."""
     try:
@@ -286,6 +333,9 @@ async def extract(
 
     async def process_url(url: str):
         async with sem:
+            if url.startswith("file://"):
+                return await _extract_local_file(url)
+
             if not is_safe_url(url):
                 logger.warning(f"Skipping unsafe URL: {url}")
                 return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
@@ -774,6 +824,24 @@ async def batch_extract(
 # ---------------------------------------------------------------------------
 
 
+def _get_allowed_dirs() -> list[Path]:
+    """Resolve allowed directories for local file access."""
+    if settings.convert_allowed_dirs:
+        return [
+            Path(d.strip())
+            for d in settings.convert_allowed_dirs.split(",")
+            if d.strip()
+        ]
+
+    # Default to allowing access only to the home directory and the
+    # platform temp directory to prevent arbitrary file read of
+    # sensitive system files.
+    return [
+        Path.home().resolve(),
+        Path(tempfile.gettempdir()).resolve(),
+    ]
+
+
 async def convert_local_files(paths: list[str]) -> str:
     """Convert local files to Markdown via markitdown.
 
@@ -786,33 +854,14 @@ async def convert_local_files(paths: list[str]) -> str:
     if len(paths) > _MAX_CONVERT_FILES:
         return f"Error: Maximum {_MAX_CONVERT_FILES} files per call (got {len(paths)})"
 
-    from wet_mcp.config import settings as _settings
-    from wet_mcp.security import is_safe_local_path
-
-    if _settings.convert_allowed_dirs:
-        allowed_dirs = [
-            Path(d.strip())
-            for d in _settings.convert_allowed_dirs.split(",")
-            if d.strip()
-        ]
-    else:
-        # Default to allowing access only to the home directory and the
-        # platform temp directory to prevent arbitrary file read of
-        # sensitive system files. ``tempfile.gettempdir()`` returns the
-        # OS-level temp dir (``/tmp`` on Linux, ``$TMPDIR`` /
-        # ``/var/folders/...`` on macOS, ``C:\Users\<u>\AppData\Local\Temp``
-        # on Windows) — hardcoding ``/tmp`` breaks on non-Linux hosts.
-        allowed_dirs = [
-            Path.home().resolve(),
-            Path(tempfile.gettempdir()).resolve(),
-        ]
+    allowed_dirs = _get_allowed_dirs()
 
     results = []
     for path_str in paths:
         safe_path = is_safe_local_path(
             path_str,
             allowed_dirs=allowed_dirs,
-            max_size=_settings.convert_max_file_size,
+            max_size=settings.convert_max_file_size,
         )
         if safe_path is None:
             results.append({"path": path_str, "error": f"Path rejected: {path_str}"})

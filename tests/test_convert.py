@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from wet_mcp.sources.crawler import convert_local_files
 
 
@@ -48,3 +50,34 @@ async def test_convert_local_files_multiple(tmp_path):
     data = json.loads(result)
     assert len(data) == 2
     assert all("content" in d for d in data)
+
+
+@pytest.mark.asyncio
+async def test_extract_file_url(tmp_path):
+    from wet_mcp.sources.crawler import extract
+
+    f = tmp_path / "test_extract.txt"
+    f.write_text("Extracted from file URL")
+    file_url = f"file://{f}"
+
+    result = await extract([file_url])
+    data = json.loads(result)
+
+    assert len(data) == 1
+    assert data[0]["url"] == file_url
+    assert "Extracted from file URL" in data[0]["content"]
+    assert data[0]["title"] == "test_extract.txt"
+
+
+@pytest.mark.asyncio
+async def test_extract_file_url_unsafe():
+    from wet_mcp.sources.crawler import extract
+
+    file_url = "file:///etc/passwd"
+
+    result = await extract([file_url])
+    data = json.loads(result)
+
+    assert len(data) == 1
+    assert "error" in data[0]
+    assert "Path rejected or unsafe" in data[0]["error"]

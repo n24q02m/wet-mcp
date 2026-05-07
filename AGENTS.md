@@ -145,4 +145,4 @@ Conventional Commits: `type(scope): message`. Automated semantic release.
 ## TODO / Backlog
 
 - [x] **markitdown integration**: Added `markitdown[pdf,docx,pptx]` as dependency. Extract tool auto-detects document URLs by extension and routes through markitdown instead of Crawl4AI.
-- [ ] **extract action for local files**: Support `file://` URLs or a new `convert` action for local document conversion via markitdown.
+- [x] **extract action for local files**: Support `file://` URLs or a new `convert` action for local document conversion via markitdown.
