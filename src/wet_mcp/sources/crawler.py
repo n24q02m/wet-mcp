@@ -436,7 +436,7 @@ async def crawl(
 
             async with sem:
                 try:
-                    crawler = await _get_crawler(stealth=False)
+                    crawler = await _get_crawler(stealth)
                     result = await crawler.arun(  # ty: ignore[missing-argument]
                         url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
