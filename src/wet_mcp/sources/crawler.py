@@ -317,7 +317,6 @@ async def extract(
     """
     logger.info(f"Extracting content from {len(urls)} URLs")
 
-    crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
     # Build CrawlerRunConfig with optional SPA-friendly settings
@@ -346,6 +345,7 @@ async def extract(
                 return await _extract_with_markitdown(url)
 
             try:
+                crawler = await _get_crawler(stealth)
                 result = await crawler.arun(  # ty: ignore[missing-argument]
                     url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                     config=run_config,
@@ -408,7 +408,6 @@ async def crawl(
     all_results = []
     visited: set[str] = set()
 
-    crawler = await _get_crawler(stealth)
     sem = _get_semaphore()
 
     for root_url in urls:
