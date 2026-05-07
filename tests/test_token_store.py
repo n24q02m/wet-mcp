@@ -8,9 +8,14 @@ import pytest
 
 from wet_mcp.token_store import (
     _get_token_dir,
+    _get_token_dir_for_sub,
     get_token_path,
+    get_token_path_for_sub,
     load_token,
+    load_token_for_sub,
+    read_token_for_sub,
     save_token,
+    save_token_for_sub,
 )
 
 
@@ -180,3 +185,39 @@ def test_save_token_unix_permissions(token_dir):
         save_token("drive", {"access_token": "test"})
         # Verify chmod was called (once for dir, once for file)
         assert mock_chmod.call_count == 2
+
+
+def test_get_token_dir_for_sub(token_dir, tmp_path):
+    """Test _get_token_dir_for_sub helper."""
+    expected = tmp_path / "subs" / "user123" / "tokens"
+    assert _get_token_dir_for_sub("user123") == expected
+
+
+def test_get_token_path_for_sub(token_dir, tmp_path):
+    """Test get_token_path_for_sub returns correct provider path within sub dir."""
+    expected = tmp_path / "subs" / "user123" / "tokens" / "drive.json"
+    assert get_token_path_for_sub("user123", "drive") == expected
+
+
+def test_save_and_load_token_for_sub(token_dir):
+    """Test save and load flow for a specific sub."""
+    sub = "user456"
+    token = {"access_token": "sub-secret-789", "token_type": "Bearer"}
+    save_token_for_sub(sub, "drive", token)
+
+    loaded = load_token_for_sub(sub, "drive")
+    assert loaded == token
+
+    # Verify file exists in the right spot
+    path = get_token_path_for_sub(sub, "drive")
+    assert path.exists()
+    assert "subs/user456/tokens/drive.json" in str(path.as_posix())
+
+
+def test_read_token_for_sub_alias(token_dir):
+    """Verify read_token_for_sub is an alias for load_token_for_sub."""
+    sub = "user789"
+    token = {"access_token": "alias-test", "token_type": "Bearer"}
+    save_token_for_sub(sub, "drive", token)
+
+    assert read_token_for_sub(sub, "drive") == token
