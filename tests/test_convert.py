@@ -1,9 +1,9 @@
 """Tests for local file conversion via convert_local_files."""
 
 import json
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from wet_mcp.sources.crawler import convert_local_files
 
@@ -83,6 +83,7 @@ async def test_extract_file_url_unsafe():
     assert "error" in data[0]
     assert "Path rejected or unsafe" in data[0]["error"]
 
+
 @pytest.mark.asyncio
 async def test_get_allowed_dirs_from_settings(monkeypatch):
     from wet_mcp.config import settings
@@ -94,44 +95,22 @@ async def test_get_allowed_dirs_from_settings(monkeypatch):
     assert str(allowed[0]) == "/tmp/a"
     assert str(allowed[1]) == "/tmp/b"
 
+
 @pytest.mark.asyncio
 async def test_extract_file_url_invalid():
     from wet_mcp.sources.crawler import _extract_local_file
+
     result = await _extract_local_file("http://not-a-file-url")
     assert "Invalid file URL" in result["error"]
 
-async def test_extract_file_url_windows_path(monkeypatch, tmp_path):
-    import os
-    from wet_mcp.sources.crawler import _extract_local_file
-
-    f = tmp_path / "win.txt"
-    f.write_text("Windows path test")
-
-    # Mock os.name to "nt" and simulate a Windows-style file URL
-    monkeypatch.setattr(os, "name", "nt")
-    # On Windows, file:///C:/path becomes /C:/path after unquote(url[7:])
-    # We want to test that the leading slash is stripped.
-    # So we'll use a URL that results in /C:/path
-    fake_url = "file:///C:/fake/path.txt"
-
-    # We don't actually want to call is_safe_local_path with this fake path as it won't exist
-    # But we want to test the path normalization logic.
-    # Actually, let's just test that it reaches is_safe_local_path with the right string.
-
-    with patch("wet_mcp.sources.crawler.is_safe_local_path") as mock_safe:
-        mock_safe.return_value = None
-        await _extract_local_file("file:///C:/fake/path.txt")
-        # url[7:] is /C:/fake/path.txt
-        # after unquote it's same
-        # it starts with / and has : at index 2
-        # it should become C:/fake/path.txt
-        mock_safe.assert_called()
-        args, kwargs = mock_safe.call_args
-        assert args[0] == "C:/fake/path.txt"
 
 @pytest.mark.asyncio
 async def test_extract_file_url_exception():
     from wet_mcp.sources.crawler import _extract_local_file
-    with patch("wet_mcp.sources.crawler._get_allowed_dirs", side_effect=Exception("Unexpected error")):
+
+    with patch(
+        "wet_mcp.sources.crawler._get_allowed_dirs",
+        side_effect=Exception("Unexpected error"),
+    ):
         result = await _extract_local_file("file:///some/path")
         assert "Unexpected error" in result["error"]

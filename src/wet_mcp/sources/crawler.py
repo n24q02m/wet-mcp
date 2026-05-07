@@ -436,6 +436,7 @@ async def crawl(
 
             async with sem:
                 try:
+                    crawler = await _get_crawler(stealth=False)
                     result = await crawler.arun(  # ty: ignore[missing-argument]
                         url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
@@ -496,7 +497,6 @@ async def sitemap(
     all_urls: list[dict[str, object]] = []
     visited: set[str] = set()
 
-    crawler = await _get_crawler(stealth=False)
     sem = _get_semaphore()
 
     for root_url in urls:
@@ -526,6 +526,7 @@ async def sitemap(
 
             async with sem:
                 try:
+                    crawler = await _get_crawler(stealth=False)
                     result = await crawler.arun(  # ty: ignore[missing-argument]
                         url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                         config=CrawlerRunConfig(verbose=False),
@@ -569,10 +570,10 @@ async def list_media(
     if not is_safe_url(url):
         return json.dumps({"error": "Security Alert: Unsafe URL blocked"})
 
-    crawler = await _get_crawler(stealth=False)
     sem = _get_semaphore()
 
     async with sem:
+        crawler = await _get_crawler(stealth=False)
         result = await crawler.arun(  # ty: ignore[missing-argument]
             url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
             config=CrawlerRunConfig(verbose=False),
