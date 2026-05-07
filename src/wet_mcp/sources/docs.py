@@ -41,6 +41,20 @@ def _github_headers() -> dict[str, str]:
     return headers
 
 
+def _is_github_url(url: str) -> bool:
+    """Check if a URL is a valid GitHub URL (web or git)."""
+    if not url:
+        return False
+    try:
+        # Handle git@github.com:owner/repo
+        if url.startswith("git@github.com:"):
+            return True
+        parsed = urlparse(url)
+        return parsed.netloc == "github.com" or parsed.netloc.endswith(".github.com")
+    except Exception:
+        return False
+
+
 def _apply_version_to_url(url: str, version: str | None) -> str:
     """Apply version to docs URL if applicable.
 
@@ -137,15 +151,15 @@ async def _discover_from_pypi(name: str) -> dict | None:
             # Fallback: extract GitHub URL from any project_urls value
             # Many PyPI packages list GitHub under "Homepage", "Bug Tracker",
             # "Changelog", etc. without a dedicated "Repository" key.
-            if not repo_url or "github.com" not in repo_url:
+            if not repo_url or not _is_github_url(repo_url):
                 for _key, url_val in project_urls_lower.items():
-                    if url_val and ("github.com" in url_val):  # nosemgrep
+                    if url_val and _is_github_url(url_val):
                         repo_url = url_val
                         break
             # Last resort: check top-level home_page field
-            if not repo_url or "github.com" not in repo_url:
+            if not repo_url or not _is_github_url(repo_url):
                 hp = info.get("home_page") or ""
-                if "github.com" in hp:  # nosemgrep
+                if _is_github_url(hp):
                     repo_url = hp
             return {
                 "name": info.get("name", name),
@@ -252,7 +266,7 @@ async def _discover_from_go(name: str) -> dict | None:
                 description = item.get("description") or ""
                 repo_url = item.get("html_url") or ""
                 # Use homepage if it's a real docs domain (not github.com itself)
-                if homepage and "github.com" not in homepage.lower():
+                if homepage and not _is_github_url(homepage):
                     docs_url = homepage
                 else:
                     docs_url = f"https://pkg.go.dev/github.com/{full_name}"
@@ -424,10 +438,10 @@ async def _discover_from_rubygems(name: str) -> dict | None:
             docs_url = data.get("documentation_uri") or data.get("homepage_uri") or ""
             repo_url = data.get("source_code_uri") or ""
             # Fallback: extract GitHub URL from any URI field
-            if not repo_url or "github.com" not in repo_url:
+            if not repo_url or not _is_github_url(repo_url):
                 for key in ("homepage_uri", "bug_tracker_uri", "changelog_uri"):
                     val = data.get(key) or ""
-                    if "github.com" in val:  # nosemgrep
+                    if _is_github_url(val):
                         repo_url = val
                         break
             return {
@@ -474,7 +488,7 @@ async def _discover_from_nuget(name: str) -> dict | None:
             project_url = latest.get("projectUrl") or ""
             repo_url = ""
             # Extract GitHub repo from project URL if available
-            if project_url and ("github.com" in project_url):  # nosemgrep
+            if project_url and _is_github_url(project_url):
                 repo_url = project_url
             return {
                 "name": latest.get("id", name),
@@ -683,11 +697,7 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
         homepage = item.get("homepage") or ""
         repo_url = item.get("html_url") or ""
         stars = item.get("stargazers_count", 0)
-        docs_url = (
-            homepage
-            if (homepage and "github.com" not in homepage.lower())
-            else repo_url
-        )
+        docs_url = homepage if (homepage and not _is_github_url(homepage)) else repo_url
         logger.info(
             f"GitHub search {match_type} {name} ({language}): "
             f"{repo_url} ({stars} stars)"
@@ -788,7 +798,7 @@ async def _get_github_homepage(url: str) -> str | None:
                 return None
             data = resp.json()
             gh_homepage = data.get("homepage", "")
-            if gh_homepage and "github.com" not in gh_homepage.lower():
+            if gh_homepage and not _is_github_url(gh_homepage):
                 # Filter registry listing pages (uninformative, not docs)
                 gh_lower = gh_homepage.lower()
                 if any(
@@ -1674,11 +1684,11 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
     for i, r in enumerate(valid_results):
         homepage = r.get("homepage") or ""
         repo_url = r.get("repository") or ""
-        hp_is_github = "github.com" in homepage
+        hp_is_github = _is_github_url(homepage)
         # Upgrade when NO homepage at all, OR homepage IS a GitHub URL
         if (not homepage or hp_is_github) and (repo_url or homepage):
-            gh_url = repo_url if "github.com" in repo_url else homepage
-            if "github.com" in gh_url:
+            gh_url = repo_url if _is_github_url(repo_url) else homepage
+            if _is_github_url(gh_url):
                 upgrade_tasks.append(_get_github_homepage(gh_url))
                 upgrade_indices.append(i)
 
@@ -1705,7 +1715,10 @@ async def discover_library(name: str, language: str | None = None) -> dict | Non
             score += 5
             # Non-GitHub homepage = established project with custom domain
             parsed_hp = urlparse(homepage)
-            if parsed_hp.netloc and "github.com" not in parsed_hp.netloc:
+            if parsed_hp.netloc and (
+                parsed_hp.netloc != "github.com"
+                and not parsed_hp.netloc.endswith(".github.com")
+            ):
                 lib_norm = name.lower().replace("-", "")
                 if parsed_hp.netloc in ("docs.rs", "pkg.go.dev"):
                     score += 1  # Auto-generated docs, minimal boost
