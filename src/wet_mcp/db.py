@@ -1077,7 +1077,6 @@ class DocsDB:
         self._conn.commit()
         return stats
 
-
     def close(self) -> None:
         """Close database connection."""
         try:
