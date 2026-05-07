@@ -1215,7 +1215,6 @@ async def help(tool_name: str = "search") -> str:
         return f"Error loading documentation: {e}"
 
 
-
 async def _handle_config_status() -> str:
     from wet_mcp.embedder import get_backend
     from wet_mcp.reranker import get_reranker
@@ -1229,9 +1228,7 @@ async def _handle_config_status() -> str:
             "docs_indexed": (_docs_db.stats() if _docs_db else {}),
         },
         "embedding": {
-            "backend": (
-                type(embed_backend).__name__ if embed_backend else None
-            ),
+            "backend": (type(embed_backend).__name__ if embed_backend else None),
             "dims": _embedding_dims,
             "available": embed_backend is not None,
         },
@@ -1241,11 +1238,7 @@ async def _handle_config_status() -> str:
         },
         "cache": {
             "enabled": settings.wet_cache,
-            "path": (
-                str(settings.get_cache_db_path())
-                if settings.wet_cache
-                else None
-            ),
+            "path": (str(settings.get_cache_db_path()) if settings.wet_cache else None),
         },
         "sync": {
             "enabled": settings.sync_enabled,
