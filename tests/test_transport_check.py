@@ -217,3 +217,11 @@ async def test_extract_action_works_regardless_of_uvx(monkeypatch):
 
         assert "Extracted Content" in result
         mock_extract.assert_called_once()
+
+
+def test_uvx_searxng_blocked_error():
+    """uvx_searxng_blocked_error() formats the message correctly."""
+    result = tc.uvx_searxng_blocked_error("search")
+    assert "Error: action 'search' requires SearXNG" in result
+    assert "stdio uvx mode" in result
+    assert "https://github.com/n24q02m/wet-mcp#setup" in result
