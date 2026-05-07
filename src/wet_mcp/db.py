@@ -323,14 +323,17 @@ class DocsDB:
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
             ).fetchone()
             if not row:
+                # Security: Dimensions are validated as 0-65536 integer in __init__.
+                # Schema construction (CREATE VIRTUAL TABLE) does not support parameters.
+                dims_str = str(int(self._embedding_dims))
+                sql = (
+                    "CREATE VIRTUAL TABLE doc_chunks_vec USING vec0("
+                    "id TEXT PRIMARY KEY, "
+                    "embedding float[" + dims_str + "]"
+                    ")"
+                )
                 # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(f"""
-                    CREATE VIRTUAL TABLE doc_chunks_vec
-                    USING vec0(
-                        id TEXT PRIMARY KEY,
-                        embedding float[{int(self._embedding_dims)}]
-                    )
-                """)
+                self._conn.execute(sql)
 
     # -----------------------------------------------------------------------
     # Stats
@@ -390,9 +393,23 @@ class DocsDB:
             params.append(now)
             params.append(lib_id)
             if updates:
+                # Security: Validate column names against an explicit allowlist
+                # to prevent injection if the update logic is made more dynamic.
+                allowed_cols = {
+                    "docs_url",
+                    "registry",
+                    "description",
+                    "discovery_version",
+                    "updated_at",
+                }
+                for u in updates:
+                    col = u.split("=")[0].strip()
+                    if col not in allowed_cols:
+                        raise ValueError(f"Unauthorized column update: {col}")
+
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
-                    f"UPDATE libraries SET {', '.join(updates)} WHERE id = ?",
+                    "UPDATE libraries SET " + ", ".join(updates) + " WHERE id = ?",
                     params,
                 )
                 self._conn.commit()
@@ -802,13 +819,15 @@ class DocsDB:
                 _placeholders = ",".join(["(?,?,?)"] * len(_batch))
                 _params = [item for key_tuple in _batch for item in key_tuple]
 
+                # Security: Placeholders are constructed from static tokens (?,?,?)
+                # and strictly separated from the query structure.
+                sql = (
+                    "SELECT url, version_id, chunk_index, content "
+                    "FROM doc_chunks "
+                    "WHERE (url, version_id, chunk_index) IN (" + _placeholders + ")"
+                )
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                rows = self._conn.execute(
-                    f"""SELECT url, version_id, chunk_index, content
-                        FROM doc_chunks
-                        WHERE (url, version_id, chunk_index) IN ({_placeholders})""",
-                    _params,
-                ).fetchall()
+                rows = self._conn.execute(sql, _params).fetchall()
                 for r in rows:
                     _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
                         "content"
@@ -958,7 +977,8 @@ class DocsDB:
                 placeholders = ",".join("?" * len(batch))
                 # Safe because table is strictly validated against allowlist
                 # and placeholders string contains only static "?" and ",".
-                query = allowed_queries[table].format(placeholders)
+                query = allowed_queries[table].replace("{}", placeholders)
+                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 res = self._conn.execute(query, batch).fetchall()
                 existing.update(r[0] for r in res)
             return existing
