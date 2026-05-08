@@ -54,17 +54,18 @@ mcp-name: io.github.n24q02m/wet-mcp
 >
 > All plugins share the same architecture (this spec) -- install once, learn pattern transfers.
 
-## Setup
+## Documentation
 
-- **Stdio mode** (default) -- basic search works without env; optional API keys for advanced features. See [setup-manual.md](docs/setup-manual.md).
-- **HTTP mode** (optional, encouraged) -- multi-user, browser-based GDrive OAuth via bundled public client. See [setup-manual.md](docs/setup-manual.md).
+Full docs at **[mcp.n24q02m.com/servers/wet-mcp/](https://mcp.n24q02m.com/servers/wet-mcp/)**:
 
-**With AI Agent** -- copy and send this to your AI agent:
+- [Setup](https://mcp.n24q02m.com/servers/wet-mcp/setup/) -- install methods for Claude Code, Codex, Gemini CLI, Cursor, Windsurf, mcp.json
+- [Modes overview](https://mcp.n24q02m.com/get-started/modes-overview/) -- stdio / local-relay / remote-relay / remote-oauth
+- [Multi-user setup](https://mcp.n24q02m.com/get-started/multi-user/) -- per-JWT-sub credential model
 
-> Please set up wet-mcp for me. Follow this guide:
-> https://raw.githubusercontent.com/n24q02m/wet-mcp/main/docs/setup-with-agent.md
+**Install with AI agent** -- paste this to your AI coding agent:
 
-**Manual Setup** -- follow [docs/setup-manual.md](docs/setup-manual.md)
+> Install MCP server `wet-mcp` following the steps at
+> https://raw.githubusercontent.com/n24q02m/claude-plugins/main/plugins/wet-mcp/setup-with-agent.md
 
 ## Tools
 
