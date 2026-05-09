@@ -1,4 +1,5 @@
 import asyncio
+import os
 import signal
 import subprocess
 import sys
@@ -121,8 +122,11 @@ def test_read_discovery(tmp_path):
         mock_file.write_text("invalid")
         assert _read_discovery() is None
 
-        # Valid JSON
+        # Valid JSON — web-core v2.x rejects discovery files without 0o600 mode
+        # on POSIX (defence-in-depth against world-readable PID files).
         mock_file.write_text('{"pid": 1234, "port": 8080}')
+        if sys.platform != "win32":
+            os.chmod(mock_file, 0o600)
         assert _read_discovery() == {"pid": 1234, "port": 8080}
 
 
@@ -715,7 +719,10 @@ def test_cleanup_process_not_owner():
 def test_get_process_kwargs_unix():
     with patch("sys.platform", "linux"):
         kwargs = _get_process_kwargs()
-        assert "preexec_fn" in kwargs
+        # web-core v2.x switched from preexec_fn to start_new_session=True
+        # for process group management (modern Python convention).
+        assert kwargs.get("start_new_session") is True
+        assert "preexec_fn" not in kwargs
 
 
 def test_get_process_kwargs_win32():
