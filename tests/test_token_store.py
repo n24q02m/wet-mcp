@@ -8,9 +8,14 @@ import pytest
 
 from wet_mcp.token_store import (
     _get_token_dir,
+    _get_token_dir_for_sub,
     get_token_path,
+    get_token_path_for_sub,
     load_token,
+    load_token_for_sub,
+    read_token_for_sub,
     save_token,
+    save_token_for_sub,
 )
 
 
@@ -180,3 +185,65 @@ def test_save_token_unix_permissions(token_dir):
         save_token("drive", {"access_token": "test"})
         # Verify chmod was called (once for dir, once for file)
         assert mock_chmod.call_count == 2
+
+
+def test_get_token_dir_for_sub(token_dir, tmp_path):
+    """Test _get_token_dir_for_sub helper."""
+    assert _get_token_dir_for_sub("user1") == tmp_path / "subs" / "user1" / "tokens"
+
+
+def test_get_token_path_for_sub(token_dir, tmp_path):
+    """Test get_token_path_for_sub returns correct scoped path."""
+    expected = tmp_path / "subs" / "user1" / "tokens" / "drive.json"
+    assert get_token_path_for_sub("user1", "drive") == expected
+
+
+def test_save_and_load_token_for_sub(token_dir):
+    """Test standard save and load flow for per-sub tokens."""
+    sub = "user123"
+    token = {"access_token": "sub-token-456", "token_type": "Bearer"}
+
+    save_token_for_sub(sub, "drive", token)
+    loaded = load_token_for_sub(sub, "drive")
+
+    assert loaded == token
+
+
+def test_load_token_for_sub_missing(token_dir):
+    """load_token_for_sub returns None if file doesn't exist."""
+    assert load_token_for_sub("no-user", "drive") is None
+
+
+def test_load_token_for_sub_invalid_format(token_dir, tmp_path):
+    """load_token_for_sub returns None for malformed JSON or invalid format."""
+    sub = "user1"
+    path = get_token_path_for_sub(sub, "drive")
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Malformed JSON
+    path.write_text("not json", encoding="utf-8")
+    assert load_token_for_sub(sub, "drive") is None
+
+    # Missing access_token
+    path.write_text(json.dumps({"foo": "bar"}), encoding="utf-8")
+    assert load_token_for_sub(sub, "drive") is None
+
+
+def test_read_token_for_sub_alias():
+    """Verify read_token_for_sub is an alias for load_token_for_sub."""
+    assert read_token_for_sub is load_token_for_sub
+
+
+def test_load_token_for_sub_non_dict(token_dir, tmp_path):
+    """load_token_for_sub returns None if JSON is not a dictionary."""
+    sub = "user1"
+    path = get_token_path_for_sub(sub, "drive")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+    assert load_token_for_sub(sub, "drive") is None
+
+
+def test_load_token_for_sub_oserror(token_dir):
+    """load_token_for_sub handles OSError during read."""
+    with patch.object(Path, "exists", side_effect=OSError("disk error")):
+        assert load_token_for_sub("user1", "drive") is None
