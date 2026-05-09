@@ -1789,7 +1789,7 @@ dev = [
 
 [[package]]
 name = "n24q02m-web-core"
-version = "2.0.0"
+version = "2.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
@@ -1803,9 +1803,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7d/44/65967054dd4cdbcfd0b9825d4d0674fb8a3f8ce3297d0ca28f38b8712e4a/n24q02m_web_core-2.0.0.tar.gz", hash = "sha256:fea30ecc6d7a71a6ff02ece6ea25c5beec27a502e7241e1817e6b6b7348d8382", size = 218939, upload-time = "2026-05-09T08:44:00.285Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1b/06/67583d81ceb029debc928ce8dcffc50db5f3aca64e36a2d6fa68b8aa2dc4/n24q02m_web_core-2.0.1.tar.gz", hash = "sha256:0e8e4aa2e8d4bf44ac060243e822d56c9e541c1324c148928dfa0b3d7f6cdd48", size = 218985, upload-time = "2026-05-09T09:02:51.106Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ce/fb/4956af1df870a3c2da2d44e22259c81a587c24f4197ac6ddb4a7dcce2513/n24q02m_web_core-2.0.0-py3-none-any.whl", hash = "sha256:378d06e96f7fcb3ea05c4b4aa93cc2fced70dd7e13e07ed95d5b82062d3ae95a", size = 59290, upload-time = "2026-05-09T08:43:58.699Z" },
+    { url = "https://files.pythonhosted.org/packages/55/c1/bda1a831ab3a43f68cc386ea0076673ddfe3aba37b71ad596f13fdec508f/n24q02m_web_core-2.0.1-py3-none-any.whl", hash = "sha256:06e2b2c82bafc29bceb043fd1643d68623709ca8d3c8333934408015f160e8aa", size = 59283, upload-time = "2026-05-09T09:02:51.992Z" },
 ]
 
 [[package]]
@@ -3448,10 +3448,10 @@ requires-dist = [
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
     { name = "n24q02m-mcp-core", editable = "../mcp-core/packages/core-py" },
-    { name = "n24q02m-web-core", specifier = ">=2.0.0" },
+    { name = "n24q02m-web-core", specifier = ">=2.0.1" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "pillow", specifier = ">=12.2.0" },
-    { name = "pydantic" },
+    { name = "pydantic", specifier = ">=2.12.5,<2.13" },
     { name = "pydantic-settings" },
     { name = "qwen3-embed", specifier = ">=1.9.0" },
     { name = "sqlite-vec" },
