@@ -2044,6 +2044,11 @@ async def test_do_docs_search_fallback_exception():
             "wet_mcp.server._background_index_and_search",
             new_callable=AsyncMock,
         ),
+        patch(
+            "wet_mcp.server._do_immediate_fallback_search",
+            new_callable=AsyncMock,
+            return_value={"results": []},
+        ),
     ):
         res = await server._do_docs_search("testlib", "query")
         data = json.loads(res)
