@@ -2,7 +2,13 @@
 
 mcp-name: io.github.n24q02m/wet-mcp
 
-**Open-source MCP Server for web search, content extraction, library docs & multimodal analysis.**
+**5-strategy web search + extract + media MCP server, web-core ScrapingAgent backend.**
+
+| Phase | Status | Scope |
+|---|---|---|
+| Phase 1 | **Current (v1.x.y)** | web-core ScrapingAgent migration, smart chunks output, search polish, media slim |
+| Phase 2 | Planned | Context7-level docs search (library index, version-aware queries, project context isolation) |
+| Phase 3 | Planned (BREAKING) | `extract.agent` multi-step research, `extract.interact` click/fill/submit, `media.analyze` removal |
 
 <!-- Badge Row 1: Status -->
 [![CI](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml)
@@ -46,8 +52,10 @@ mcp-name: io.github.n24q02m/wet-mcp
 
 - [Features](#features)
 - [Status](#status)
+- [Quick install](#quick-install)
 - [Documentation](#documentation)
 - [Tools](#tools)
+- [Comparison](#comparison)
 - [Security](#security)
 - [Build from Source](#build-from-source)
 - [Trust Model](#trust-model)
@@ -61,15 +69,35 @@ mcp-name: io.github.n24q02m/wet-mcp
 
 ## Features
 
-- **Web Search** -- Embedded SearXNG metasearch (Google, Bing, DuckDuckGo, Brave) with filters, semantic reranking, query expansion, and snippet enrichment
+- **Web Search** -- Embedded SearXNG metasearch (Google, Bing, DuckDuckGo, Brave) with query expansion, TTL cache (1 h general / 5 min time-sensitive), standardized citation format, and 200-token snippet cap
 - **Academic Research** -- Search Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
 - **Library Docs** -- Auto-discover and index documentation with FTS5 hybrid search, HyDE-enhanced retrieval, and version-specific docs
-- **Content Extract** -- Clean content extraction (Markdown/Text), structured data extraction (LLM + JSON Schema), batch processing (up to 50 URLs), deep crawling, site mapping
+- **Content Extract** -- 5-strategy escalation chain via `n24q02m-web-core` `ScrapingAgent` (`basic_http` -> `tls_spoof` -> `headless` Crawl4AI), markitdown bridge for low-tier HTML/MD fallback, smart chunks structured output (clean text + markdown + JSON-LD + code blocks + metadata), batch processing (up to 50 URLs), deep crawling, site mapping
 - **Local File Conversion** -- Convert PDF, DOCX, XLSX, CSV, HTML, EPUB, PPTX to Markdown
-- **Media** -- List, download, and analyze images, videos, audio files
-- **Anti-bot** -- Stealth mode bypasses Cloudflare, Medium, LinkedIn, Twitter
-- **Zero Config** -- Built-in local Qwen3 embedding + reranking, no API keys needed. Optional cloud providers (Jina AI, Gemini, OpenAI, Cohere)
+- **Media** -- List + download images / videos / audio files. `analyze` deprecated v&lt;auto&gt;+ -- use `imagine-mcp.understand` for vision/audio inference
+- **Anti-bot** -- Stealth strategies bypass Cloudflare, Medium, LinkedIn, Twitter
+- **Zero Config** -- Built-in local Qwen3 embedding + reranking, no API keys needed. Optional cloud providers (Jina AI, Gemini, OpenAI, Cohere) for higher-quality vectors
 - **Sync** -- Cross-machine sync of indexed docs via Google Drive (OAuth Device Code, no browser redirect)
+
+## Quick install
+
+```bash
+# Method 1 (default): plugin install via Claude Code
+/plugin marketplace add n24q02m/claude-plugins
+/plugin install wet-mcp@n24q02m-plugins
+
+# Method 1 (CLI): direct uvx invocation
+claude mcp add wet -- uvx wet-mcp
+
+# Method 3 (recommended for HTTP / multi-device / OAuth)
+docker run -d --name wet-mcp-http -p 8084:8084 \
+  -v wet-data:/data -e MCP_TRANSPORT=http \
+  -e PUBLIC_URL=https://wet.example.com \
+  n24q02m/wet-mcp:latest
+```
+
+Full setup matrices for each install method live in `docs/setup-manual.md`
+and `docs/setup-with-agent.md`.
 
 ## Status
 
@@ -99,6 +127,13 @@ Full docs at **[mcp.n24q02m.com/servers/wet-mcp/](https://mcp.n24q02m.com/server
 - [Modes overview](https://mcp.n24q02m.com/get-started/modes-overview/) -- stdio / local-relay / remote-relay / remote-oauth
 - [Multi-user setup](https://mcp.n24q02m.com/get-started/multi-user/) -- per-JWT-sub credential model
 
+In-repo references:
+
+- [`docs/setup-manual.md`](docs/setup-manual.md) -- detailed manual setup walkthrough (3 install methods, env vars, troubleshooting)
+- [`docs/setup-with-agent.md`](docs/setup-with-agent.md) -- paste-to-agent install snippets (Claude Code / Codex CLI / Cursor / Antigravity)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) -- web-core ScrapingAgent integration, strategy chain, storage layout, LLM provider dispatch
+- [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) -- v1.x baseline coverage / latency placeholders + tier-1 fixture metrics
+
 **Install with AI agent** -- paste this to your AI coding agent:
 
 > Install MCP server `wet-mcp` following the steps at
@@ -106,14 +141,36 @@ Full docs at **[mcp.n24q02m.com/servers/wet-mcp/](https://mcp.n24q02m.com/server
 
 ## Tools
 
-| Tool | Actions | Description |
-|:-----|:--------|:------------|
-| `search` | `search`, `research`, `docs`, `similar` | Web search (with filters, reranking, expand/enrich), academic research, library docs (HyDE), find similar |
-| `extract` | `extract`, `batch`, `crawl`, `map`, `convert`, `extract_structured` | Content extraction, batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion, structured data extraction (JSON Schema) |
-| `media` | `list`, `download`, `analyze` | Media discovery, download, and analysis |
-| `config` | `status`, `set`, `cache_clear`, `docs_reindex` | Server configuration and cache management |
-| `setup` | `open_relay`, `status`, `skip`, `reset`, `complete`, `warmup`, `setup_sync` | Credential setup (browser relay, local-only mode, reset), status check, model warmup, Google Drive sync |
-| `help` | -- | Full documentation for any tool |
+5 MCP tools (3 domain + `config` + `help`). The legacy `setup` tool merged
+into `config` action dispatch.
+
+| Tool | Description |
+|:-----|:------------|
+| `search` | Web (SearXNG metasearch), news, images, academic research (Scholar / arXiv / PubMed / CrossRef / Semantic Scholar / BASE), library docs (HyDE + FTS5), find similar pages |
+| `extract` | URL -> smart chunks dict (`clean_text` + `markdown` + `structured_data` + `code_blocks` + `metadata`) via web-core 5-strategy chain. Batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion (PDF/DOCX/XLSX/PPTX/EPUB), structured extraction (JSON Schema) |
+| `media` | `list` (discover URLs from gallery pages), `download` (SSRF-safe). `analyze` deprecated v&lt;auto&gt;+ -- forwards to `imagine-mcp.understand` |
+| `config` | `status`, `set`, `cache_clear`, `docs_reindex`, `warmup`, `setup_open_relay`, `setup_status`, `setup_skip`, `setup_reset`, `setup_complete`, `setup_sync` |
+| `help` | Per-tool documentation: `search`, `extract`, `media`, `config` |
+
+> **Media boundary**: For vision / audio understanding (image captioning,
+> OCR, audio transcription, video summarization), use
+> [imagine-mcp](https://github.com/n24q02m/imagine-mcp). `media.analyze`
+> in wet has been deprecated since v&lt;auto&gt; and will be removed in
+> wet v2.0.0 (Phase 3).
+
+## Comparison
+
+How wet-mcp stacks up against direct competitors in each pillar:
+
+| Capability | wet-mcp | Brave Search | Tavily | Firecrawl | Context7 |
+|---|---|---|---|---|---|
+| Web search | Yes (SearXNG aggregation) | Yes | Yes | No | No |
+| Extract URL | Yes (5-strategy chain) | No | Yes (basic) | Yes | No |
+| Media list / download | Yes | No | No | No | No |
+| Library docs search | Phase 2 | No | No | No | Yes |
+| Academic research | Yes (6 providers) | No | No | No | No |
+| Self-hostable | Yes | No | No | No | Yes |
+| Free tier | Yes (open source) | Limited | Limited | Limited | Yes |
 
 ## Security
 
