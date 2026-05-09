@@ -17,6 +17,13 @@ Get clean content from one or more URLs.
 {"action": "extract", "urls": ["https://example.com/article"]}
 ```
 
+> **Smart chunks output:** Phase 1 Task 4 will introduce a structured
+> `{clean_text, markdown, structured_data, code_blocks, metadata}`
+> response shape (powered by web-core's `ScrapingAgent` 5-strategy
+> chain). Until that lands, `extract` returns the legacy single-string
+> body in the requested `format`. Schema and examples will be added
+> here once Task 4 ships.
+
 ---
 
 ### crawl
