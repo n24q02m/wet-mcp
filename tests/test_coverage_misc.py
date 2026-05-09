@@ -964,24 +964,27 @@ class TestCrawlSkipsVisitedAndDepth:
 
 
 class TestExtractErrorPath:
-    """Cover line 579: error in extract process_url."""
+    """Cover the error branch in extract.process_url after ScrapingAgent migration."""
 
     async def test_extract_crawl_error(self):
         from wet_mcp.sources.crawler import extract
 
-        mock_crawler = AsyncMock()
-        mock_crawler.arun = AsyncMock(side_effect=RuntimeError("browser crash"))
+        agent = MagicMock()
+        agent.scrape = AsyncMock(side_effect=RuntimeError("browser crash"))
+        agent.strategy_cache = MagicMock()
+        agent.strategy_cache.recommend = AsyncMock(return_value=["basic_http"])
 
         with patch(
-            "wet_mcp.sources.crawler._get_crawler",
+            "wet_mcp.sources.crawler._get_scraping_agent",
             new_callable=AsyncMock,
-            return_value=mock_crawler,
+            return_value=agent,
         ):
             result_json = await extract(urls=["https://example.com"])
 
         results = json.loads(result_json)
         assert len(results) == 1
         assert "error" in results[0]
+        assert "browser crash" in results[0]["error"]
 
 
 # -----------------------------------------------------------------------

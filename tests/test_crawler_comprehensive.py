@@ -52,10 +52,27 @@ def reset_crawler_state():
     crawler._browser_semaphore = None
 
 
+def _fake_scraping_agent(scrape_return=None, scrape_side_effect=None):
+    """Build a fake ScrapingAgent stand-in for extract() tests."""
+    agent = MagicMock()
+    if scrape_side_effect is not None:
+        agent.scrape = AsyncMock(side_effect=scrape_side_effect)
+    else:
+        agent.scrape = AsyncMock(return_value=scrape_return or "")
+    agent.strategy_cache = MagicMock()
+    agent.strategy_cache.recommend = AsyncMock(return_value=["basic_http"])
+    return agent
+
+
 @pytest.mark.asyncio
 async def test_extract_success():
+    agent = _fake_scraping_agent(scrape_return="# Test Title\n\nmd content")
     with (
-        patch("wet_mcp.sources.crawler.AsyncWebCrawler", new=MockAsyncWebCrawler),
+        patch(
+            "wet_mcp.sources.crawler._get_scraping_agent",
+            new_callable=AsyncMock,
+            return_value=agent,
+        ),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.extract(
@@ -70,60 +87,74 @@ async def test_extract_success():
         data = json.loads(result_json)
         assert len(data) == 1
         assert data[0]["url"] == "https://safe.com"
-        assert data[0]["content"] == "md content"
-        assert data[0]["title"] == "Test Title"
+        assert "md content" in data[0]["clean_text"]
+        assert data[0]["metadata"]["title"] == "Test Title"
 
 
 @pytest.mark.asyncio
 async def test_extract_html_format():
+    html_payload = "<!doctype html><html><body>content</body></html>"
+    agent = _fake_scraping_agent(scrape_return=html_payload)
     with (
-        patch("wet_mcp.sources.crawler.AsyncWebCrawler", new=MockAsyncWebCrawler),
+        patch(
+            "wet_mcp.sources.crawler._get_scraping_agent",
+            new_callable=AsyncMock,
+            return_value=agent,
+        ),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.extract(["https://safe.com"], format="html")
         data = json.loads(result_json)
-        assert data[0]["content"] == "<html>content</html>"
+        assert "content" in data[0]["clean_text"]
+        assert data[0]["metadata"]["source_format"] == "html"
 
 
 @pytest.mark.asyncio
 async def test_extract_unsafe_url():
-    with patch("wet_mcp.sources.crawler.is_safe_url", return_value=False):
-        with patch("wet_mcp.sources.crawler._get_crawler", new_callable=AsyncMock):
-            result_json = await crawler.extract(["http://unsafe.com"])
+    agent = _fake_scraping_agent(scrape_return="should not run")
+    with (
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=False),
+        patch(
+            "wet_mcp.sources.crawler._get_scraping_agent",
+            new_callable=AsyncMock,
+            return_value=agent,
+        ),
+    ):
+        result_json = await crawler.extract(["http://unsafe.com"])
         data = json.loads(result_json)
         assert data[0]["error"] == "Security Alert: Unsafe URL blocked"
 
 
 @pytest.mark.asyncio
 async def test_extract_crawler_failure():
-    mock_crawler = MockAsyncWebCrawler()
-    mock_crawler.arun.return_value = MockCrawlerResult(
-        success=False, error_message="Crawling failed"
-    )
-
+    agent = _fake_scraping_agent(scrape_side_effect=RuntimeError("Crawling failed"))
     with (
-        patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
-        patch("playwright.async_api.async_playwright"),
+        patch(
+            "wet_mcp.sources.crawler._get_scraping_agent",
+            new_callable=AsyncMock,
+            return_value=agent,
+        ),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.extract(["https://safe.com"])
         data = json.loads(result_json)
-        assert data[0]["error"] == "Crawling failed"
+        assert "Crawling failed" in data[0]["error"]
 
 
 @pytest.mark.asyncio
 async def test_extract_crawler_exception():
-    mock_crawler = MockAsyncWebCrawler()
-    mock_crawler.arun.side_effect = Exception("Unexpected error")
-
+    agent = _fake_scraping_agent(scrape_side_effect=Exception("Unexpected error"))
     with (
-        patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler),
-        patch("playwright.async_api.async_playwright"),
+        patch(
+            "wet_mcp.sources.crawler._get_scraping_agent",
+            new_callable=AsyncMock,
+            return_value=agent,
+        ),
         patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
     ):
         result_json = await crawler.extract(["https://safe.com"])
         data = json.loads(result_json)
-        assert data[0]["error"] == "Unexpected error"
+        assert "Unexpected error" in data[0]["error"]
 
 
 @pytest.mark.asyncio

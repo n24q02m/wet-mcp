@@ -1,11 +1,18 @@
-"""Crawl4AI integration for web crawling and extraction.
+"""Crawl + extract integration.
 
-Uses a singleton browser pool to reuse a single browser instance across
-requests instead of starting/stopping the browser on every call.  This
-dramatically improves reliability and performance.
+The ``extract`` action now delegates to ``web_core.scraper.ScrapingAgent``
+(5-strategy chain: ``basic_http`` → ``tls_spoof`` → ``api_direct`` →
+``headless`` → ``patchright``, plus optional ``captcha``). Phase 1 spec
+§4.2/§5.5: drop direct Crawl4AI usage from the extract path; consume
+web-core primitives so escalation, robots.txt + selector-inference are
+shared with sibling consumers.
 
-Concurrency is bounded by a semaphore so that parallel tool calls do not
-overwhelm the browser or exhaust system memory.
+The ``crawl``, ``sitemap``, ``list_media`` paths still rely on the legacy
+Crawl4AI singleton browser pool for now (Phase 1 keeps wet-local media;
+crawl + sitemap migration is out of scope for v1.x.y per spec §5.7
+contribute-back roadmap). Crawl4AI is reached via ``web_core``'s
+transitive dependency, so we no longer require a direct
+``crawl4ai`` entry in ``pyproject.toml``.
 """
 
 import asyncio
@@ -15,15 +22,23 @@ import os
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig
 from loguru import logger
+from web_core.scraper import ScrapingAgent
+from web_core.scraper.strategies import (
+    BasicHTTPStrategy,
+    HeadlessStrategy,
+    TLSSpoofStrategy,
+)
 
 from wet_mcp.config import settings
 from wet_mcp.security import is_safe_url
 from wet_mcp.security import safe_httpx_client as _safe_httpx_client
+from wet_mcp.sources._smart_chunks import smart_chunks
 
 # Document extensions that markitdown handles better than Crawl4AI
 _DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".pptx", ".xlsx", ".doc", ".ppt", ".xls"}
@@ -168,7 +183,7 @@ async def _get_crawler(stealth: bool = False) -> AsyncWebCrawler:
 
 async def shutdown_crawler() -> None:
     """Shut down the shared browser (called during server shutdown)."""
-    global _crawler_instance, _browser_semaphore
+    global _crawler_instance, _browser_semaphore, _scraping_agent
 
     async with _pool_lock:
         if _crawler_instance is not None:
@@ -180,6 +195,45 @@ async def shutdown_crawler() -> None:
             _crawler_instance = None
             logger.info("Shared browser shut down")
         _browser_semaphore = None
+        _scraping_agent = None
+
+
+# ---------------------------------------------------------------------------
+# ScrapingAgent (web-core) singleton — used by extract()
+# ---------------------------------------------------------------------------
+
+_scraping_agent: ScrapingAgent | None = None
+_agent_lock = asyncio.Lock()
+
+
+def _build_scraping_agent(stealth: bool = True) -> ScrapingAgent:
+    """Build a ScrapingAgent with the canonical wet strategy chain.
+
+    Order matches spec §4.2 escalation: ``basic_http`` → ``tls_spoof`` →
+    ``headless``. ``api_direct``/``patchright``/``captcha`` are intentionally
+    omitted from the default chain (api_direct rarely beats basic_http on
+    arbitrary URLs; patchright + captcha pull in heavier optional deps and
+    are reserved for Phase 3 ``interact`` work).
+
+    ``respect_robots`` stays False to preserve wet's historical behaviour;
+    callers wanting robots compliance can override via env in a follow-up.
+    """
+    strategies: dict[str, Any] = {
+        "basic_http": BasicHTTPStrategy(timeout=settings.crawler_timeout),
+        "tls_spoof": TLSSpoofStrategy(timeout=settings.crawler_timeout),
+        "headless": HeadlessStrategy(timeout=settings.crawler_timeout, stealth=stealth),
+    }
+    return ScrapingAgent(strategies=strategies, respect_robots=False)
+
+
+async def _get_scraping_agent(stealth: bool = True) -> ScrapingAgent:
+    """Return a process-wide ScrapingAgent, building one on first use."""
+    global _scraping_agent
+    async with _agent_lock:
+        if _scraping_agent is None:
+            logger.info("Initialising web-core ScrapingAgent")
+            _scraping_agent = _build_scraping_agent(stealth=stealth)
+        return _scraping_agent
 
 
 # ---------------------------------------------------------------------------
@@ -255,77 +309,69 @@ async def extract(
     delay_before_return_html: float = 0.0,
     page_timeout: int = 60000,
 ) -> str:
-    """Extract content from URLs.
+    """Extract content from URLs via web-core ``ScrapingAgent``.
+
+    The agent walks a 3-strategy chain (``basic_http`` → ``tls_spoof`` →
+    ``headless``) with cache-recommended ordering and LLM selector
+    inference fallback. Output is post-processed into smart-chunks dicts
+    (``clean_text`` / ``markdown`` / ``structured_data`` / ``code_blocks``
+    / ``metadata``) per spec §4.2.
 
     Args:
-        urls: List of URLs to extract
-        format: Output format (markdown, text, html)
-        stealth: Enable stealth mode
-        scan_full_page: Auto-scroll to trigger lazy-loaded content
-        delay_before_return_html: Seconds to wait after page load before capture
-        page_timeout: Page loading timeout in milliseconds
+        urls: List of URLs to extract.
+        format: Reserved for future use (smart-chunks always emit both
+            markdown and clean_text). Accepted for backward compat.
+        stealth: Forwarded to the headless strategy when the agent is
+            built; ignored for already-instantiated agents.
+        scan_full_page: Reserved (no-op under ScrapingAgent — escalation
+            now relies on strategy chain rather than scroll injection).
+        delay_before_return_html: Reserved (no-op).
+        page_timeout: Reserved (no-op; per-strategy timeouts apply).
 
     Returns:
-        JSON string with extracted content
+        JSON string of smart-chunks dicts (one per URL). Failed URLs
+        produce ``{"url": ..., "error": "..."}`` entries.
     """
-    logger.info(f"Extracting content from {len(urls)} URLs")
+    del format, scan_full_page, delay_before_return_html, page_timeout  # reserved
 
-    crawler = await _get_crawler(stealth)
+    logger.info(f"Extracting content from {len(urls)} URLs via ScrapingAgent")
+
+    agent = await _get_scraping_agent(stealth=stealth)
     sem = _get_semaphore()
 
-    # Build CrawlerRunConfig with optional SPA-friendly settings
-    run_config_kwargs: dict = {"verbose": False}
-    if scan_full_page:
-        run_config_kwargs["scan_full_page"] = True
-        run_config_kwargs["scroll_delay"] = 0.3
-    if delay_before_return_html > 0:
-        run_config_kwargs["delay_before_return_html"] = delay_before_return_html
-    if page_timeout != 60000:
-        run_config_kwargs["page_timeout"] = page_timeout
-    run_config = CrawlerRunConfig(**run_config_kwargs)
-
-    async def process_url(url: str):
+    async def process_url(url: str) -> dict[str, Any]:
         async with sem:
             if not is_safe_url(url):
                 logger.warning(f"Skipping unsafe URL: {url}")
                 return {"url": url, "error": "Security Alert: Unsafe URL blocked"}
 
-            # Route document URLs (PDF, DOCX, etc.) through markitdown
             if _is_document_url(url):
                 logger.info(f"Document URL detected, using markitdown: {url}")
                 return await _extract_with_markitdown(url)
 
             try:
-                result = await crawler.arun(  # ty: ignore[missing-argument]
-                    url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
-                    config=run_config,
-                )
-
-                if result.success:
-                    content = (
-                        result.markdown if format == "markdown" else result.cleaned_html
-                    )
-                    return {
-                        "url": url,
-                        "title": result.metadata.get("title", ""),
-                        "content": content,
-                        "links": {
-                            "internal": result.links.get("internal", [])[:20],
-                            "external": result.links.get("external", [])[:20],
-                        },
-                    }
-                else:
-                    return {
-                        "url": url,
-                        "error": result.error_message or "Failed to extract",
-                    }
-
+                t0 = asyncio.get_event_loop().time()
+                content = await agent.scrape(url)
+                latency_ms = (asyncio.get_event_loop().time() - t0) * 1000.0
             except Exception as e:
                 logger.error(f"Error extracting {url}: {e}")
-                return {
-                    "url": url,
-                    "error": str(e),
-                }
+                return {"url": url, "error": str(e)}
+
+            strategy_used = ""
+            try:
+                cache_recs = await agent.strategy_cache.recommend(url)
+                if cache_recs:
+                    strategy_used = cache_recs[0]
+            except Exception:
+                pass
+
+            chunks = smart_chunks(
+                content,
+                url=url,
+                strategy_used=strategy_used,
+                latency_ms=latency_ms,
+            )
+            return {"url": url, **chunks}
 
     tasks = [process_url(url) for url in urls]
     results = await asyncio.gather(*tasks)

@@ -5,24 +5,47 @@ Extract content from web pages, crawl sites, or map site structure.
 ## Actions
 
 ### extract
-Get clean content from one or more URLs.
+Get clean content from one or more URLs. Powered by web-core's `ScrapingAgent`
+escalation chain (`basic_http` -> `tls_spoof` -> `headless`) with cache-recommended
+ordering and LLM selector inference fallback.
 
 **Parameters:**
 - `urls` (required): List of URLs to extract
-- `format`: Output format - markdown, text, html (default: markdown)
-- `stealth`: Enable stealth mode to bypass anti-bot (default: true)
+- `format`: Reserved for backward compat (smart chunks always emit both `markdown` and `clean_text`)
+- `stealth`: Forwarded to the headless strategy when the agent is built (default: true)
 
 **Example:**
 ```json
 {"action": "extract", "urls": ["https://example.com/article"]}
 ```
 
-> **Smart chunks output:** Phase 1 Task 4 will introduce a structured
-> `{clean_text, markdown, structured_data, code_blocks, metadata}`
-> response shape (powered by web-core's `ScrapingAgent` 5-strategy
-> chain). Until that lands, `extract` returns the legacy single-string
-> body in the requested `format`. Schema and examples will be added
-> here once Task 4 ships.
+**Smart chunks output (per URL):**
+
+```json
+{
+  "url": "https://example.com/article",
+  "clean_text": "Article body without HTML tags or markdown decorators",
+  "markdown": "# Title\n\nBody...",
+  "structured_data": [{"@type": "Article", "headline": "..."}],
+  "code_blocks": [{"lang": "python", "code": "x = 1"}],
+  "metadata": {
+    "title": "Page title (HTML <title> or first H1)",
+    "url": "https://example.com/article",
+    "scrape_strategy_used": "basic_http",
+    "latency_ms": 412.0,
+    "content_length": 14523,
+    "source_format": "html",
+    "headings": [{"level": "1", "text": "Title"}, {"level": "2", "text": "Sub"}]
+  }
+}
+```
+
+`structured_data` contains all `<script type="application/ld+json">` blobs (JSON-LD).
+`code_blocks` lists every fenced code block in the markdown rendition with detected
+language hint (`plain` when none).
+
+PDF/DOCX/PPTX/XLSX URLs bypass the agent and use the markitdown bridge directly,
+returning the legacy `{url, title, content, converter}` shape.
 
 ---
 

@@ -119,7 +119,7 @@ async def test_extract_document_via_process_url(mock_crawler_instance):
 
 
 @pytest.mark.asyncio
-async def test_extract_mixed_urls(mock_crawler_instance):
+async def test_extract_mixed_urls():
     """Test extract() with a mix of web and document URLs."""
     doc_url = "https://example.com/doc.pdf"
     web_url = "https://example.com/page"
@@ -130,25 +130,23 @@ async def test_extract_mixed_urls(mock_crawler_instance):
         "converter": "markitdown",
     }
 
-    mock_web_result = MagicMock()
-    mock_web_result.success = True
-    mock_web_result.markdown = "Web content"
-    mock_web_result.metadata = {"title": "Web Title"}
-    mock_web_result.links = {"internal": [], "external": []}
-
-    mock_crawler_instance.arun = AsyncMock(return_value=mock_web_result)
+    fake_agent = MagicMock()
+    fake_agent.scrape = AsyncMock(return_value="# Web Title\n\nWeb content")
+    fake_agent.strategy_cache = MagicMock()
+    fake_agent.strategy_cache.recommend = AsyncMock(return_value=["basic_http"])
 
     with (
         patch(
             "wet_mcp.sources.crawler._extract_with_markitdown", new_callable=AsyncMock
         ) as mock_md,
         patch(
-            "wet_mcp.sources.crawler._get_crawler", return_value=mock_crawler_instance
+            "wet_mcp.sources.crawler._get_scraping_agent",
+            new_callable=AsyncMock,
+            return_value=fake_agent,
         ),
     ):
         mock_md.return_value = mock_doc_result
 
-        # We don't need to patch _is_document_url if it works correctly
         result_json = await extract([doc_url, web_url])
         results = json.loads(result_json)
 
@@ -157,5 +155,8 @@ async def test_extract_mixed_urls(mock_crawler_instance):
         doc_res = next(r for r in results if r["url"] == doc_url)
         web_res = next(r for r in results if r["url"] == web_url)
 
+        # Document path keeps legacy markitdown shape (with raw "content" key)
         assert doc_res["content"] == "PDF content"
-        assert web_res["content"] == "Web content"
+        # Web path now uses smart-chunks shape (markdown + clean_text)
+        assert "Web content" in web_res["clean_text"]
+        assert web_res["metadata"]["title"] == "Web Title"
