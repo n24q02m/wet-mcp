@@ -1171,6 +1171,204 @@ async def help(tool_name: str = "search") -> str:
         return f"Error loading documentation: {e}"
 
 
+async def _handle_config_status() -> str:
+    from wet_mcp.embedder import get_backend
+    from wet_mcp.reranker import get_reranker
+
+    embed_backend = get_backend()
+    reranker = get_reranker()
+
+    status = {
+        "database": {
+            "path": str(settings.get_db_path()),
+            "docs_indexed": (_docs_db.stats() if _docs_db else {}),
+        },
+        "embedding": {
+            "backend": (type(embed_backend).__name__ if embed_backend else None),
+            "dims": _embedding_dims,
+            "available": embed_backend is not None,
+        },
+        "reranker": {
+            "available": reranker is not None,
+            "backend": (type(reranker).__name__ if reranker else None),
+        },
+        "cache": {
+            "enabled": settings.wet_cache,
+            "path": (str(settings.get_cache_db_path()) if settings.wet_cache else None),
+        },
+        "sync": {
+            "enabled": settings.sync_enabled,
+            "provider": "google_drive",
+            "folder": settings.sync_folder,
+            "interval": settings.sync_interval,
+            "google_drive_client_id": bool(settings.google_drive_client_id),
+        },
+        "settings": {
+            "log_level": settings.log_level,
+            "tool_timeout": settings.tool_timeout,
+        },
+    }
+    return json.dumps(status, indent=2, default=str)
+
+
+def _handle_config_set(key: str | None, value: str | None) -> str:
+    if not key or value is None:
+        return json.dumps({"error": "key and value are required for set"})
+    valid_keys = {
+        "log_level",
+        "tool_timeout",
+        "wet_cache",
+        "sync_enabled",
+        "sync_folder",
+        "sync_interval",
+    }
+    if key not in valid_keys:
+        return json.dumps(
+            {
+                "error": f"Invalid key: {key}",
+                "valid_keys": sorted(valid_keys),
+            }
+        )
+    if key == "log_level":
+        settings.log_level = value.upper()
+        logger.remove()
+        logger.add(sys.stderr, level=settings.log_level)
+    elif key in ("tool_timeout", "sync_interval"):
+        setattr(settings, key, int(value))
+    elif key in ("wet_cache", "sync_enabled"):
+        setattr(settings, key, value.lower() in ("true", "1", "yes"))
+    else:
+        setattr(settings, key, value)
+    return json.dumps(
+        {
+            "status": "updated",
+            "key": key,
+            "value": getattr(settings, key),
+        },
+        default=str,
+    )
+
+
+async def _handle_config_cache_clear() -> str:
+    if _web_cache:
+        await asyncio.to_thread(_web_cache.clear)
+        return json.dumps({"status": "cache cleared"})
+    return json.dumps({"error": "Cache is not enabled"})
+
+
+def _handle_config_docs_reindex(key: str | None) -> str:
+    if not key:
+        return json.dumps({"error": "key (library name) is required"})
+    if not _docs_db:
+        return json.dumps({"error": "Docs database not initialized"})
+    lib = _docs_db.get_library(key)
+    if lib:
+        ver = _docs_db.get_best_version(lib["id"])
+        if ver:
+            _docs_db.clear_version_chunks(ver["id"])
+        return json.dumps(
+            {
+                "status": "cleared",
+                "library": key,
+                "hint": "Next docs search will re-index",
+            }
+        )
+    return json.dumps({"error": f"Library '{key}' not found in index"})
+
+
+async def _handle_config_warmup() -> str:
+    from wet_mcp.setup_tool import run_warmup
+
+    result = await run_warmup()
+    return json.dumps(result, indent=2, default=str)
+
+
+async def _handle_config_setup_sync(remote_type: str | None) -> str:
+    from wet_mcp.setup_tool import run_setup_sync
+
+    result = await run_setup_sync(remote_type or "drive")
+    return json.dumps(result, indent=2, default=str)
+
+
+def _handle_config_setup_status() -> str:
+    from mcp_core.storage.per_plugin_store import PerPluginStore
+
+    from wet_mcp import credential_state as _cs
+
+    _saved = PerPluginStore(_cs.PLUGIN_NAME).load() or {}
+    _env_keys = [k for k in _cs.CLOUD_KEYS if os.environ.get(k)]
+    _store_keys = [k for k in _cs.CLOUD_KEYS if _saved.get(k)]
+    _providers = list(dict.fromkeys(_env_keys + _store_keys))
+    if _providers:
+        _derived_state = "configured"
+    elif _cs.get_state() == _cs.CredentialState.LOCAL:
+        _derived_state = "local"
+    else:
+        _derived_state = "awaiting_setup"
+    return json.dumps(
+        {
+            "state": _derived_state,
+            "setup_url": _cs.get_setup_url(),
+            "cloud_keys_in_env": _env_keys,
+            "providers_configured": _providers,
+        }
+    )
+
+
+def _handle_config_setup_skip() -> str:
+    from mcp_core import set_local_mode
+
+    from wet_mcp.credential_state import CredentialState, set_state
+
+    set_local_mode("wet-mcp")
+    set_state(CredentialState.LOCAL)
+    return json.dumps(
+        {
+            "status": "ok",
+            "message": "Local mode set. Relay will not trigger on restart.",
+        }
+    )
+
+
+def _handle_config_setup_reset() -> str:
+    from wet_mcp.credential_state import reset_state
+
+    reset_state()
+    return json.dumps(
+        {
+            "status": "ok",
+            "message": "Credentials cleared. Next tool call will offer setup.",
+        }
+    )
+
+
+async def _handle_config_setup_complete() -> str:
+    from wet_mcp.credential_state import (
+        CredentialState,
+        resolve_credential_state,
+    )
+    from wet_mcp.credential_state import (
+        get_state as _get_state,
+    )
+
+    resolve_credential_state()
+    state = _get_state()
+    mode = settings.setup_providers()
+
+    # Re-init embedding + reranker if now configured
+    if state == CredentialState.CONFIGURED:
+        await _init_embedding_backend(mode)
+        await _init_reranker_backend(mode)
+
+    return json.dumps(
+        {
+            "status": "ok",
+            "state": state.value,
+            "message": "Credential state refreshed.",
+        }
+    )
+
+
 @mcp.tool(
     description=(
         "Server config and management. Actions: "
@@ -1209,200 +1407,34 @@ async def config(
     """
     match action:
         case "status":
-            from wet_mcp.embedder import get_backend
-            from wet_mcp.reranker import get_reranker
-
-            embed_backend = get_backend()
-            reranker = get_reranker()
-
-            status = {
-                "database": {
-                    "path": str(settings.get_db_path()),
-                    "docs_indexed": (_docs_db.stats() if _docs_db else {}),
-                },
-                "embedding": {
-                    "backend": (
-                        type(embed_backend).__name__ if embed_backend else None
-                    ),
-                    "dims": _embedding_dims,
-                    "available": embed_backend is not None,
-                },
-                "reranker": {
-                    "available": reranker is not None,
-                    "backend": (type(reranker).__name__ if reranker else None),
-                },
-                "cache": {
-                    "enabled": settings.wet_cache,
-                    "path": (
-                        str(settings.get_cache_db_path())
-                        if settings.wet_cache
-                        else None
-                    ),
-                },
-                "sync": {
-                    "enabled": settings.sync_enabled,
-                    "provider": "google_drive",
-                    "folder": settings.sync_folder,
-                    "interval": settings.sync_interval,
-                    "google_drive_client_id": bool(settings.google_drive_client_id),
-                },
-                "settings": {
-                    "log_level": settings.log_level,
-                    "tool_timeout": settings.tool_timeout,
-                },
-            }
-            return json.dumps(status, indent=2, default=str)
+            return await _handle_config_status()
 
         case "set":
-            if not key or value is None:
-                return json.dumps({"error": "key and value are required for set"})
-            valid_keys = {
-                "log_level",
-                "tool_timeout",
-                "wet_cache",
-                "sync_enabled",
-                "sync_folder",
-                "sync_interval",
-            }
-            if key not in valid_keys:
-                return json.dumps(
-                    {
-                        "error": f"Invalid key: {key}",
-                        "valid_keys": sorted(valid_keys),
-                    }
-                )
-            if key == "log_level":
-                settings.log_level = value.upper()
-                logger.remove()
-                logger.add(sys.stderr, level=settings.log_level)
-            elif key in ("tool_timeout", "sync_interval"):
-                setattr(settings, key, int(value))
-            elif key in ("wet_cache", "sync_enabled"):
-                setattr(settings, key, value.lower() in ("true", "1", "yes"))
-            else:
-                setattr(settings, key, value)
-            return json.dumps(
-                {
-                    "status": "updated",
-                    "key": key,
-                    "value": getattr(settings, key),
-                },
-                default=str,
-            )
+            return _handle_config_set(key, value)
 
         case "cache_clear":
-            if _web_cache:
-                await asyncio.to_thread(_web_cache.clear)
-                return json.dumps({"status": "cache cleared"})
-            return json.dumps({"error": "Cache is not enabled"})
+            return await _handle_config_cache_clear()
 
         case "docs_reindex":
-            if not key:
-                return json.dumps({"error": "key (library name) is required"})
-            if not _docs_db:
-                return json.dumps({"error": "Docs database not initialized"})
-            lib = _docs_db.get_library(key)
-            if lib:
-                ver = _docs_db.get_best_version(lib["id"])
-                if ver:
-                    _docs_db.clear_version_chunks(ver["id"])
-                return json.dumps(
-                    {
-                        "status": "cleared",
-                        "library": key,
-                        "hint": ("Next docs search will re-index"),
-                    }
-                )
-            return json.dumps({"error": f"Library '{key}' not found in index"})
+            return _handle_config_docs_reindex(key)
 
         case "warmup":
-            from wet_mcp.setup_tool import run_warmup
-
-            result = await run_warmup()
-            return json.dumps(result, indent=2, default=str)
+            return await _handle_config_warmup()
 
         case "setup_sync":
-            from wet_mcp.setup_tool import run_setup_sync
-
-            result = await run_setup_sync(remote_type or "drive")
-            return json.dumps(result, indent=2, default=str)
+            return await _handle_config_setup_sync(remote_type)
 
         case "setup_status":
-            from mcp_core.storage.per_plugin_store import PerPluginStore
-
-            from wet_mcp import credential_state as _cs
-
-            # Derive providers_configured from live PerPluginStore load + env
-            # so status is accurate even if module-level _state is stale.
-            _saved = PerPluginStore(_cs.PLUGIN_NAME).load() or {}
-            _env_keys = [k for k in _cs.CLOUD_KEYS if os.environ.get(k)]
-            _store_keys = [k for k in _cs.CLOUD_KEYS if _saved.get(k)]
-            _providers = list(dict.fromkeys(_env_keys + _store_keys))
-            if _providers:
-                _derived_state = "configured"
-            elif _cs.get_state() == _cs.CredentialState.LOCAL:
-                _derived_state = "local"
-            else:
-                _derived_state = "awaiting_setup"
-            return json.dumps(
-                {
-                    "state": _derived_state,
-                    "setup_url": _cs.get_setup_url(),
-                    "cloud_keys_in_env": _env_keys,
-                    "providers_configured": _providers,
-                }
-            )
+            return _handle_config_setup_status()
 
         case "setup_skip":
-            from mcp_core import set_local_mode
-
-            from wet_mcp.credential_state import CredentialState, set_state
-
-            set_local_mode("wet-mcp")
-            set_state(CredentialState.LOCAL)
-            return json.dumps(
-                {
-                    "status": "ok",
-                    "message": "Local mode set. Relay will not trigger on restart.",
-                }
-            )
+            return _handle_config_setup_skip()
 
         case "setup_reset":
-            from wet_mcp.credential_state import reset_state
-
-            reset_state()
-            return json.dumps(
-                {
-                    "status": "ok",
-                    "message": "Credentials cleared. Next tool call will offer setup.",
-                }
-            )
+            return _handle_config_setup_reset()
 
         case "setup_complete":
-            from wet_mcp.credential_state import (
-                CredentialState,
-                resolve_credential_state,
-            )
-            from wet_mcp.credential_state import (
-                get_state as _get_state,
-            )
-
-            resolve_credential_state()
-            state = _get_state()
-            mode = settings.setup_providers()
-
-            # Re-init embedding + reranker if now configured
-            if state == CredentialState.CONFIGURED:
-                await _init_embedding_backend(mode)
-                await _init_reranker_backend(mode)
-
-            return json.dumps(
-                {
-                    "status": "ok",
-                    "state": state.value,
-                    "message": "Credential state refreshed.",
-                }
-            )
+            return await _handle_config_setup_complete()
 
         case _:
             import difflib
@@ -1432,8 +1464,6 @@ async def config(
 # ---------------------------------------------------------------------------
 # Research (academic search via SearXNG science category)
 # ---------------------------------------------------------------------------
-
-
 async def _do_research(
     query: str,
     max_results: int = 10,
