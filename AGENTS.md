@@ -1,148 +1,128 @@
 # AGENTS.md - wet-mcp
 
-Web Extract & Transform MCP Server. Python 3.13, uv, src layout.
+Python MCP Server: web search, content extraction, library docs, media analysis.
+Xem `AGENTS.md` va `README.md` de hieu architecture va configuration.
 
-## Build / Lint / Test Commands
+## Cau truc
+
+- `src/wet_mcp/` -- Package chinh (src layout)
+  - `server.py` -- FastMCP server (orchestrator, file lon nhat)
+  - `config.py` -- Pydantic Settings (singleton)
+  - `cache.py`, `db.py`, `embedder.py`, `reranker.py` -- Infrastructure
+  - `relay_setup.py` -- Zero-config relay: create session, poll for config
+  - `relay_schema.py` -- Relay form schema (2 modes: local/cloud)
+  - `sync.py` -- Google Drive sync (OAuth Device Code, httpx)
+  - `token_store.py` -- Local token storage cho OAuth (~/.wet-mcp/tokens/)
+  - `setup_tool.py` -- Warmup + setup-sync logic (MCP-callable)
+  - `sources/` -- Data source integrations (crawler, docs, searxng)
+- `tests/` -- Mirror source modules
+
+## Lenh thuong dung
 
 ```bash
-uv sync --group dev                # Install dependencies
+uv sync --group dev                # Cai dependencies
 uv build                           # Build package (hatchling)
 uv run ruff check .                # Lint
-uv run ruff format --check .       # Format check
-uv run ruff format .               # Format fix
-uv run ruff check --fix .          # Lint fix
-uv run ty check                    # Type check (Astral ty)
-uv run pytest                      # Run all tests (integration excluded by default)
-uv run pytest -m integration       # Run integration tests only
-
-# Run a single test file
-uv run pytest tests/test_config.py
-
-# Run a single test function
-uv run pytest tests/test_config.py::test_function_name -v
+uv run ruff format --check .       # Kiem tra format
+uv run ruff check --fix . && uv run ruff format .  # Fix
+uv run ty check                    # Type check (ty lenient config)
+uv run pytest                      # Test tat ca (integration excluded by default)
+uv run pytest -m integration       # Chi integration tests
+uv run pytest tests/test_config.py::test_function_name -v  # Test don le
+uv run wet-mcp                     # Chay server
 
 # Mise shortcuts
-mise run setup     # Full dev environment setup
+mise run setup     # Full dev env setup
 mise run lint      # ruff check + ruff format --check + ty check
 mise run test      # pytest
 mise run fix       # ruff check --fix --unsafe-fixes + ruff format
 mise run dev       # uv run wet-mcp
 ```
 
-### Pytest Configuration
+## Cau hinh quan trong
 
-- `asyncio_mode = "auto"` -- no `@pytest.mark.asyncio` needed
+- **Python 3.13 bat buoc** -- 3.14+ KHONG tuong thich do SearXNG
+- `requires-python = "==3.13.*"` trong pyproject.toml
+- Ruff: line-length 88, target py313, rules E/F/W/I/UP/B/C4, ignore E501
+- ty: lenient (unresolved-import, unresolved-attribute, possibly-missing-attribute all "ignore")
+
+## Pytest
+
+- `asyncio_mode = "auto"` -- KHONG can `@pytest.mark.asyncio`
 - Default timeout: 30 seconds per test
-- Integration tests excluded by default (`-m 'not integration'`)
-- Test files: `test_*.py` in `tests/` directory
+- Integration/live/full tests excluded by default
+- `addopts = "-m 'not integration and not live and not full'"` trong pyproject.toml
 
-## Code Style
+## Env vars
 
-### Formatting (Ruff)
+- KHONG co prefix ung dung (day la open-source MCP server)
+- LLM: google-genai + openai (SDK) > disable if no key. Embed/Rerank: Jina > Gemini > OpenAI > Cohere (cloud) > local ONNX
+- Embedding: `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`
+- Reranking: `RERANK_BACKEND`, `RERANK_MODEL`
+- SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
+- Sync: `SYNC_ENABLED` (default false), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
+- Sync dung Google Drive API truc tiep (httpx). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`
+- Relay: `MCP_RELAY_URL` (required for remote-relay mode, no default — wet-mcp default is local-relay per matrix)
+- Secrets: skret SSM namespace `/wet-mcp/prod` (region `ap-southeast-1`)
 
-- **Line length**: 88 (E501 ignored -- long lines allowed)
-- **Quotes**: Double quotes
-- **Indent**: 4 spaces (Python), 2 spaces (JSON/YAML/TOML)
-- **Line endings**: LF
-- **Target**: Python 3.13
+## Release & Deploy
 
-### Ruff Rules
+- Conventional Commits. Tag format: `v{version}`
+- CD: workflow_dispatch, chon beta/stable
+- Pipeline: PSR v10 -> PyPI (uv publish) -> Docker multi-arch (amd64 + arm64) -> DockerHub + GHCR -> MCP Registry
+- Docker images: `n24q02m/wet-mcp`, `ghcr.io/n24q02m/wet-mcp`
 
-`select = ["E", "F", "W", "I", "UP", "B", "C4"]`, `ignore = ["E501"]`
-
-- `I` = isort, `UP` = pyupgrade, `B` = bugbear, `C4` = comprehensions
-
-### Type Checker (ty)
-
-Lenient: `unresolved-import`, `unresolved-attribute`, `possibly-missing-attribute` all `"ignore"`.
-
-### Import Ordering (isort via Ruff)
-
-1. Standard library (`import asyncio`, `import json`, `import os`)
-2. Third-party (`from loguru import logger`, `from mcp.server.fastmcp import FastMCP`)
-3. Local (`from wet_mcp.config import settings`, `from wet_mcp.sources.crawler import ...`)
-
-Lazy imports inside functions for heavy deps and to avoid circular deps.
-
-```python
-import asyncio
-import json
-import sys
-from contextlib import asynccontextmanager
-
-from loguru import logger
-from mcp.server.fastmcp import Context, FastMCP
-
-from wet_mcp.cache import WebCache
-from wet_mcp.config import settings
-```
-
-### Type Hints
-
-- Full type hints on all signatures: parameters and return types
-- Modern syntax: `str | None`, `list[float]`, `dict[str, object]`
-- `from __future__ import annotations` used in some files
-- `py.typed` marker file present
-
-### Naming Conventions
-
-| Element            | Convention       | Example                            |
-|--------------------|------------------|------------------------------------|
-| Functions/methods  | snake_case       | `setup_api_keys`, `_warmup_searxng` |
-| Private            | Leading `_`      | `_embed`, `_do_research`, `_web_cache` |
-| Classes            | PascalCase       | `Settings`, `WebCache`, `DocsDB`   |
-| Constants          | UPPER_SNAKE_CASE | `_EMBEDDING_CANDIDATES`, `_SEARXNG_TIMEOUT` |
-| Modules            | snake_case       | `searxng_runner.py`, `security.py` |
-
-### Error Handling
-
-- MCP tools return error strings: `return "Error: query is required..."` (not exceptions)
-- try/except with `logger.debug()` / `logger.warning()` for non-fatal failures
-- Graceful fallback chains: Cloud -> Local, Tier 0 -> 1 -> 2 -> 3
-- Custom `_with_timeout()` using `asyncio.wait` with grace period for cleanup
-- `match action:` for tool action dispatch
-- `asyncio.to_thread()` for wrapping sync operations
-
-### File Organization
-
-```
-src/wet_mcp/
-  __init__.py, __main__.py    # Package + entry
-  config.py                   # Pydantic Settings (singleton)
-  server.py                   # FastMCP server (largest, orchestrator)
-  security.py                 # SSRF validation
-  llm.py                      # Native LLM providers (google-genai, openai)
-  cache.py                    # Web cache (SQLite)
-  db.py                       # Docs DB (SQLite + sqlite-vec)
-  embedder.py                 # Embedding backend (Jina/Gemini/OpenAI/Cohere cloud + local ONNX)
-  reranker.py                 # Reranker backend
-  searxng_runner.py           # Embedded SearXNG subprocess
-  setup.py                    # Auto-setup (SearXNG + Playwright)
-  sync.py                     # Google Drive sync (OAuth Device Code, httpx)
-  sources/                    # Data source integrations
-    crawler.py, docs.py, searxng.py
-  docs/                       # Tool documentation markdown
-tests/                        # Test files mirror source modules
-```
-
-### Documentation
-
-- Module-level docstrings on every file
-- Google-style docstrings with `Args:`/`Returns:` sections
-- Section separators: `# ---------------------------------------------------------------------------`
-- `# noqa` comments used sparingly: `F401`, `E402`
-
-### Commits
-
-Conventional Commits: `type(scope): message`. Automated semantic release.
-
-### Pre-commit Hooks
+## Pre-commit hooks
 
 1. Ruff lint (`--fix --target-version=py313`) + format
 2. ty type check
-3. pytest (`--timeout=30 --tb=short -q`)
+3. pytest (`--tb=short -q --timeout=30`)
+4. Commit message: enforce `feat`/`fix` prefix
 
-## TODO / Backlog
+## Luu y quan trong
 
-- [x] **markitdown integration**: Added `markitdown[pdf,docx,pptx]` as dependency. Extract tool auto-detects document URLs by extension and routes through markitdown instead of Crawl4AI.
-- [ ] **extract action for local files**: Support `file://` URLs or a new `convert` action for local document conversion via markitdown.
+- Lazy imports ben trong functions cho heavy deps va tranh circular deps
+- MCP tools return error strings (`return "Error: ..."`) -- KHONG raise exceptions
+- Graceful fallback chains: Cloud -> Local, Tier 0 -> 1 -> 2 -> 3
+- `match action:` cho tool action dispatch
+- `asyncio.to_thread()` cho wrapping sync operations
+- Embedding luu tai 768 dims (default). Doi provider KHONG lam hu vector table
+- Renovate: Python upgrades DISABLED
+
+## Known bugs / gotchas (phat hien 2026-04-18 E2E)
+
+1. **Setup flow 2-phase race condition**:
+   - Phase 1: user submit API keys form -> `writeConfig(SERVER_NAME, config)` -> `state=configured` (nhanh, ~5-30s)
+   - Phase 2: Google Drive OAuth Device Code flow start (async, BLOCKING user hanh dong tren `google.com/device`)
+   - Sau Phase 2, token save vao `~/.wet-mcp/tokens/google_drive.json`
+   - **Gotcha:** E2E test script KHONG duoc kill server process sau Phase 1 -- PHAI wait cho `google_drive.json` ton tai TRUOC KHI exit. Neu kill som -> OAuth token mat -> next run phai re-auth.
+   - Example fix: `phase-m-e2e-test/test_wet_full.py` phase_1 dung check `pathlib.Path(token_path).exists()` + 300s timeout after state=configured.
+
+2. **GDrive token shared voi mnemo-mcp**:
+   - Neu user auth mot account Google cho wet-mcp, mnemo-mcp co the auto-detect va skip device code flow (shared account pool ong)
+   - Chua verify chinh xac mechanism, nhung observed 2026-04-18 E2E: setup mnemo ngay sau wet -> report "configured" rat nhanh
+   - **Impact:** Tot cho UX, nhung can check xem logic share co security concern khong (token scope, privilege escalation)
+
+3. **Relay "Setup complete" browser UI**: Python core-py relay implementation works correctly (browser hien "Setup complete!" sau phase 2). KHAC voi TS consumers (notion/email) bi stuck -- see `C:\Users\n24q02m-wlap\projects\mcp-core\CLAUDE.md` Known bugs #2.
+
+## E2E
+
+Driven by `mcp-core/scripts/e2e/` (matrix-locked, 15 configs). Run a single config from this repo via `make e2e` (proxy) or directly:
+
+```
+cd ../mcp-core && uv run --project scripts/e2e python -m e2e.driver <config-id>
+```
+
+Configs for this repo: `wet-full`.
+
+t2-interaction: GDrive device-code (900s); per-sub token storage at ``~/.wet-mcp/subs/<sub>/tokens/google_drive.json``.
+
+Tier policy:
+
+- **T0** (precommit + CI on PR / main push) - runs without upstream identity. Skret keys not required.
+- **T2 non-interaction** (`make e2e-config CONFIG=<id>` locally) - driver pre-fills relay form from skret AWS SSM `/wet-mcp/prod` (`ap-southeast-1`). No user gate.
+- **T2 interaction** - driver fills relay form, then prints upstream user-gate URL; user signs in / types OTP at provider. Driver enforces per-flow timeouts (device-code 900s, oauth-redirect 300s, browser-form 600s) and emits `[poll] elapsed=Xs remaining=Ys status=<body>` every 30s. On timeout, container logs + last `setup-status` are saved to `<tmp>/e2e-diag/` BEFORE teardown for post-mortem.
+
+Multi-user remote mode (deployment property; not a separate config) requires `MCP_DCR_SERVER_SECRET` in the same skret namespace - driver refuses to start the container without it when `PUBLIC_URL` is set.
+
+References: `mcp-core/scripts/e2e/matrix.yaml`, `~/.claude/skills/mcp-dev/references/e2e-full-matrix.md` (harness-readiness gate), `~/.claude/skills/mcp-dev/references/secrets-skret.md` (per-server credential layout), `~/.claude/skills/mcp-dev/references/multi-user-pattern.md` (per-JWT-sub isolation).

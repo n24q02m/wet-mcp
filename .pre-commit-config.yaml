@@ -108,3 +108,17 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit]
+
+  # ============================================================================
+  # Docs sync: CLAUDE.md and AGENTS.md MUST stay body-identical
+  # (only line 1 may differ, per .pre-commit-hooks/sync-claude-agents.sh).
+  # ============================================================================
+  - repo: local
+    hooks:
+      - id: sync-claude-agents
+        name: Sync CLAUDE.md <-> AGENTS.md (body-identical guard)
+        entry: bash .pre-commit-hooks/sync-claude-agents.sh
+        language: system
+        pass_filenames: false
+        files: ^(CLAUDE|AGENTS)\.md$
+        stages: [pre-commit]
