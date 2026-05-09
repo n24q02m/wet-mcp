@@ -688,8 +688,16 @@ async def search(  # noqa: PLR0913
         case "search":
             if not query:
                 return 'Error: query is required for search action. Example: search(action="search", query="python async patterns")'
+            from wet_mcp.sources._search_polish import (
+                normalize_query,
+                search_ttl_seconds,
+                standardize_results,
+            )
+
+            normalized_query = normalize_query(query)
+            ttl = search_ttl_seconds(time_range)
             cache_params = {
-                "query": query,
+                "query": normalized_query,
                 "categories": categories,
                 "max_results": max_results,
                 "time_range": time_range,
@@ -698,9 +706,24 @@ async def search(  # noqa: PLR0913
                 "exclude_domains": exclude_domains,
             }
             if _web_cache:
-                cached = await asyncio.to_thread(_web_cache.get, "search", cache_params)
-                if cached:
-                    return cached
+                cache_hit = await asyncio.to_thread(
+                    _web_cache.get_with_age, "search", cache_params
+                )
+                if cache_hit:
+                    cached_content, cache_age = cache_hit
+                    # Re-stamp freshness signal based on current age.
+                    try:
+                        cached_data = json.loads(cached_content)
+                        if isinstance(cached_data, dict) and cached_data.get("results"):
+                            cached_data["results"] = standardize_results(
+                                cached_data["results"],
+                                cache_age_seconds=cache_age,
+                                ttl_seconds=ttl,
+                            )
+                            return json.dumps(cached_data, ensure_ascii=False, indent=2)
+                    except json.JSONDecodeError:
+                        pass
+                    return cached_content
             try:
                 searxng_url = await asyncio.wait_for(
                     ensure_searxng(), timeout=_SEARXNG_TIMEOUT
@@ -709,8 +732,8 @@ async def search(  # noqa: PLR0913
                 return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
             except (SystemExit, Exception) as exc:
                 return f"Error: SearXNG startup failed: {exc}"
-            # Optional query expansion
-            search_query = query
+            # Optional query expansion (LLM-driven, opt-in)
+            search_query = normalized_query or query
             if expand:
                 from wet_mcp.sources.search_strategies import expand_query
 
@@ -773,12 +796,27 @@ async def search(  # noqa: PLR0913
                         except Exception as e:
                             logger.debug(f"Snippet enrichment failed: {e}")
 
+                    # Citation standardization (always on -- cheap pure-python).
+                    try:
+                        results_list = data.get("results", [])
+                        if results_list:
+                            data["results"] = standardize_results(
+                                results_list,
+                                cache_age_seconds=None,
+                                ttl_seconds=ttl,
+                            )
+                            modified = True
+                    except Exception as e:
+                        logger.debug(f"Citation standardization failed: {e}")
+
                     if modified:
                         result = json.dumps(data, ensure_ascii=False, indent=2)
                 except json.JSONDecodeError:
                     pass
             if _web_cache and not result.startswith("Error"):
-                await asyncio.to_thread(_web_cache.set, "search", cache_params, result)
+                await asyncio.to_thread(
+                    _web_cache.set, "search", cache_params, result, ttl
+                )
             return result
 
         case "research":

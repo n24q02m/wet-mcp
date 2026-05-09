@@ -97,11 +97,41 @@ class WebCache:
         logger.debug(f"Cache MISS: {action} ({key[:12]}...)")
         return None
 
-    def set(self, action: str, params: dict, content: str) -> None:
-        """Store result in cache with TTL."""
+    def get_with_age(self, action: str, params: dict) -> tuple[str, int] | None:
+        """Like ``get`` but also returns ``cache_age_seconds`` (now - created_at).
+
+        Returns ``None`` on miss or expiry. Used by callers that want to
+        derive a freshness signal from the cache age.
+        """
         key = _cache_key(action, params)
         now = time.time()
-        ttl = self._ttls.get(action, 3600)
+
+        row = self._conn.execute(
+            "UPDATE web_cache SET hit_count = hit_count + 1 WHERE key = ? AND expires_at > ? RETURNING content, created_at",
+            (key, now),
+        ).fetchone()
+
+        if row:
+            self._conn.commit()
+            age = max(0, int(now - row["created_at"]))
+            logger.debug(f"Cache HIT: {action} ({key[:12]}...) age={age}s")
+            return row["content"], age
+
+        logger.debug(f"Cache MISS: {action} ({key[:12]}...)")
+        return None
+
+    def set(
+        self, action: str, params: dict, content: str, ttl_override: int | None = None
+    ) -> None:
+        """Store result in cache with TTL.
+
+        ``ttl_override`` lets callers pin a custom TTL (e.g. 300s for
+        time-filtered search queries) without mutating the per-action
+        defaults shared by all callers.
+        """
+        key = _cache_key(action, params)
+        now = time.time()
+        ttl = ttl_override if ttl_override is not None else self._ttls.get(action, 3600)
         expires_at = now + ttl
 
         self._conn.execute(

@@ -50,6 +50,9 @@ def _mock_settings():
 def _mock_web_cache():
     server._web_cache = MagicMock()
     server._web_cache.get.return_value = None
+    # Search dispatcher uses get_with_age (returns (content, age) tuple or
+    # None). Default to a miss so non-cache tests still hit the fetch path.
+    server._web_cache.get_with_age.return_value = None
     yield server._web_cache
     server._web_cache = None
 
@@ -483,7 +486,8 @@ async def test_rerank_fewer_results_than_top_n():
 
 async def test_search_cache_hit(_mock_web_cache):
     """Line 511: search returns cached result."""
-    _mock_web_cache.get.return_value = "cached search result"
+    # Search dispatcher consumes get_with_age -> (content, age) | None.
+    _mock_web_cache.get_with_age.return_value = ("cached search result", 0)
     result = await server.search("search", query="test")
     assert "cached search result" in result
 
