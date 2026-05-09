@@ -1917,12 +1917,14 @@ class TestServerMediaTool:
         result = await media(action="download")
         assert "Error: media_urls is required" in result
 
-    async def test_media_analyze_missing_url(self):
-        """Analyze action requires url."""
+    async def test_media_analyze_returns_deprecation_string(self):
+        """Analyze action is deprecated -- returns migration notice (no url check)."""
         from wet_mcp.server import media
 
         result = await media(action="analyze")
-        assert "Error: url" in result
+        assert "deprecated" in result
+        assert "imagine-mcp" in result
+        assert "v2.0.0" in result
 
     async def test_media_invalid_action(self):
         """Invalid media action."""
@@ -1956,19 +1958,20 @@ class TestServerMediaTool:
             result = await media(action="list", url="https://example.com")
             assert "media" in result
 
-    async def test_media_analyze_success(self):
-        """Analyze action calls analyze_media."""
+    async def test_media_analyze_does_not_call_analyze_media(self):
+        """Deprecated analyze must not invoke the underlying llm primitive."""
         from wet_mcp.server import media
 
         with patch(
             "wet_mcp.llm.analyze_media",
             new_callable=AsyncMock,
             return_value="A beautiful image",
-        ):
+        ) as mocked:
             result = await media(
                 action="analyze", url="/tmp/img.jpg", prompt="Describe"
             )
-            assert "beautiful" in result
+            assert "deprecated" in result
+            mocked.assert_not_called()
 
 
 class TestServerResearchAction:

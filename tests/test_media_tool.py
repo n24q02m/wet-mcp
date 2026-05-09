@@ -101,8 +101,8 @@ async def test_media_download_missing_urls():
 
 
 @pytest.mark.asyncio
-async def test_media_analyze_success(mock_settings):
-    """Test media analyze action successfully calls analyze_media."""
+async def test_media_analyze_returns_deprecation(mock_settings):
+    """Phase 1 Task 6: analyze is deprecated -- never invokes analyze_media."""
     mock_analyze_media = AsyncMock(return_value="Analysis result")
 
     with patch("wet_mcp.llm.analyze_media", mock_analyze_media):
@@ -110,18 +110,17 @@ async def test_media_analyze_success(mock_settings):
             action="analyze", url="/path/to/image.jpg", prompt="Describe it"
         )
 
-        mock_analyze_media.assert_called_once_with(
-            media_path="/path/to/image.jpg", prompt="Describe it"
-        )
-        assert "Analysis result" in result
-        assert "<untrusted_media_content>" in result
+        mock_analyze_media.assert_not_called()
+        assert "deprecated" in result
+        assert "imagine-mcp" in result
 
 
 @pytest.mark.asyncio
-async def test_media_analyze_missing_url():
-    """Test media analyze action fails without url (local path)."""
+async def test_media_analyze_no_url_still_returns_deprecation():
+    """Deprecated handler runs regardless of whether url is supplied."""
     result = await media(action="analyze")
-    assert "Error:" in result and "url" in result and "analyze" in result
+    assert "deprecated" in result
+    assert "imagine-mcp" in result
 
 
 @pytest.mark.asyncio

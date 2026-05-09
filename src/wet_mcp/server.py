@@ -1097,21 +1097,22 @@ async def media(  # noqa: PLR0913
     max_items: int = 10,
     prompt: str = "Describe this image in detail.",
 ) -> str:
-    """Discover, download, and analyze media files (images, videos, audio) from web pages.
+    """Discover and download media files (images, videos, audio) from web pages.
 
     Actions:
     - list: Scan a page and return media URLs with metadata. Example: media(action="list", url="https://example.com/gallery", media_type="images")
     - download: Download media files to local storage. Example: media(action="download", media_urls=["https://example.com/photo.jpg"])
-    - analyze: Analyze a local file using LLM vision (requires API_KEYS). Example: media(action="analyze", url="/path/to/image.jpg", prompt="What objects are in this image?")
+    - analyze: DEPRECATED -- use imagine-mcp's understand action instead. Will be removed in wet v2.0.0.
 
     Key parameters:
-    - url (required for list/analyze): Page URL to scan, or local file path for analyze
+    - url (required for list): Page URL to scan
     - media_urls (required for download): List of media URLs to download
     - media_type: Filter for list -- "images", "videos", "audio", "files", "all" (default: "all")
     - output_dir: Download directory (default: ~/.wet-mcp/downloads)
-    - prompt: Analysis prompt for analyze action
+    - prompt: (deprecated) was used by analyze; ignored now
 
-    Typical workflow: list (discover) -> download (save locally) -> analyze (LLM insights).
+    Typical workflow: list (discover) -> download (save locally). For LLM
+    analysis, hand the downloaded path to imagine-mcp's understand action.
     Use `help` tool with tool_name="media" for full documentation.
     """
     blocked = _require_credentials()
@@ -1154,24 +1155,32 @@ async def media(  # noqa: PLR0913
             )
 
         case "analyze":
-            if not url:
-                return 'Error: url (local file path) is required for analyze action. Example: media(action="analyze", url="/path/to/image.jpg", prompt="Describe this image"). Download a file first with media(action="download", ...).'
-
-            from wet_mcp.llm import analyze_media
-
-            result = await _with_timeout(
-                analyze_media(media_path=url, prompt=prompt),
-                "media.analyze",
+            # Phase 1 Task 6: deprecate analyze in favor of imagine-mcp's
+            # understand action. Image/video analysis is imagine-mcp's domain
+            # (multimodal pipeline + provider routing). wet keeps list +
+            # download for the discover/fetch half of the workflow. The
+            # action is removed in v2.0.0; until then we return a clear
+            # migration string and emit a logger warning so any caller
+            # still hitting it can be located via logs.
+            logger.warning(
+                "media.analyze is deprecated; use imagine-mcp's understand "
+                "action instead. Will be removed in wet v2.0.0."
             )
-            return result
+            return (
+                "media.analyze is deprecated. Use imagine-mcp's understand "
+                "action instead. Will be removed in wet v2.0.0."
+            )
 
         case _:
             import difflib
 
+            # "analyze" still in the close-match list so typos that target
+            # the deprecated action route to the deprecation handler
+            # instead of an opaque "unknown action" error.
             valid_actions = ["analyze", "download", "list"]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-            return f"Error: Unknown action '{action}'.{suggestion} Valid actions: list (discover media on page), download (save to local), analyze (LLM vision analysis)."
+            return f"Error: Unknown action '{action}'.{suggestion} Valid actions: list (discover media on page), download (save to local). analyze is deprecated -- use imagine-mcp's understand action."
 
 
 @mcp.tool(

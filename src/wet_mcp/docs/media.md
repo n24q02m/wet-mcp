@@ -52,31 +52,26 @@ Use this when you need to inspect the actual file content (e.g., sending an imag
 
 ---
 
-### analyze
-Analyze a local media file using configured LLM (requires API_KEYS).
-Supports images, videos, audio, and text files.
+### analyze (DEPRECATED -- removed in v2.0.0)
 
-**Parameters:**
-- `url` (required): Local file path to analyze
-- `prompt`: Analysis prompt (default: "Describe this image in detail.")
-
-**Example:**
-```json
-{"action": "analyze", "url": "/path/to/image.jpg", "prompt": "What objects are in this image?"}
-```
-
-**Returns:**
-LLM analysis text response.
-
-**Requirements:**
-- Set `API_KEYS` environment variable (format: `GOOGLE_API_KEY:xxx`)
-- Set `LLM_MODELS` to specify model (default: `gemini/gemini-3-flash-preview`)
+> **Deprecated.** `media(action="analyze", ...)` returns a deprecation
+> notice and no longer performs LLM vision analysis. The action will be
+> removed entirely in wet **v2.0.0**.
+>
+> **Migration:** use `imagine-mcp`'s `understand` action instead --
+> imagine-mcp is the dedicated multimodal pipeline (provider routing,
+> caching, vision/audio/video) and is where new analysis features land.
+>
+> Typical replacement flow:
+> 1. `wet: media(action="list", url=...)` -- discover media URLs.
+> 2. `wet: media(action="download", media_urls=[...])` -- save locally.
+> 3. `imagine: understand(file=..., prompt=...)` -- analyze.
 
 ---
 
 ## Workflow
 
 1. Use `list` to discover media on a page
-2. Review the results (optionally have AI analyze)
-3. Use `download` to save specific files locally
-4. Use `analyze` to get LLM insights on downloaded files
+2. Use `download` to save specific files locally
+3. Hand the downloaded path off to `imagine-mcp`'s `understand` action
+   for LLM analysis (vision/audio/video)
