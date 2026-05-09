@@ -2279,13 +2279,17 @@ class TestSearxngRunnerExtras:
         sys.platform == "win32", reason="os.setsid unavailable on Windows"
     )
     def test_get_process_kwargs_unix(self):
-        """Unix kwargs include preexec_fn."""
+        """Unix kwargs include start_new_session for process group management."""
         from web_core.search.runner import _get_process_kwargs
 
         with patch("web_core.search.runner.sys") as mock_sys:
             mock_sys.platform = "linux"
             kwargs = _get_process_kwargs()
-            assert "preexec_fn" in kwargs
+            # web-core uses start_new_session=True (modern Python) instead of
+            # preexec_fn — keep both expectations covered so future regressions
+            # in either direction surface here.
+            assert kwargs.get("start_new_session") is True
+            assert "preexec_fn" not in kwargs
 
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only test")
     def test_get_process_kwargs_windows(self):
@@ -2342,6 +2346,10 @@ class TestSearxngRunnerExtras:
         old = runner._DISCOVERY_FILE
         runner._DISCOVERY_FILE = tmp_path / "instance.json"
         runner._DISCOVERY_FILE.write_text(json.dumps({"pid": 123, "port": 8080}))
+        # web-core's _read_discovery rejects files whose mode is not 0o600 on
+        # POSIX (defence-in-depth). tmp_path inherits umask, so chmod here.
+        if sys.platform != "win32":
+            os.chmod(runner._DISCOVERY_FILE, 0o600)
 
         result = runner._read_discovery()
         assert result is not None
