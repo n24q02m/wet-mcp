@@ -42,7 +42,7 @@ dependencies = [
     # Vector search for docs
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
-    "qwen3-embed>=1.9.0",
+    "qwen3-embed>=1.9.2",
     "pillow>=12.2.0",
     "diskcache>=5.6.3",
     "cryptography>=48.0.0",
@@ -53,7 +53,7 @@ dependencies = [
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
     # Relay setup (zero-env-config)
-    "n24q02m-mcp-core>=1.13.0",
+    "n24q02m-mcp-core>=1.14.0",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance
     # downgrading to CVE-vulnerable 2.x (5 CVEs including critical SSRF).
     # Must stay >=3.2.3,<4 until mcp-core bumps its own floor past 3.x.
