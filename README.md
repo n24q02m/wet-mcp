@@ -96,8 +96,11 @@ docker run -d --name wet-mcp-http -p 8084:8084 \
   n24q02m/wet-mcp:latest
 ```
 
-Full setup matrices for each install method live in `docs/setup-manual.md`
-and `docs/setup-with-agent.md`.
+Full setup matrices live at the canonical docs site
+[mcp.n24q02m.com/servers/wet-mcp/setup/](https://mcp.n24q02m.com/servers/wet-mcp/setup/)
+and the paste-to-agent snippets at
+[claude-plugins/plugins/wet-mcp/setup-with-agent.md](https://github.com/n24q02m/claude-plugins/blob/main/plugins/wet-mcp/setup-with-agent.md)
+(per Spec F single source of truth).
 
 ## Status
 
@@ -105,7 +108,7 @@ and `docs/setup-with-agent.md`.
 >
 > Past months saw significant churn around credential handling and the daemon-bridge auto-spawn pattern. This caused multi-process races, browser tab spam, and inconsistent setup UX across plugins. **As of v&lt;auto&gt;, the architecture is stable**: 2 clean modes (stdio + HTTP), no daemon-bridge layer, no auto-spawn from stdio.
 >
-> Apologies for the instability period. If you encountered issues with prior versions, please update to v&lt;auto&gt;+ and follow the current `docs/setup-manual.md` -- most prior workarounds are no longer needed.
+> Apologies for the instability period. If you encountered issues with prior versions, please update to v&lt;auto&gt;+ and follow the current [setup docs](https://mcp.n24q02m.com/servers/wet-mcp/setup/) -- most prior workarounds are no longer needed.
 >
 > **Related plugins from the same author**:
 > - [wet-mcp](https://github.com/n24q02m/wet-mcp) -- Web search + content extraction
@@ -127,10 +130,9 @@ Full docs at **[mcp.n24q02m.com/servers/wet-mcp/](https://mcp.n24q02m.com/server
 - [Modes overview](https://mcp.n24q02m.com/get-started/modes-overview/) -- stdio / local-relay / remote-relay / remote-oauth
 - [Multi-user setup](https://mcp.n24q02m.com/get-started/multi-user/) -- per-JWT-sub credential model
 
-In-repo references:
+In-repo references (Spec F single source of truth: setup docs live in
+[claude-plugins/plugins/wet-mcp/](https://github.com/n24q02m/claude-plugins/tree/main/plugins/wet-mcp)):
 
-- [`docs/setup-manual.md`](docs/setup-manual.md) -- detailed manual setup walkthrough (3 install methods, env vars, troubleshooting)
-- [`docs/setup-with-agent.md`](docs/setup-with-agent.md) -- paste-to-agent install snippets (Claude Code / Codex CLI / Cursor / Antigravity)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) -- web-core ScrapingAgent integration, strategy chain, storage layout, LLM provider dispatch
 - [`docs/BENCHMARKS.md`](docs/BENCHMARKS.md) -- v1.x baseline coverage / latency placeholders + tier-1 fixture metrics
 
