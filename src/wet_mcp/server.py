@@ -1146,7 +1146,7 @@ async def media(  # noqa: PLR0913
 async def help(tool_name: str = "search") -> str:
     """Get detailed documentation for any tool. Call this when you need full parameter reference or usage examples.
 
-    Valid tool_name values: search, extract, media, config, help.
+    Valid tool_name values: search, extract, media, config.
 
     Quick guide -- which tool to use:
     - Need to FIND information? Use `search` (returns result listings with URLs)
@@ -1154,7 +1154,7 @@ async def help(tool_name: str = "search") -> str:
     - Need media files? Use `media` (discover, download, analyze images/videos/audio)
     - Need server settings? Use `config` (status, cache, settings, warmup, sync setup)
     """
-    allowed_tools = {"search", "extract", "media", "config", "help"}
+    allowed_tools = {"search", "extract", "media", "config"}
     if tool_name not in allowed_tools:
         import difflib
 

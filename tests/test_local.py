@@ -118,7 +118,7 @@ async def test_help():
     print("=" * 50)
 
     try:
-        for tool_name in ["search", "extract", "media", "help"]:
+        for tool_name in ["search", "extract", "media", "config"]:
             result = await help(tool_name)
             has_content = len(result) > 50 and "Error" not in result
             status = "OK" if has_content else "FAIL"
