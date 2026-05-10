@@ -1,10 +1,26 @@
 """Pytest configuration and fixtures."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 pytest_plugins = ["conftest_e2e"]
+
+
+@pytest.fixture(autouse=True)
+def _stub_phase2_lifespan_hooks():
+    """Phase 2 wires migrations + Tier 1 warmup into the FastMCP lifespan.
+
+    Both touch ``~/.wet-mcp/docs.db`` which the CI runner does not have.
+    Stub them out by default so tests that drive the lifespan don't hit
+    real disk; tests that need the real migrations / warmup call them
+    directly (test_migrations.py, test_tier1_warmup.py).
+    """
+    with (
+        patch("wet_mcp.migrations.run_migrations_on_startup"),
+        patch("wet_mcp.sources.tier1_warmup.maybe_warm"),
+    ):
+        yield
 
 
 @pytest.fixture(autouse=True)
