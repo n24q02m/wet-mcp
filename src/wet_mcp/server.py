@@ -290,6 +290,15 @@ async def _lifespan_startup() -> asyncio.Task | None:
     except Exception as e:  # pragma: no cover - never block startup
         logger.warning(f"Migrations skipped: {e}")
 
+    # 5b. Tier 1 metadata warmup (Phase 2). Lazy chunk ingestion is
+    # triggered on first docs_query for an unseeded library.
+    try:
+        from wet_mcp.sources.tier1_warmup import maybe_warm
+
+        await asyncio.to_thread(maybe_warm, _docs_db)
+    except Exception as e:  # pragma: no cover - never block startup
+        logger.warning(f"Tier 1 warmup skipped: {e}")
+
     # Start auto-sync when Google Drive client ID is configured
     if settings.google_drive_client_id:
         from wet_mcp.sync import start_auto_sync

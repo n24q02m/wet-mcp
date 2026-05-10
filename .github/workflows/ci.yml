@@ -13,6 +13,9 @@ on:
     types:
       - opened
       - reopened
+  schedule:
+    # Phase 2: weekly Tier 1 docs refresh — Sunday 06:00 UTC.
+    - cron: '0 6 * * 0'
 
 permissions:
   contents: read
@@ -176,3 +179,37 @@ jobs:
 
             ---
             ${{ github.event.issue.body || github.event.pull_request.body || 'No description provided.' }}
+
+  refresh-tier1:
+    name: Refresh Tier 1 docs index (weekly)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+
+      - name: Setup Python 3.13
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Build Tier 1 index
+        run: uv run python scripts/build_tier1_index.py
+
+      - name: Upload metrics artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier1-index-metrics
+          path: ~/.wet-mcp/tier1_index_metrics.json
+          if-no-files-found: warn
