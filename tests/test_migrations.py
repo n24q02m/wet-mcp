@@ -84,25 +84,29 @@ def test_baseline_migration_idempotent(tmp_path: Path) -> None:
 
 
 def test_run_migrations_on_startup_stamps_fresh_db(tmp_path: Path) -> None:
-    """Fresh DB created by DocsDB.__init__ → runner stamps to head."""
+    """Fresh DB created by DocsDB.__init__ → runner stamps + upgrades to head.
+
+    Mimics the real production sequence: ``DocsDB._create_tables`` runs
+    first (CREATE TABLE IF NOT EXISTS for libraries / versions / doc_chunks
+    + FTS5), then the runner stamps the baseline and applies any forward
+    migrations to head.
+    """
     db_path = tmp_path / "docs.db"
 
-    # Simulate DocsDB._create_tables having already run (libraries exists).
+    # Simulate DocsDB._create_tables having already run by applying the
+    # baseline-shape DDL via Alembic itself (without stamping). We then
+    # delete alembic_version so the runner observes an "unstamped" DB.
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "docs_001_baseline")
     conn = sqlite3.connect(str(db_path))
-    conn.execute(
-        "CREATE TABLE libraries (id TEXT PRIMARY KEY, name TEXT NOT NULL, "
-        "docs_url TEXT, registry TEXT, description TEXT, "
-        "created_at REAL NOT NULL, updated_at REAL NOT NULL, "
-        "discovery_version INTEGER DEFAULT 0)"
-    )
+    conn.execute("DROP TABLE IF EXISTS alembic_version")
     conn.commit()
     conn.close()
 
     run_migrations_on_startup(db_path)
 
-    # alembic_version table now present + populated
+    # alembic_version table now present + populated; DB ends at head.
     rev = _read_alembic_version(db_path)
-    cfg = _make_alembic_cfg(db_path)
     head = ScriptDirectory.from_config(cfg).get_current_head()
     assert rev == head
 

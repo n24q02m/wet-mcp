@@ -361,14 +361,38 @@ class DocsDB:
         docs_url: str | None = None,
         registry: str | None = None,
         description: str | None = None,
+        tier: int | None = None,
+        package_managers: list[str] | None = None,
+        homepage: str | None = None,
+        github_url: str | None = None,
+        canonical_name: str | None = None,
     ) -> str:
         """Create or update a library. Returns library ID.
 
         Automatically stamps the current ``DISCOVERY_VERSION``.
+
+        Phase 2 (spec §5.4) adds optional metadata: ``tier`` (1 curated /
+        2 on-demand), ``package_managers`` (JSON list), ``homepage``,
+        ``github_url``, and ``canonical_name`` (display label). Columns
+        are added by ``docs_002_libraries`` migration; this writer
+        gracefully skips any field whose column is missing so it can run
+        against pre-Alembic legacy databases for one cycle.
         """
         now = _now_ts()
         # Normalize name to lowercase
         norm_name = name.lower().strip()
+
+        # Phase 2 columns may be absent on a pre-Alembic legacy DB. Detect
+        # presence once per call so we don't crash on older schemas.
+        existing_cols = {
+            r["name"]
+            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
+        }
+        pkg_json = (
+            json.dumps(package_managers, ensure_ascii=False)
+            if package_managers is not None
+            else None
+        )
 
         row = self._conn.execute(
             "SELECT id FROM libraries WHERE name = ?", (norm_name,)
@@ -376,7 +400,7 @@ class DocsDB:
 
         if row:
             lib_id = row["id"]
-            updates = []
+            updates: list[str] = []
             params: list = []
             if docs_url is not None:
                 updates.append("docs_url = ?")
@@ -387,6 +411,24 @@ class DocsDB:
             if description is not None:
                 updates.append("description = ?")
                 params.append(description)
+            if canonical_name is not None and "canonical_name" in existing_cols:
+                updates.append("canonical_name = ?")
+                params.append(canonical_name)
+            if homepage is not None and "homepage" in existing_cols:
+                updates.append("homepage = ?")
+                params.append(homepage)
+            if github_url is not None and "github_url" in existing_cols:
+                updates.append("github_url = ?")
+                params.append(github_url)
+            if pkg_json is not None and "package_managers" in existing_cols:
+                updates.append("package_managers = ?")
+                params.append(pkg_json)
+            if tier is not None and "tier" in existing_cols:
+                updates.append("tier = ?")
+                params.append(int(tier))
+            if "last_indexed_at" in existing_cols:
+                updates.append("last_indexed_at = ?")
+                params.append(now)
             updates.append("discovery_version = ?")
             params.append(DISCOVERY_VERSION)
             updates.append("updated_at = ?")
@@ -399,6 +441,12 @@ class DocsDB:
                     "docs_url",
                     "registry",
                     "description",
+                    "canonical_name",
+                    "homepage",
+                    "github_url",
+                    "package_managers",
+                    "tier",
+                    "last_indexed_at",
                     "discovery_version",
                     "updated_at",
                 }
@@ -416,24 +464,77 @@ class DocsDB:
             return lib_id
 
         lib_id = uuid.uuid4().hex[:12]
+        # Build the INSERT dynamically so we only target columns that exist
+        # in the current schema (legacy DBs may lack Phase 2 columns).
+        cols = [
+            "id",
+            "name",
+            "docs_url",
+            "registry",
+            "description",
+            "discovery_version",
+            "created_at",
+            "updated_at",
+        ]
+        vals: list = [
+            lib_id,
+            norm_name,
+            docs_url,
+            registry,
+            description,
+            DISCOVERY_VERSION,
+            now,
+            now,
+        ]
+        for col_name, value in (
+            ("canonical_name", canonical_name or norm_name),
+            ("homepage", homepage),
+            ("github_url", github_url),
+            ("package_managers", pkg_json),
+            ("tier", tier if tier is not None else None),
+            ("last_indexed_at", now),
+        ):
+            if col_name in existing_cols:
+                cols.append(col_name)
+                vals.append(value)
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.execute(
-            """INSERT INTO libraries
-               (id, name, docs_url, registry, description, discovery_version,
-                created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                lib_id,
-                norm_name,
-                docs_url,
-                registry,
-                description,
-                DISCOVERY_VERSION,
-                now,
-                now,
-            ),
+            f"INSERT INTO libraries ({', '.join(cols)}) "
+            f"VALUES ({', '.join('?' * len(cols))})",
+            vals,
         )
         self._conn.commit()
         return lib_id
+
+    def mark_library_indexed(
+        self, library_id: str, total_versions: int | None = None
+    ) -> None:
+        """Update libraries.last_indexed_at + total_versions (Phase 2).
+
+        Silently no-ops on pre-Alembic legacy databases that lack the
+        ``last_indexed_at`` / ``total_versions`` columns.
+        """
+        existing_cols = {
+            r["name"]
+            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
+        }
+        sets: list[str] = []
+        params: list = []
+        if "last_indexed_at" in existing_cols:
+            sets.append("last_indexed_at = ?")
+            params.append(_now_ts())
+        if "total_versions" in existing_cols and total_versions is not None:
+            sets.append("total_versions = ?")
+            params.append(int(total_versions))
+        if not sets:
+            return
+        params.append(library_id)
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+        self._conn.execute(
+            "UPDATE libraries SET " + ", ".join(sets) + " WHERE id = ?",
+            params,
+        )
+        self._conn.commit()
 
     def get_library(self, name: str) -> dict | None:
         """Get library by name."""
@@ -525,16 +626,45 @@ class DocsDB:
     ) -> int:
         """Add document chunks with optional embeddings.
 
-        Each chunk dict: {url, title, content, heading_path, chunk_index}
+        Each chunk dict supports the v1 keys
+        ``{url, title, content, heading_path, chunk_index}`` plus the
+        Phase 2 (spec §5.4) optional keys ``topic``, ``section``,
+        ``content_hash``, ``token_count``. Phase 2 keys are written
+        only when the corresponding columns exist in the live schema
+        (post ``docs_002_libraries`` migration).
         """
         now = _now_ts()
 
         # Pre-generate IDs for all chunks
         chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
 
-        # Batch insert all doc chunks
-        chunk_rows = [
-            (
+        # Detect Phase 2 columns once so we can branch on a single INSERT.
+        existing_cols = {
+            r["name"]
+            for r in self._conn.execute("PRAGMA table_info(doc_chunks)").fetchall()
+        }
+        phase2_cols = [
+            c
+            for c in ("topic", "section", "content_hash", "token_count")
+            if c in existing_cols
+        ]
+
+        base_cols = (
+            "id",
+            "version_id",
+            "library_id",
+            "url",
+            "title",
+            "chunk_index",
+            "content",
+            "heading_path",
+            "created_at",
+        )
+        all_cols = base_cols + tuple(phase2_cols)
+
+        chunk_rows = []
+        for i, chunk in enumerate(chunks):
+            row = [
                 chunk_ids[i],
                 version_id,
                 library_id,
@@ -544,13 +674,15 @@ class DocsDB:
                 chunk["content"],
                 chunk.get("heading_path", ""),
                 now,
-            )
-            for i, chunk in enumerate(chunks)
-        ]
+            ]
+            for col in phase2_cols:
+                row.append(chunk.get(col))
+            chunk_rows.append(tuple(row))
+
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.executemany(
-            """INSERT INTO doc_chunks
-               (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            f"INSERT INTO doc_chunks ({', '.join(all_cols)}) "
+            f"VALUES ({', '.join('?' * len(all_cols))})",
             chunk_rows,
         )
 
