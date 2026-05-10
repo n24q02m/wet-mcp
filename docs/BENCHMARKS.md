@@ -1,7 +1,9 @@
 # wet-mcp Benchmarks
 
-> Status: Phase 2 (Context7-level docs search). Target metrics defined in
-> `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` section 3.
+> Status: Phase 3 (`extract.agent` + `extract.interact`, BREAKING v2.0.0).
+> Target metrics defined in
+> `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` section 3
+> + `2026-05-09-phase-3-plan.md` task 11.
 
 This document captures the v1.x baseline metrics established during
 Phase 1. Full pre-release benchmark runs (latency p50 / p95, recall@10,
@@ -82,8 +84,30 @@ Phase 2 ships the schema + dispatchers; the 200-fixture recall eval and
 500-query latency run land in the consolidated pre-release session per
 user "test+fix 1 lượt cuối" strategy.
 
+## Phase 3 -- agent + interact targets
+
+| Pillar | Metric | Target | Methodology |
+|---|---|---|---|
+| extract.agent | End-to-end p95 (5-URL synthesis) | < 30 s | 50 research-style queries fixture |
+| extract.agent | Synthesis quality (1-5 manual rubric) | mean >= 4.0 | 50-query fixture with curated ground truth |
+| extract.interact | Per-action p95 latency | < 5 s | 20 fixture flows (login, search, submit) |
+| extract.interact | Session reuse hit rate | >= 90% on 2nd call | 10 multi-step flows |
+| All Phase 3 | Regression vs v1_phase2_baseline | within +/- 10% | `docs/benchmarks/v1_phase2_baseline.json` |
+
+Live latency runs land in the consolidated pre-release session per the
+Phase 3 plan task 11. Until then, baseline values are captured in
+`docs/benchmarks/v1_phase2_baseline.json` (HEAD `22a93a0`,
+`v2.31.0-beta.1`) so post-Phase-3 deltas can be computed deterministically.
+
+### Coverage gate
+
+- Phase 2 baseline: 92% (CI gate `--cov-fail-under=92`).
+- Phase 3 target: maintain >= 92%, climb back to >= 95% in the
+  consolidated coverage push post-Phase-3.
+
 ## Cross-references
 
 - Spec: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` (section 3 metrics, section 7 fixture layout)
 - Phase 1 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-1-plan.md`
 - Phase 2 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`
+- Phase 3 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-3-plan.md`

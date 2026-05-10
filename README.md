@@ -7,8 +7,14 @@ mcp-name: io.github.n24q02m/wet-mcp
 | Phase | Status | Scope |
 |---|---|---|
 | Phase 1 | Shipped | web-core ScrapingAgent migration, smart chunks output, search polish, media slim |
-| Phase 2 | **Current** | Context7-level docs search: library index (Tier 1 + Tier 2), version-aware queries with token cap, project lock (Cabinets) |
-| Phase 3 | Planned (BREAKING) | `extract.agent` multi-step research, `extract.interact` click/fill/submit, `media.analyze` removal |
+| Phase 2 | Shipped | Context7-level docs search: library index (Tier 1 + Tier 2), version-aware queries with token cap, project lock (Cabinets) |
+| Phase 3 | **Current (BREAKING v2.0.0)** | `extract.agent` multi-step research with cited synthesis, `extract.interact` click/fill/submit via patchright (optional session persistence), `docs_004_chunk_summaries` migration, **`media.analyze` removed** |
+
+> **BREAKING in v2.0.0** -- `media(action="analyze")` was removed entirely
+> after the 2-minor-version deprecation grace period started in Phase 1.
+> Use [`imagine-mcp`](https://github.com/n24q02m/imagine-mcp)'s
+> `understand` action for vision/audio/video analysis. See
+> [`docs/migration.md`](docs/migration.md) for the upgrade recipe.
 
 <!-- Badge Row 1: Status -->
 [![CI](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml)

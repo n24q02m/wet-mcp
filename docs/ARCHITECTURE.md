@@ -1,8 +1,9 @@
 # wet-mcp Architecture
 
-> Status: Phase 2 (Context7-level docs search) on top of Phase 1.
-> Spec source: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md`
-> + `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`.
+> Status: Phase 3 (`extract.agent` + `extract.interact` + `media.analyze`
+> removed in v2.0.0 BREAKING) on top of Phase 1 + Phase 2. Spec source:
+> `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md`
+> + `~/projects/.superpower/wet-mcp/2026-05-09-phase-3-plan.md`.
 
 This document describes the runtime architecture of wet-mcp after the
 Phase 1 migration to `n24q02m-web-core` `ScrapingAgent`. It covers the
@@ -224,11 +225,101 @@ persists the lock list to `project_context`. Subsequent
 `version` honor the pin from the lock; `last_used_at` is bumped for
 LRU eviction tracking.
 
+## Phase 3 -- agent + interact + media.analyze removal
+
+### `extract(action="agent")` orchestrator
+
+```text
+extract(action="agent", query=...)
+  |
+  +-- detect_llm_provider() (GEMINI_API_KEY > OPENAI_API_KEY > XAI_API_KEY)
+  |     |
+  |     +-- not configured -> return "Error: no LLM provider detected"
+  |     |                     (does not crash the SDK)
+  |     +-- configured     -> proceed
+  |
+  +-- searxng_search(query, max_results=clamp(max_urls, 1, 20))
+  |     |
+  |     v
+  |   urls = [r.url for r in results]
+  |
+  +-- _extract_many(urls)  (sem-bounded 3, lazy-imports crawler)
+  |     |
+  |     v
+  |   list of smart-chunks-shaped dicts in input order
+  |
+  +-- build_cited_prompt(query, extracts, token_budget)
+  |     |
+  |     v
+  |   per-extract char budget = (token_budget - 200) / N * 4
+  |   numbered [N] citations with URL + title + truncated body
+  |
+  +-- llm.acompletion(model=synthesis_model or LLM_MODELS[0], ...)
+  |     |
+  |     v
+  |   synthesis Markdown with [1], [2], ... matching sources index
+  |
+  +-- return {markdown, sources, per_url_metadata}
+```
+
+### `extract(action="interact")` orchestrator + session pool
+
+```text
+extract(action="interact", url=, actions=, session=None, screenshot=False)
+  |
+  +-- input validation (url + actions required, max 20 actions)
+  |
+  +-- session?
+  |     +-- yes -> SessionPool.get(session, url)
+  |     |           |
+  |     |           +-- cached  -> reuse browser + page (cookies preserved)
+  |     |           +-- absent  -> open_interact_session() + cache
+  |     |                          (LRU eviction at max_concurrent=5,
+  |     |                           TTL=1800s background gc)
+  |     |
+  |     +-- no  -> open_interact_session() (one-shot, closed in finally)
+  |
+  +-- for each action:
+  |     +-- click   -> InteractOps.click(selector OR text=description)
+  |     +-- fill    -> InteractOps.fill(selector OR text=description, value)
+  |     +-- submit  -> InteractOps.submit(selector)
+  |     +-- wait    -> InteractOps.wait_for(selector, state=visible)
+  |
+  +-- snapshot: page.content() -> _strip_html_to_markdown() (8000 char cap)
+  +-- screenshot? -> ops.screenshot() -> ~/.wet-mcp/interact/<sha>.png
+  +-- return {url, snapshot_markdown, screenshot_path?}
+```
+
+`SessionPool` lifecycle: process-scoped singleton in
+`wet_mcp.sources._browser_sessions`. Background `_gc_loop` runs every
+60s, evicts entries past `_ttl` (default 1800s), and self-cancels
+when the pool is empty.
+
+### `media.analyze` removal (BREAKING)
+
+The Phase 1 deprecation handler is gone. The `media` dispatcher now
+routes `action="analyze"` through the standard unknown-action branch
+with a special-cased migration string pointing to `imagine-mcp`'s
+`understand` action. `wet_mcp.llm.analyze_media` is preserved for unit
+tests but is unreachable from any MCP tool surface.
+
+### `docs_004_chunk_summaries` schema
+
+Adds nullable `summary` + `summary_provider` TEXT columns to
+`doc_chunks`. Backward-compatible (existing rows have NULL); the
+migration is schema-ready only -- no Phase 3 task generates summaries.
+Reserved for the LLM-enhanced summaries NICE feature per spec section
+4.3.
+
 ## Cross-references
 
 - Spec: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` (sections 4.3, 5.4, 5.7, 8)
 - Phase 1 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-1-plan.md`
 - Phase 2 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`
-- Web-core repo: `n24q02m/web-core` (`web_core.scraper.ScrapingAgent`)
+- Phase 3 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-3-plan.md`
+- Migration guide: `docs/migration.md` (v1.x.y -> v2.0.0)
+- Interact reference: `docs/interact.md` (action language + session)
+- Web-core repo: `n24q02m/web-core` (`web_core.scraper.ScrapingAgent`,
+  future `web_core.browsers.patchright.InteractOps`)
 - mcp-core repo: `n24q02m/mcp-core` (relay, JWT issuer, config storage primitives)
 - Trust model: <https://github.com/n24q02m/mcp-core/blob/main/docs/TRUST-MODEL.md>
