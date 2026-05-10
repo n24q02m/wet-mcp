@@ -164,7 +164,10 @@ class DocsDB:
         self._vec_enabled = False
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path))
+        # check_same_thread=False allows the connection to be used from
+        # asyncio.to_thread workers (PRAGMA busy_timeout below serializes
+        # concurrent writes safely; SQLite WAL is multi-reader-safe).
+        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")

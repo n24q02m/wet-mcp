@@ -154,6 +154,54 @@ def test_lock_persists_to_project_context(db: DocsDB) -> None:
     assert by_name["pydantic"]["indexed"] is False
 
 
+def test_parse_pep508_invalid_returns_empty() -> None:
+    """A malformed dependency string yields empty (name, version) tuple."""
+    assert _pl_mod._parse_pep508("@@@@@") == ("", "")
+    assert _pl_mod._parse_pep508("") == ("", "")
+
+
+def test_parse_pep508_with_extras_strips_them() -> None:
+    name, version = _pl_mod._parse_pep508("pydantic[email]>=2.0")
+    assert name == "pydantic"
+    assert version == ">=2.0"
+
+
+def test_detect_pyproject_handles_invalid_toml(tmp_path: Path) -> None:
+    """A malformed pyproject.toml degrades gracefully (returns []
+    for that manifest, doesn't crash)."""
+    project = tmp_path / "broken-py"
+    project.mkdir()
+    (project / "pyproject.toml").write_text("not [valid toml")
+    deps = detect_manifests(project)
+    assert isinstance(deps, list)
+
+
+def test_detect_package_json_handles_invalid(tmp_path: Path) -> None:
+    project = tmp_path / "broken-js"
+    project.mkdir()
+    (project / "package.json").write_text("{ not valid json")
+    deps = detect_manifests(project)
+    assert isinstance(deps, list)
+
+
+def test_detect_skips_empty_id_entries(tmp_path: Path) -> None:
+    """Manifests yielding empty-id entries are filtered out by detect_manifests."""
+    project = tmp_path / "noop"
+    project.mkdir()
+    # Empty pyproject — no [project] section, no [tool.poetry], no deps.
+    (project / "pyproject.toml").write_text("[build-system]\nrequires = []\n")
+    deps = detect_manifests(project)
+    assert deps == []
+
+
+def test_lock_project_with_no_manifests(tmp_path: Path, db: DocsDB) -> None:
+    project = tmp_path / "empty"
+    project.mkdir()
+    summary = lock_project(db, project)
+    assert summary["total"] == 0
+    assert summary["indexed"] == 0
+
+
 def test_docs_query_respects_lock(db: DocsDB) -> None:
     """When project_path is set and a lock pins react@18.0.0, the lock wins."""
     lib_id = db.upsert_library(name="react")

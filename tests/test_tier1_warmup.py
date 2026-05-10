@@ -120,3 +120,50 @@ def test_tier1_warmup_total_matches_fixture(db: DocsDB) -> None:
     """Sanity: the bundled fixture exposes at least 50 libraries."""
     summary = maybe_warm(db)
     assert summary["total"] >= 50
+
+
+def test_tier1_warmup_empty_payload_returns_zero(db: DocsDB, monkeypatch) -> None:
+    """If _load_tier1_payload returns no libraries, maybe_warm short-circuits."""
+    monkeypatch.setattr(_tw_mod, "_load_tier1_payload", lambda: {"libraries": []})
+    summary = maybe_warm(db)
+    assert summary == {"total": 0, "skipped_fresh": 0, "seeded": 0}
+
+
+def test_load_tier1_payload_missing_resource_returns_empty() -> None:
+    """ModuleNotFoundError / FileNotFoundError fall back to empty payload."""
+
+    def _broken(*args, **kwargs):
+        raise ModuleNotFoundError("simulated missing data package")
+
+    original = _tw_mod.files
+    try:
+        _tw_mod.files = _broken
+        result = _tw_mod._load_tier1_payload()
+        assert result == {"libraries": []}
+    finally:
+        _tw_mod.files = original
+
+
+def test_tier1_warmup_handles_upsert_error(db: DocsDB, monkeypatch) -> None:
+    """If upsert_library raises for one entry, the loop continues."""
+    monkeypatch.setattr(
+        _tw_mod,
+        "_load_tier1_payload",
+        lambda: {
+            "libraries": [
+                {"id": "good-lib", "canonical_name": "Good", "tier": 1},
+                {"id": "broken-lib", "canonical_name": "Broken", "tier": 1},
+            ]
+        },
+    )
+    original = db.upsert_library
+
+    def _flaky(name, **kwargs):
+        if name == "broken-lib":
+            raise RuntimeError("simulated DB failure")
+        return original(name=name, **kwargs)
+
+    monkeypatch.setattr(db, "upsert_library", _flaky)
+    summary = maybe_warm(db)
+    # good-lib seeded, broken-lib raised -> seeded = 1.
+    assert summary["seeded"] == 1
