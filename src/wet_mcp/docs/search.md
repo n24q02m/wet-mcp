@@ -79,6 +79,57 @@ Search library/framework documentation with auto-indexing. First call indexes do
 
 ---
 
+### docs_resolve
+Free-form library name → ranked list of resolved libraries. Returns `library_id`, `canonical_name`, `tier`, `homepage`, `github_url`, `latest_version`, etc. Useful when the agent wants to disambiguate `next` (Next.js) vs `nextflow` before calling `docs_query`.
+
+**Parameters:**
+- `query` (required): Library name (free-form, case-insensitive)
+- `limit`: Max results (default: 10, smaller = stricter ranking)
+
+**Example:**
+```json
+{"action": "docs_resolve", "query": "react"}
+{"action": "docs_resolve", "query": "next", "limit": 3}
+```
+
+---
+
+### docs_query
+Version-aware library docs query honoring optional topic filter, project lock (Cabinets), and a 5000-token response cap (spec section 3).
+
+**Parameters:**
+- `query` (required): What to search for
+- `library` (required): Library name OR `library_id` from `docs_resolve`
+- `version`: Specific version (default: `latest`)
+- `topic`: Section/topic filter (e.g. `useState`, `routing`)
+- `project_path`: Absolute path to project root. When set AND no explicit `version` is given, the version pinned by a prior `docs_lock_project` call is used.
+- `limit`: Max chunks (default: 10, also subject to 5000-token cap)
+
+**Example:**
+```json
+{"action": "docs_query", "library": "react", "version": "18.0.0", "topic": "useState", "query": "how do I share state between components?"}
+{"action": "docs_query", "library": "fastapi", "project_path": "/repo/my-api", "query": "dependency injection"}
+```
+
+When the requested library is not yet indexed, the action returns `status: "indexing_in_progress"` and starts a background Tier 2 ingestion (GitHub README + RTD/Docusaurus/Mintlify detection via web-core scraper). Retry shortly.
+
+---
+
+### docs_lock_project
+Detect project manifests at `project_path` (`pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`) and persist the locked library set into the Cabinets `project_context` table. Subsequent `docs_query` calls passing the same `project_path` honor the pinned versions automatically.
+
+**Parameters:**
+- `project_path` (required): Absolute path to project root.
+
+**Example:**
+```json
+{"action": "docs_lock_project", "project_path": "/repo/my-app"}
+```
+
+**Returns:** Lock summary with `project_path`, `locked_libraries` (each `{id, name, version, indexed}`), `total`, `indexed`.
+
+---
+
 ### similar
 Find pages similar to a given URL. Extracts content from the source page, generates search keywords, and finds related pages via SearXNG.
 

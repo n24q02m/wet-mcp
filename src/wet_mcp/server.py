@@ -648,6 +648,8 @@ async def search(  # noqa: PLR0913
     query: str | None = None,
     library: str | None = None,
     version: str | None = None,
+    topic: str | None = None,
+    project_path: str | None = None,
     language: str | None = None,
     categories: str = "general",
     max_results: int = 10,
@@ -664,6 +666,9 @@ async def search(  # noqa: PLR0913
     - search: Web search via SearXNG. Example: search(action="search", query="python async patterns")
     - research: Academic/scientific search (Google Scholar, arXiv, PubMed). Example: search(action="research", query="transformer attention mechanism")
     - docs: Search library documentation with auto-indexing. Example: search(action="docs", query="how to create routes", library="fastapi")
+    - docs_resolve: Free-form library name to ranked library_id list. Example: search(action="docs_resolve", query="react")
+    - docs_query: Version-aware library docs query honoring project lock + token cap. Example: search(action="docs_query", library="react", version="latest", topic="useState", query="how to set initial state")
+    - docs_lock_project: Detect project manifests (pyproject/package.json/go.mod/Cargo.toml) and lock the library set for Cabinets isolation. Example: search(action="docs_lock_project", project_path="/repo/my-app")
     - similar: Find pages similar to a URL (pass URL as query). Example: search(action="similar", query="https://example.com/article")
 
     Key parameters:
@@ -690,6 +695,8 @@ async def search(  # noqa: PLR0913
     # (stdio Docker) or Method 2 (HTTP Docker). Other actions on the
     # ``extract`` tool (``extract`` / ``crawl`` / ``map`` / ``media``) hit
     # upstream via ``httpx`` directly and remain available.
+    # docs_resolve and docs_lock_project do not need SearXNG (pure DB ops);
+    # docs_query falls back to local FTS even without SearXNG, so allow it.
     if action in ("search", "research", "docs", "similar") and is_uvx_tool_venv():
         return uvx_searxng_blocked_error(action)
 
@@ -898,15 +905,136 @@ async def search(  # noqa: PLR0913
                 "similar",
             )
 
+        case "docs_resolve":
+            if not query:
+                return 'Error: query (library name) is required for docs_resolve. Example: search(action="docs_resolve", query="react")'
+            if not _docs_db:
+                return "Error: Docs database not initialized"
+            from wet_mcp.sources.docs import resolve_library
+
+            results = await asyncio.to_thread(resolve_library, _docs_db, query, limit)
+            return json.dumps(
+                {"query": query, "results": results, "total": len(results)},
+                ensure_ascii=False,
+                indent=2,
+            )
+
+        case "docs_query":
+            if not query:
+                return 'Error: query is required for docs_query. Example: search(action="docs_query", library="react", query="useState")'
+            if not library:
+                return 'Error: library is required for docs_query. Example: search(action="docs_query", library="react", query="useState")'
+            if not _docs_db:
+                return "Error: Docs database not initialized"
+            from wet_mcp.sources.docs import (
+                ingest_tier2,
+                query_docs,
+                resolve_library,
+            )
+
+            # Resolve library: accept either library_id (12-char hex) or
+            # canonical/alias name. We always look up by name first so the
+            # caller can pass either form.
+            resolved = await asyncio.to_thread(resolve_library, _docs_db, library, 1)
+            if not resolved:
+                # Tier 2 lazy ingest: fire-and-forget, return progress hint.
+                asyncio.create_task(ingest_tier2(_docs_db, library))
+                return json.dumps(
+                    {
+                        "status": "indexing_in_progress",
+                        "library": library,
+                        "message": (
+                            "Library not yet indexed. Tier 2 ingestion has "
+                            "started in the background; retry shortly."
+                        ),
+                        "results": [],
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+
+            lib_id = resolved[0]["library_id"]
+            effective_version = version
+
+            # Honor Cabinets project lock when project_path is supplied AND
+            # the caller did not explicitly pin a version.
+            lock_pin: str | None = None
+            if project_path and not version:
+                lock_entry = await asyncio.to_thread(
+                    _docs_db.get_project_context, project_path
+                )
+                if lock_entry:
+                    for locked in lock_entry.get("locked_libraries", []):
+                        if locked.get("id") in (lib_id, library, library.lower()):
+                            lock_pin = locked.get("version")
+                            break
+                    await asyncio.to_thread(
+                        _docs_db.touch_project_context, project_path
+                    )
+            if lock_pin:
+                effective_version = lock_pin
+
+            results = await asyncio.to_thread(
+                query_docs,
+                _docs_db,
+                lib_id,
+                query,
+                effective_version,
+                topic,
+                limit,
+            )
+            return json.dumps(
+                {
+                    "library": resolved[0],
+                    "query": query,
+                    "version": effective_version or "latest",
+                    "topic": topic,
+                    "project_path": project_path,
+                    "lock_pin": lock_pin,
+                    "results": results,
+                    "total": len(results),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+
+        case "docs_lock_project":
+            if not project_path:
+                return 'Error: project_path is required for docs_lock_project. Example: search(action="docs_lock_project", project_path="/repo/my-app")'
+            if not _docs_db:
+                return "Error: Docs database not initialized"
+            from wet_mcp.sources.project_lock import lock_project
+
+            try:
+                lock = await asyncio.to_thread(
+                    lock_project, _docs_db, Path(project_path)
+                )
+            except FileNotFoundError as exc:
+                return f"Error: project_path does not exist: {exc}"
+            return json.dumps(lock, ensure_ascii=False, indent=2)
+
         case _:
             import difflib
 
-            valid_actions = ["docs", "research", "search", "similar"]
+            valid_actions = [
+                "docs",
+                "docs_resolve",
+                "docs_query",
+                "docs_lock_project",
+                "research",
+                "search",
+                "similar",
+            ]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return (
                 f"Error: Unknown action '{action}'.{suggestion} "
-                "Valid actions: search (web search), research (academic), docs (library documentation), similar (find related pages). "
+                "Valid actions: search (web search), research (academic), "
+                "docs (library documentation, auto-indexing), "
+                "docs_resolve (library name → ranked library_id), "
+                "docs_query (version-aware docs query with token cap), "
+                "docs_lock_project (Cabinets project isolation), "
+                "similar (find related pages). "
                 "If you want to read content from a URL, use the `extract` tool instead."
             )
 

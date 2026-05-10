@@ -195,10 +195,27 @@ class DocsDB:
         self._create_doc_chunks_table()
         self._create_fts_table()
         self._create_vector_table()
+        self._create_project_context_table()
         self._conn.commit()
 
+    def _create_project_context_table(self) -> None:
+        # Phase 2 (spec section 5.4) — Cabinets project isolation.
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS project_context (
+                project_path TEXT PRIMARY KEY,
+                locked_libraries TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                last_used_at REAL NOT NULL
+            )
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_project_context_last_used
+            ON project_context(last_used_at)
+        """)
+
     def _create_libraries_table(self) -> None:
-        # Libraries metadata
+        # Libraries metadata (Phase 2 schema; pre-Alembic legacy databases
+        # are upgraded to this shape by alembic/versions/docs_002_libraries.py).
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS libraries (
                 id TEXT PRIMARY KEY,
@@ -206,6 +223,14 @@ class DocsDB:
                 docs_url TEXT,
                 registry TEXT,
                 description TEXT,
+                canonical_name TEXT,
+                homepage TEXT,
+                github_url TEXT,
+                package_managers TEXT,
+                tier INTEGER NOT NULL DEFAULT 2,
+                last_indexed_at REAL,
+                total_versions INTEGER NOT NULL DEFAULT 0,
+                discovery_version INTEGER DEFAULT 0,
                 created_at REAL NOT NULL,
                 updated_at REAL NOT NULL
             )
@@ -215,18 +240,29 @@ class DocsDB:
             ON libraries(name)
         """)
 
-        # Migration: add discovery_version column if missing
-        try:
-            self._conn.execute(
-                "ALTER TABLE libraries ADD COLUMN discovery_version INTEGER DEFAULT 0"
-            )
-            self._conn.commit()
-            logger.debug("Migrated libraries table: added discovery_version")
-        except sqlite3.OperationalError:
-            pass  # Column already exists
+        # Idempotent column adds for legacy DBs that pre-date Alembic.
+        # Each ALTER is wrapped in a try/except so re-running on a fresh
+        # head-shape table does not raise.
+        for col_ddl in (
+            "discovery_version INTEGER DEFAULT 0",
+            "canonical_name TEXT",
+            "homepage TEXT",
+            "github_url TEXT",
+            "package_managers TEXT",
+            "tier INTEGER NOT NULL DEFAULT 2",
+            "last_indexed_at REAL",
+            "total_versions INTEGER NOT NULL DEFAULT 0",
+        ):
+            try:
+                self._conn.execute(f"ALTER TABLE libraries ADD COLUMN {col_ddl}")
+                self._conn.commit()
+                col_name = col_ddl.split()[0]
+                logger.debug(f"Migrated libraries table: added {col_name}")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
 
     def _create_versions_table(self) -> None:
-        # Versions
+        # Versions (Phase 2 schema with release_date + source_url).
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS versions (
                 id TEXT PRIMARY KEY,
@@ -237,13 +273,22 @@ class DocsDB:
                 page_count INTEGER DEFAULT 0,
                 chunk_count INTEGER DEFAULT 0,
                 status TEXT DEFAULT 'pending',
+                release_date REAL,
+                source_url TEXT,
                 FOREIGN KEY (library_id) REFERENCES libraries(id) ON DELETE CASCADE,
                 UNIQUE(library_id, version)
             )
         """)
+        # Idempotent column adds for legacy DBs.
+        for col_ddl in ("release_date REAL", "source_url TEXT"):
+            try:
+                self._conn.execute(f"ALTER TABLE versions ADD COLUMN {col_ddl}")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
 
     def _create_doc_chunks_table(self) -> None:
-        # Document chunks
+        # Document chunks (Phase 2 schema with section/topic/content_hash/token_count).
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS doc_chunks (
                 id TEXT PRIMARY KEY,
@@ -254,11 +299,27 @@ class DocsDB:
                 chunk_index INTEGER NOT NULL DEFAULT 0,
                 content TEXT NOT NULL,
                 heading_path TEXT,
+                section TEXT,
+                topic TEXT,
+                content_hash TEXT,
+                token_count INTEGER,
                 created_at REAL NOT NULL,
                 FOREIGN KEY (version_id) REFERENCES versions(id) ON DELETE CASCADE,
                 FOREIGN KEY (library_id) REFERENCES libraries(id) ON DELETE CASCADE
             )
         """)
+        # Idempotent column adds for legacy DBs.
+        for col_ddl in (
+            "section TEXT",
+            "topic TEXT",
+            "content_hash TEXT",
+            "token_count INTEGER",
+        ):
+            try:
+                self._conn.execute(f"ALTER TABLE doc_chunks ADD COLUMN {col_ddl}")
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_version
             ON doc_chunks(version_id)
@@ -277,6 +338,11 @@ class DocsDB:
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_url_order
             ON doc_chunks(url, version_id, chunk_index)
+        """)
+        # Phase 2: composite index for topic-filtered queries.
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_doc_chunks_lib_ver_topic
+            ON doc_chunks(library_id, version_id, topic)
         """)
 
     def _create_fts_table(self) -> None:
@@ -486,15 +552,15 @@ class DocsDB:
             now,
             now,
         ]
-        for col_name, value in (
-            ("canonical_name", canonical_name or norm_name),
-            ("homepage", homepage),
-            ("github_url", github_url),
-            ("package_managers", pkg_json),
-            ("tier", tier if tier is not None else None),
-            ("last_indexed_at", now),
+        for col_name, value, include_when_none in (
+            ("canonical_name", canonical_name or norm_name, True),
+            ("homepage", homepage, False),
+            ("github_url", github_url, False),
+            ("package_managers", pkg_json, False),
+            ("tier", tier, False),  # Skip — column defaults to 2
+            ("last_indexed_at", now, True),
         ):
-            if col_name in existing_cols:
+            if col_name in existing_cols and (value is not None or include_when_none):
                 cols.append(col_name)
                 vals.append(value)
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
@@ -985,6 +1051,11 @@ class DocsDB:
                 "heading_path": chunk.get("heading_path", ""),
                 "library": chunk.get("_library_name", ""),
                 "score": round(score, 4),
+                # Phase 2 (spec section 5.4) — propagate when columns exist.
+                "topic": chunk.get("topic"),
+                "section": chunk.get("section"),
+                "token_count": chunk.get("token_count"),
+                "version_id": chunk.get("version_id"),
             }
 
             # Cross-chunk context: include adjacent chunks for better RAG

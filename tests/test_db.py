@@ -24,6 +24,8 @@ import pytest
 # ---------------------------------------------------------------------------
 _src_root = Path(__file__).resolve().parent.parent / "src"
 
+# Reuse already-loaded modules so we don't invalidate patches in
+# sibling test files that bind names at import time.
 if "wet_mcp" not in sys.modules:
     _pkg = types.ModuleType("wet_mcp")
     _pkg.__path__ = [str(_src_root / "wet_mcp")]
@@ -35,20 +37,28 @@ if "wet_mcp.sources" not in sys.modules:
     sys.modules["wet_mcp.sources"] = _sources_pkg
 
 # Load docs module (lightweight — no crawl4ai dependency)
-_docs_file = _src_root / "wet_mcp" / "sources" / "docs.py"
-_docs_spec = importlib.util.spec_from_file_location("wet_mcp.sources.docs", _docs_file)
-assert _docs_spec is not None
-_docs_mod = importlib.util.module_from_spec(_docs_spec)
-sys.modules["wet_mcp.sources.docs"] = _docs_mod
-_docs_spec.loader.exec_module(_docs_mod)
+if "wet_mcp.sources.docs" not in sys.modules:
+    _docs_file = _src_root / "wet_mcp" / "sources" / "docs.py"
+    _docs_spec = importlib.util.spec_from_file_location(
+        "wet_mcp.sources.docs", _docs_file
+    )
+    assert _docs_spec is not None
+    _docs_mod = importlib.util.module_from_spec(_docs_spec)
+    sys.modules["wet_mcp.sources.docs"] = _docs_mod
+    _docs_spec.loader.exec_module(_docs_mod)
+else:
+    _docs_mod = sys.modules["wet_mcp.sources.docs"]
 
 # Now load db module
-_db_file = _src_root / "wet_mcp" / "db.py"
-_db_spec = importlib.util.spec_from_file_location("wet_mcp.db", _db_file)
-assert _db_spec is not None
-_db_mod = importlib.util.module_from_spec(_db_spec)
-sys.modules["wet_mcp.db"] = _db_mod
-_db_spec.loader.exec_module(_db_mod)
+if "wet_mcp.db" not in sys.modules:
+    _db_file = _src_root / "wet_mcp" / "db.py"
+    _db_spec = importlib.util.spec_from_file_location("wet_mcp.db", _db_file)
+    assert _db_spec is not None
+    _db_mod = importlib.util.module_from_spec(_db_spec)
+    sys.modules["wet_mcp.db"] = _db_mod
+    _db_spec.loader.exec_module(_db_mod)
+else:
+    _db_mod = sys.modules["wet_mcp.db"]
 
 DocsDB = _db_mod.DocsDB
 _build_fts_queries = _db_mod._build_fts_queries
