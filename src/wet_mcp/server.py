@@ -1242,6 +1242,26 @@ async def extract(  # noqa: PLR0913
                 return result
             return json.dumps(result, ensure_ascii=False, indent=2)
 
+        case "interact":
+            if not url:
+                return 'Error: url is required for interact action. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "click", "selector": "#submit"}])'
+            if not actions:
+                return 'Error: actions is required for interact action. Provide a list of {type, selector?, description?, value?} ops. Example: actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}]'
+            from wet_mcp.sources.interact_orchestrator import run_interact
+
+            result = await _with_timeout(
+                run_interact(
+                    url=url,
+                    actions=actions,
+                    session=session,
+                    screenshot=screenshot,
+                ),
+                "interact",
+            )
+            if isinstance(result, str):
+                return result
+            return json.dumps(result, ensure_ascii=False, indent=2)
+
         case _:
             import difflib
 
@@ -1252,6 +1272,7 @@ async def extract(  # noqa: PLR0913
                 "crawl",
                 "extract",
                 "extract_structured",
+                "interact",
                 "map",
             ]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
@@ -1260,7 +1281,7 @@ async def extract(  # noqa: PLR0913
                 f"Error: Unknown action '{action}'.{suggestion} "
                 "Valid actions: extract (read URL content), batch (bulk extract), crawl (follow links), "
                 "map (site structure), convert (local files to markdown), extract_structured (schema-based), "
-                "agent (multi-step research orchestration). "
+                "agent (multi-step research orchestration), interact (drive a page with click/fill/submit). "
                 "If you want to search for information, use the `search` tool instead."
             )
 
