@@ -153,6 +153,73 @@ Extract structured data from web pages using LLM + JSON Schema. Provide a schema
 
 ---
 
+### agent
+Multi-step research orchestration -- search the web, extract the top results, then synthesise a citation-preserving Markdown answer with one configured LLM. Internally runs `search` (one round) -> `extract` (concurrent, sem-bounded 3) -> LLM synthesis with numbered `[N]` citations.
+
+**Parameters:**
+- `query` (required): Research question to answer
+- `max_urls`: Number of search hits to extract and cite (default: 5, hard cap: 20)
+- `synthesis_model`: Override the LLM model used for the synthesis step (e.g. `"openai/gpt-5"`); falls back to `LLM_MODELS` config
+- `token_budget`: Soft cap on prompt tokens for the synthesis call (default: 10000). Each extract gets `(token_budget - 200) / N` tokens of room and is truncated above that.
+
+**Example:**
+```json
+{"action": "agent", "query": "latest pydantic 2 changes", "max_urls": 5}
+```
+
+**Returns:**
+```json
+{
+  "markdown": "# Pydantic 2 highlights\n\nThe v2 release [1] introduces ...",
+  "sources": [
+    {"index": 1, "url": "https://...", "title": "..."}
+  ],
+  "per_url_metadata": [
+    {"url": "...", "extract_strategy": "basic_http", "tokens": 487, "error": null}
+  ]
+}
+```
+
+**Requires:** an LLM provider key (`GEMINI_API_KEY` / `OPENAI_API_KEY` / `XAI_API_KEY`). Returns a clear "no LLM provider detected" error string when none is set instead of crashing the SDK.
+
+---
+
+### interact
+Drive a page interactively via patchright (click / fill / submit / optional screenshot). Useful for surfaces that need a few targeted user actions before content becomes visible (search forms, simple logins, "load more" buttons). Exposes a small action language so callers do not have to embed JavaScript.
+
+**Parameters:**
+- `url` (required): Page URL to drive
+- `actions` (required): List of `{type, selector?, description?, value?}` operations applied in order. Supported types: `click`, `fill` (uses `value`), `submit`, `wait`. Either `selector` OR `description` (LLM-resolved selector fallback, NICE) must be provided.
+- `session`: Persistent session id; reusing the same id across calls keeps the same browser + cookies + localStorage (TTL eviction, see `docs/interact.md`)
+- `screenshot`: When `true`, save a PNG of the post-interaction page under `~/.wet-mcp/interact/` and include its path in the response (default: false)
+
+**Example:**
+```json
+{
+  "action": "interact",
+  "url": "https://example.com/login",
+  "actions": [
+    {"type": "fill", "selector": "#email", "value": "user@example.com"},
+    {"type": "fill", "selector": "#password", "value": "secret"},
+    {"type": "submit", "selector": "form#login"}
+  ],
+  "session": "demo-login"
+}
+```
+
+**Returns:**
+```json
+{
+  "url": "https://example.com/dashboard",
+  "snapshot_markdown": "# Dashboard\n\n...",
+  "screenshot_path": "/home/user/.wet-mcp/interact/<sha>.png"
+}
+```
+
+See `docs/interact.md` for the full action-language reference, session-persistence semantics, and security notes.
+
+---
+
 ## Anti-Bot Features
 
 The `stealth` parameter enables:

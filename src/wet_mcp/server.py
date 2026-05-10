@@ -1060,7 +1060,7 @@ async def search(  # noqa: PLR0913
     ),
 )
 @_wrap_tool("extract")
-async def extract(
+async def extract(  # noqa: PLR0913
     action: str,
     urls: list[str] | None = None,
     paths: list[str] | None = None,
@@ -1070,6 +1070,14 @@ async def extract(
     stealth: bool = False,
     schema: dict | None = None,
     prompt: str | None = None,
+    query: str | None = None,
+    max_urls: int = 5,
+    synthesis_model: str | None = None,
+    token_budget: int = 10000,
+    actions: list[dict] | None = None,
+    session: str | None = None,
+    screenshot: bool = False,
+    url: str | None = None,
 ) -> str:
     """Read and return full page content from URLs or local files. Use this when you have a specific URL and need its content. For finding URLs first, use the `search` tool instead.
 
@@ -1080,10 +1088,20 @@ async def extract(
     - map: Discover site URL structure without extracting content. Example: extract(action="map", urls=["https://example.com"])
     - convert: Convert local files (PDF, DOCX, PPTX, XLSX) to Markdown. Example: extract(action="convert", paths=["/home/user/report.pdf"])
     - extract_structured: Extract structured data using JSON Schema + LLM. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})
+    - agent: Multi-step research orchestration -- search the web, extract top results, synthesize a cited Markdown answer. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)
+    - interact: Drive a page with click/fill/submit via patchright. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}])
 
     Key parameters:
     - urls (required for extract/batch/crawl/map/extract_structured): List of URLs
     - paths (required for convert): List of local file paths
+    - query (required for agent): Research question to answer
+    - url (required for interact): Page URL to drive
+    - actions (required for interact): List of {type, selector?, description?, value?} ops
+    - max_urls (agent): Default 5, hard cap 20
+    - synthesis_model (agent): Override LLM model for the synthesis step
+    - token_budget (agent): Max prompt tokens (default 10000)
+    - session (interact): Persistent session id; reuses browser across calls
+    - screenshot (interact): Capture post-interaction screenshot
     - format: Output format -- "markdown" (default), "text", "html"
     - depth: Crawl depth (default: 2, max: 5)
     - max_pages: Max pages for crawl/map (default: 20, max: 100)
@@ -1206,10 +1224,29 @@ async def extract(
                 "extract_structured",
             )
 
+        case "agent":
+            if not query:
+                return 'Error: query is required for agent action. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)'
+            from wet_mcp.sources.agent_orchestrator import run_agent
+
+            result = await _with_timeout(
+                run_agent(
+                    query=query,
+                    max_urls=max_urls,
+                    synthesis_model=synthesis_model,
+                    token_budget=token_budget,
+                ),
+                "agent",
+            )
+            if isinstance(result, str):
+                return result
+            return json.dumps(result, ensure_ascii=False, indent=2)
+
         case _:
             import difflib
 
             valid_actions = [
+                "agent",
                 "batch",
                 "convert",
                 "crawl",
@@ -1222,7 +1259,8 @@ async def extract(
             return (
                 f"Error: Unknown action '{action}'.{suggestion} "
                 "Valid actions: extract (read URL content), batch (bulk extract), crawl (follow links), "
-                "map (site structure), convert (local files to markdown), extract_structured (schema-based). "
+                "map (site structure), convert (local files to markdown), extract_structured (schema-based), "
+                "agent (multi-step research orchestration). "
                 "If you want to search for information, use the `search` tool instead."
             )
 
