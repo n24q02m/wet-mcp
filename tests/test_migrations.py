@@ -333,6 +333,66 @@ def test_004_idempotent_on_rerun(tmp_path: Path) -> None:
     assert "summary_provider" in cols
 
 
+def test_full_v1_to_v2_round_trip(tmp_path: Path) -> None:
+    """Phase 3 Task 9 regression: v1.x.y (docs_001) -> v2.0.0 (head)."""
+    if not _has_revision("docs_004_chunk_summaries"):
+        pytest.skip("docs_004_chunk_summaries not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+
+    # Land at docs_001 (v1.x.y baseline) and seed representative rows so
+    # we can verify the data survives the full chain.
+    command.upgrade(cfg, "docs_001_baseline")
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO libraries (id, name, docs_url, registry, description, "
+        "created_at, updated_at, discovery_version) "
+        "VALUES ('lib-pre', 'Pre', 'http://x', 'github', 'd', 0.0, 0.0, 0)"
+    )
+    conn.execute(
+        "INSERT INTO versions (id, library_id, version, status, "
+        "page_count, chunk_count) "
+        "VALUES ('ver-pre', 'lib-pre', '1.0.0', 'indexed', 1, 1)"
+    )
+    conn.execute(
+        "INSERT INTO doc_chunks (id, version_id, library_id, url, title, "
+        "chunk_index, content, heading_path, created_at) "
+        "VALUES ('c-pre', 'ver-pre', 'lib-pre', 'https://x', 't', 0, 'b', '', 0.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    # Now run the production auto-migrate-on-startup runner end-to-end.
+    run_migrations_on_startup(db_path)
+
+    # Version stamp advanced to head.
+    assert _read_alembic_version(db_path) == "docs_004_chunk_summaries"
+
+    # Pre-existing rows are preserved across all forward migrations.
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        lib_count = conn.execute("SELECT COUNT(*) FROM libraries").fetchone()[0]
+        ver_count = conn.execute("SELECT COUNT(*) FROM versions").fetchone()[0]
+        chunk_row = conn.execute(
+            "SELECT * FROM doc_chunks WHERE id = 'c-pre'"
+        ).fetchone()
+    finally:
+        conn.close()
+    assert lib_count == 1
+    assert ver_count == 1
+    assert chunk_row is not None
+    assert chunk_row["content"] == "b"
+    # Phase 3 columns are present and NULL for the pre-existing row.
+    assert chunk_row["summary"] is None
+    assert chunk_row["summary_provider"] is None
+
+    # Backup file was created when the runner saw current_rev != head.
+    backups = list(tmp_path.glob("docs.db.bak.*"))
+    assert backups, "auto-migrate-on-startup must snapshot before upgrade"
+
+
 def test_db_add_chunks_writes_summary_columns_when_present(tmp_path: Path) -> None:
     """db.DocsDB.add_chunks must write summary + summary_provider when set."""
     if not _has_revision("docs_004_chunk_summaries"):
