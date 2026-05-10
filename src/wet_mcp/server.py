@@ -276,10 +276,19 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
     asyncio.create_task(_init_backends_task())
 
-    # 5. Initialize docs DB
+    # 5. Initialize docs DB + run Alembic migrations (auto-migrate-on-startup
+    #    with backup-before-migrate per spec §8). DocsDB._create_tables is
+    #    still the bootstrap path for fresh DBs (CREATE TABLE IF NOT EXISTS);
+    #    Alembic stamps the baseline + applies any forward migrations.
     docs_path = settings.get_db_path()
     docs_path.parent.mkdir(parents=True, exist_ok=True)
     _docs_db = DocsDB(docs_path, embedding_dims=_embedding_dims)
+    try:
+        from wet_mcp.migrations import run_migrations_on_startup
+
+        run_migrations_on_startup(docs_path)
+    except Exception as e:  # pragma: no cover - never block startup
+        logger.warning(f"Migrations skipped: {e}")
 
     # Start auto-sync when Google Drive client ID is configured
     if settings.google_drive_client_id:

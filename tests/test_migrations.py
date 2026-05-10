@@ -1,0 +1,264 @@
+"""Tests for Alembic auto-migrate-on-startup runner.
+
+Covers:
+
+* baseline migration is idempotent (running ``alembic upgrade head`` twice
+  on a fresh DB is a no-op the second time);
+* ``run_migrations_on_startup`` stamps an unstamped DB without applying any
+  forward migration when current == head after stamp;
+* backup file is created when a real upgrade would run;
+* docs_002_libraries forward migration adds the spec §5.4 columns and
+  preserves existing rows;
+* docs_003_project_context creates the Cabinets table.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+
+from alembic import command
+from wet_mcp.migrations import (
+    _ALEMBIC_INI_PATH,
+    _ALEMBIC_SCRIPT_LOCATION,
+    _read_alembic_version,
+    run_migrations_on_startup,
+)
+
+
+def _make_alembic_cfg(db_path: Path) -> Config:
+    cfg = Config(str(_ALEMBIC_INI_PATH))
+    cfg.set_main_option("script_location", str(_ALEMBIC_SCRIPT_LOCATION))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path.resolve().as_posix()}")
+    return cfg
+
+
+def _table_columns(db_path: Path, table: str) -> set[str]:
+    conn = sqlite3.connect(str(db_path))
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    finally:
+        conn.close()
+    return {r[1] for r in rows}
+
+
+def _table_exists(db_path: Path, table: str) -> bool:
+    conn = sqlite3.connect(str(db_path))
+    try:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+            (table,),
+        ).fetchone()
+    finally:
+        conn.close()
+    return row is not None
+
+
+def _has_revision(rev_id: str) -> bool:
+    """Return True when the named Alembic revision file exists in alembic/versions."""
+    versions_dir = _ALEMBIC_SCRIPT_LOCATION / "versions"
+    return any(p.stem.startswith(rev_id) for p in versions_dir.glob("*.py"))
+
+
+def test_baseline_migration_idempotent(tmp_path: Path) -> None:
+    """alembic upgrade head twice on fresh DB == no schema diff second run."""
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+
+    command.upgrade(cfg, "docs_001_baseline")
+    rev_after_first = _read_alembic_version(db_path)
+
+    command.upgrade(cfg, "docs_001_baseline")
+    rev_after_second = _read_alembic_version(db_path)
+
+    assert rev_after_first == rev_after_second == "docs_001_baseline"
+    # Baseline tables present
+    assert _table_exists(db_path, "libraries")
+    assert _table_exists(db_path, "versions")
+    assert _table_exists(db_path, "doc_chunks")
+    assert _table_exists(db_path, "doc_chunks_fts")
+
+
+def test_run_migrations_on_startup_stamps_fresh_db(tmp_path: Path) -> None:
+    """Fresh DB created by DocsDB.__init__ → runner stamps to head."""
+    db_path = tmp_path / "docs.db"
+
+    # Simulate DocsDB._create_tables having already run (libraries exists).
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "CREATE TABLE libraries (id TEXT PRIMARY KEY, name TEXT NOT NULL, "
+        "docs_url TEXT, registry TEXT, description TEXT, "
+        "created_at REAL NOT NULL, updated_at REAL NOT NULL, "
+        "discovery_version INTEGER DEFAULT 0)"
+    )
+    conn.commit()
+    conn.close()
+
+    run_migrations_on_startup(db_path)
+
+    # alembic_version table now present + populated
+    rev = _read_alembic_version(db_path)
+    cfg = _make_alembic_cfg(db_path)
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    assert rev == head
+
+
+def test_run_migrations_on_startup_creates_backup_when_upgrading(
+    tmp_path: Path,
+) -> None:
+    """When an actual forward migration would run, a .bak.<ts> file appears."""
+    if not _has_revision("docs_002_libraries"):
+        pytest.skip("docs_002_libraries not yet created")
+
+    db_path = tmp_path / "docs.db"
+
+    # Apply only baseline so the runner has work to do (head > baseline).
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "docs_001_baseline")
+
+    # Insert a marker row so we can verify the backup is a real copy.
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO libraries (id, name, created_at, updated_at) "
+        "VALUES ('marker', 'marker-lib', 1.0, 1.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    run_migrations_on_startup(db_path)
+
+    backups = list(tmp_path.glob("docs.db.bak.*"))
+    assert backups, "Expected a docs.db.bak.<ts> file from backup-before-migrate"
+
+
+def test_002_adds_libraries_columns(tmp_path: Path) -> None:
+    """docs_002 adds tier/last_indexed_at/package_managers/etc."""
+    if not _has_revision("docs_002_libraries"):
+        pytest.skip("docs_002_libraries not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "docs_001_baseline")
+
+    # Seed pre-existing rows on the v1 schema.
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO libraries (id, name, docs_url, registry, description, "
+        "created_at, updated_at, discovery_version) "
+        "VALUES ('lib1', 'react', 'https://react.dev', 'npm', 'react lib', "
+        "1.0, 2.0, 1)"
+    )
+    conn.commit()
+    conn.close()
+
+    command.upgrade(cfg, "docs_002_libraries")
+
+    cols = _table_columns(db_path, "libraries")
+    for required in (
+        "canonical_name",
+        "homepage",
+        "github_url",
+        "package_managers",
+        "tier",
+        "last_indexed_at",
+        "total_versions",
+    ):
+        assert required in cols, f"Missing column {required} in libraries"
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM libraries WHERE id = 'lib1'").fetchone()
+    conn.close()
+    assert row is not None
+    assert row["canonical_name"] == "react"  # backfill from name
+    assert row["last_indexed_at"] == 2.0  # backfill from updated_at
+    assert row["tier"] == 2  # default for pre-existing rows
+    assert row["total_versions"] == 0  # default
+
+
+def test_002_adds_versions_columns(tmp_path: Path) -> None:
+    """docs_002 adds release_date + source_url to versions."""
+    if not _has_revision("docs_002_libraries"):
+        pytest.skip("docs_002_libraries not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "docs_001_baseline")
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO libraries (id, name, created_at, updated_at) "
+        "VALUES ('lib1', 'react', 1.0, 2.0)"
+    )
+    conn.execute(
+        "INSERT INTO versions (id, library_id, version, status, "
+        "page_count, chunk_count) "
+        "VALUES ('v1', 'lib1', '18.0.0', 'indexed', 5, 50)"
+    )
+    conn.commit()
+    conn.close()
+
+    command.upgrade(cfg, "docs_002_libraries")
+
+    cols = _table_columns(db_path, "versions")
+    assert "release_date" in cols
+    assert "source_url" in cols
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM versions WHERE id = 'v1'").fetchone()
+    conn.close()
+    assert row is not None
+    assert row["page_count"] == 5  # preserved
+    assert row["chunk_count"] == 50  # preserved
+
+
+def test_002_adds_doc_chunks_columns(tmp_path: Path) -> None:
+    """docs_002 adds section/topic/content_hash/token_count to doc_chunks."""
+    if not _has_revision("docs_002_libraries"):
+        pytest.skip("docs_002_libraries not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "docs_002_libraries")
+
+    cols = _table_columns(db_path, "doc_chunks")
+    for required in ("section", "topic", "content_hash", "token_count"):
+        assert required in cols, f"Missing column {required} in doc_chunks"
+
+
+def test_003_creates_project_context_table(tmp_path: Path) -> None:
+    """docs_003 creates Cabinets project_context table."""
+    if not _has_revision("docs_003_project_context"):
+        pytest.skip("docs_003_project_context not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "head")
+
+    assert _table_exists(db_path, "project_context")
+    cols = _table_columns(db_path, "project_context")
+    for required in ("project_path", "locked_libraries", "created_at", "last_used_at"):
+        assert required in cols, f"Missing column {required} in project_context"
+
+
+def test_alembic_version_advances_through_chain(tmp_path: Path) -> None:
+    """Sequential upgrade chain: baseline → 002 → 003 lands at head."""
+    if not _has_revision("docs_003_project_context"):
+        pytest.skip("docs_003_project_context not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+
+    command.upgrade(cfg, "docs_001_baseline")
+    assert _read_alembic_version(db_path) == "docs_001_baseline"
+
+    command.upgrade(cfg, "docs_002_libraries")
+    assert _read_alembic_version(db_path) == "docs_002_libraries"
+
+    command.upgrade(cfg, "head")
+    assert _read_alembic_version(db_path) == "docs_003_project_context"
