@@ -698,23 +698,32 @@ class DocsDB:
         Each chunk dict supports the v1 keys
         ``{url, title, content, heading_path, chunk_index}`` plus the
         Phase 2 (spec §5.4) optional keys ``topic``, ``section``,
-        ``content_hash``, ``token_count``. Phase 2 keys are written
-        only when the corresponding columns exist in the live schema
-        (post ``docs_002_libraries`` migration).
+        ``content_hash``, ``token_count`` plus the Phase 3 (spec §4.3
+        NICE) optional keys ``summary``, ``summary_provider``. Optional
+        keys are written only when the corresponding columns exist in
+        the live schema (post ``docs_002_libraries`` for Phase 2;
+        post ``docs_004_chunk_summaries`` for Phase 3).
         """
         now = _now_ts()
 
         # Pre-generate IDs for all chunks
         chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
 
-        # Detect Phase 2 columns once so we can branch on a single INSERT.
+        # Detect optional columns once so we can branch on a single INSERT.
         existing_cols = {
             r["name"]
             for r in self._conn.execute("PRAGMA table_info(doc_chunks)").fetchall()
         }
         phase2_cols = [
             c
-            for c in ("topic", "section", "content_hash", "token_count")
+            for c in (
+                "topic",
+                "section",
+                "content_hash",
+                "token_count",
+                "summary",
+                "summary_provider",
+            )
             if c in existing_cols
         ]
 

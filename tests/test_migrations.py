@@ -251,7 +251,7 @@ def test_003_creates_project_context_table(tmp_path: Path) -> None:
 
 
 def test_alembic_version_advances_through_chain(tmp_path: Path) -> None:
-    """Sequential upgrade chain: baseline → 002 → 003 lands at head."""
+    """Sequential upgrade chain: baseline → 002 → 003 → 004 lands at head."""
     if not _has_revision("docs_003_project_context"):
         pytest.skip("docs_003_project_context not yet created")
 
@@ -264,5 +264,123 @@ def test_alembic_version_advances_through_chain(tmp_path: Path) -> None:
     command.upgrade(cfg, "docs_002_libraries")
     assert _read_alembic_version(db_path) == "docs_002_libraries"
 
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "docs_003_project_context")
     assert _read_alembic_version(db_path) == "docs_003_project_context"
+
+    if _has_revision("docs_004_chunk_summaries"):
+        command.upgrade(cfg, "head")
+        assert _read_alembic_version(db_path) == "docs_004_chunk_summaries"
+
+
+def test_004_adds_summary_columns(tmp_path: Path) -> None:
+    """docs_004 adds nullable summary + summary_provider to doc_chunks."""
+    if not _has_revision("docs_004_chunk_summaries"):
+        pytest.skip("docs_004_chunk_summaries not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "head")
+
+    cols = _table_columns(db_path, "doc_chunks")
+    assert "summary" in cols, "Missing column summary in doc_chunks"
+    assert "summary_provider" in cols, "Missing column summary_provider in doc_chunks"
+
+
+def test_004_preserves_existing_chunk_rows(tmp_path: Path) -> None:
+    """Backward compat: pre-existing rows have NULL for the new columns."""
+    if not _has_revision("docs_004_chunk_summaries"):
+        pytest.skip("docs_004_chunk_summaries not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+
+    # Land at docs_003 first, insert a row, then upgrade through 004.
+    command.upgrade(cfg, "docs_003_project_context")
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO doc_chunks (id, version_id, library_id, url, title, "
+        "chunk_index, content, heading_path, created_at) "
+        "VALUES ('c1', 'v1', 'lib1', 'https://x', 't', 0, 'body', '', 0.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    command.upgrade(cfg, "head")
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM doc_chunks WHERE id = 'c1'").fetchone()
+    conn.close()
+    assert row is not None
+    assert row["summary"] is None
+    assert row["summary_provider"] is None
+    assert row["content"] == "body"  # untouched
+
+
+def test_004_idempotent_on_rerun(tmp_path: Path) -> None:
+    """Re-running docs_004 upgrade on an already-upgraded DB is a no-op."""
+    if not _has_revision("docs_004_chunk_summaries"):
+        pytest.skip("docs_004_chunk_summaries not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "head")
+    # Stamp back to 003 then re-run; column add must be a no-op.
+    command.stamp(cfg, "docs_003_project_context")
+    command.upgrade(cfg, "head")  # must not raise "duplicate column"
+    cols = _table_columns(db_path, "doc_chunks")
+    assert "summary" in cols
+    assert "summary_provider" in cols
+
+
+def test_db_add_chunks_writes_summary_columns_when_present(tmp_path: Path) -> None:
+    """db.DocsDB.add_chunks must write summary + summary_provider when set."""
+    if not _has_revision("docs_004_chunk_summaries"):
+        pytest.skip("docs_004_chunk_summaries not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "head")
+
+    # Seed library + version rows that add_chunks expects to reference.
+    # Baseline columns: libraries(id, name, docs_url, registry, description,
+    # created_at, updated_at, discovery_version); versions(id, library_id,
+    # version, status, page_count, chunk_count, docs_url, indexed_at).
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO libraries (id, name, docs_url, registry, description, "
+        "created_at, updated_at, discovery_version) "
+        "VALUES ('lib1', 'Lib', 'http://x', 'github', 'desc', 0.0, 0.0, 0)"
+    )
+    conn.execute(
+        "INSERT INTO versions (id, library_id, version, status, "
+        "page_count, chunk_count) "
+        "VALUES ('v1', 'lib1', '1.0.0', 'indexed', 0, 0)"
+    )
+    conn.commit()
+    conn.close()
+
+    from wet_mcp.db import DocsDB
+
+    db = DocsDB(db_path=db_path)
+    chunks = [
+        {
+            "url": "https://x/page",
+            "title": "Page",
+            "content": "body",
+            "summary": "Short overview",
+            "summary_provider": "gemini-3-flash-preview",
+        }
+    ]
+    db.add_chunks(version_id="v1", library_id="lib1", chunks=chunks)
+    db.close()
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT summary, summary_provider FROM doc_chunks LIMIT 1"
+    ).fetchone()
+    conn.close()
+    assert row is not None
+    assert row["summary"] == "Short overview"
+    assert row["summary_provider"] == "gemini-3-flash-preview"
