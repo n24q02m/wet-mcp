@@ -1212,6 +1212,85 @@ class DocsDB:
         self._conn.commit()
         return stats
 
+    # -----------------------------------------------------------------------
+    # Project context (Cabinets — Phase 2 docs_003_project_context)
+    # -----------------------------------------------------------------------
+
+    def _ensure_project_context(self) -> bool:
+        """Return True iff the project_context table exists."""
+        row = self._conn.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type='table' AND name='project_context'"
+        ).fetchone()
+        return row is not None
+
+    def upsert_project_context(
+        self, project_path: str, locked_libraries: list[dict]
+    ) -> None:
+        """Persist a project's locked-library set (Cabinets isolation).
+
+        Args:
+            project_path: Absolute project root path (used as PK).
+            locked_libraries: List of ``{"id": <library_id>, "version": <spec>}``.
+
+        Silently no-ops on pre-Alembic legacy databases that lack the
+        ``project_context`` table.
+        """
+        if not self._ensure_project_context():
+            logger.debug(
+                "project_context table absent; skipping upsert_project_context"
+            )
+            return
+        now = _now_ts()
+        payload = json.dumps(locked_libraries, ensure_ascii=False)
+        existing = self._conn.execute(
+            "SELECT created_at FROM project_context WHERE project_path = ?",
+            (project_path,),
+        ).fetchone()
+        if existing:
+            self._conn.execute(
+                "UPDATE project_context "
+                "SET locked_libraries = ?, last_used_at = ? "
+                "WHERE project_path = ?",
+                (payload, now, project_path),
+            )
+        else:
+            self._conn.execute(
+                "INSERT INTO project_context "
+                "(project_path, locked_libraries, created_at, last_used_at) "
+                "VALUES (?, ?, ?, ?)",
+                (project_path, payload, now, now),
+            )
+        self._conn.commit()
+
+    def get_project_context(self, project_path: str) -> dict | None:
+        """Return the lock entry for a project, or None if not locked."""
+        if not self._ensure_project_context():
+            return None
+        row = self._conn.execute(
+            "SELECT project_path, locked_libraries, created_at, last_used_at "
+            "FROM project_context WHERE project_path = ?",
+            (project_path,),
+        ).fetchone()
+        if row is None:
+            return None
+        result = dict(row)
+        try:
+            result["locked_libraries"] = json.loads(result["locked_libraries"])
+        except (TypeError, json.JSONDecodeError):
+            result["locked_libraries"] = []
+        return result
+
+    def touch_project_context(self, project_path: str) -> None:
+        """Update last_used_at — call before each docs_query that honors a lock."""
+        if not self._ensure_project_context():
+            return
+        self._conn.execute(
+            "UPDATE project_context SET last_used_at = ? WHERE project_path = ?",
+            (_now_ts(), project_path),
+        )
+        self._conn.commit()
+
     def close(self) -> None:
         """Close database connection."""
         try:
