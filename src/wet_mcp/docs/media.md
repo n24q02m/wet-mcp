@@ -52,17 +52,19 @@ Use this when you need to inspect the actual file content (e.g., sending an imag
 
 ---
 
-### analyze (DEPRECATED -- removed in v2.0.0)
+### analyze (REMOVED in v2.0.0)
 
-> **Deprecated.** `media(action="analyze", ...)` returns a deprecation
-> notice and no longer performs LLM vision analysis. The action will be
-> removed entirely in wet **v2.0.0**.
+> **Removed.** `media(action="analyze", ...)` was removed in wet
+> **v2.0.0** after the 2-minor-version deprecation grace started in
+> Phase 1. Calling it now returns the standard unknown-action error
+> with a migration hint.
 >
-> **Migration:** use `imagine-mcp`'s `understand` action instead --
-> imagine-mcp is the dedicated multimodal pipeline (provider routing,
-> caching, vision/audio/video) and is where new analysis features land.
+> **Use** [`imagine-mcp`](https://github.com/n24q02m/imagine-mcp)'s
+> `understand` action instead -- imagine-mcp is the dedicated
+> multimodal pipeline (provider routing, caching, vision/audio/video)
+> and is where all analysis features now land.
 >
-> Typical replacement flow:
+> Replacement flow:
 > 1. `wet: media(action="list", url=...)` -- discover media URLs.
 > 2. `wet: media(action="download", media_urls=[...])` -- save locally.
 > 3. `imagine: understand(file=..., prompt=...)` -- analyze.

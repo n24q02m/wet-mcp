@@ -1307,17 +1307,20 @@ async def media(  # noqa: PLR0913
     Actions:
     - list: Scan a page and return media URLs with metadata. Example: media(action="list", url="https://example.com/gallery", media_type="images")
     - download: Download media files to local storage. Example: media(action="download", media_urls=["https://example.com/photo.jpg"])
-    - analyze: DEPRECATED -- use imagine-mcp's understand action instead. Will be removed in wet v2.0.0.
 
     Key parameters:
     - url (required for list): Page URL to scan
     - media_urls (required for download): List of media URLs to download
     - media_type: Filter for list -- "images", "videos", "audio", "files", "all" (default: "all")
     - output_dir: Download directory (default: ~/.wet-mcp/downloads)
-    - prompt: (deprecated) was used by analyze; ignored now
+    - prompt: Reserved -- accepted for backward compatibility, ignored
 
     Typical workflow: list (discover) -> download (save locally). For LLM
-    analysis, hand the downloaded path to imagine-mcp's understand action.
+    analysis (vision/audio/video), hand the downloaded path to
+    imagine-mcp's understand action. The legacy media(action="analyze")
+    was REMOVED in wet v2.0.0 (deprecated since v1.x.y); calling it now
+    returns the standard unknown-action error.
+
     Use `help` tool with tool_name="media" for full documentation.
     """
     blocked = _require_credentials()
@@ -1359,33 +1362,31 @@ async def media(  # noqa: PLR0913
                 "media.download",
             )
 
-        case "analyze":
-            # Phase 1 Task 6: deprecate analyze in favor of imagine-mcp's
-            # understand action. Image/video analysis is imagine-mcp's domain
-            # (multimodal pipeline + provider routing). wet keeps list +
-            # download for the discover/fetch half of the workflow. The
-            # action is removed in v2.0.0; until then we return a clear
-            # migration string and emit a logger warning so any caller
-            # still hitting it can be located via logs.
-            logger.warning(
-                "media.analyze is deprecated; use imagine-mcp's understand "
-                "action instead. Will be removed in wet v2.0.0."
-            )
-            return (
-                "media.analyze is deprecated. Use imagine-mcp's understand "
-                "action instead. Will be removed in wet v2.0.0."
-            )
-
         case _:
             import difflib
 
-            # "analyze" still in the close-match list so typos that target
-            # the deprecated action route to the deprecation handler
-            # instead of an opaque "unknown action" error.
-            valid_actions = ["analyze", "download", "list"]
+            # Phase 3 (v2.0.0) BREAKING: analyze removed entirely after the
+            # 2-minor-version deprecation grace period started in Phase 1
+            # commit 2ea6f23. Vision/audio/video analysis lives in
+            # imagine-mcp's understand action. We special-case the
+            # message for callers still passing analyze so they can
+            # migrate without hunting through release notes.
+            valid_actions = ["download", "list"]
             closest = difflib.get_close_matches(action, valid_actions, n=1)
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-            return f"Error: Unknown action '{action}'.{suggestion} Valid actions: list (discover media on page), download (save to local). analyze is deprecated -- use imagine-mcp's understand action."
+            if action == "analyze":
+                return (
+                    "Error: Unknown action 'analyze'. The analyze action was "
+                    "removed in wet v2.0.0. Use imagine-mcp's understand "
+                    "action for vision/audio/video analysis. "
+                    "Valid wet media actions: list (discover media on page), "
+                    "download (save to local)."
+                )
+            return (
+                f"Error: Unknown action '{action}'.{suggestion} "
+                "Valid actions: list (discover media on page), "
+                "download (save to local)."
+            )
 
 
 @mcp.tool(

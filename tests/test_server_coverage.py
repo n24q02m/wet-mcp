@@ -1168,10 +1168,10 @@ async def test_media_list_missing_url():
 
 
 async def test_media_analyze_missing_url():
-    """Phase 1 Task 6: analyze is deprecated -- returns migration notice
+    """Phase 3 Task 5 BREAKING: analyze removed -- routes to unknown-action
     regardless of url presence."""
     result = await server.media("analyze")
-    assert "deprecated" in result
+    assert "Unknown action 'analyze'" in result
     assert "imagine-mcp" in result
 
 

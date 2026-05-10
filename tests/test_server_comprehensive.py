@@ -280,10 +280,12 @@ async def test_media_tool():
         res = await server.media("download", media_urls=["http://test"])
         assert "down_result" in res
 
-        # Phase 1 Task 6: analyze deprecated -- never invokes the LLM helper.
+        # Phase 3 Task 5 BREAKING: analyze removed in v2.0.0 -- routes
+        # through unknown-action with migration hint, never invokes LLM.
         mock_analyze.return_value = "analyze_result"
         res = await server.media("analyze", url="http://test")
-        assert "deprecated" in res
+        assert "Unknown action 'analyze'" in res
+        assert "removed in wet v2.0.0" in res
         mock_analyze.assert_not_called()
 
 
@@ -1334,10 +1336,10 @@ async def test_media_tool_download_security_check():
 
 @pytest.mark.asyncio
 async def test_media_tool_analyze_missing_url():
-    """Phase 1 Task 6: analyze is deprecated -- always returns the migration
-    notice (no url validation runs anymore)."""
+    """Phase 3 Task 5 BREAKING: analyze removed -- routes to unknown-action
+    regardless of url presence."""
     res = await server.media("analyze", url=None)
-    assert "deprecated" in res
+    assert "Unknown action 'analyze'" in res
     assert "imagine-mcp" in res
 
 

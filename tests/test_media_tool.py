@@ -101,8 +101,8 @@ async def test_media_download_missing_urls():
 
 
 @pytest.mark.asyncio
-async def test_media_analyze_returns_deprecation(mock_settings):
-    """Phase 1 Task 6: analyze is deprecated -- never invokes analyze_media."""
+async def test_media_analyze_returns_unknown_action_post_removal(mock_settings):
+    """Phase 3 Task 5 BREAKING: analyze removed -- routes to unknown-action."""
     mock_analyze_media = AsyncMock(return_value="Analysis result")
 
     with patch("wet_mcp.llm.analyze_media", mock_analyze_media):
@@ -111,15 +111,16 @@ async def test_media_analyze_returns_deprecation(mock_settings):
         )
 
         mock_analyze_media.assert_not_called()
-        assert "deprecated" in result
+        assert "Unknown action 'analyze'" in result
+        assert "removed in wet v2.0.0" in result
         assert "imagine-mcp" in result
 
 
 @pytest.mark.asyncio
-async def test_media_analyze_no_url_still_returns_deprecation():
-    """Deprecated handler runs regardless of whether url is supplied."""
+async def test_media_analyze_no_url_still_unknown_action():
+    """Removal: analyze without url still routes through unknown-action."""
     result = await media(action="analyze")
-    assert "deprecated" in result
+    assert "Unknown action 'analyze'" in result
     assert "imagine-mcp" in result
 
 
@@ -172,4 +173,6 @@ async def test_media_unknown_action():
     """Test media action with unknown action."""
     result = await media(action="unknown_action")
     assert "Error:" in result and "unknown_action" in result
-    assert "list" in result and "download" in result and "analyze" in result
+    # Phase 3 v2.0.0 BREAKING: analyze removed from valid_actions list.
+    assert "list" in result and "download" in result
+    assert "analyze" not in result
