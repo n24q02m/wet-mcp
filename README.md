@@ -6,8 +6,8 @@ mcp-name: io.github.n24q02m/wet-mcp
 
 | Phase | Status | Scope |
 |---|---|---|
-| Phase 1 | **Current (v1.x.y)** | web-core ScrapingAgent migration, smart chunks output, search polish, media slim |
-| Phase 2 | Planned | Context7-level docs search (library index, version-aware queries, project context isolation) |
+| Phase 1 | Shipped | web-core ScrapingAgent migration, smart chunks output, search polish, media slim |
+| Phase 2 | **Current** | Context7-level docs search: library index (Tier 1 + Tier 2), version-aware queries with token cap, project lock (Cabinets) |
 | Phase 3 | Planned (BREAKING) | `extract.agent` multi-step research, `extract.interact` click/fill/submit, `media.analyze` removal |
 
 <!-- Badge Row 1: Status -->
@@ -148,7 +148,7 @@ into `config` action dispatch.
 
 | Tool | Description |
 |:-----|:------------|
-| `search` | Web (SearXNG metasearch), news, images, academic research (Scholar / arXiv / PubMed / CrossRef / Semantic Scholar / BASE), library docs (HyDE + FTS5), find similar pages |
+| `search` | Web (SearXNG metasearch), news, images, academic research (Scholar / arXiv / PubMed / CrossRef / Semantic Scholar / BASE), library docs (HyDE + FTS5), find similar pages. **Phase 2** adds `docs_resolve` (library name -> ranked id), `docs_query` (version-aware + topic + 5000-token cap), `docs_lock_project` (Cabinets project pin via pyproject / package.json / go.mod / Cargo.toml manifest detection). |
 | `extract` | URL -> smart chunks dict (`clean_text` + `markdown` + `structured_data` + `code_blocks` + `metadata`) via web-core 5-strategy chain. Batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion (PDF/DOCX/XLSX/PPTX/EPUB), structured extraction (JSON Schema) |
 | `media` | `list` (discover URLs from gallery pages), `download` (SSRF-safe). `analyze` deprecated v&lt;auto&gt;+ -- forwards to `imagine-mcp.understand` |
 | `config` | `status`, `set`, `cache_clear`, `docs_reindex`, `warmup`, `setup_open_relay`, `setup_status`, `setup_skip`, `setup_reset`, `setup_complete`, `setup_sync` |
@@ -169,7 +169,7 @@ How wet-mcp stacks up against direct competitors in each pillar:
 | Web search | Yes (SearXNG aggregation) | Yes | Yes | No | No |
 | Extract URL | Yes (5-strategy chain) | No | Yes (basic) | Yes | No |
 | Media list / download | Yes | No | No | No | No |
-| Library docs search | Phase 2 | No | No | No | Yes |
+| Library docs search | Yes (Tier 1 curated + Tier 2 on-demand, version-aware, Cabinets) | No | No | No | Yes |
 | Academic research | Yes (6 providers) | No | No | No | No |
 | Self-hostable | Yes | No | No | No | Yes |
 | Free tier | Yes (open source) | Limited | Limited | Limited | Yes |

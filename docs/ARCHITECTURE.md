@@ -1,7 +1,8 @@
 # wet-mcp Architecture
 
-> Status: Phase 1 (v&lt;auto&gt;+).
-> Spec source: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md`.
+> Status: Phase 2 (Context7-level docs search) on top of Phase 1.
+> Spec source: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md`
+> + `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`.
 
 This document describes the runtime architecture of wet-mcp after the
 Phase 1 migration to `n24q02m-web-core` `ScrapingAgent`. It covers the
@@ -164,10 +165,70 @@ stdio default avoids OAuth complexity for single-machine personal use;
 HTTP self-host is recommended when multi-device sync, claude.ai web
 compatibility, or team sharing matters.
 
+## Phase 2 — Context7-level docs search
+
+Phase 2 layers a curated library index, project lock (Cabinets), and
+token-aware docs query on top of the existing FTS5 + sqlite-vec hybrid
+search. Three new actions ship under the `search` tool surface:
+
+| Action | Purpose | Latency target |
+|---|---|---|
+| `docs_resolve` | Free-form library name -> ranked `library_id` list | < 50 ms (in-process SQLite) |
+| `docs_query` | Version-aware docs query honoring lock + 5000-token cap | < 500 ms p95 |
+| `docs_lock_project` | Detect `pyproject.toml` / `package.json` / `go.mod` / `Cargo.toml`, persist Cabinets pin | < 100 ms |
+
+### Schema diff vs Phase 1
+
+Alembic migration chain:
+
+* `docs_001_baseline` (no-op anchor for legacy DBs)
+* `docs_002_libraries` — adds `libraries.{canonical_name, homepage,
+  github_url, package_managers, tier, last_indexed_at, total_versions}`,
+  `versions.{release_date, source_url}`, `doc_chunks.{section, topic,
+  content_hash, token_count}` + `idx_doc_chunks_lib_ver_topic`.
+* `docs_003_project_context` — Cabinets `project_context` table with
+  `project_path` PK + `locked_libraries` JSON + LRU index.
+
+`run_migrations_on_startup()` (in `wet_mcp.migrations`) is invoked by
+the FastMCP lifespan after `DocsDB.__init__`. The runner copies
+`docs.db -> docs.db.bak.<unix-ts>` before any forward migration.
+Failures are logged and swallowed so server startup never blocks.
+
+### Tier 1 / Tier 2 ingestion pipeline
+
+```text
+First docs_query for library X
+    |
+    +-- (a) Tier 1 metadata seeded? (data/tier1_libraries.json -> upsert_library)
+    |       |
+    |       +-- yes: resolve library_id, run hybrid search
+    |       +-- no:  trigger ingest_tier2 in background, return progress hint
+    |
+    +-- ingest_tier2 reuses discover_library + fetch_docs_pages
+            (delegates to web_core.scraper.ScrapingAgent strategy chain)
+            -> chunks stored with topic / section / token_count
+            -> mark_library_indexed updates last_indexed_at
+```
+
+Tier 1 freshness window: 7 days (spec section 3). The Phase 2
+`refresh-tier1` cron job in `.github/workflows/ci.yml` re-runs
+`scripts/build_tier1_index.py` weekly to keep curated chunks fresh.
+
+### Cabinets project isolation
+
+`docs_lock_project(project_path=...)` walks the project root, parses
+the supported manifests (PEP 621 + Poetry, `package.json`, `go.mod`,
+`Cargo.toml`), resolves each entry against the libraries table, and
+persists the lock list to `project_context`. Subsequent
+`docs_query(library=..., project_path=...)` calls without an explicit
+`version` honor the pin from the lock; `last_used_at` is bumped for
+LRU eviction tracking.
+
 ## Cross-references
 
-- Spec: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` (sections 5.1, 5.4, 5.5, 5.6)
+- Spec: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` (sections 4.3, 5.4, 5.7, 8)
 - Phase 1 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-1-plan.md`
+- Phase 2 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`
 - Web-core repo: `n24q02m/web-core` (`web_core.scraper.ScrapingAgent`)
 - mcp-core repo: `n24q02m/mcp-core` (relay, JWT issuer, config storage primitives)
 - Trust model: <https://github.com/n24q02m/mcp-core/blob/main/docs/TRUST-MODEL.md>

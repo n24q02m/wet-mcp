@@ -1,6 +1,6 @@
 # wet-mcp Benchmarks
 
-> Status: Phase 1 (v&lt;auto&gt;+) baseline. Target metrics defined in
+> Status: Phase 2 (Context7-level docs search). Target metrics defined in
 > `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` section 3.
 
 This document captures the v1.x baseline metrics established during
@@ -69,7 +69,21 @@ benchmark CI job runs:
 Results write to `tests/fixtures/benchmarks/history/<timestamp>.json` and
 get diff'd against the previous run for regression alerting.
 
+## Phase 2 — Docs search targets (spec section 3)
+
+| Pillar | Metric | Target | Methodology |
+|---|---|---|---|
+| Docs | `docs_resolve` + `docs_query` p95 | < 500 ms | 500 popular library queries |
+| Docs | Recall@10 (correct lib + correct version chunks) | >= 0.85 | 200 (library, question, expected_chunks) eval set |
+| Docs | Index freshness (Tier 1 / Tier 2 within 7-day lag) | >= 90% Tier 1 / >= 70% Tier 2 | Weekly `refresh-tier1` cron job |
+| Docs | Token cap per response | <= 5000 tokens | Greedy accumulator in `query_docs` |
+
+Phase 2 ships the schema + dispatchers; the 200-fixture recall eval and
+500-query latency run land in the consolidated pre-release session per
+user "test+fix 1 lượt cuối" strategy.
+
 ## Cross-references
 
 - Spec: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` (section 3 metrics, section 7 fixture layout)
-- Phase 1 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-1-plan.md` (Task 4 step 7 fixture, Task 5 step 6 search benchmark, Task 8 pre-release gate)
+- Phase 1 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-1-plan.md`
+- Phase 2 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`
