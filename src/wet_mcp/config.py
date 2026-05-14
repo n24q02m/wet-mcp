@@ -141,6 +141,20 @@ class Settings(BaseSettings):
     )
     google_drive_client_secret: str = "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"
 
+    # S3-compatible sync (operator deploy mode).
+    # When SYNC_S3_BUCKET is non-empty the active backend resolves to "s3"
+    # and the Google Drive OAuth flow is DISABLED. Used in HTTP / Docker
+    # deploy mode where the operator pre-provisions a bucket for docs.db
+    # backup/restore instead of relying on per-user GDrive OAuth.
+    # Mutually exclusive with the GDrive flow at deployment level - the
+    # two backends MUST NOT both be active in the same process.
+    sync_s3_bucket: str = ""
+    sync_s3_region: str = "us-east-1"
+    sync_s3_endpoint: str = ""  # custom endpoint for R2 / B2 / MinIO
+    sync_s3_access_key_id: str = ""
+    sync_s3_secret_access_key: str = ""
+    sync_s3_prefix: str = "docs/"
+
     # Logging
     log_level: str = "INFO"
 
