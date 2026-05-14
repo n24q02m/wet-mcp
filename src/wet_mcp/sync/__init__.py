@@ -1,0 +1,174 @@
+"""Backend-pluggable sync package (Phase 2 refactor, parity with mnemo-mcp).
+
+This package replaces the single-file ``sync.py`` from Phase 1. It still
+exports every public + private symbol the existing call sites + tests
+import (so ``from wet_mcp.sync import sync_full`` and
+``patch("wet_mcp.sync._refresh_token", ...)`` keep working) while also
+exposing a backend registry so the Phase 2 docs-sync orchestrator can
+choose between Google Drive and S3 (and any future backend) uniformly.
+
+Layout:
+
+* :mod:`wet_mcp.sync.base` - :class:`SyncBackend` abstract contract.
+* :mod:`wet_mcp.sync.gdrive` - legacy DB-file sync helpers + new
+  :class:`GDriveBackend` adapter for the docs.db sync orchestrator.
+* :mod:`wet_mcp.sync.s3` - S3 / R2 / B2 / MinIO backend for operator
+  deploy mode (HTTP / Docker), gated on ``SYNC_S3_BUCKET``.
+
+To preserve the Phase 1 monkeypatching pattern (``patch("wet_mcp.sync.X")``)
+this ``__init__`` mirrors the gdrive submodule's ``__dict__`` into its own
+namespace AND wires the gdrive module's globals so a patch on either
+namespace propagates to the actual call site. Tests written against the
+single-file ``sync.py`` continue to pass without modification.
+
+Backend selection (XOR semantics):
+
+* No ``SYNC_S3_BUCKET`` env -> :func:`resolve_active_backend` returns
+  ``"gdrive"`` and the existing OAuth Device Code flow runs (Method 1,
+  uvx local mode).
+* ``SYNC_S3_BUCKET`` set -> returns ``"s3"`` and the GDrive flow is
+  skipped (operator deploy mode, Method 2 / 3).
+"""
+
+from __future__ import annotations
+
+import sys
+
+from wet_mcp.sync import gdrive as _gdrive_module
+from wet_mcp.sync.base import SyncBackend
+from wet_mcp.sync.gdrive import GDriveBackend
+
+# Mirror every public + private name exported by gdrive.py into this
+# package's namespace. Tests that do ``patch("wet_mcp.sync._refresh_token",
+# mock)`` set the attribute here; the production code inside gdrive.py looks
+# up names in its OWN globals, so we additionally proxy attribute mutations
+# from this module into the gdrive module via __setattr__ at the module
+# class level (see _SyncModuleProxy below).
+
+_DELEGATE_NAMES = [name for name in dir(_gdrive_module) if not name.startswith("__")]
+
+#: Names representing mutable module-level state inside gdrive.py. We do
+#: NOT copy these into the package globals so a fresh ``getattr`` always
+#: lands on the live gdrive value (via ``_SyncModuleProxy.__getattr__``).
+_LIVE_PROXY_NAMES = {"_sync_task", "_folder_id_cache"}
+
+for _name in _DELEGATE_NAMES:
+    if _name in _LIVE_PROXY_NAMES:
+        continue
+    globals()[_name] = getattr(_gdrive_module, _name)
+
+
+class _SyncModuleProxy(type(sys.modules[__name__])):
+    """Module subclass that mirrors writes -> gdrive AND reads <- gdrive.
+
+    Tests do ``patch("wet_mcp.sync._foo", mock)`` which calls
+    ``sys.modules["wet_mcp.sync"].__setattr__("_foo", mock)``. The patched
+    attribute MUST also become visible inside ``gdrive.py``'s globals so the
+    function calls there resolve to the mock. Conversely, tests assert
+    ``wet_mcp.sync._sync_task == ...`` AFTER ``start_auto_sync`` mutated
+    the gdrive global; we mirror reads back so the assertion sees the live
+    gdrive value.
+    """
+
+    def __setattr__(self, name: str, value: object) -> None:
+        if name in _LIVE_PROXY_NAMES:
+            # Live state -> only mutate gdrive globals so subsequent
+            # ``getattr`` falls through to the live value via __getattr__.
+            setattr(_gdrive_module, name, value)
+            return
+        super().__setattr__(name, value)
+        if name in _DELEGATE_NAMES:
+            setattr(_gdrive_module, name, value)
+
+    def __getattr__(self, name: str) -> object:
+        if name in _DELEGATE_NAMES or hasattr(_gdrive_module, name):
+            return getattr(_gdrive_module, name)
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+sys.modules[__name__].__class__ = _SyncModuleProxy
+
+
+# ---------------------------------------------------------------------------
+# Backend registry (Phase 2 NEW)
+# ---------------------------------------------------------------------------
+
+_REGISTRY: dict[str, SyncBackend] = {}
+
+
+def register(name: str, backend: SyncBackend) -> None:
+    """Register ``backend`` under ``name`` so :func:`get` can resolve it."""
+    if not isinstance(backend, SyncBackend):
+        raise TypeError(
+            f"register: expected SyncBackend instance, got {type(backend).__name__}"
+        )
+    _REGISTRY[name] = backend
+
+
+def get(name: str) -> SyncBackend:
+    """Return the registered backend for ``name`` or raise ``KeyError``.
+
+    Lazily registers default backends on first lookup so importing the
+    package does not immediately touch httpx / boto3 / OAuth state:
+
+    * ``"gdrive"`` -> :class:`GDriveBackend` (uses Phase 1 OAuth token).
+    * ``"s3"`` -> :class:`S3Backend` configured from ``settings.sync_s3_*``.
+      Raises ``KeyError`` if ``SYNC_S3_BUCKET`` is unset (so the caller
+      sees a helpful "configure SYNC_S3_BUCKET" message instead of a
+      cryptic boto3 NoCredentialsError later).
+    """
+    if name == "gdrive" and "gdrive" not in _REGISTRY:
+        _REGISTRY["gdrive"] = GDriveBackend()
+    if name == "s3" and "s3" not in _REGISTRY:
+        from wet_mcp.config import settings
+        from wet_mcp.sync.s3 import S3Backend
+
+        if not settings.sync_s3_bucket:
+            raise KeyError(
+                "Cannot get('s3'): SYNC_S3_BUCKET is empty. Set the bucket "
+                "name (and SYNC_S3_REGION / SYNC_S3_ENDPOINT for R2 / B2 / "
+                "MinIO) before requesting the S3 backend."
+            )
+        _REGISTRY["s3"] = S3Backend(
+            bucket=settings.sync_s3_bucket,
+            region=settings.sync_s3_region or "us-east-1",
+            access_key_id=settings.sync_s3_access_key_id or None,
+            secret_access_key=settings.sync_s3_secret_access_key or None,
+            endpoint_url=settings.sync_s3_endpoint or None,
+            prefix=settings.sync_s3_prefix or "docs/",
+        )
+    if name not in _REGISTRY:
+        raise KeyError(
+            f"Unknown sync backend {name!r}; "
+            f"registered backends: {sorted(_REGISTRY.keys())}"
+        )
+    return _REGISTRY[name]
+
+
+def list_backends() -> list[str]:
+    """Return the list of registered backend names sorted alphabetically."""
+    return sorted(_REGISTRY.keys())
+
+
+def reset_registry() -> None:
+    """Clear the registry (test helper - do not call in production)."""
+    _REGISTRY.clear()
+
+
+def resolve_active_backend() -> str:
+    """Resolve the active sync backend name from environment.
+
+    Returns ``"s3"`` when ``SYNC_S3_BUCKET`` is non-empty (operator deploy
+    mode: HTTP / Docker), otherwise ``"gdrive"`` (default uvx Method 1
+    local-relay mode with per-user OAuth Device Code).
+
+    The two backends are mutually exclusive at deployment level - a single
+    process never runs both. Callers should treat this as the single
+    source of truth and gate Google Drive setup / S3 client init behind
+    this resolver.
+    """
+    from wet_mcp.config import settings
+
+    if settings.sync_s3_bucket:
+        return "s3"
+    return "gdrive"

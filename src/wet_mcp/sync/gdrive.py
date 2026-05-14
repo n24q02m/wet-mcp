@@ -815,3 +815,39 @@ def setup_sync() -> None:
             file=sys.stderr,
         )
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# GDriveBackend (Phase 2 SyncBackend adapter)
+# ---------------------------------------------------------------------------
+
+from wet_mcp.sync.base import SyncBackend  # noqa: E402
+
+
+class GDriveBackend(SyncBackend):
+    """:class:`SyncBackend` adapter wrapping the legacy GDrive sync helpers.
+
+    Routes the four-method contract through the existing function-style
+    API (``sync_push`` / ``sync_pull`` / ``check_health``) so the new
+    orchestrator can treat GDrive uniformly with S3 while preserving the
+    Phase 1 OAuth Device Code flow + token storage at
+    ``~/.wet-mcp/tokens/google_drive.json``.
+    """
+
+    name = "gdrive"
+
+    async def push(self, db_path: Path) -> bool:
+        """Upload ``db_path`` to the configured GDrive folder."""
+        return await sync_push(db_path, settings.sync_folder)
+
+    async def pull(self, db_path: Path) -> Path | None:
+        """Download the remote docs.db to a temp path next to ``db_path``."""
+        return await sync_pull(db_path, settings.sync_folder)
+
+    async def health_check(self) -> bool:
+        """Probe GDrive API via a list-files call."""
+        return await check_health()
+
+    @property
+    def supports_oauth_setup(self) -> bool:
+        return True
