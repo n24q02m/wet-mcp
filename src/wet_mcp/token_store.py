@@ -37,6 +37,8 @@ def _get_token_dir() -> Path:
 
 def get_token_path(provider: str) -> Path:
     """Get path for a provider's token file."""
+    if not provider or "/" in provider or "\\" in provider or ".." in provider:
+        raise ValueError("Invalid provider name")
     return _get_token_dir() / f"{provider}.json"
 
 
@@ -47,11 +49,15 @@ def _get_token_dir_for_sub(sub: str) -> Path:
     JWT ``sub`` so user A's GDrive refresh-token is not visible to
     user B sharing the same wet-mcp deployment.
     """
+    if not sub or "/" in sub or "\\" in sub or ".." in sub:
+        raise ValueError("Invalid sub name")
     return settings.get_data_dir() / "subs" / sub / "tokens"
 
 
 def get_token_path_for_sub(sub: str, provider: str) -> Path:
     """Get path for a provider's token file scoped to a specific JWT sub."""
+    if not provider or "/" in provider or "\\" in provider or ".." in provider:
+        raise ValueError("Invalid provider name")
     return _get_token_dir_for_sub(sub) / f"{provider}.json"
 
 

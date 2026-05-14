@@ -46,6 +46,14 @@ def test_get_token_path(token_dir):
     assert get_token_path("drive") == token_dir / "drive.json"
 
 
+def test_get_token_path_invalid_provider(token_dir):
+    """Test get_token_path raises ValueError for invalid provider names."""
+    invalid_providers = ["", "../drive", "foo/bar", "foo\\bar", ".."]
+    for provider in invalid_providers:
+        with pytest.raises(ValueError, match="Invalid provider name"):
+            get_token_path(provider)
+
+
 def test_load_missing_token(token_dir):
     """load_token returns None if file doesn't exist."""
     assert load_token("drive") is None
@@ -192,10 +200,26 @@ def test_get_token_dir_for_sub(token_dir, tmp_path):
     assert _get_token_dir_for_sub("user1") == tmp_path / "subs" / "user1" / "tokens"
 
 
+def test_get_token_dir_for_sub_invalid_sub(token_dir, tmp_path):
+    """Test _get_token_dir_for_sub raises ValueError for invalid sub names."""
+    invalid_subs = ["", "../user", "foo/bar", "foo\\bar", ".."]
+    for sub in invalid_subs:
+        with pytest.raises(ValueError, match="Invalid sub name"):
+            _get_token_dir_for_sub(sub)
+
+
 def test_get_token_path_for_sub(token_dir, tmp_path):
     """Test get_token_path_for_sub returns correct scoped path."""
     expected = tmp_path / "subs" / "user1" / "tokens" / "drive.json"
     assert get_token_path_for_sub("user1", "drive") == expected
+
+
+def test_get_token_path_for_sub_invalid_provider(token_dir, tmp_path):
+    """Test get_token_path_for_sub raises ValueError for invalid provider names."""
+    invalid_providers = ["", "../drive", "foo/bar", "foo\\bar", ".."]
+    for provider in invalid_providers:
+        with pytest.raises(ValueError, match="Invalid provider name"):
+            get_token_path_for_sub("user1", provider)
 
 
 def test_save_and_load_token_for_sub(token_dir):
