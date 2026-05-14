@@ -208,7 +208,7 @@ jobs:
         run: uv run python scripts/build_tier1_index.py
 
       - name: Upload metrics artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: tier1-index-metrics
           path: ~/.wet-mcp/tier1_index_metrics.json
