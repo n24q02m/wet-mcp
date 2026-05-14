@@ -8,3 +8,7 @@
 ## 2023-11-20 - Redundant JSON parsing
 **Learning:** Bypassing redundant `json.loads` followed by `json.dumps` in MCP tool handlers significantly reduces CPU overhead when the source functions already return pretty-printed JSON.
 **Action:** Ensure that JSON parsing is only done when data modification is necessary. If a function returns an already correctly formatted JSON string, return it directly to the caller.
+
+## 2023-10-27 - Intermediate List Allocations in Hot Loops
+**Learning:** List comprehensions that eagerly allocate arrays of stripped strings (e.g. `[line.strip() for line in lines]`) introduce unnecessary memory overhead and latency, especially when evaluating multi-megabyte document payloads for quality checks.
+**Action:** Use single-pass loops with `line.isspace()` checks to parse large payloads without allocating intermediate string collections.

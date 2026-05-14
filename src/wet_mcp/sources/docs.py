@@ -1924,18 +1924,30 @@ def _is_toc_only(content: str) -> bool:
     Returns True if >50% of non-empty lines are markdown links or bare URLs,
     indicating the file is just a TOC rather than actual documentation.
     """
-    lines = [line.strip() for line in content.splitlines() if line.strip()]
-    if not lines:
+    total_lines = 0
+    toc_lines = 0
+    heading_lines = 0
+
+    # ⚡ Bolt Optimization: Single-pass iteration without allocating lists of stripped lines
+    for line in content.splitlines():
+        if not line or line.isspace():
+            continue
+
+        total_lines += 1
+        s_line = line.strip()
+
+        if _TOC_LINE_RE.match(s_line):
+            toc_lines += 1
+        # Also count heading-only lines (# Title without body)
+        elif s_line.startswith("#"):
+            heading_lines += 1
+
+    if not total_lines:
         return True
 
-    toc_lines = sum(1 for line in lines if _TOC_LINE_RE.match(line))
-
-    # Also count heading-only lines (# Title without body)
-    heading_lines = sum(1 for line in lines if line.startswith("#"))
-
-    content_lines = len(lines) - toc_lines - heading_lines
+    content_lines = total_lines - toc_lines - heading_lines
     # If less than 50% of lines are actual content, it's a TOC
-    return content_lines < len(lines) * 0.5
+    return content_lines < total_lines * 0.5
 
 
 # ---------------------------------------------------------------------------
@@ -2876,17 +2888,24 @@ def _has_excessive_macros(content: str, threshold: float = 0.15) -> bool:
     Returns True if >15% of non-empty lines contain ``{{...}}`` patterns,
     indicating unrendered Jinja2/mkdocs-macros content.
     """
-    lines = [ln for ln in content.splitlines() if ln.strip()]
-    if len(lines) < 5:
-        return False
-    # ⚡ Bolt Optimization: Use string find over regex for ~3-10x faster macro detection.
-    # Enforces the correct order ({{ before }}) without regex overhead.
+    total_lines = 0
     macro_lines = 0
-    for ln in lines:
+
+    # ⚡ Bolt Optimization: Single-pass iteration without allocating lists of stripped lines.
+    # Use string find over regex for ~3-10x faster macro detection.
+    for ln in content.splitlines():
+        if not ln or ln.isspace():
+            continue
+
+        total_lines += 1
         start = ln.find("{{")
         if start != -1 and ln.find("}}", start + 2) != -1:
             macro_lines += 1
-    return macro_lines / len(lines) > threshold
+
+    if total_lines < 5:
+        return False
+
+    return macro_lines / total_lines > threshold
 
 
 def _strip_template_macros(content: str) -> str:
