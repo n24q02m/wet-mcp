@@ -18,9 +18,8 @@ import os
 from logging.config import fileConfig
 from pathlib import Path
 
-from sqlalchemy import create_engine, event, pool
-
 from alembic import context
+from sqlalchemy import create_engine, event, pool
 
 config = context.config
 

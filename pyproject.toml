@@ -108,10 +108,9 @@ include = [
     "src/wet_mcp/**/*.py",
     "src/wet_mcp/**/*.yml",
     "src/wet_mcp/**/*.md",
-    "alembic.ini",
-    "alembic/**/*.py",
-    "alembic/**/*.mako",
-    "alembic/README",
+    "src/wet_mcp/**/*.ini",
+    "src/wet_mcp/**/*.mako",
+    "src/wet_mcp/alembic/README",
 ]
 
 [tool.pytest.ini_options]

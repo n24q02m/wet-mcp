@@ -28,9 +28,9 @@ from pathlib import Path
 
 from loguru import logger
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_ALEMBIC_INI_PATH = _REPO_ROOT / "alembic.ini"
-_ALEMBIC_SCRIPT_LOCATION = _REPO_ROOT / "alembic"
+_PKG_DIR = Path(__file__).resolve().parent
+_ALEMBIC_INI_PATH = _PKG_DIR / "alembic.ini"
+_ALEMBIC_SCRIPT_LOCATION = _PKG_DIR / "alembic"
 
 
 def _read_alembic_version(db_path: Path) -> str | None:
@@ -92,10 +92,9 @@ def run_migrations_on_startup(db_path: Path) -> None:
         return
 
     try:
+        from alembic import command
         from alembic.config import Config
         from alembic.script import ScriptDirectory
-
-        from alembic import command
     except ImportError as e:  # pragma: no cover - dep is required at runtime
         logger.warning(f"Alembic import failed, skipping migrations: {e}")
         return
