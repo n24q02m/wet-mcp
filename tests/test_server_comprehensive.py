@@ -854,6 +854,8 @@ async def test_lifespan_startup_sync_enabled():
         ms.wet_auto_searxng = False
         ms.wet_cache = False
         ms.sync_enabled = True
+        ms.sync_s3_bucket = ""
+        ms.google_drive_client_id = "test-client-id"
         ms.resolve_embedding_dims.return_value = 768
         ms.get_db_path.return_value = MagicMock()
         ms.get_db_path.return_value.parent = MagicMock()
@@ -885,6 +887,8 @@ async def test_lifespan_shutdown_sync_enabled():
         ms.wet_auto_searxng = False
         ms.wet_cache = False
         ms.sync_enabled = True
+        ms.sync_s3_bucket = ""
+        ms.google_drive_client_id = "test-client-id"
         ms.resolve_embedding_dims.return_value = 768
         ms.get_db_path.return_value = MagicMock()
         ms.get_db_path.return_value.parent = MagicMock()

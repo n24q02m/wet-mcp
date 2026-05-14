@@ -299,8 +299,23 @@ async def _lifespan_startup() -> asyncio.Task | None:
     except Exception as e:  # pragma: no cover - never block startup
         logger.warning(f"Tier 1 warmup skipped: {e}")
 
-    # Start auto-sync when Google Drive client ID is configured
-    if settings.google_drive_client_id:
+    # Start auto-sync via the active backend (XOR semantics):
+    # * SYNC_S3_BUCKET set -> S3 mode (operator deploy, Method 2/3 Docker).
+    #   The GDrive OAuth flow is skipped entirely.
+    # * No S3 bucket -> GDrive mode (Method 1 uvx, per-user Device Code).
+    from wet_mcp.sync import resolve_active_backend
+
+    active_backend = resolve_active_backend()
+    if active_backend == "s3":
+        logger.info(
+            f"Sync backend: s3 (bucket={settings.sync_s3_bucket}, "
+            f"prefix={settings.sync_s3_prefix})"
+        )
+        from wet_mcp.sync import start_s3_auto_sync
+
+        start_s3_auto_sync(_docs_db)
+    elif settings.google_drive_client_id:
+        logger.info("Sync backend: gdrive (Device Code OAuth via relay)")
         from wet_mcp.sync import start_auto_sync
 
         start_auto_sync(_docs_db)
@@ -322,10 +337,16 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
         except (asyncio.CancelledError, Exception):
             pass
 
-    # Stop auto-sync
+    # Stop auto-sync (whichever backend is active)
     from wet_mcp.config import settings
+    from wet_mcp.sync import resolve_active_backend
 
-    if settings.google_drive_client_id:
+    active_backend = resolve_active_backend()
+    if active_backend == "s3":
+        from wet_mcp.sync import stop_s3_auto_sync
+
+        stop_s3_auto_sync()
+    elif settings.google_drive_client_id:
         from wet_mcp.sync import stop_auto_sync
 
         stop_auto_sync()

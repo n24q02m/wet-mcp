@@ -172,3 +172,112 @@ def resolve_active_backend() -> str:
     if settings.sync_s3_bucket:
         return "s3"
     return "gdrive"
+
+
+# ---------------------------------------------------------------------------
+# S3 auto-sync loop (operator deploy mode)
+# ---------------------------------------------------------------------------
+
+import asyncio  # noqa: E402
+
+_s3_sync_task: asyncio.Task | None = None
+
+
+async def _s3_auto_sync_loop(db) -> None:  # type: ignore[no-untyped-def]
+    """Background loop pushing docs.db to S3 every ``SYNC_INTERVAL`` seconds.
+
+    On startup we attempt a pull first (so a fresh container hydrates
+    from the bucket). Subsequent ticks push the local docs.db; pulls
+    are only useful at startup since the bucket has overwrite-on-push
+    semantics and the container is the canonical writer.
+    """
+    from loguru import logger
+
+    from wet_mcp.config import settings as _settings
+
+    interval = _settings.sync_interval
+    if interval <= 0:
+        logger.info("S3 auto-sync disabled (SYNC_INTERVAL <= 0)")
+        return
+
+    try:
+        backend = get("s3")
+    except KeyError as e:
+        logger.error(f"S3 auto-sync init failed: {e}")
+        return
+
+    db_path = _settings.get_db_path()
+    logger.info(f"S3 auto-sync started (interval={interval}s)")
+
+    # 1. Initial pull: hydrate fresh container from bucket if remote
+    #    has a docs.db. We do NOT overwrite local on pull - the merge
+    #    happens via JSONL import like the GDrive path (see sync_full).
+    try:
+        remote_db_path = await backend.pull(db_path)
+        if remote_db_path:
+            logger.info(f"S3 hydrate: remote docs.db downloaded -> {remote_db_path}")
+            try:
+                from wet_mcp.db import DocsDB
+
+                remote_db = DocsDB(remote_db_path, embedding_dims=0)
+                remote_jsonl = remote_db.export_jsonl()
+                remote_db.close()
+                if remote_jsonl.strip():
+                    result = db.import_jsonl(remote_jsonl, mode="merge")
+                    logger.info(f"S3 hydrate merge ok: {result}")
+            except Exception as e:
+                logger.warning(f"S3 hydrate merge failed (non-fatal): {e}")
+            finally:
+                remote_db_path.unlink(missing_ok=True)
+                try:
+                    remote_db_path.parent.rmdir()
+                except OSError:
+                    pass
+    except asyncio.CancelledError:
+        logger.info("S3 auto-sync stopped during hydrate")
+        return
+    except Exception as e:
+        logger.warning(f"S3 hydrate failed (non-fatal): {e}")
+
+    # 2. Push loop: every interval, upload local docs.db.
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            await backend.push(db_path)
+        except asyncio.CancelledError:
+            logger.info("S3 auto-sync stopped")
+            return
+        except Exception as e:
+            logger.error(f"S3 auto-sync push error (non-fatal): {e}")
+
+
+def start_s3_auto_sync(db) -> None:  # type: ignore[no-untyped-def]
+    """Start background S3 auto-sync task.
+
+    Idempotent: returns early when SYNC_S3_BUCKET is unset, when the
+    interval is <= 0, or when a task is already running.
+    """
+    global _s3_sync_task
+    from wet_mcp.config import settings as _settings
+
+    if not _settings.sync_s3_bucket:
+        return
+    if _settings.sync_interval <= 0:
+        return
+    if _s3_sync_task is not None and not _s3_sync_task.done():
+        return
+
+    try:
+        _s3_sync_task = asyncio.create_task(_s3_auto_sync_loop(db))
+    except RuntimeError:
+        # No running event loop (e.g. in test harness). Caller can
+        # schedule manually if needed.
+        pass
+
+
+def stop_s3_auto_sync() -> None:
+    """Cancel the background S3 auto-sync task if running."""
+    global _s3_sync_task
+    if _s3_sync_task is not None and not _s3_sync_task.done():
+        _s3_sync_task.cancel()
+    _s3_sync_task = None

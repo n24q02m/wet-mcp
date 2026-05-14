@@ -43,6 +43,10 @@ def _mock_settings():
         mock.sync_folder = ""
         mock.google_drive_client_id = ""
         mock.sync_interval = 300
+        # Phase 2: default to gdrive mode (no S3 bucket) so the GDrive
+        # branch is exercised; S3-mode tests override explicitly.
+        mock.sync_s3_bucket = ""
+        mock.sync_s3_prefix = "docs/"
         yield mock
 
 
@@ -89,6 +93,7 @@ async def test_lifespan_startup_no_github_token():
         cfg.wet_auto_searxng = False
         cfg.wet_cache = False
         cfg.sync_enabled = False
+        cfg.sync_s3_bucket = ""
         cfg.resolve_embedding_dims.return_value = 768
         cfg.get_db_path.return_value = MagicMock()
         task = await server._lifespan_startup()
@@ -113,6 +118,7 @@ async def test_lifespan_startup_with_auto_searxng():
         cfg.wet_auto_searxng = True
         cfg.wet_cache = False
         cfg.sync_enabled = False
+        cfg.sync_s3_bucket = ""
         cfg.resolve_embedding_dims.return_value = 768
         cfg.get_db_path.return_value = MagicMock()
         task = await server._lifespan_startup()
@@ -145,6 +151,7 @@ async def test_lifespan_startup_backends_init_failure():
         cfg.wet_auto_searxng = False
         cfg.wet_cache = False
         cfg.sync_enabled = False
+        cfg.sync_s3_bucket = ""
         cfg.resolve_embedding_dims.return_value = 768
         cfg.get_db_path.return_value = MagicMock()
         await server._lifespan_startup()
@@ -170,6 +177,8 @@ async def test_lifespan_startup_sync_enabled():
         cfg.wet_auto_searxng = False
         cfg.wet_cache = False
         cfg.sync_enabled = True
+        cfg.sync_s3_bucket = ""
+        cfg.google_drive_client_id = "test-client-id"
         cfg.resolve_embedding_dims.return_value = 768
         cfg.get_db_path.return_value = MagicMock()
         await server._lifespan_startup()
@@ -190,6 +199,8 @@ async def test_lifespan_shutdown_sync_enabled():
         patch("wet_mcp.config.settings") as cfg,
     ):
         cfg.sync_enabled = True
+        cfg.sync_s3_bucket = ""
+        cfg.google_drive_client_id = "test-client-id"
         await server._lifespan_shutdown(None)
         mock_stop.assert_called_once()
 
