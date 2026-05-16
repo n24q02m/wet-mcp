@@ -25,6 +25,14 @@ from loguru import logger
 from wet_mcp.config import settings
 
 
+def _validate_safe_name(name: str) -> None:
+    """Validate that a name does not contain path separators or traversal sequences."""
+    if not name:
+        raise ValueError("Name cannot be empty")
+    if "/" in name or "\\" in name or ".." in name:
+        raise ValueError(f"Invalid path component: {name}")
+
+
 def _get_token_dir() -> Path:
     """Get directory for token storage (~/.wet-mcp/tokens/).
 
@@ -37,6 +45,7 @@ def _get_token_dir() -> Path:
 
 def get_token_path(provider: str) -> Path:
     """Get path for a provider's token file."""
+    _validate_safe_name(provider)
     return _get_token_dir() / f"{provider}.json"
 
 
@@ -47,11 +56,14 @@ def _get_token_dir_for_sub(sub: str) -> Path:
     JWT ``sub`` so user A's GDrive refresh-token is not visible to
     user B sharing the same wet-mcp deployment.
     """
+    _validate_safe_name(sub)
     return settings.get_data_dir() / "subs" / sub / "tokens"
 
 
 def get_token_path_for_sub(sub: str, provider: str) -> Path:
     """Get path for a provider's token file scoped to a specific JWT sub."""
+    _validate_safe_name(sub)
+    _validate_safe_name(provider)
     return _get_token_dir_for_sub(sub) / f"{provider}.json"
 
 

@@ -46,6 +46,24 @@ def test_get_token_path(token_dir):
     assert get_token_path("drive") == token_dir / "drive.json"
 
 
+def test_path_traversal_validation(token_dir):
+    """Test that path traversal sequences are blocked."""
+    with pytest.raises(ValueError, match="Invalid path component"):
+        get_token_path("../drive")
+
+    with pytest.raises(ValueError, match="Invalid path component"):
+        get_token_path("drive/something")
+
+    with pytest.raises(ValueError, match="Invalid path component"):
+        get_token_path_for_sub("../user", "drive")
+
+    with pytest.raises(ValueError, match="Invalid path component"):
+        get_token_path_for_sub("user", "../drive")
+
+    with pytest.raises(ValueError, match="Name cannot be empty"):
+        get_token_path("")
+
+
 def test_load_missing_token(token_dir):
     """load_token returns None if file doesn't exist."""
     assert load_token("drive") is None
