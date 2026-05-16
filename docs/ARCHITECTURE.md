@@ -1,14 +1,12 @@
 # wet-mcp Architecture
 
-> Status: Phase 3 (`extract.agent` + `extract.interact` + `media.analyze`
-> removed in v2.0.0 BREAKING) on top of Phase 1 + Phase 2. Spec source:
-> `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md`
-> + `~/projects/.superpower/wet-mcp/2026-05-09-phase-3-plan.md`.
+> v2.0.0: `extract.agent` + `extract.interact` shipped; `media.analyze`
+> removed (BREAKING).
 
-This document describes the runtime architecture of wet-mcp after the
-Phase 1 migration to `n24q02m-web-core` `ScrapingAgent`. It covers the
-component graph, strategy escalation chain, storage layout, and LLM
-provider dispatch model.
+This document describes the runtime architecture of wet-mcp built on the
+`n24q02m-web-core` `ScrapingAgent`. It covers the component graph,
+strategy escalation chain, storage layout, and LLM provider dispatch
+model.
 
 ## Component graph
 
@@ -67,8 +65,8 @@ first.
 | 1 | `tls_spoof` (`curl_cffi` impersonation) | low | ~85% |
 | 2 | `headless` (Crawl4AI Playwright) | medium | ~95% |
 
-Phase 3 (planned, BREAKING) extends with `patchright` (stealth
-interactive) and `captcha` (CapSolver) tiers per spec section 4.2.
+The chain extends with `patchright` (stealth interactive) and `captcha`
+(CapSolver) tiers for interactive extraction.
 
 ### Rationale (cost vs success rate)
 
@@ -126,14 +124,14 @@ SearXNG runs as a bundled subprocess on `localhost:41592` (configurable
 via `WET_SEARXNG_PORT`). It is not persisted across restarts; SearXNG
 internal state is ephemeral.
 
-Future Phase 2 schema additions (libraries, versions, project_context)
-documented in spec section 5.4 -- migrations land via Alembic
-revisions `docs_002_libraries`, `docs_003_project_context`.
+Docs-search schema additions (libraries, versions, project_context)
+land via Alembic revisions `docs_002_libraries`,
+`docs_003_project_context`.
 
 ## LLM provider dispatch (no hardcoded default)
 
-Per spec section 5.5, wet-mcp does not pin a default LLM model. Provider
-selection at runtime walks env vars in priority order:
+wet-mcp does not pin a default LLM model. Provider selection at runtime
+walks env vars in priority order:
 
 ```text
 GEMINI_API_KEY / GOOGLE_API_KEY  -> google-genai SDK
@@ -151,8 +149,7 @@ If none is set:
 - No hard failure -- LLM is an enhancement, not a requirement.
 
 This dispatch is shared with web-core's `selector_inference` module
-(per spec section 5.5; web-core 2.0.1+ removed the hardcoded
-`gemini-2.5-flash` default).
+(web-core 2.0.1+ removed the hardcoded `gemini-2.5-flash` default).
 
 ## Mode matrix
 
@@ -161,16 +158,15 @@ This dispatch is shared with web-core's `selector_inference` module
 | stdio | Yes | Local user (`~/.wet-mcp/config.enc`, perm 0600) | No |
 | HTTP self-host | No | Per-JWT-sub credential vault | Yes |
 
-Spec section 5.2 + 5.3 cover the entry points and tool surface. The
-stdio default avoids OAuth complexity for single-machine personal use;
-HTTP self-host is recommended when multi-device sync, claude.ai web
+The stdio default avoids OAuth complexity for single-machine personal
+use; HTTP self-host is recommended when multi-device sync, claude.ai web
 compatibility, or team sharing matters.
 
-## Phase 2 — Context7-level docs search
+## Library docs search (Context7-parity)
 
-Phase 2 layers a curated library index, project lock (Cabinets), and
-token-aware docs query on top of the existing FTS5 + sqlite-vec hybrid
-search. Three new actions ship under the `search` tool surface:
+The docs-search pillar layers a curated library index, project lock
+(Cabinets), and token-aware docs query on top of the FTS5 + sqlite-vec
+hybrid search. Three actions ship under the `search` tool surface:
 
 | Action | Purpose | Latency target |
 |---|---|---|
@@ -178,7 +174,7 @@ search. Three new actions ship under the `search` tool surface:
 | `docs_query` | Version-aware docs query honoring lock + 5000-token cap | < 500 ms p95 |
 | `docs_lock_project` | Detect `pyproject.toml` / `package.json` / `go.mod` / `Cargo.toml`, persist Cabinets pin | < 100 ms |
 
-### Schema diff vs Phase 1
+### Docs-search schema
 
 Alembic migration chain:
 
@@ -211,9 +207,9 @@ First docs_query for library X
             -> mark_library_indexed updates last_indexed_at
 ```
 
-Tier 1 freshness window: 7 days (spec section 3). The Phase 2
-`refresh-tier1` cron job in `.github/workflows/ci.yml` re-runs
-`scripts/build_tier1_index.py` weekly to keep curated chunks fresh.
+Tier 1 freshness window: 7 days. The `refresh-tier1` cron job in
+`.github/workflows/ci.yml` re-runs `scripts/build_tier1_index.py`
+weekly to keep curated chunks fresh.
 
 ### Cabinets project isolation
 
@@ -225,7 +221,7 @@ persists the lock list to `project_context`. Subsequent
 `version` honor the pin from the lock; `last_used_at` is bumped for
 LRU eviction tracking.
 
-## Phase 3 -- agent + interact + media.analyze removal
+## Agent + interact + media.analyze removal
 
 ### `extract(action="agent")` orchestrator
 
@@ -297,7 +293,7 @@ when the pool is empty.
 
 ### `media.analyze` removal (BREAKING)
 
-The Phase 1 deprecation handler is gone. The `media` dispatcher now
+The legacy deprecation handler is gone. The `media` dispatcher now
 routes `action="analyze"` through the standard unknown-action branch
 with a special-cased migration string pointing to `imagine-mcp`'s
 `understand` action. `wet_mcp.llm.analyze_media` is preserved for unit
@@ -307,16 +303,11 @@ tests but is unreachable from any MCP tool surface.
 
 Adds nullable `summary` + `summary_provider` TEXT columns to
 `doc_chunks`. Backward-compatible (existing rows have NULL); the
-migration is schema-ready only -- no Phase 3 task generates summaries.
-Reserved for the LLM-enhanced summaries NICE feature per spec section
-4.3.
+migration is schema-ready only -- no code path generates summaries yet.
+Reserved for the future LLM-enhanced summaries feature.
 
 ## Cross-references
 
-- Spec: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` (sections 4.3, 5.4, 5.7, 8)
-- Phase 1 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-1-plan.md`
-- Phase 2 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`
-- Phase 3 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-3-plan.md`
 - Migration guide: `docs/migration.md` (v1.x.y -> v2.0.0)
 - Interact reference: `docs/interact.md` (action language + session)
 - Web-core repo: `n24q02m/web-core` (`web_core.scraper.ScrapingAgent`,

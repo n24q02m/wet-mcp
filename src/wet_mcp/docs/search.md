@@ -95,7 +95,7 @@ Free-form library name → ranked list of resolved libraries. Returns `library_i
 ---
 
 ### docs_query
-Version-aware library docs query honoring optional topic filter, project lock (Cabinets), and a 5000-token response cap (spec section 3).
+Version-aware library docs query honoring optional topic filter, project lock (Cabinets), and a 5000-token response cap.
 
 **Parameters:**
 - `query` (required): What to search for

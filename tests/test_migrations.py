@@ -18,10 +18,10 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-from alembic import command
 from wet_mcp.migrations import (
     _ALEMBIC_INI_PATH,
     _ALEMBIC_SCRIPT_LOCATION,
