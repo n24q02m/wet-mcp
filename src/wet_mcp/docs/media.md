@@ -55,8 +55,7 @@ Use this when you need to inspect the actual file content (e.g., sending an imag
 ### analyze (REMOVED in v2.0.0)
 
 > **Removed.** `media(action="analyze", ...)` was removed in wet
-> **v2.0.0** after the 2-minor-version deprecation grace started in
-> Phase 1. Calling it now returns the standard unknown-action error
+> **v2.0.0**. Calling it now returns the standard unknown-action error
 > with a migration hint.
 >
 > **Use** [`imagine-mcp`](https://github.com/n24q02m/imagine-mcp)'s

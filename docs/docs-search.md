@@ -1,10 +1,9 @@
 # wet-mcp Docs Search (Context7-parity)
 
-> Status: Phase 2 (Context7-level docs search).
-> Spec source: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` section 4.3.
+> Context7-level docs search.
 
-This document explains how wet-mcp's Phase 2 docs search compares with
-Context7, Nia, Docfork, and Grounded Docs, and how to use the three new
+This document explains how wet-mcp's docs search compares with
+Context7, Nia, Docfork, and Grounded Docs, and how to use the three
 `search` actions in practice.
 
 ## Why a docs search pillar?
@@ -23,14 +22,14 @@ that no longer exist. A self-hosted indexed docs cache solves both:
   `Cargo.toml`, so subsequent `docs_query` calls without an explicit
   `version` honor the lock automatically.
 * **Token-efficient**: each `docs_query` response respects a
-  5000-token cap (spec section 3) — the agent gets the most relevant
-  chunks first without blowing the context window.
+  5000-token cap — the agent gets the most relevant chunks first
+  without blowing the context window.
 
 ## Library coverage tiers
 
 | Tier | Source | Freshness | Latency |
 |---|---|---|---|
-| **Tier 1** | Curated `data/tier1_libraries.json` (50 popular libs across React/Next/Vue/Svelte/SolidJS/Express/Nest/Fastify/Prisma/Drizzle/TanStack/TailwindCSS/Zod/Vite/esbuild/Axios/Lodash/TypeScript/FastAPI/Pydantic/SQLAlchemy/Django/Flask/pytest/NumPy/pandas/Polars/Requests/HTTPX/Celery/PyTorch/Transformers/LangChain/Gin/Echo/Fiber/sqlc/Cobra/Tokio/Axum/Serde/clap/MongoDB/PostgreSQL/Redis/DuckDB/SQLite/Kafka...). Metadata seeded at startup; chunks ingested lazily on first `docs_query` or eagerly via the weekly `build_tier1_index.py` script. | Re-validated weekly (>= 90% within 7 days per spec section 3) | Metadata < 50 ms; chunks served from local SQLite (FTS5 + sqlite-vec) |
+| **Tier 1** | Curated `data/tier1_libraries.json` (50 popular libs across React/Next/Vue/Svelte/SolidJS/Express/Nest/Fastify/Prisma/Drizzle/TanStack/TailwindCSS/Zod/Vite/esbuild/Axios/Lodash/TypeScript/FastAPI/Pydantic/SQLAlchemy/Django/Flask/pytest/NumPy/pandas/Polars/Requests/HTTPX/Celery/PyTorch/Transformers/LangChain/Gin/Echo/Fiber/sqlc/Cobra/Tokio/Axum/Serde/clap/MongoDB/PostgreSQL/Redis/DuckDB/SQLite/Kafka...). Metadata seeded at startup; chunks ingested lazily on first `docs_query` or eagerly via the weekly `build_tier1_index.py` script. | Re-validated weekly (>= 90% within 7 days) | Metadata < 50 ms; chunks served from local SQLite (FTS5 + sqlite-vec) |
 | **Tier 2** | On-demand discovery via `discover_library` chain (npm / PyPI / crates.io / Go / Hex / Packagist / Pub / RubyGems / NuGet / Maven / GitHub README) and content fetch via `fetch_docs_pages` (web-core ScrapingAgent strategy chain). | Refreshes whenever the chunk fetch runs | First call: 3-30 s for ingestion + indexing; subsequent calls: < 500 ms |
 
 ## When to use which action
@@ -83,7 +82,7 @@ search(action="docs_query",
 | Hybrid search (FTS5 + sqlite-vec) | Yes | unknown | unknown | unknown | unknown |
 | Local SQLite + WAL | Yes | No | No | partial | partial |
 
-## Performance targets (spec section 3)
+## Performance targets
 
 | Metric | Target | Methodology |
 |---|---|---|
@@ -105,5 +104,3 @@ search(action="docs_query",
 - Eager Tier 1 build: `scripts/build_tier1_index.py`
 - Schema migrations: `alembic/versions/docs_002_libraries.py` +
   `alembic/versions/docs_003_project_context.py`
-- Spec: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` section 4.3
-- Phase 2 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`

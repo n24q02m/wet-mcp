@@ -1,29 +1,25 @@
 # wet-mcp Benchmarks
 
-> Status: Phase 3 (`extract.agent` + `extract.interact`, BREAKING v2.0.0).
-> Target metrics defined in
-> `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` section 3
-> + `2026-05-09-phase-3-plan.md` task 11.
+> v2.0.0: `extract.agent` + `extract.interact` shipped (BREAKING).
 
-This document captures the v1.x baseline metrics established during
-Phase 1. Full pre-release benchmark runs (latency p50 / p95, recall@10,
-freshness, success rate against the 200-URL tier-1 fixture) land in the
-pre-release main session per Plan 2026-05-09 Task 5 + Task 4.
+This document captures the v1.x baseline metrics. Full pre-release
+benchmark runs (latency p50 / p95, recall@10, freshness, success rate
+against the 200-URL tier-1 fixture) land in a pre-release benchmark
+session.
 
 ## v1.x baseline (2026-05-09)
 
 | Pillar | Metric | Value | Method |
 |---|---|---|---|
-| Coverage | `pytest --cov` post-Phase-1 | 93.24% | CI gate currently 93%, target post-Phase-1 95% (spec section 3) |
+| Coverage | `pytest --cov` | 93.24% | CI gate currently 93%, long-term target 95% |
 | Test suite | Total tests passed | 1606 | `uv run pytest` (unit + integration; e2e + benchmark + live excluded) |
 | Test suite | Total tests skipped | 34 | Skips driven by missing optional creds (cloud APIs) |
 | Tier-1 extract | Sample fixture size | 20 URLs | Sampled subset; full 200 URL fixture pending pre-release run |
-| Tier-1 extract | Success rate (sample) | >=80% | Spec target 95% on full 200 URL fixture (section 3) |
+| Tier-1 extract | Success rate (sample) | >=80% | Target 95% on full 200 URL fixture |
 
 ## Latency placeholders
 
-Real measurements land in pre-release benchmark CI run. Targets per spec
-section 3:
+Real measurements land in the pre-release benchmark CI run. Targets:
 
 | Pillar | Metric | Target | Methodology |
 |---|---|---|---|
@@ -35,28 +31,26 @@ section 3:
 | Overall | Memory footprint (idle server) | < 400 MB | RSS after startup + 10 tool calls |
 | Overall | Test coverage | >= 95% | `pytest --cov-fail-under=95` enforced in CI |
 
-## Phase 1 gate notes
+## Baseline gate notes
 
 - **Coverage gate**: CI currently enforces `--cov-fail-under=93`. The
-  `>=95%` spec target unlocks once the 200-URL tier-1 fixture is
-  finalized (Plan Task 4 step 7) and exercised by the integration suite.
-- **Tier-1 fixture**: 20-URL sample committed in Task 4. Full 200-URL
-  fixture deferred to pre-release main session (per Plan Task 5 + Task 4).
-- **Search polish (Task 5)**: query expansion + TTL cache (3600 s general
-  / 300 s time-sensitive) + standardized citation format + 200-token
-  snippet cap landed in commit `10f1ca5`.
-- **ScrapingAgent migration (Task 4)**: extract pipeline now backed by
+  `>=95%` target unlocks once the 200-URL tier-1 fixture is finalized
+  and exercised by the integration suite.
+- **Tier-1 fixture**: 20-URL sample committed. Full 200-URL fixture
+  deferred to a pre-release benchmark session.
+- **Search polish**: query expansion + TTL cache (3600 s general / 300 s
+  time-sensitive) + standardized citation format + 200-token snippet
+  cap.
+- **ScrapingAgent migration**: extract pipeline backed by
   `n24q02m-web-core` `ScrapingAgent` 5-strategy chain. Markdown output
   comparable to prior Crawl4AI-direct config across the sample fixture;
-  full A/B comparison runs in pre-release main session.
-- **Media slim (Task 6)**: `media.analyze` deprecated with grace-period
-  message forwarding to `imagine-mcp.understand`. `list` + `download`
-  unchanged.
+  full A/B comparison runs in a pre-release benchmark session.
+- **Media slim**: `media.analyze` removed in v2.0.0; use
+  `imagine-mcp.understand`. `list` + `download` unchanged.
 
 ## Pre-release benchmark plan
 
-See spec section 7 for the full benchmark + fixture layout. The pre-release
-benchmark CI job runs:
+The pre-release benchmark CI job runs:
 
 1. `tests/fixtures/urls/tier1_popular/` (200 URLs across diverse popular
    domains) -- success rate + markdown clean ratio.
@@ -71,7 +65,7 @@ benchmark CI job runs:
 Results write to `tests/fixtures/benchmarks/history/<timestamp>.json` and
 get diff'd against the previous run for regression alerting.
 
-## Phase 2 — Docs search targets (spec section 3)
+## Docs search targets
 
 | Pillar | Metric | Target | Methodology |
 |---|---|---|---|
@@ -80,11 +74,11 @@ get diff'd against the previous run for regression alerting.
 | Docs | Index freshness (Tier 1 / Tier 2 within 7-day lag) | >= 90% Tier 1 / >= 70% Tier 2 | Weekly `refresh-tier1` cron job |
 | Docs | Token cap per response | <= 5000 tokens | Greedy accumulator in `query_docs` |
 
-Phase 2 ships the schema + dispatchers; the 200-fixture recall eval and
-500-query latency run land in the consolidated pre-release session per
-user "test+fix 1 lượt cuối" strategy.
+The docs-search pillar ships the schema + dispatchers; the 200-fixture
+recall eval and 500-query latency run land in a consolidated pre-release
+session.
 
-## Phase 3 -- agent + interact targets
+## Agent + interact targets
 
 | Pillar | Metric | Target | Methodology |
 |---|---|---|---|
@@ -92,22 +86,20 @@ user "test+fix 1 lượt cuối" strategy.
 | extract.agent | Synthesis quality (1-5 manual rubric) | mean >= 4.0 | 50-query fixture with curated ground truth |
 | extract.interact | Per-action p95 latency | < 5 s | 20 fixture flows (login, search, submit) |
 | extract.interact | Session reuse hit rate | >= 90% on 2nd call | 10 multi-step flows |
-| All Phase 3 | Regression vs v1_phase2_baseline | within +/- 10% | `docs/benchmarks/v1_phase2_baseline.json` |
+| Overall regression | Regression vs `v1_phase2_baseline` | within +/- 10% | `docs/benchmarks/v1_phase2_baseline.json` |
 
-Live latency runs land in the consolidated pre-release session per the
-Phase 3 plan task 11. Until then, baseline values are captured in
-`docs/benchmarks/v1_phase2_baseline.json` (HEAD `22a93a0`,
-`v2.31.0-beta.1`) so post-Phase-3 deltas can be computed deterministically.
+Live latency runs land in a consolidated pre-release session. Until
+then, baseline values are captured in
+`docs/benchmarks/v1_phase2_baseline.json` (`v2.31.0-beta.1`) so deltas
+can be computed deterministically.
 
 ### Coverage gate
 
-- Phase 2 baseline: 92% (CI gate `--cov-fail-under=92`).
-- Phase 3 target: maintain >= 92%, climb back to >= 95% in the
-  consolidated coverage push post-Phase-3.
+- Current baseline: 92% (CI gate `--cov-fail-under=92`).
+- Target: maintain >= 92%, climb back to >= 95% in a consolidated
+  coverage push.
 
 ## Cross-references
 
-- Spec: `~/projects/.superpower/wet-mcp/2026-04-19-wet-v2-design.md` (section 3 metrics, section 7 fixture layout)
-- Phase 1 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-1-plan.md`
-- Phase 2 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-2-plan.md`
-- Phase 3 plan: `~/projects/.superpower/wet-mcp/2026-05-09-phase-3-plan.md`
+- Architecture: `docs/ARCHITECTURE.md`
+- Migration guide: `docs/migration.md` (v1.x.y -> v2.0.0)

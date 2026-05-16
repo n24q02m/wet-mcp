@@ -10,8 +10,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 | Phase 2 | Shipped | Context7-level docs search: library index (Tier 1 + Tier 2), version-aware queries with token cap, project lock (Cabinets) |
 | Phase 3 | **Current (BREAKING v2.0.0)** | `extract.agent` multi-step research with cited synthesis, `extract.interact` click/fill/submit via patchright (optional session persistence), `docs_004_chunk_summaries` migration, **`media.analyze` removed** |
 
-> **BREAKING in v2.0.0** -- `media(action="analyze")` was removed entirely
-> after the 2-minor-version deprecation grace period started in Phase 1.
+> **BREAKING in v2.0.0** -- `media(action="analyze")` was removed entirely.
 > Use [`imagine-mcp`](https://github.com/n24q02m/imagine-mcp)'s
 > `understand` action for vision/audio/video analysis. See
 > [`docs/migration.md`](docs/migration.md) for the upgrade recipe.
@@ -154,7 +153,7 @@ into `config` action dispatch.
 
 | Tool | Description |
 |:-----|:------------|
-| `search` | Web (SearXNG metasearch), news, images, academic research (Scholar / arXiv / PubMed / CrossRef / Semantic Scholar / BASE), library docs (HyDE + FTS5), find similar pages. **Phase 2** adds `docs_resolve` (library name -> ranked id), `docs_query` (version-aware + topic + 5000-token cap), `docs_lock_project` (Cabinets project pin via pyproject / package.json / go.mod / Cargo.toml manifest detection). |
+| `search` | Web (SearXNG metasearch), news, images, academic research (Scholar / arXiv / PubMed / CrossRef / Semantic Scholar / BASE), library docs (HyDE + FTS5), find similar pages. Includes `docs_resolve` (library name -> ranked id), `docs_query` (version-aware + topic + 5000-token cap), `docs_lock_project` (Cabinets project pin via pyproject / package.json / go.mod / Cargo.toml manifest detection). |
 | `extract` | URL -> smart chunks dict (`clean_text` + `markdown` + `structured_data` + `code_blocks` + `metadata`) via web-core 5-strategy chain. Batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion (PDF/DOCX/XLSX/PPTX/EPUB), structured extraction (JSON Schema) |
 | `media` | `list` (discover URLs from gallery pages), `download` (SSRF-safe). `analyze` deprecated v&lt;auto&gt;+ -- forwards to `imagine-mcp.understand` |
 | `config` | `status`, `set`, `cache_clear`, `docs_reindex`, `warmup`, `setup_open_relay`, `setup_status`, `setup_skip`, `setup_reset`, `setup_complete`, `setup_sync` |
@@ -163,8 +162,7 @@ into `config` action dispatch.
 > **Media boundary**: For vision / audio understanding (image captioning,
 > OCR, audio transcription, video summarization), use
 > [imagine-mcp](https://github.com/n24q02m/imagine-mcp). `media.analyze`
-> in wet has been deprecated since v&lt;auto&gt; and will be removed in
-> wet v2.0.0 (Phase 3).
+> was removed in wet v2.0.0 -- use `imagine-mcp.understand` instead.
 
 ## Comparison
 

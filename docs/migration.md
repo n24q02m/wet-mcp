@@ -1,15 +1,14 @@
 # Migration: wet v1.x.y -> v2.0.0
 
-This guide covers what changed in the Phase 3 BREAKING release and how
+This guide covers what changed in the v2.0.0 BREAKING release and how
 to upgrade existing wet-mcp deployments cleanly.
 
 ## What's removed
 
 ### `media(action="analyze")`
 
-The `analyze` action was deprecated in wet **v2.31.x** (Phase 1, commit
-`2ea6f23`, 2026-05-09) with a stable migration string returned for the
-two minor versions of grace period required by spec section 8. wet
+The `analyze` action was deprecated in wet **v2.31.x** with a stable
+migration string returned for a two-minor-version grace period. wet
 **v2.0.0** removes the action entirely. Calls now return:
 
 ```text
@@ -66,9 +65,9 @@ reference, session-persistence semantics, and security notes.
 
 Adds nullable `summary` + `summary_provider` columns to `doc_chunks`.
 Backward-compatible (existing rows have NULL); reserved for the future
-LLM-enhanced summaries NICE feature per spec section 4.3. No Phase 3
-task generates summaries -- the schema is only made available so
-adopters do not need a second migration when the feature lands.
+LLM-enhanced summaries feature. No code path generates summaries yet --
+the schema is only made available so adopters do not need a second
+migration when the feature lands.
 
 ## Auto-migrate-on-startup
 
