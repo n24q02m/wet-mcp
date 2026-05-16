@@ -2401,14 +2401,16 @@ def _process_rst_heading(i: int, line: str, lines: list[str], out: list[str]) ->
     else:
         level = "####"
 
-    if (
-        i > 0
-        and out
-        and out[-1].strip()
-        and all(c in _RST_HEADING_CHARS for c in out[-1].strip())
-        and len(set(out[-1].strip())) == 1
-    ):
-        out[-1] = ""
+    if i > 0 and out:
+        last_stripped = out[-1].strip()
+        # Optimization: Caching `.strip()` and checking `last_stripped[0]` combined with `len(set(..)) == 1`
+        # is significantly faster and less memory intensive than using `all(...)`.
+        if (
+            last_stripped
+            and last_stripped[0] in _RST_HEADING_CHARS
+            and len(set(last_stripped)) == 1
+        ):
+            out[-1] = ""
 
     out.append(f"{level} {line.strip()}")
     return i + 2
@@ -2507,16 +2509,20 @@ def _rst_to_markdown(content: str) -> str:
             continue
 
         # Detect RST headings: line followed by underline of same length
-        if (
-            i + 1 < len(lines)
-            and line.strip()
-            and len(lines[i + 1].strip()) >= len(line.strip())
-            and lines[i + 1].strip()
-            and all(c in _RST_HEADING_CHARS for c in lines[i + 1].strip())
-            and len(set(lines[i + 1].strip())) == 1
-        ):
-            i = _process_rst_heading(i, line, lines, out)
-            continue
+        if i + 1 < len(lines):
+            stripped_line = line.strip()
+            if stripped_line:
+                next_stripped = lines[i + 1].strip()
+                # Optimization: Caching `.strip()` and checking `next_stripped[0]` combined with `len(set(..)) == 1`
+                # is significantly faster and less memory intensive than using `all(...)`.
+                if (
+                    next_stripped
+                    and len(next_stripped) >= len(stripped_line)
+                    and next_stripped[0] in _RST_HEADING_CHARS
+                    and len(set(next_stripped)) == 1
+                ):
+                    i = _process_rst_heading(i, line, lines, out)
+                    continue
 
         # Detect code-block directive
         directive_match = _RST_DIRECTIVE_RE.match(line.strip())

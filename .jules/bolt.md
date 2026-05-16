@@ -8,3 +8,6 @@
 ## 2023-11-20 - Redundant JSON parsing
 **Learning:** Bypassing redundant `json.loads` followed by `json.dumps` in MCP tool handlers significantly reduces CPU overhead when the source functions already return pretty-printed JSON.
 **Action:** Ensure that JSON parsing is only done when data modification is necessary. If a function returns an already correctly formatted JSON string, return it directly to the caller.
+## 2023-10-27 - Optimize multiple string operations in conditionals
+**Learning:** Calling `.strip()` multiple times per text line in complex conditions creates unnecessary string allocations. Combining generator expressions like `all(...)` with length checks can be redundant. If `len(set(text)) == 1` guarantees uniform characters, `all(c in SET for c in text)` can be safely replaced by an O(1) index check `text[0] in SET`.
+**Action:** In text parsing loops, cache `.strip()` calls into local variables. Replace $O(N)$ string validations with $O(1)$ index accesses when a set length check guarantees uniform string content.
