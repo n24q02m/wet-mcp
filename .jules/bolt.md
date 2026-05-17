@@ -8,3 +8,6 @@
 ## 2023-11-20 - Redundant JSON parsing
 **Learning:** Bypassing redundant `json.loads` followed by `json.dumps` in MCP tool handlers significantly reduces CPU overhead when the source functions already return pretty-printed JSON.
 **Action:** Ensure that JSON parsing is only done when data modification is necessary. If a function returns an already correctly formatted JSON string, return it directly to the caller.
+## 2026-05-17 - splitlines() and strip() overhead
+**Learning:** In `src/wet_mcp/sources/docs.py`, iterating with `content.splitlines()` combined with `line.strip()` introduces unnecessary overhead due to creating many string copies. However, when regexes with end-of-line anchors (`$`) are used on lines, replacing `splitlines()` with `split('\n')` is unsafe on Windows because `split('\n')` leaves `\r` attached, breaking the regex.
+**Action:** To safely optimize such hot loops without regressions, keep `content.splitlines()` but replace list comprehensions and multiple `sum()` generator iterations with a single `for` loop, and avoid fully `strip()`-ing lines when `isspace()` suffices for emptiness checks.
