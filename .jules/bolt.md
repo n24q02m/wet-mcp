@@ -8,3 +8,7 @@
 ## 2023-11-20 - Redundant JSON parsing
 **Learning:** Bypassing redundant `json.loads` followed by `json.dumps` in MCP tool handlers significantly reduces CPU overhead when the source functions already return pretty-printed JSON.
 **Action:** Ensure that JSON parsing is only done when data modification is necessary. If a function returns an already correctly formatted JSON string, return it directly to the caller.
+
+## 2023-11-20 - Regex vs string allocation (lstrip)
+**Learning:** When attempting to optimize regexes with a "fast-path" character check in Python, calling `line.lstrip()` on every iteration allocates a new string in memory if there is leading whitespace. This allocation overhead often completely negates the performance benefit of bypassing the regex, making the code *slower* than just letting the C-optimized `re.match` run.
+**Action:** Avoid unconditionally allocating strings (like `lstrip()`) in tight text-processing loops when trying to optimize regexes. A true fast path must avoid both regex execution *and* string allocation.
