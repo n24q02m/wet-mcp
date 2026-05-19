@@ -1,3 +1,25 @@
+## [3.1.0](https://github.com/n24q02m/wet-mcp/compare/v3.0.0-beta.4...v3.1.0) (2026-05-19)
+
+First stable release of the v3 line. (Version `3.0.0` was permanently
+reserved by a GitHub immutable release and cannot be reused, so the v3
+line ships from `3.1.0`; release contents are unchanged.)
+
+
+### Features
+
+* Context7-style library documentation retrieval
+* Content extraction agent with interaction modes
+* Sync backend selection: operator-configured S3 (env) XOR Google Drive
+  (relay), mutually exclusive
+
+
+### Bug Fixes
+
+* Bundle Alembic migrations into the wheel so DB migrations run on uvx installs
+* Align sync configuration parity between wet-mcp and mnemo-mcp
+* Pin urllib3 and langsmith floors to patch 3 high-severity CVEs
+* Scrub internal dev-process terminology from user-facing docs
+
 ## [2.1.4-beta.4](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.3...v2.1.4-beta.4) (2026-02-05)
 
 
