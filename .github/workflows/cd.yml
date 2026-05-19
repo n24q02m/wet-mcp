@@ -10,6 +10,11 @@ on:
         options:
           - beta
           - stable
+      publish_existing_tag:
+        description: "Recovery only: publish an already-created tag (e.g. v3.1.0), skipping semantic-release. Use when the auto-computed version's tag name is permanently reserved by a GitHub immutable release."
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -30,10 +35,10 @@ jobs:
     name: Semantic Release
     runs-on: ubuntu-latest
     outputs:
-      released: ${{ steps.release.outputs.released }}
-      tag: ${{ steps.release.outputs.tag }}
-      version: ${{ steps.release.outputs.version }}
-      is_prerelease: ${{ steps.release.outputs.is_prerelease }}
+      released: ${{ steps.release.outputs.released || steps.forced.outputs.released }}
+      tag: ${{ steps.release.outputs.tag || steps.forced.outputs.tag }}
+      version: ${{ steps.release.outputs.version || steps.forced.outputs.version }}
+      is_prerelease: ${{ steps.release.outputs.is_prerelease || steps.forced.outputs.is_prerelease }}
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2
@@ -54,16 +59,30 @@ jobs:
 
       - uses: python-semantic-release/python-semantic-release@350c48fcb3ffcdfd2e0a235206bc2ecea6b69df0 # v10
         id: release
+        if: inputs.publish_existing_tag == ''
         with:
           github_token: ${{ steps.app-token.outputs.token }}
           prerelease: ${{ inputs.release_type == 'beta' }}
           prerelease_token: beta
 
       - uses: python-semantic-release/publish-action@310a9983a0ae878b29f3aac778d7c77c1db27378 # v10
-        if: steps.release.outputs.released == 'true'
+        if: inputs.publish_existing_tag == '' && steps.release.outputs.released == 'true'
         with:
           github_token: ${{ steps.app-token.outputs.token }}
           tag: ${{ steps.release.outputs.tag }}
+
+      - name: Use existing tag (immutable-release recovery)
+        id: forced
+        if: inputs.publish_existing_tag != ''
+        run: |
+          TAG="${{ inputs.publish_existing_tag }}"
+          VERSION="${TAG#v}"
+          {
+            echo "released=true"
+            echo "tag=$TAG"
+            echo "version=$VERSION"
+            echo "is_prerelease=false"
+          } >> "$GITHUB_OUTPUT"
 
   # =================== Publish to PyPI ===================
   publish-pypi:
