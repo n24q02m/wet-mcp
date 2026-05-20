@@ -24,7 +24,7 @@ RELAY_SCHEMA: dict[str, Any] = {
             "type": "password",
             "placeholder": "AIza...",
             "helpUrl": "https://aistudio.google.com/apikey",
-            "helpText": "LLM (structured extraction, media analysis) + Embedding. Free tier available.",
+            "helpText": "LLM (structured extraction) + Embedding. Free tier available.",
             "required": False,
         },
         {
@@ -77,9 +77,9 @@ RELAY_SCHEMA: dict[str, Any] = {
             "description": "Re-ranks search results for accuracy. Local mode uses Qwen3-Reranker (0.6B ONNX).",
         },
         {
-            "label": "LLM / Vision",
+            "label": "LLM",
             "priority": "Gemini > OpenAI",
-            "description": "Used for structured extraction and media analysis. Without a key, these features are limited.",
+            "description": "Used for structured extraction. Without a key, these features are limited.",
         },
     ],
 }

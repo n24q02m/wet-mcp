@@ -54,7 +54,7 @@ class TestRelaySchema:
         assert "Extraction" in labels
         assert "Embedding" in labels
         assert "Reranking" in labels
-        assert "LLM / Vision" in labels
+        assert "LLM" in labels
 
 
 class TestLoadConfigFromFile:
