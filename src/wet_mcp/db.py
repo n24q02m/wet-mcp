@@ -56,8 +56,9 @@ def _build_fts_queries(query: str) -> list[str]:
     words (any language) and the PHRASE->AND->OR fallback ensures precision
     first, then recall.
     """
-    words = [w.strip() for w in query.split() if w.strip()]
-    safe = [w.replace('"', '""') for w in words]
+    # ⚡ Bolt Optimization: str.split() inherently handles all whitespace and ignores empty strings,
+    # eliminating the need for intermediate .strip() checks and the separate 'words' list creation.
+    safe = [w.replace('"', '""') for w in query.split()]
 
     if not safe:
         return []
