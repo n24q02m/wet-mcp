@@ -1497,9 +1497,15 @@ def _handle_config_set(key: str | None, value: str | None) -> str:
         "sync_interval",
     }
     if key not in valid_keys:
+        import difflib
+
+        suggestion = ""
+        if key and isinstance(key, str):
+            closest = difflib.get_close_matches(key, valid_keys, n=1)
+            suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
         return json.dumps(
             {
-                "error": f"Invalid key: {key}",
+                "error": f"Invalid key: {key}.{suggestion}",
                 "valid_keys": sorted(valid_keys),
             }
         )
