@@ -28,7 +28,7 @@ dependencies = [
     # Config
     # Pydantic upper bound lives here (not in web-core) because cohere>=6.1.0
     # pins pydantic-core <2.44 and pydantic 2.13.x ships pydantic-core 2.46.
-    "pydantic>=2.13.4,<2.14",
+    "pydantic>=2.12.5,<2.13",
     "pydantic-settings",
     # Logging
     "loguru",
