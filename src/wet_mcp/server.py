@@ -1499,7 +1499,9 @@ def _handle_config_set(key: str | None, value: str | None) -> str:
     if key not in valid_keys:
         import difflib
 
-        closest = difflib.get_close_matches(key, valid_keys, n=1) if key is not None else []
+        closest = (
+            difflib.get_close_matches(key, valid_keys, n=1) if key is not None else []
+        )
         suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
         return json.dumps(
             {
