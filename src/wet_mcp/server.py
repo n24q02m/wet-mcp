@@ -1425,7 +1425,7 @@ async def help(tool_name: str = "search") -> str:
     Quick guide -- which tool to use:
     - Need to FIND information? Use `search` (returns result listings with URLs)
     - Need to READ a page? Use `extract` (returns full page content from a URL)
-    - Need media files? Use `media` (discover, download, analyze images/videos/audio)
+    - Need media files? Use `media` (discover, download images/videos/audio)
     - Need server settings? Use `config` (status, cache, settings, warmup, sync setup)
     """
     allowed_tools = {"search", "extract", "media", "config"}
