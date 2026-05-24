@@ -33,7 +33,7 @@ dependencies = [
     # Logging
     "loguru",
     # LLM + Embedding (native SDKs)
-    "cohere>=6.1.0",
+    "cohere>=7.0.0",
     "httpx>=0.28.1",
     "google-genai>=2.6.0",
     "openai>=2.38.0",
