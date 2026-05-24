@@ -28,7 +28,7 @@ dependencies = [
     # Config
     # Pydantic upper bound lives here (not in web-core) because cohere>=6.1.0
     # pins pydantic-core <2.44 and pydantic 2.13.x ships pydantic-core 2.46.
-    "pydantic>=2.12.5,<2.13",
+    "pydantic>=2.13.4,<2.14",
     "pydantic-settings",
     # Logging
     "loguru",
@@ -62,7 +62,7 @@ dependencies = [
     "google-api-python-client>=2.196.0",
     "google-auth>=2.53.0",
     # S3-compatible sync (AWS S3, Cloudflare R2, Backblaze B2, MinIO)
-    "boto3>=1.43.13",
+    "boto3>=1.43.14",
     # Production WSGI server for embedded SearXNG on Windows
     # (Werkzeug dev server deadlocks under concurrent engine requests)
     "waitress>=3.0.2; sys_platform == 'win32'",
