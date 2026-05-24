@@ -1924,18 +1924,28 @@ def _is_toc_only(content: str) -> bool:
     Returns True if >50% of non-empty lines are markdown links or bare URLs,
     indicating the file is just a TOC rather than actual documentation.
     """
-    lines = [line.strip() for line in content.splitlines() if line.strip()]
-    if not lines:
+    toc_lines = 0
+    heading_lines = 0
+    total_lines = 0
+
+    for line in content.splitlines():
+        if not line or line.isspace():
+            continue
+
+        total_lines += 1
+        line = line.lstrip()
+
+        if line.startswith("#"):
+            heading_lines += 1
+        elif _TOC_LINE_RE.match(line):
+            toc_lines += 1
+
+    if not total_lines:
         return True
 
-    toc_lines = sum(1 for line in lines if _TOC_LINE_RE.match(line))
-
-    # Also count heading-only lines (# Title without body)
-    heading_lines = sum(1 for line in lines if line.startswith("#"))
-
-    content_lines = len(lines) - toc_lines - heading_lines
+    content_lines = total_lines - toc_lines - heading_lines
     # If less than 50% of lines are actual content, it's a TOC
-    return content_lines < len(lines) * 0.5
+    return content_lines < total_lines * 0.5
 
 
 # ---------------------------------------------------------------------------
