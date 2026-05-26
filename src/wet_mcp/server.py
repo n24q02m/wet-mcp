@@ -2462,6 +2462,11 @@ async def run_http_server(port: int = 0) -> None:
     else:
         host = "127.0.0.1"
 
+    # MCP_AUTH_DISABLE=1 skips Bearer JWT verification on /mcp -- for
+    # deployments behind an external auth boundary (reverse proxy / API
+    # gateway). See mcp-core BearerMCPApp.auth_disabled (>=1.15.0-beta.3).
+    auth_disabled = os.environ.get("MCP_AUTH_DISABLE") == "1"
+
     # Only attach the per-request sub scope when running in multi-user
     # remote mode (PUBLIC_URL set). Single-user / local HTTP keeps the
     # legacy env-driven credential path so existing single-user setups
@@ -2481,6 +2486,7 @@ async def run_http_server(port: int = 0) -> None:
         # stuck on "Waiting for authorization..." forever.
         setup_complete_hook=wire_gdrive_callbacks,
         auth_scope=auth_scope,
+        auth_disabled=auth_disabled,
     )
 
 
