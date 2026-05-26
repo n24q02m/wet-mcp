@@ -2351,10 +2351,12 @@ def _split_preserving_code(
     buffer = ""
     for seg in segments:
         if buffer and len(buffer) + len(seg) + 2 > max_chunk_size:
-            if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
+            # ⚡ Bolt Optimization: Cache buffer.strip() to avoid redundant string allocations
+            buffer_stripped = buffer.strip()
+            if buffer_stripped and len(buffer_stripped) >= min_chunk_size:
                 chunks.append(
                     {
-                        "content": buffer.strip(),
+                        "content": buffer_stripped,
                         "title": context.title,
                         "heading_path": context.heading_path,
                         "url": context.url,
@@ -2365,10 +2367,12 @@ def _split_preserving_code(
         else:
             buffer = f"{buffer}\n\n{seg}" if buffer else seg
 
-    if buffer.strip() and len(buffer.strip()) >= min_chunk_size:
+    # ⚡ Bolt Optimization: Cache buffer.strip() to avoid redundant string allocations
+    buffer_stripped = buffer.strip()
+    if buffer_stripped and len(buffer_stripped) >= min_chunk_size:
         chunks.append(
             {
-                "content": buffer.strip(),
+                "content": buffer_stripped,
                 "title": context.title,
                 "heading_path": context.heading_path,
                 "url": context.url,
@@ -2411,14 +2415,16 @@ def _process_rst_heading(i: int, line: str, lines: list[str], out: list[str]) ->
     else:
         level = "####"
 
-    if (
-        i > 0
-        and out
-        and out[-1].strip()
-        and all(c in _RST_HEADING_CHARS for c in out[-1].strip())
-        and len(set(out[-1].strip())) == 1
-    ):
-        out[-1] = ""
+    if i > 0 and out:
+        prev_stripped = out[-1].strip()
+        # ⚡ Bolt Optimization: Use cached prev_stripped and an O(1) index check
+        # prev_stripped[0] in _RST_HEADING_CHARS over an O(N) generator `all(c in ...)`
+        if (
+            prev_stripped
+            and len(set(prev_stripped)) == 1
+            and prev_stripped[0] in _RST_HEADING_CHARS
+        ):
+            out[-1] = ""
 
     out.append(f"{level} {line.strip()}")
     return i + 2
@@ -2517,16 +2523,19 @@ def _rst_to_markdown(content: str) -> str:
             continue
 
         # Detect RST headings: line followed by underline of same length
-        if (
-            i + 1 < len(lines)
-            and line.strip()
-            and len(lines[i + 1].strip()) >= len(line.strip())
-            and lines[i + 1].strip()
-            and all(c in _RST_HEADING_CHARS for c in lines[i + 1].strip())
-            and len(set(lines[i + 1].strip())) == 1
-        ):
-            i = _process_rst_heading(i, line, lines, out)
-            continue
+        line_stripped = line.strip()
+        if i + 1 < len(lines) and line_stripped:
+            next_stripped = lines[i + 1].strip()
+            # ⚡ Bolt Optimization: Cache .strip() and use an O(1) check
+            # next_stripped[0] in _RST_HEADING_CHARS instead of an O(N) generator
+            if (
+                len(next_stripped) >= len(line_stripped)
+                and next_stripped
+                and len(set(next_stripped)) == 1
+                and next_stripped[0] in _RST_HEADING_CHARS
+            ):
+                i = _process_rst_heading(i, line, lines, out)
+                continue
 
         # Detect code-block directive
         directive_match = _RST_DIRECTIVE_RE.match(line.strip())
