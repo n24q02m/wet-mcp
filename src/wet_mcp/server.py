@@ -1055,7 +1055,11 @@ async def search(  # noqa: PLR0913
                 "search",
                 "similar",
             ]
-            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            closest = (
+                difflib.get_close_matches(action, valid_actions, n=1)
+                if action is not None
+                else []
+            )
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return (
                 f"Error: Unknown action '{action}'.{suggestion} "
@@ -1296,7 +1300,11 @@ async def extract(  # noqa: PLR0913
                 "interact",
                 "map",
             ]
-            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            closest = (
+                difflib.get_close_matches(action, valid_actions, n=1)
+                if action is not None
+                else []
+            )
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return (
                 f"Error: Unknown action '{action}'.{suggestion} "
@@ -1393,7 +1401,11 @@ async def media(  # noqa: PLR0913
             # message for callers still passing analyze so they can
             # migrate without hunting through release notes.
             valid_actions = ["download", "list"]
-            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            closest = (
+                difflib.get_close_matches(action, valid_actions, n=1)
+                if action is not None
+                else []
+            )
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             if action == "analyze":
                 return (
@@ -1432,7 +1444,11 @@ async def help(tool_name: str = "search") -> str:
     if tool_name not in allowed_tools:
         import difflib
 
-        closest = difflib.get_close_matches(tool_name, sorted(allowed_tools), n=1)
+        closest = (
+            difflib.get_close_matches(tool_name, sorted(allowed_tools), n=1)
+            if tool_name is not None
+            else []
+        )
         suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
         return f"Error: Invalid tool_name '{tool_name}'.{suggestion} Valid options: {', '.join(sorted(allowed_tools))}."
 
@@ -1733,7 +1749,11 @@ async def config(
                 "status",
                 "warmup",
             ]
-            closest = difflib.get_close_matches(action, valid_actions, n=1)
+            closest = (
+                difflib.get_close_matches(action, valid_actions, n=1)
+                if action is not None
+                else []
+            )
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return json.dumps(
                 {
