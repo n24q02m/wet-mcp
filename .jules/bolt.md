@@ -12,3 +12,7 @@
 ## 2023-10-27 - str.split() redundant strip operations
 **Learning:** `str.split()` without arguments automatically splits by arbitrary whitespace and discards empty strings. Using list comprehensions with `strip()` and truthiness checks (e.g., `[w.strip() for w in text.split() if w.strip()]`) creates unnecessary intermediate allocations.
 **Action:** Use `text.split()` directly when arbitrary whitespace splitting is desired without empty elements.
+
+## 2024-05-18 - String uniform validation
+**Learning:** For uniform string validation (where `len(set(text)) == 1`), replacing an O(N) generator check like `all(c in ALLOWED for c in text)` with a simple O(1) index check `text[0] in ALLOWED` significantly improves iteration overhead.
+**Action:** Always prefer array indexing to generator comprehensions when validating a uniformly matching string, and ensure that the stripped result is cached to avoid redundant allocations.
