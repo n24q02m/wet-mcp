@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import warnings
+from typing import Any
 
 # Fix Windows console encoding for Unicode output
 if sys.platform == "win32":
@@ -355,7 +356,7 @@ async def main():
             f.write(json.dumps(slim, ensure_ascii=False) + "\n")
 
     # Run benchmarks
-    summary = []
+    summary: list[dict[str, Any]] = []
     for i, case in enumerate(cases):
         idx = args.start + i + 1
         print(f"\n[{idx}/{args.start + len(cases)}] {case['id']} ({case['library']})")

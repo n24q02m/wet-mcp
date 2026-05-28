@@ -828,9 +828,8 @@ class TestStopAutoSync:
 
     def test_task_already_done(self):
         import asyncio
-        from typing import Any, cast
 
-        future = cast("asyncio.Task[Any]", asyncio.Future())
+        future = asyncio.Future()
         future.set_result(None)
         wet_mcp.sync._sync_task = future
         stop_auto_sync()
