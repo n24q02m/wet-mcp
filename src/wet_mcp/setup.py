@@ -9,8 +9,8 @@ Setup runs automatically on first server start.
 """
 
 import platform
-import subprocess
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
