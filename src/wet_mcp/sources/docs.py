@@ -3368,7 +3368,7 @@ async def _fetch_and_process_batch(
     version_prefix: str = "",
     is_github: bool = False,
     gh_path_prefix: str = "",
-    pending_urls: list[str] = None,
+    pending_urls: list[str] | None = None,
 ) -> int:
     """Fetch a batch of URLs and process results. Returns number of blocked pages."""
     from wet_mcp.sources.crawler import extract
