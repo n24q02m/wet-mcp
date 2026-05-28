@@ -1094,50 +1094,53 @@ class DocsDB:
 
     def export_jsonl(self) -> str:
         """Export all docs data as JSONL for sync."""
-        lines = []
 
-        # Export libraries (using SQLite native JSON serialization for performance)
-        for row in self._conn.execute(
-            """
-            SELECT json_insert(json_object(
-                'id', id, 'name', name, 'docs_url', docs_url,
-                'registry', registry, 'description', description,
-                'created_at', created_at, 'updated_at', updated_at
-            ), '$._type', 'library')
-            FROM libraries ORDER BY name
-            """
-        ).fetchall():
-            lines.append(row[0])
+        def _gen_lines():
+            # Export libraries (using SQLite native JSON serialization for performance)
+            cursor = self._conn.execute(
+                """
+                SELECT json_insert(json_object(
+                    'id', id, 'name', name, 'docs_url', docs_url,
+                    'registry', registry, 'description', description,
+                    'created_at', created_at, 'updated_at', updated_at
+                ), '$._type', 'library')
+                FROM libraries ORDER BY name
+                """
+            )
+            for row in cursor:
+                yield row[0]
 
-        # Export versions
-        for row in self._conn.execute(
-            """
-            SELECT json_insert(json_object(
-                'id', id, 'library_id', library_id, 'version', version,
-                'docs_url', docs_url, 'indexed_at', indexed_at,
-                'page_count', page_count, 'chunk_count', chunk_count,
-                'status', status
-            ), '$._type', 'version')
-            FROM versions ORDER BY library_id
-            """
-        ).fetchall():
-            lines.append(row[0])
+            # Export versions
+            cursor = self._conn.execute(
+                """
+                SELECT json_insert(json_object(
+                    'id', id, 'library_id', library_id, 'version', version,
+                    'docs_url', docs_url, 'indexed_at', indexed_at,
+                    'page_count', page_count, 'chunk_count', chunk_count,
+                    'status', status
+                ), '$._type', 'version')
+                FROM versions ORDER BY library_id
+                """
+            )
+            for row in cursor:
+                yield row[0]
 
-        # Export chunks (without embeddings — re-generate on target)
-        for row in self._conn.execute(
-            """
-            SELECT json_insert(json_object(
-                'id', id, 'version_id', version_id, 'library_id', library_id,
-                'url', url, 'title', title, 'chunk_index', chunk_index,
-                'content', content, 'heading_path', heading_path,
-                'created_at', created_at
-            ), '$._type', 'chunk')
-            FROM doc_chunks ORDER BY library_id, chunk_index
-            """
-        ).fetchall():
-            lines.append(row[0])
+            # Export chunks (without embeddings — re-generate on target)
+            cursor = self._conn.execute(
+                """
+                SELECT json_insert(json_object(
+                    'id', id, 'version_id', version_id, 'library_id', library_id,
+                    'url', url, 'title', title, 'chunk_index', chunk_index,
+                    'content', content, 'heading_path', heading_path,
+                    'created_at', created_at
+                ), '$._type', 'chunk')
+                FROM doc_chunks ORDER BY library_id, chunk_index
+                """
+            )
+            for row in cursor:
+                yield row[0]
 
-        return "\n".join(lines)
+        return "\n".join(_gen_lines())
 
     def import_jsonl(self, data: str, mode: str = "merge") -> dict:
         """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""
@@ -1156,7 +1159,7 @@ class DocsDB:
             self._conn.execute("DELETE FROM versions")
             self._conn.execute("DELETE FROM libraries")
 
-        lines = data.split("\n")
+        lines = data.splitlines()
 
         libraries = []
         versions = []
