@@ -98,77 +98,7 @@ async def ensure_config(
 
     logger.info("Starting relay setup...")
     try:
-        from mcp_core.relay.client import create_session, poll_for_result
-
-        from .relay_schema import RELAY_SCHEMA
-
-        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)  # ty: ignore[invalid-argument-type]
-
-        timeout_msg = f", {int(timeout)}s timeout" if timeout else ""
-        print(
-            f"\nConfigure cloud providers (optional{timeout_msg}):"
-            f"\n{session.relay_url}"
-            f"\nSkip to use local mode (ONNX embedding + SearXNG).\n",
-            file=sys.stderr,
-            flush=True,
-        )
-
-        config = await poll_for_result(relay_url, session, timeout_s=timeout)  # ty: ignore[invalid-argument-type]
-
-        # Save to per-plugin store for future use (~/.wet-mcp/config.json)
-        PerPluginStore(PLUGIN_NAME).save(config)
-        logger.info("Config saved successfully")
-
-        apply_config(config)
-
-        # Notify relay page: config saved (info, NOT complete — GDrive OAuth may follow)
-        try:
-            import httpx
-
-            async with httpx.AsyncClient() as http:
-                await http.post(
-                    f"{relay_url}/api/sessions/{session.session_id}/messages",
-                    json={
-                        "type": "info",
-                        "text": "API keys saved. Starting Google Drive sync setup...",
-                    },
-                )
-        except Exception:
-            pass
-
-        # Trigger GDrive OAuth Device Code using default client ID from settings
-        from wet_mcp.config import settings as _settings
-
-        gdrive_ok = False
-        if _settings.google_drive_client_id:
-            logger.info("Starting Google Drive OAuth setup...")
-            try:
-                from wet_mcp.sync import setup_google_auth
-
-                gdrive_ok = await setup_google_auth(
-                    relay_url=relay_url,
-                    session_id=session.session_id,
-                )
-            except Exception as e:
-                logger.warning(f"GDrive OAuth setup failed: {e}")
-
-        # NOW send complete message (after GDrive OAuth finishes or skips)
-        try:
-            async with httpx.AsyncClient() as http:
-                msg = (
-                    "Setup complete!"
-                    if gdrive_ok
-                    else "API keys saved. Google Drive sync can be configured later via config tool."
-                )
-                await http.post(
-                    f"{relay_url}/api/sessions/{session.session_id}/messages",
-                    json={"type": "complete", "text": msg},
-                )
-        except Exception:
-            pass
-
-        return config
-
+        return await _run_relay_setup(relay_url, timeout)
     except RuntimeError as e:
         if "RELAY_SKIPPED" in str(e):
             logger.info("Relay setup skipped by user. Using local mode.")
@@ -180,3 +110,86 @@ async def ensure_config(
     except Exception as e:
         logger.debug("Relay setup unavailable: {}. Using local mode.", e)
         return None
+
+
+async def _run_relay_setup(relay_url: str, timeout: float | None) -> dict[str, str]:
+    """Perform the interactive relay setup flow."""
+    from mcp_core.relay.client import create_session, poll_for_result
+
+    from .relay_schema import RELAY_SCHEMA
+
+    session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)  # ty: ignore[invalid-argument-type]
+
+    timeout_msg = f", {int(timeout)}s timeout" if timeout else ""
+    print(
+        f"\nConfigure cloud providers (optional{timeout_msg}):"
+        f"\n{session.relay_url}"
+        f"\nSkip to use local mode (ONNX embedding + SearXNG).\n",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    config = await poll_for_result(relay_url, session, timeout_s=timeout)  # ty: ignore[invalid-argument-type]
+
+    # Save to per-plugin store for future use (~/.wet-mcp/config.json)
+    PerPluginStore(PLUGIN_NAME).save(config)
+    logger.info("Config saved successfully")
+
+    apply_config(config)
+
+    # Notify relay page: config saved
+    await _notify_relay_status(
+        relay_url,
+        session.session_id,
+        "info",
+        "API keys saved. Starting Google Drive sync setup...",
+    )
+
+    # Trigger GDrive OAuth Device Code
+    gdrive_ok = await _setup_google_drive(relay_url, session.session_id)
+
+    # Send complete message
+    msg = (
+        "Setup complete!"
+        if gdrive_ok
+        else "API keys saved. Google Drive sync can be configured later via config tool."
+    )
+    await _notify_relay_status(relay_url, session.session_id, "complete", msg)
+
+    return config
+
+
+async def _notify_relay_status(
+    relay_url: str, session_id: str, message_type: str, text: str
+) -> None:
+    """Send a status message to the relay session."""
+    try:
+        import httpx
+
+        async with httpx.AsyncClient() as http:
+            await http.post(
+                f"{relay_url}/api/sessions/{session_id}/messages",
+                json={"type": message_type, "text": text},
+            )
+    except Exception:
+        pass
+
+
+async def _setup_google_drive(relay_url: str, session_id: str) -> bool:
+    """Trigger Google Drive OAuth Device Code flow if configured."""
+    from wet_mcp.config import settings as _settings
+
+    if not _settings.google_drive_client_id:
+        return False
+
+    logger.info("Starting Google Drive OAuth setup...")
+    try:
+        from wet_mcp.sync import setup_google_auth
+
+        return await setup_google_auth(
+            relay_url=relay_url,
+            session_id=session_id,
+        )
+    except Exception as e:
+        logger.warning(f"GDrive OAuth setup failed: {e}")
+        return False
