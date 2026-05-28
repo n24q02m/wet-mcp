@@ -21,7 +21,8 @@ import unicodedata
 from pathlib import Path
 
 if sys.platform == "win32":
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
 # Unicode char -> candidate ASCII replacements frequently produced by AI rewrites.
