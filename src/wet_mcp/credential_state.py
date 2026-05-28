@@ -488,6 +488,44 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
     return None
 
 
+def _notify_gdrive_failed(error: str) -> None:
+    if _on_gdrive_failed is None:
+        return
+    try:
+        _on_gdrive_failed("gdrive", error)
+    except Exception:
+        logger.opt(exception=True).debug("GDrive failed callback raised")
+
+
+def _save_gdrive_token(data: dict[str, Any], sub: str | None) -> bool:
+    """Save token and fire complete callback. Returns True on success."""
+    from wet_mcp.token_store import save_token, save_token_for_sub
+
+    try:
+        if sub:
+            save_token_for_sub(sub, "google_drive", data)
+        else:
+            save_token("google_drive", data)
+        logger.info("GDrive OAuth token saved successfully")
+    except Exception as exc:
+        logger.opt(exception=True).warning(
+            "GDrive token save FAILED after successful exchange: {}. "
+            "Token lost; device_code cannot be re-exchanged. "
+            "User must restart setup.",
+            exc,
+        )
+        _notify_gdrive_failed(f"save_token failed: {exc}")
+        return False
+
+    logger.info("GDrive authorized. Sync will start on next server restart.")
+    if _on_gdrive_complete:
+        try:
+            _on_gdrive_complete()
+        except Exception:
+            logger.opt(exception=True).debug("GDrive complete callback failed")
+    return True
+
+
 async def _gdrive_token_poll(
     client_id: str,
     client_secret: str,
@@ -515,14 +553,6 @@ async def _gdrive_token_poll(
 
     import httpx
 
-    def _notify_failed(error: str) -> None:
-        if _on_gdrive_failed is None:
-            return
-        try:
-            _on_gdrive_failed("gdrive", error)
-        except Exception:
-            logger.opt(exception=True).debug("GDrive failed callback raised")
-
     deadline = time.time() + expires_in
     async with httpx.AsyncClient() as client:
         while time.time() < deadline:
@@ -540,36 +570,7 @@ async def _gdrive_token_poll(
                 )
                 data = resp.json()
                 if "access_token" in data:
-                    # Save token. In multi-user remote mode (``sub`` is
-                    # set), use the per-sub bucket so concurrent users
-                    # do not share a single GDrive refresh-token.
-                    from wet_mcp.token_store import save_token, save_token_for_sub
-
-                    try:
-                        if sub:
-                            save_token_for_sub(sub, "google_drive", data)
-                        else:
-                            save_token("google_drive", data)
-                        logger.info("GDrive OAuth token saved successfully")
-                    except Exception as exc:
-                        logger.opt(exception=True).warning(
-                            "GDrive token save FAILED after successful exchange: {}. "
-                            "Token lost; device_code cannot be re-exchanged. "
-                            "User must restart setup.",
-                            exc,
-                        )
-                        _notify_failed(f"save_token failed: {exc}")
-                        return
-                    logger.info(
-                        "GDrive authorized. Sync will start on next server restart."
-                    )
-                    if _on_gdrive_complete:
-                        try:
-                            _on_gdrive_complete()
-                        except Exception:
-                            logger.opt(exception=True).debug(
-                                "GDrive complete callback failed"
-                            )
+                    _save_gdrive_token(data, sub)
                     return
                 err = data.get("error")
                 if err == "authorization_pending":
@@ -585,13 +586,13 @@ async def _gdrive_token_poll(
                     err,
                     err_desc,
                 )
-                _notify_failed(str(err_desc))
+                _notify_gdrive_failed(str(err_desc))
                 return
             except Exception:
                 logger.opt(exception=True).debug("GDrive token poll request failed")
         # Deadline exceeded without success -> surface timeout.
         logger.warning("GDrive device code flow expired before user approved")
-        _notify_failed("expired")
+        _notify_gdrive_failed("expired")
 
 
 def set_state(state: CredentialState) -> None:
