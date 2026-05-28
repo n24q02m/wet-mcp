@@ -3439,7 +3439,7 @@ async def fetch_docs_pages(
 
     # For GitHub URLs, restrict crawl to the same repo path
     docs_parsed = urlparse(docs_url)
-    is_github = "github.com" in docs_parsed.netloc
+    is_github = _is_github_url(docs_url)
     gh_path_prefix = "/".join(docs_parsed.path.strip("/").split("/")[:2])
 
     # Detect redirect/versioning
