@@ -526,7 +526,8 @@ class TestSaveCredentialsGdriveNextStep:
             mock_settings.google_drive_client_secret = "csec"
             mock_settings.setup_providers = MagicMock()
 
-            save_credentials({"FOO": "bar"}, {"sub": "test-sub"})
+            with patch.dict(os.environ, {"PUBLIC_URL": "http://example.com"}):
+                save_credentials({"FOO": "bar"}, {"sub": "test-sub"})
 
             # Capture the target function
             target = mock_thread.call_args.kwargs["target"]
@@ -537,7 +538,9 @@ class TestSaveCredentialsGdriveNextStep:
                 "wet_mcp.credential_state._gdrive_token_poll", new=MagicMock()
             ) as mock_poll_sync:
                 target()
-                mock_poll_sync.assert_called_once_with("cid", "csec", "dev123", 5, 1800)
+                mock_poll_sync.assert_called_once_with(
+                    "cid", "csec", "dev123", 5, 1800, sub="test-sub"
+                )
 
             mock_run.assert_called_once()
 
