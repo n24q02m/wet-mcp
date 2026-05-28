@@ -426,117 +426,106 @@ class DocsDB:
     # Library CRUD
     # -----------------------------------------------------------------------
 
-    def upsert_library(
-        self,
-        name: str,
-        docs_url: str | None = None,
-        registry: str | None = None,
-        description: str | None = None,
-        tier: int | None = None,
-        package_managers: list[str] | None = None,
-        homepage: str | None = None,
-        github_url: str | None = None,
-        canonical_name: str | None = None,
-    ) -> str:
-        """Create or update a library. Returns library ID.
-
-        Automatically stamps the current ``DISCOVERY_VERSION``.
-
-        Phase 2 (spec §5.4) adds optional metadata: ``tier`` (1 curated /
-        2 on-demand), ``package_managers`` (JSON list), ``homepage``,
-        ``github_url``, and ``canonical_name`` (display label). Columns
-        are added by ``docs_002_libraries`` migration; this writer
-        gracefully skips any field whose column is missing so it can run
-        against pre-Alembic legacy databases for one cycle.
-        """
-        now = _now_ts()
-        # Normalize name to lowercase
-        norm_name = name.lower().strip()
-
-        # Phase 2 columns may be absent on a pre-Alembic legacy DB. Detect
-        # presence once per call so we don't crash on older schemas.
-        existing_cols = {
+    def _get_table_columns(self, table_name: str) -> set[str]:
+        """Get column names for a table."""
+        if table_name not in {"libraries", "versions", "doc_chunks"}:
+            raise ValueError(f"Invalid table name for column check: {table_name}")
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+        return {
             r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
+            for r in self._conn.execute("PRAGMA table_info(" + table_name + ")").fetchall()
         }
-        pkg_json = (
-            json.dumps(package_managers, ensure_ascii=False)
-            if package_managers is not None
-            else None
-        )
 
-        row = self._conn.execute(
-            "SELECT id FROM libraries WHERE name = ?", (norm_name,)
-        ).fetchone()
-
-        if row:
-            lib_id = row["id"]
-            updates: list[str] = []
-            params: list = []
-            if docs_url is not None:
-                updates.append("docs_url = ?")
-                params.append(docs_url)
-            if registry is not None:
-                updates.append("registry = ?")
-                params.append(registry)
-            if description is not None:
-                updates.append("description = ?")
-                params.append(description)
-            if canonical_name is not None and "canonical_name" in existing_cols:
-                updates.append("canonical_name = ?")
-                params.append(canonical_name)
-            if homepage is not None and "homepage" in existing_cols:
-                updates.append("homepage = ?")
-                params.append(homepage)
-            if github_url is not None and "github_url" in existing_cols:
-                updates.append("github_url = ?")
-                params.append(github_url)
-            if pkg_json is not None and "package_managers" in existing_cols:
-                updates.append("package_managers = ?")
-                params.append(pkg_json)
-            if tier is not None and "tier" in existing_cols:
-                updates.append("tier = ?")
-                params.append(int(tier))
-            if "last_indexed_at" in existing_cols:
-                updates.append("last_indexed_at = ?")
-                params.append(now)
-            updates.append("discovery_version = ?")
-            params.append(DISCOVERY_VERSION)
-            updates.append("updated_at = ?")
+    def _do_update_library(
+        self,
+        lib_id: str,
+        existing_cols: set[str],
+        now: float,
+        docs_url: str | None,
+        registry: str | None,
+        description: str | None,
+        tier: int | None,
+        pkg_json: str | None,
+        homepage: str | None,
+        github_url: str | None,
+        canonical_name: str | None,
+    ) -> None:
+        updates: list[str] = []
+        params: list = []
+        if docs_url is not None:
+            updates.append("docs_url = ?")
+            params.append(docs_url)
+        if registry is not None:
+            updates.append("registry = ?")
+            params.append(registry)
+        if description is not None:
+            updates.append("description = ?")
+            params.append(description)
+        if canonical_name is not None and "canonical_name" in existing_cols:
+            updates.append("canonical_name = ?")
+            params.append(canonical_name)
+        if homepage is not None and "homepage" in existing_cols:
+            updates.append("homepage = ?")
+            params.append(homepage)
+        if github_url is not None and "github_url" in existing_cols:
+            updates.append("github_url = ?")
+            params.append(github_url)
+        if pkg_json is not None and "package_managers" in existing_cols:
+            updates.append("package_managers = ?")
+            params.append(pkg_json)
+        if tier is not None and "tier" in existing_cols:
+            updates.append("tier = ?")
+            params.append(int(tier))
+        if "last_indexed_at" in existing_cols:
+            updates.append("last_indexed_at = ?")
             params.append(now)
-            params.append(lib_id)
-            if updates:
-                # Security: Validate column names against an explicit allowlist
-                # to prevent injection if the update logic is made more dynamic.
-                allowed_cols = {
-                    "docs_url",
-                    "registry",
-                    "description",
-                    "canonical_name",
-                    "homepage",
-                    "github_url",
-                    "package_managers",
-                    "tier",
-                    "last_indexed_at",
-                    "discovery_version",
-                    "updated_at",
-                }
-                for u in updates:
-                    col = u.split("=")[0].strip()
-                    if col not in allowed_cols:
-                        raise ValueError(f"Unauthorized column update: {col}")
+        updates.append("discovery_version = ?")
+        params.append(DISCOVERY_VERSION)
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.append(lib_id)
 
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(
-                    "UPDATE libraries SET " + ", ".join(updates) + " WHERE id = ?",
-                    params,
-                )
-                self._conn.commit()
-            return lib_id
+        if updates:
+            allowed_cols = {
+                "docs_url",
+                "registry",
+                "description",
+                "canonical_name",
+                "homepage",
+                "github_url",
+                "package_managers",
+                "tier",
+                "last_indexed_at",
+                "discovery_version",
+                "updated_at",
+            }
+            for u in updates:
+                col = u.split("=")[0].strip()
+                if col not in allowed_cols:
+                    raise ValueError(f"Unauthorized column update: {col}")
 
-        lib_id = uuid.uuid4().hex[:12]
-        # Build the INSERT dynamically so we only target columns that exist
-        # in the current schema (legacy DBs may lack Phase 2 columns).
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            self._conn.execute(
+                "UPDATE libraries SET " + ", ".join(updates) + " WHERE id = ?",
+                params,
+            )
+            self._conn.commit()
+
+    def _do_insert_library(
+        self,
+        lib_id: str,
+        norm_name: str,
+        existing_cols: set[str],
+        now: float,
+        docs_url: str | None,
+        registry: str | None,
+        description: str | None,
+        tier: int | None,
+        pkg_json: str | None,
+        homepage: str | None,
+        github_url: str | None,
+        canonical_name: str | None,
+    ) -> None:
         cols = [
             "id",
             "name",
@@ -562,21 +551,90 @@ class DocsDB:
             ("homepage", homepage, False),
             ("github_url", github_url, False),
             ("package_managers", pkg_json, False),
-            ("tier", tier, False),  # Skip — column defaults to 2
+            ("tier", tier, False),
             ("last_indexed_at", now, True),
         ):
             if col_name in existing_cols and (value is not None or include_when_none):
                 cols.append(col_name)
                 vals.append(value)
+
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.execute(
-            f"INSERT INTO libraries ({', '.join(cols)}) "
-            f"VALUES ({', '.join('?' * len(cols))})",
+            f"INSERT INTO libraries ({", ".join(cols)}) "
+            f"VALUES ({", ".join("?" * len(cols))})",
             vals,
         )
         self._conn.commit()
-        return lib_id
 
+    def upsert_library(
+        self,
+        name: str,
+        docs_url: str | None = None,
+        registry: str | None = None,
+        description: str | None = None,
+        tier: int | None = None,
+        package_managers: list[str] | None = None,
+        homepage: str | None = None,
+        github_url: str | None = None,
+        canonical_name: str | None = None,
+    ) -> str:
+        """Create or update a library. Returns library ID.
+
+        Automatically stamps the current ``DISCOVERY_VERSION``.
+
+        Phase 2 (spec §5.4) adds optional metadata: ``tier`` (1 curated /
+        2 on-demand), ``package_managers`` (JSON list), ``homepage``,
+        ``github_url``, and ``canonical_name`` (display label). Columns
+        are added by ``docs_002_libraries`` migration; this writer
+        gracefully skips any field whose column is missing so it can run
+        against pre-Alembic legacy databases for one cycle.
+        """
+        now = _now_ts()
+        norm_name = name.lower().strip()
+        existing_cols = self._get_table_columns("libraries")
+        pkg_json = (
+            json.dumps(package_managers, ensure_ascii=False)
+            if package_managers is not None
+            else None
+        )
+
+        row = self._conn.execute(
+            "SELECT id FROM libraries WHERE name = ?", (norm_name,)
+        ).fetchone()
+
+        if row:
+            lib_id = row["id"]
+            self._do_update_library(
+                lib_id,
+                existing_cols,
+                now,
+                docs_url,
+                registry,
+                description,
+                tier,
+                pkg_json,
+                homepage,
+                github_url,
+                canonical_name,
+            )
+            return lib_id
+
+        lib_id = uuid.uuid4().hex[:12]
+        self._do_insert_library(
+            lib_id,
+            norm_name,
+            existing_cols,
+            now,
+            docs_url,
+            registry,
+            description,
+            tier,
+            pkg_json,
+            homepage,
+            github_url,
+            canonical_name,
+        )
+        return lib_id
     def mark_library_indexed(
         self, library_id: str, total_versions: int | None = None
     ) -> None:
@@ -585,10 +643,7 @@ class DocsDB:
         Silently no-ops on pre-Alembic legacy databases that lack the
         ``last_indexed_at`` / ``total_versions`` columns.
         """
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
-        }
+        existing_cols = self._get_table_columns("libraries")
         sets: list[str] = []
         params: list = []
         if "last_indexed_at" in existing_cols:
