@@ -3261,16 +3261,30 @@ _SPA_KWARGS: dict = {
 
 # GitHub-specific paths to skip during documentation crawling
 _GH_SKIP_PATHS = {
-    "features", "enterprise", "copilot", "marketplace", "security",
-    "sponsors", "login", "signup", "about", "pricing",
-    "customer-stories", "why-github",
+    "features",
+    "enterprise",
+    "copilot",
+    "marketplace",
+    "security",
+    "sponsors",
+    "login",
+    "signup",
+    "about",
+    "pricing",
+    "customer-stories",
+    "why-github",
 }
 
 # Generated/index pages to skip (Sphinx, MkDocs, etc.)
 _DOCS_SKIP_URL_PATTERNS = (
-    "/genindex", "/searchindex", "/modindex",
-    "/_modules/", "/_sources/", "/blog/",
-    "/changelog", "/releases",
+    "/genindex",
+    "/searchindex",
+    "/modindex",
+    "/_modules/",
+    "/_sources/",
+    "/blog/",
+    "/changelog",
+    "/releases",
 )
 
 
@@ -3392,10 +3406,11 @@ async def _fetch_and_process_batch(
                     pending_urls.extend(new_links)
     except TimeoutError:
         round_name = "Round 1" if is_round1 else "Round 2"
-        logger.warning(f"{round_name} crawl timed out after {batch_timeout}s ({len(urls)} pages)")
+        logger.warning(
+            f"{round_name} crawl timed out after {batch_timeout}s ({len(urls)} pages)"
+        )
 
     return blocked_count
-
 
 
 async def fetch_docs_pages(
@@ -3480,7 +3495,9 @@ async def fetch_docs_pages(
 
     # Early exit if blocked
     if blocked_count > 0 and not pages:
-        logger.warning(f"Root page blocked by bot protection, skipping crawl: {docs_url}")
+        logger.warning(
+            f"Root page blocked by bot protection, skipping crawl: {docs_url}"
+        )
         return pages
 
     # Sitemap + objects.inv discovery
@@ -3492,7 +3509,9 @@ async def fetch_docs_pages(
             timeout=batch_timeout,
         )
     except TimeoutError:
-        logger.warning(f"Sitemap/objects.inv discovery timed out after {batch_timeout}s")
+        logger.warning(
+            f"Sitemap/objects.inv discovery timed out after {batch_timeout}s"
+        )
         sitemap_urls, inv_urls = [], []
 
     # Merge: objects.inv URLs first (more reliable for Sphinx), then sitemap
@@ -3552,6 +3571,8 @@ async def fetch_docs_pages(
         logger.warning(f"Filtered {blocked_count} bot-protected pages from {docs_url}")
     logger.info(f"Fetched {len(pages)} docs pages from {docs_url}")
     return pages
+
+
 async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
     """Try fetching sitemap.xml and extracting docs page URLs.
 
