@@ -521,14 +521,16 @@ class DocsDB:
                     "discovery_version",
                     "updated_at",
                 }
+                safe_sets = []
                 for u in updates:
                     col = u.split("=")[0].strip()
                     if col not in allowed_cols:
                         raise ValueError(f"Unauthorized column update: {col}")
+                    safe_sets.append(f"{col} = ?")
 
                 # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(
-                    "UPDATE libraries SET " + ", ".join(updates) + " WHERE id = ?",
+                    "UPDATE libraries SET " + ", ".join(safe_sets) + " WHERE id = ?",
                     params,
                 )
                 self._conn.commit()
@@ -568,6 +570,26 @@ class DocsDB:
             if col_name in existing_cols and (value is not None or include_when_none):
                 cols.append(col_name)
                 vals.append(value)
+        # Security: Validate all column names before joining into SQL
+        insert_allowed = {
+            "id",
+            "name",
+            "docs_url",
+            "registry",
+            "description",
+            "discovery_version",
+            "created_at",
+            "updated_at",
+            "canonical_name",
+            "homepage",
+            "github_url",
+            "package_managers",
+            "tier",
+            "last_indexed_at",
+        }
+        for c in cols:
+            if c not in insert_allowed:
+                raise ValueError(f"Unauthorized column insert: {c}")
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.execute(
             f"INSERT INTO libraries ({', '.join(cols)}) "
@@ -600,9 +622,18 @@ class DocsDB:
         if not sets:
             return
         params.append(library_id)
+        # Security: Validate column names before joining into SQL
+        allowed_mark = {"last_indexed_at", "total_versions"}
+        safe_sets = []
+        for s in sets:
+            col = s.split("=")[0].strip()
+            if col not in allowed_mark:
+                raise ValueError(f"Unauthorized column update: {col}")
+            safe_sets.append(f"{col} = ?")
+
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.execute(
-            "UPDATE libraries SET " + ", ".join(sets) + " WHERE id = ?",
+            "UPDATE libraries SET " + ", ".join(safe_sets) + " WHERE id = ?",
             params,
         )
         self._conn.commit()
@@ -758,6 +789,28 @@ class DocsDB:
             for col in phase2_cols:
                 row.append(chunk.get(col))
             chunk_rows.append(tuple(row))
+
+        # Security: Validate all column names before joining into SQL
+        chunks_allowed = {
+            "id",
+            "version_id",
+            "library_id",
+            "url",
+            "title",
+            "chunk_index",
+            "content",
+            "heading_path",
+            "created_at",
+            "topic",
+            "section",
+            "content_hash",
+            "token_count",
+            "summary",
+            "summary_provider",
+        }
+        for c in all_cols:
+            if c not in chunks_allowed:
+                raise ValueError(f"Unauthorized column insert: {c}")
 
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.executemany(
