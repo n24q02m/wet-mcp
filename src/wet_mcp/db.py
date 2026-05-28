@@ -1187,7 +1187,9 @@ class DocsDB:
         ids = [(obj["id"],) for obj in items]
         self._conn.execute("CREATE TEMPORARY TABLE _import_check (id TEXT PRIMARY KEY)")
         try:
-            self._conn.executemany("INSERT OR IGNORE INTO _import_check (id) VALUES (?)", ids)
+            self._conn.executemany(
+                "INSERT OR IGNORE INTO _import_check (id) VALUES (?)", ids
+            )
             # Safe because table is strictly validated against allowlist
             query = f"SELECT id FROM {table} WHERE id IN (SELECT id FROM _import_check)"
             # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
@@ -1299,9 +1301,7 @@ class DocsDB:
         libraries, versions, chunks = self._parse_jsonl_data(data)
 
         existing_libs = (
-            self._get_existing_ids("libraries", libraries)
-            if mode == "merge"
-            else set()
+            self._get_existing_ids("libraries", libraries) if mode == "merge" else set()
         )
         self._import_libraries(libraries, mode, stats, existing_libs)
 
