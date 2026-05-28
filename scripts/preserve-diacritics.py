@@ -24,7 +24,6 @@ if sys.platform == "win32":
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-
 # Unicode char -> candidate ASCII replacements frequently produced by AI rewrites.
 UNICODE_REPLACEMENTS: dict[str, list[str]] = {
     "\u2014": ["---", "--", "-"],  # em-dash
