@@ -433,7 +433,9 @@ class DocsDB:
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         return {
             r["name"]
-            for r in self._conn.execute("PRAGMA table_info(" + table_name + ")").fetchall()
+            for r in self._conn.execute(
+                "PRAGMA table_info(" + table_name + ")"
+            ).fetchall()
         }
 
     def _do_update_library(
@@ -560,8 +562,8 @@ class DocsDB:
 
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.execute(
-            f"INSERT INTO libraries ({", ".join(cols)}) "
-            f"VALUES ({", ".join("?" * len(cols))})",
+            f"INSERT INTO libraries ({', '.join(cols)}) "
+            f"VALUES ({', '.join('?' * len(cols))})",
             vals,
         )
         self._conn.commit()
@@ -635,6 +637,7 @@ class DocsDB:
             canonical_name,
         )
         return lib_id
+
     def mark_library_indexed(
         self, library_id: str, total_versions: int | None = None
     ) -> None:
