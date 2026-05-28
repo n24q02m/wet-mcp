@@ -3252,6 +3252,306 @@ async def _try_github_raw_docs(
 # ---------------------------------------------------------------------------
 
 
+# SPA-friendly crawl settings: scroll full page to trigger lazy-loaded
+# content and add a small delay for JS rendering before capture.
+_SPA_KWARGS: dict = {
+    "scan_full_page": True,
+    "delay_before_return_html": 1.0,
+}
+
+# GitHub-specific paths to skip during documentation crawling
+_GH_SKIP_PATHS = {
+    "features", "enterprise", "copilot", "marketplace", "security",
+    "sponsors", "login", "signup", "about", "pricing",
+    "customer-stories", "why-github",
+}
+
+# Generated/index pages to skip (Sphinx, MkDocs, etc.)
+_DOCS_SKIP_URL_PATTERNS = (
+    "/genindex", "/searchindex", "/modindex",
+    "/_modules/", "/_sources/", "/blog/",
+    "/changelog", "/releases",
+)
+
+
+def _detect_version_prefix(
+    root_results: list[dict], docs_url: str, docs_parsed: Any
+) -> str:
+    """Detect version prefix from root page redirect."""
+    for r in root_results:
+        actual_url = r.get("url", "")
+        if actual_url and actual_url != docs_url:
+            actual_parsed = urlparse(actual_url)
+            if actual_parsed.netloc == docs_parsed.netloc:
+                actual_path = actual_parsed.path.rstrip("/")
+                actual_parts = [s for s in actual_path.split("/") if s]
+                if len(actual_parts) >= 2:
+                    prefix = "/" + "/".join(actual_parts) + "/"
+                    logger.info(f"Detected version prefix: {prefix}")
+                    return prefix
+            break
+    return ""
+
+
+def _collect_valid_doc_urls(
+    result: dict,
+    docs_url: str,
+    docs_parsed: Any,
+    seen_urls: set[str],
+    version_prefix: str = "",
+    is_github: bool = False,
+    gh_path_prefix: str = "",
+) -> list[str]:
+    """Extract and filter valid doc URLs from a crawl result."""
+    urls: list[str] = []
+    internal = result.get("links", {}).get("internal", [])
+    for link in internal:
+        href = link.get("href", "") if isinstance(link, dict) else link
+        if not href:
+            continue
+        parsed = urlparse(href)
+        if parsed.netloc and parsed.netloc != docs_parsed.netloc:
+            continue
+
+        full_url = urljoin(docs_url, href)
+        if full_url in seen_urls:
+            continue
+
+        full_parsed = urlparse(full_url)
+        # Skip generated index/module pages
+        if any(pat in full_parsed.path.lower() for pat in _DOCS_SKIP_URL_PATTERNS):
+            continue
+
+        # GitHub-specific: stay within same repo
+        if is_github:
+            path_parts = full_parsed.path.strip("/").split("/")
+            if path_parts and path_parts[0] in _GH_SKIP_PATHS:
+                continue
+            if "/".join(path_parts[:2]) != gh_path_prefix:
+                continue
+
+        # Skip translated (non-English) pages
+        if _is_i18n_url(full_parsed.path, docs_parsed.path):
+            continue
+
+        # Versioned docs: restrict to same version path prefix
+        if version_prefix and not full_parsed.path.startswith(version_prefix):
+            continue
+
+        urls.append(full_url)
+        seen_urls.add(full_url)
+    return urls
+
+
+async def _fetch_and_process_batch(
+    urls: list[str],
+    pages: list[dict],
+    seen_urls: set[str],
+    batch_timeout: int,
+    is_round1: bool = False,
+    docs_url: str = "",
+    docs_parsed: Any = None,
+    version_prefix: str = "",
+    is_github: bool = False,
+    gh_path_prefix: str = "",
+    pending_urls: list[str] = None,
+) -> int:
+    """Fetch a batch of URLs and process results. Returns number of blocked pages."""
+    from wet_mcp.sources.crawler import extract
+
+    blocked_count = 0
+    try:
+        batch_str = await asyncio.wait_for(
+            extract(urls=urls, format="markdown", stealth=True, **_SPA_KWARGS),
+            timeout=batch_timeout,
+        )
+        batch_results = json.loads(batch_str)
+        for br in batch_results:
+            if br.get("content") and not br.get("error"):
+                if _is_blocked_content(br["content"]):
+                    blocked_count += 1
+                    continue
+                pages.append(
+                    {
+                        "url": br["url"],
+                        "title": br.get("title", ""),
+                        "content": br["content"],
+                    }
+                )
+                if is_round1 and pending_urls is not None:
+                    # Depth-2: discover links from fetched pages
+                    new_links = _collect_valid_doc_urls(
+                        br,
+                        docs_url,
+                        docs_parsed,
+                        seen_urls,
+                        version_prefix,
+                        is_github,
+                        gh_path_prefix,
+                    )
+                    pending_urls.extend(new_links)
+    except TimeoutError:
+        round_name = "Round 1" if is_round1 else "Round 2"
+        logger.warning(f"{round_name} crawl timed out after {batch_timeout}s ({len(urls)} pages)")
+
+    return blocked_count
+
+
+
+async def fetch_docs_pages(
+    docs_url: str,
+    query: str = "",
+    max_pages: int = 50,
+    batch_timeout: int = 45,
+) -> list[dict]:
+    """Fetch documentation pages from a docs site with depth-2 crawling.
+
+    Strategy:
+    1. Fetch the root docs page, extract internal links
+    2. Discover more URLs from sitemap.xml
+    3. Fetch first batch of pages (round 1)
+    4. Extract links from round-1 results (depth-2 discovery)
+    5. Fetch second batch from newly discovered URLs (round 2)
+
+    Args:
+        batch_timeout: Per-batch crawl timeout in seconds. Each round
+            (root, round1, round2) is bounded by this limit.
+
+    Returns list of {url, title, content} dicts.
+    """
+    from wet_mcp.sources.crawler import extract
+
+    # Step 1: Fetch root page
+    logger.info(f"Fetching docs root: {docs_url}")
+    try:
+        root_result_str = await asyncio.wait_for(
+            extract(urls=[docs_url], format="markdown", stealth=True, **_SPA_KWARGS),
+            timeout=batch_timeout,
+        )
+    except TimeoutError:
+        logger.warning(f"Root page fetch timed out after {batch_timeout}s: {docs_url}")
+        return []
+
+    root_results = json.loads(root_result_str)
+    pages: list[dict] = []
+    seen_urls: set[str] = {docs_url}
+    pending_urls: list[str] = []
+
+    # For GitHub URLs, restrict crawl to the same repo path
+    docs_parsed = urlparse(docs_url)
+    is_github = "github.com" in docs_parsed.netloc
+    gh_path_prefix = "/".join(docs_parsed.path.strip("/").split("/")[:2])
+
+    # Detect redirect/versioning
+    version_prefix = _detect_version_prefix(root_results, docs_url, docs_parsed)
+    if version_prefix:
+        # If we detected a redirect, ensure the redirected URL is also marked as seen
+        for r in root_results:
+            actual_url = r.get("url", "")
+            if actual_url and actual_url != docs_url:
+                seen_urls.add(actual_url)
+                break
+
+    # Process root page results
+    blocked_count = 0
+    for r in root_results:
+        if r.get("content") and not r.get("error"):
+            if _is_blocked_content(r["content"]):
+                blocked_count += 1
+                continue
+            pages.append(
+                {
+                    "url": r["url"],
+                    "title": r.get("title", ""),
+                    "content": r["content"],
+                }
+            )
+            pending_urls.extend(
+                _collect_valid_doc_urls(
+                    r,
+                    docs_url,
+                    docs_parsed,
+                    seen_urls,
+                    version_prefix,
+                    is_github,
+                    gh_path_prefix,
+                )
+            )
+
+    # Early exit if blocked
+    if blocked_count > 0 and not pages:
+        logger.warning(f"Root page blocked by bot protection, skipping crawl: {docs_url}")
+        return pages
+
+    # Sitemap + objects.inv discovery
+    sitemap_task = _try_sitemap(docs_url, max_urls=max_pages)
+    inv_task = _try_objects_inv(docs_url, max_urls=max_pages)
+    try:
+        sitemap_urls, inv_urls = await asyncio.wait_for(
+            asyncio.gather(sitemap_task, inv_task),
+            timeout=batch_timeout,
+        )
+    except TimeoutError:
+        logger.warning(f"Sitemap/objects.inv discovery timed out after {batch_timeout}s")
+        sitemap_urls, inv_urls = [], []
+
+    # Merge: objects.inv URLs first (more reliable for Sphinx), then sitemap
+    inv_url_set = set(inv_urls)
+    extra_urls = list(inv_urls) + [u for u in sitemap_urls if u not in inv_url_set]
+    for su in extra_urls:
+        su_parsed = urlparse(su)
+        if su in seen_urls:
+            continue
+        if _is_i18n_url(su_parsed.path, docs_parsed.path):
+            continue
+        if su not in inv_url_set:
+            if version_prefix and not su_parsed.path.startswith(version_prefix):
+                continue
+        pending_urls.append(su)
+        seen_urls.add(su)
+
+    pending_urls = _sort_urls_by_query(pending_urls, query)
+
+    # --- Fetch round 1 ---
+    remaining = max_pages - len(pages)
+    if remaining > 0 and pending_urls:
+        round1_limit = min(len(pending_urls), remaining * 2 // 3 or remaining)
+        batch1_urls = pending_urls[:round1_limit]
+        pending_urls = pending_urls[round1_limit:]
+
+        logger.info(f"Fetching {len(batch1_urls)} docs pages (round 1)...")
+        blocked_count += await _fetch_and_process_batch(
+            urls=batch1_urls,
+            pages=pages,
+            seen_urls=seen_urls,
+            batch_timeout=batch_timeout,
+            is_round1=True,
+            docs_url=docs_url,
+            docs_parsed=docs_parsed,
+            version_prefix=version_prefix,
+            is_github=is_github,
+            gh_path_prefix=gh_path_prefix,
+            pending_urls=pending_urls,
+        )
+
+    # --- Fetch round 2 (depth-2 discovery) ---
+    remaining = max_pages - len(pages)
+    if remaining > 0 and pending_urls:
+        pending_urls = _sort_urls_by_query(pending_urls, query)
+        batch2_urls = pending_urls[:remaining]
+        if batch2_urls:
+            logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
+            blocked_count += await _fetch_and_process_batch(
+                urls=batch2_urls,
+                pages=pages,
+                seen_urls=seen_urls,
+                batch_timeout=batch_timeout,
+            )
+
+    if blocked_count:
+        logger.warning(f"Filtered {blocked_count} bot-protected pages from {docs_url}")
+    logger.info(f"Fetched {len(pages)} docs pages from {docs_url}")
+    return pages
 async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
     """Try fetching sitemap.xml and extracting docs page URLs.
 
@@ -3464,284 +3764,6 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
 
 # ---------------------------------------------------------------------------
 # Docs fetching with Crawl4AI
-# ---------------------------------------------------------------------------
-
-
-async def fetch_docs_pages(
-    docs_url: str,
-    query: str = "",
-    max_pages: int = 50,
-    batch_timeout: int = 45,
-) -> list[dict]:
-    """Fetch documentation pages from a docs site with depth-2 crawling.
-
-    Strategy:
-    1. Fetch the root docs page, extract internal links
-    2. Discover more URLs from sitemap.xml
-    3. Fetch first batch of pages (round 1)
-    4. Extract links from round-1 results (depth-2 discovery)
-    5. Fetch second batch from newly discovered URLs (round 2)
-
-    Args:
-        batch_timeout: Per-batch crawl timeout in seconds. Each round
-            (root, round1, round2) is bounded by this limit.
-
-    Returns list of {url, title, content} dicts.
-    """
-    from wet_mcp.sources.crawler import extract
-
-    # SPA-friendly crawl settings: scroll full page to trigger lazy-loaded
-    # content and add a small delay for JS rendering before capture.
-    _SPA_KWARGS: dict = {
-        "scan_full_page": True,
-        "delay_before_return_html": 1.0,
-    }
-
-    # Step 1: Fetch root page
-    logger.info(f"Fetching docs root: {docs_url}")
-    try:
-        root_result_str = await asyncio.wait_for(
-            extract(urls=[docs_url], format="markdown", stealth=True, **_SPA_KWARGS),
-            timeout=batch_timeout,
-        )
-    except TimeoutError:
-        logger.warning(f"Root page fetch timed out after {batch_timeout}s: {docs_url}")
-        return []
-    root_results = json.loads(root_result_str)
-
-    pages: list[dict] = []
-    seen_urls: set[str] = {docs_url}
-    pending_urls: list[str] = []
-
-    # For GitHub URLs, restrict crawl to the same repo path
-    docs_parsed = urlparse(docs_url)
-    _is_github = "github.com" in docs_parsed.netloc
-    _gh_path_prefix = "/".join(docs_parsed.path.strip("/").split("/")[:2])
-    _gh_skip_paths = {
-        "features",
-        "enterprise",
-        "copilot",
-        "marketplace",
-        "security",
-        "sponsors",
-        "login",
-        "signup",
-        "about",
-        "pricing",
-        "customer-stories",
-        "why-github",
-    }
-
-    # Generated/index pages to skip (Sphinx, MkDocs, etc.)
-    _skip_url_patterns = (
-        "/genindex",
-        "/searchindex",
-        "/modindex",
-        "/_modules/",
-        "/_sources/",
-        "/blog/",
-        "/changelog",
-        "/releases",
-    )
-
-    # Detect redirect: if actual URL differs from docs_url (e.g., versioned
-    # docs), use the redirected path as prefix to restrict crawling to that
-    # version.  Prevents crawling sibling version pages (/en/13/, /en/14/).
-    _version_prefix = ""
-    for r in root_results:
-        actual_url = r.get("url", "")
-        if actual_url and actual_url != docs_url:
-            actual_parsed = urlparse(actual_url)
-            if actual_parsed.netloc == docs_parsed.netloc:
-                actual_path = actual_parsed.path.rstrip("/")
-                actual_parts = [s for s in actual_path.split("/") if s]
-                if len(actual_parts) >= 2:
-                    _version_prefix = "/" + "/".join(actual_parts) + "/"
-                    seen_urls.add(actual_url)
-                    logger.info(f"Detected version prefix: {_version_prefix}")
-            break
-
-    def _collect_links(result: dict) -> list[str]:
-        """Extract valid doc URLs from a crawl result."""
-        urls: list[str] = []
-        internal = result.get("links", {}).get("internal", [])
-        for link in internal:
-            href = link.get("href", "") if isinstance(link, dict) else link
-            if not href:
-                continue
-            parsed = urlparse(href)
-            if parsed.netloc and parsed.netloc != docs_parsed.netloc:
-                continue
-            full_url = urljoin(docs_url, href)
-            if full_url in seen_urls:
-                continue
-            full_parsed = urlparse(full_url)
-
-            # Skip generated index/module pages
-            if any(pat in full_parsed.path.lower() for pat in _skip_url_patterns):
-                continue
-
-            # GitHub-specific: stay within same repo
-            if _is_github:
-                path_parts = full_parsed.path.strip("/").split("/")
-                if path_parts and path_parts[0] in _gh_skip_paths:
-                    continue
-                if "/".join(path_parts[:2]) != _gh_path_prefix:
-                    continue
-
-            # Skip translated (non-English) pages
-            if _is_i18n_url(full_parsed.path, docs_parsed.path):
-                continue
-
-            # Versioned docs: restrict to same version path prefix
-            if _version_prefix and not full_parsed.path.startswith(_version_prefix):
-                continue
-
-            urls.append(full_url)
-            seen_urls.add(full_url)
-        return urls
-
-    # Process root page results
-    blocked_count = 0
-    for r in root_results:
-        if r.get("content") and not r.get("error"):
-            if _is_blocked_content(r["content"]):
-                blocked_count += 1
-                continue
-            pages.append(
-                {
-                    "url": r["url"],
-                    "title": r.get("title", ""),
-                    "content": r["content"],
-                }
-            )
-            pending_urls.extend(_collect_links(r))
-
-    # Early exit: if root page was blocked, all other pages on the same
-    # domain will also be blocked — skip expensive crawling and return
-    # empty so that upstream fallback (GitHub raw, SearXNG) can take over.
-    if blocked_count > 0 and not pages:
-        logger.warning(
-            f"Root page blocked by bot protection, skipping crawl: {docs_url}"
-        )
-        return pages
-
-    # Sitemap + objects.inv discovery (finds URLs not linked from root page)
-    # Run both in parallel — objects.inv is more reliable for Sphinx sites,
-    # sitemap.xml works for non-Sphinx sites
-    # Bounded by batch_timeout to prevent hanging on slow servers
-    sitemap_task = _try_sitemap(docs_url, max_urls=max_pages)
-    inv_task = _try_objects_inv(docs_url, max_urls=max_pages)
-    try:
-        sitemap_urls, inv_urls = await asyncio.wait_for(
-            asyncio.gather(sitemap_task, inv_task),
-            timeout=batch_timeout,
-        )
-    except TimeoutError:
-        logger.warning(
-            f"Sitemap/objects.inv discovery timed out after {batch_timeout}s"
-        )
-        sitemap_urls, inv_urls = [], []
-
-    # Merge: objects.inv URLs first (more reliable for Sphinx), then sitemap
-    inv_url_set = set(inv_urls)
-    extra_urls = list(inv_urls) + [u for u in sitemap_urls if u not in inv_url_set]
-    for su in extra_urls:
-        su_parsed = urlparse(su)
-        if su in seen_urls:
-            continue
-        if _is_i18n_url(su_parsed.path, docs_parsed.path):
-            continue
-        # objects.inv URLs already include the correct version path from
-        # redirect resolution; only apply version prefix filter to sitemap URLs
-        if su not in inv_url_set:
-            if _version_prefix and not su_parsed.path.startswith(_version_prefix):
-                continue
-        pending_urls.append(su)
-        seen_urls.add(su)
-
-    # Sort by query relevance
-    pending_urls = _sort_urls_by_query(pending_urls, query)
-
-    # --- Fetch round 1 ---
-    remaining = max_pages - len(pages)
-    if remaining > 0 and pending_urls:
-        # Reserve some capacity for depth-2 round
-        round1_limit = min(len(pending_urls), remaining * 2 // 3 or remaining)
-        batch1_urls = pending_urls[:round1_limit]
-        pending_urls = pending_urls[round1_limit:]
-
-        logger.info(f"Fetching {len(batch1_urls)} docs pages (round 1)...")
-        try:
-            batch1_str = await asyncio.wait_for(
-                extract(
-                    urls=batch1_urls, format="markdown", stealth=True, **_SPA_KWARGS
-                ),
-                timeout=batch_timeout,
-            )
-            batch1_results = json.loads(batch1_str)
-
-            for br in batch1_results:
-                if br.get("content") and not br.get("error"):
-                    if _is_blocked_content(br["content"]):
-                        blocked_count += 1
-                        continue
-                    pages.append(
-                        {
-                            "url": br["url"],
-                            "title": br.get("title", ""),
-                            "content": br["content"],
-                        }
-                    )
-                    # Depth-2: discover links from fetched pages
-                    pending_urls.extend(_collect_links(br))
-        except TimeoutError:
-            logger.warning(
-                f"Round 1 crawl timed out after {batch_timeout}s "
-                f"({len(batch1_urls)} pages)"
-            )
-
-    # --- Fetch round 2 (depth-2 discovery) ---
-    remaining = max_pages - len(pages)
-    if remaining > 0 and pending_urls:
-        pending_urls = _sort_urls_by_query(pending_urls, query)
-        batch2_urls = pending_urls[:remaining]
-        if batch2_urls:
-            logger.info(f"Fetching {len(batch2_urls)} docs pages (round 2, depth-2)...")
-            try:
-                batch2_str = await asyncio.wait_for(
-                    extract(
-                        urls=batch2_urls, format="markdown", stealth=True, **_SPA_KWARGS
-                    ),
-                    timeout=batch_timeout,
-                )
-                batch2_results = json.loads(batch2_str)
-                for br in batch2_results:
-                    if br.get("content") and not br.get("error"):
-                        if _is_blocked_content(br["content"]):
-                            blocked_count += 1
-                            continue
-                        pages.append(
-                            {
-                                "url": br["url"],
-                                "title": br.get("title", ""),
-                                "content": br["content"],
-                            }
-                        )
-            except TimeoutError:
-                logger.warning(
-                    f"Round 2 crawl timed out after {batch_timeout}s "
-                    f"({len(batch2_urls)} pages)"
-                )
-
-    if blocked_count:
-        logger.warning(f"Filtered {blocked_count} bot-protected pages from {docs_url}")
-    logger.info(f"Fetched {len(pages)} docs pages from {docs_url}")
-    return pages
-
-
-# ---------------------------------------------------------------------------
-# Phase 2: Context7-level docs search primitives.
 # ---------------------------------------------------------------------------
 
 
