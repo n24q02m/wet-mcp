@@ -642,3 +642,67 @@ class TestExportJsonlRoundtrip:
         assert "library" in types_found
         assert "version" in types_found
         assert "chunk" in types_found
+
+
+# ---------------------------------------------------------------------------
+# mark_library_indexed (lines 580-608)
+# ---------------------------------------------------------------------------
+
+
+class TestMarkLibraryIndexed:
+    def test_mark_library_indexed_all_cols(self, db):
+        """Update last_indexed_at and total_versions (line 580)."""
+        lib_id = db.upsert_library(name="marklib")
+        with patch("wet_mcp.db._now_ts", return_value=12345.6):
+            db.mark_library_indexed(lib_id, total_versions=42)
+
+        row = db._conn.execute(
+            "SELECT last_indexed_at, total_versions FROM libraries WHERE id = ?",
+            (lib_id,),
+        ).fetchone()
+        assert row["last_indexed_at"] == 12345.6
+        assert row["total_versions"] == 42
+
+    def test_mark_library_indexed_no_total_versions(self, db):
+        """Update only last_indexed_at if total_versions is None (line 597)."""
+        lib_id = db.upsert_library(name="marklib2")
+        # Ensure total_versions starts at 0 (default)
+        row_before = db._conn.execute(
+            "SELECT total_versions FROM libraries WHERE id = ?", (lib_id,)
+        ).fetchone()
+        assert row_before["total_versions"] == 0
+
+        with patch("wet_mcp.db._now_ts", return_value=67890.0):
+            db.mark_library_indexed(lib_id)
+
+        row = db._conn.execute(
+            "SELECT last_indexed_at, total_versions FROM libraries WHERE id = ?",
+            (lib_id,),
+        ).fetchone()
+        assert row["last_indexed_at"] == 67890.0
+        assert row["total_versions"] == 0
+
+    def test_mark_library_indexed_legacy_db(self, db):
+        """No-op if columns are missing (lines 600-601)."""
+        # We can't easily mock sqlite3.Connection.execute as it's read-only.
+        # Instead, mock the return value of fetchall for PRAGMA table_info.
+
+        mock_results = [{"name": "id"}, {"name": "name"}]
+
+        # We need to mock the object returned by execute().fetchall()
+        # d.execute(...) -> returns a cursor-like object
+        # cursor.fetchall() -> returns mock_results
+
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = mock_results
+
+        with patch.object(db, "_conn") as mock_conn:
+            mock_conn.execute.return_value = mock_cursor
+
+            db.mark_library_indexed("legacy1", total_versions=10)
+
+            # Verify it did NOT call execute with UPDATE
+            # The first call should be PRAGMA table_info
+            # If it didn't return early, there would be a second call with UPDATE
+            assert mock_conn.execute.call_count == 1
+            assert "PRAGMA table_info" in mock_conn.execute.call_args[0][0]
