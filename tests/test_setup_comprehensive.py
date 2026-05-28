@@ -206,7 +206,9 @@ def test_get_pip_command_uv(mock_which):
 
     mock_which.side_effect = which_side_effect
 
-    cmd = _get_pip_command()
+    with patch("pathlib.Path.resolve", autospec=True) as mock_resolve:
+        mock_resolve.side_effect = lambda self: self
+        cmd = _get_pip_command()
     assert cmd == ["/path/to/uv", "pip", "install", "--python", "/usr/bin/python3"]
 
 
@@ -220,14 +222,18 @@ def test_get_pip_command_pip(mock_which):
 
     mock_which.side_effect = which_side_effect
 
-    cmd = _get_pip_command()
+    with patch("pathlib.Path.resolve", autospec=True) as mock_resolve:
+        mock_resolve.side_effect = lambda self: self
+        cmd = _get_pip_command()
     assert cmd == ["/path/to/pip", "install"]
 
 
 @patch("shutil.which", return_value=None)
 @patch("sys.executable", "/usr/bin/python3")
 def test_get_pip_command_sys_executable(mock_which):
-    cmd = _get_pip_command()
+    with patch("pathlib.Path.resolve", autospec=True) as mock_resolve:
+        mock_resolve.side_effect = lambda self: self
+        cmd = _get_pip_command()
     assert cmd == ["/usr/bin/python3", "-m", "pip", "install"]
 
 

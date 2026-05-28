@@ -10,6 +10,7 @@ Setup runs automatically on first server start.
 
 import platform
 import subprocess
+import shutil
 import sys
 from pathlib import Path
 
@@ -123,17 +124,16 @@ def needs_setup() -> bool:
 
 def _get_pip_command() -> list[str]:
     """Get cross-platform pip install command."""
-    import shutil
-
+    python_exe = str(Path(sys.executable).resolve())
     uv_path = shutil.which("uv")
     if uv_path:
-        return [uv_path, "pip", "install", "--python", sys.executable]
+        return [str(Path(uv_path).resolve()), "pip", "install", "--python", python_exe]
 
     pip_path = shutil.which("pip")
     if pip_path:
-        return [pip_path, "install"]
+        return [str(Path(pip_path).resolve()), "install"]
 
-    return [sys.executable, "-m", "pip", "install"]
+    return [python_exe, "-m", "pip", "install"]
 
 
 def _install_searxng() -> bool:
@@ -167,6 +167,7 @@ def _install_searxng() -> bool:
             encoding="utf-8",
             text=True,
             timeout=120,
+            shell=False,
         )
         if deps_result.returncode != 0:
             logger.error(f"Build deps install failed: {deps_result.stderr[:300]}")
@@ -185,6 +186,7 @@ def _install_searxng() -> bool:
             encoding="utf-8",
             text=True,
             timeout=300,
+            shell=False,
         )
         if result.returncode == 0:
             logger.info("SearXNG installed successfully")
@@ -219,27 +221,28 @@ def _setup_crawl4ai() -> bool:
     """
     logger.info("Running crawl4ai setup (browsers + system deps)...")
     try:
-        import subprocess
-        import sys
+        python_exe = str(Path(sys.executable).resolve())
 
         # 1. Setup home directory and run migration safely in a subprocess
         subprocess.run(
             [
-                sys.executable,
+                python_exe,
                 "-c",
                 "from crawl4ai.install import setup_home_directory, run_migration; setup_home_directory(); run_migration()",
             ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            shell=False,
         )
 
         # 2. Run playwright install safely
         subprocess.run(
-            [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
+            [python_exe, "-m", "playwright", "install", "chromium", "--with-deps"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            shell=False,
         )
 
         logger.info("crawl4ai setup completed successfully")
