@@ -876,7 +876,11 @@ class DocsDB:
         return library_id, version_id
 
     def _do_fts_search(
-        self, query: str, library_id: str | None, version_id: str | None, candidate_limit: int
+        self,
+        query: str,
+        library_id: str | None,
+        version_id: str | None,
+        candidate_limit: int,
     ) -> tuple[dict[str, float], dict[str, dict]]:
         """Tiered FTS5 search with BM25 scoring."""
         # Weights: id(0), content(2), title(3), heading_path(2)
@@ -1128,6 +1132,7 @@ class DocsDB:
             results.append(result)
 
         return results
+
     # -----------------------------------------------------------------------
     # Export / Import (JSONL for sync)
     # -----------------------------------------------------------------------
