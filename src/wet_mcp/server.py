@@ -189,12 +189,8 @@ async def _lifespan(_server: FastMCP):
     await _lifespan_shutdown(warmup_task)
 
 
-async def _lifespan_startup() -> asyncio.Task | None:
-    """Initialize all server components. Returns SearXNG warmup task."""
-    global _web_cache, _docs_db, _embedding_dims
-
-    logger.info("Starting WET MCP Server...")
-
+def _setup_credential_state() -> str:
+    """Resolve credential state and setup providers."""
     # Non-blocking credential resolution (fast, <10ms)
     from wet_mcp.credential_state import (
         CredentialState,
@@ -224,11 +220,14 @@ async def _lifespan_startup() -> asyncio.Task | None:
         )
         set_state(CredentialState.LOCAL)
 
-    # 1. Setup provider mode (sdk or local)
+    # Setup provider mode (sdk or local)
     from wet_mcp.config import settings
 
-    mode = settings.setup_providers()
+    return settings.setup_providers()
 
+
+def _setup_github_token() -> None:
+    """Detect and set GITHUB_TOKEN if missing."""
     # Warn about GitHub token for library docs discovery
     if not (os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")):
         # Try to get token from gh CLI (GitHub CLI)
@@ -242,6 +241,11 @@ async def _lifespan_startup() -> asyncio.Task | None:
                 "GitHub API (60 req/hr limit). Set GITHUB_TOKEN or run 'gh auth login'."
             )
 
+
+def _setup_searxng_warmup() -> asyncio.Task | None:
+    """Eagerly pre-warm SearXNG as a background task."""
+    from wet_mcp.config import settings
+
     # SearXNG is pre-warmed eagerly as a background task to eliminate
     # startup latency on the first search call. If this instance finds an
     # existing healthy SearXNG (started by another MCP server instance), it
@@ -251,16 +255,28 @@ async def _lifespan_startup() -> asyncio.Task | None:
     # actions are gated by `is_uvx_tool_venv()` and return a clear error
     # pointing to Docker mode. Warming SearXNG in uvx mode wastes a Docker
     # spawn the user will never get value from.
-    warmup_task: asyncio.Task | None = None
     if settings.wet_auto_searxng and not is_uvx_tool_venv():
-        warmup_task = asyncio.create_task(_warmup_searxng())
+        return asyncio.create_task(_warmup_searxng())
+    return None
 
+
+def _setup_web_cache() -> None:
+    """Initialize web cache if enabled."""
     # 2. Initialize web cache
+    global _web_cache
+    from wet_mcp.config import settings
+
     if settings.wet_cache:
         cache_path = settings.get_cache_db_path()
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         _web_cache = WebCache(cache_path)
         logger.info("Web cache enabled")
+
+
+async def _setup_docs_db(mode: str) -> None:
+    """Initialize docs DB, embeddings, and run migrations."""
+    global _docs_db, _embedding_dims
+    from wet_mcp.config import settings
 
     # 3. Initialize embedding backend (dual-backend: cloud or local)
     _embedding_dims = settings.resolve_embedding_dims()
@@ -299,12 +315,17 @@ async def _lifespan_startup() -> asyncio.Task | None:
     except Exception as e:  # pragma: no cover - never block startup
         logger.warning(f"Tier 1 warmup skipped: {e}")
 
+
+def _setup_sync() -> None:
+    """Start auto-sync (S3 or GDrive)."""
+    global _docs_db
+    from wet_mcp.config import settings
+    from wet_mcp.sync import resolve_active_backend
+
     # Start auto-sync via the active backend (XOR semantics):
     # * SYNC_S3_BUCKET set -> S3 mode (operator deploy, Method 2/3 Docker).
     #   The GDrive OAuth flow is skipped entirely.
     # * No S3 bucket -> GDrive mode (Method 1 uvx, per-user Device Code).
-    from wet_mcp.sync import resolve_active_backend
-
     active_backend = resolve_active_backend()
     if active_backend == "s3":
         logger.info(
@@ -319,6 +340,18 @@ async def _lifespan_startup() -> asyncio.Task | None:
         from wet_mcp.sync import start_auto_sync
 
         start_auto_sync(_docs_db)
+
+
+async def _lifespan_startup() -> asyncio.Task | None:
+    """Initialize all server components. Returns SearXNG warmup task."""
+    logger.info("Starting WET MCP Server...")
+
+    mode = _setup_credential_state()
+    _setup_github_token()
+    warmup_task = _setup_searxng_warmup()
+    _setup_web_cache()
+    await _setup_docs_db(mode)
+    _setup_sync()
 
     return warmup_task
 
