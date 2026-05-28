@@ -48,6 +48,25 @@ _DOCSTRING_RE = re.compile(
 # Directive-heavy content (mkdocs leftover, rst directives)
 _DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
 
+# Allowed columns for doc_chunks batch insertion (Security: SQL injection whitelist)
+_ALLOWED_CHUNK_COLUMNS = {
+    "id",
+    "version_id",
+    "library_id",
+    "url",
+    "title",
+    "chunk_index",
+    "content",
+    "heading_path",
+    "section",
+    "topic",
+    "content_hash",
+    "token_count",
+    "summary",
+    "summary_provider",
+    "created_at",
+}
+
 
 def _build_fts_queries(query: str) -> list[str]:
     """Build tiered FTS5 queries: PHRASE -> AND -> OR.
@@ -716,6 +735,8 @@ class DocsDB:
             r["name"]
             for r in self._conn.execute("PRAGMA table_info(doc_chunks)").fetchall()
         }
+        # Security: Use a whitelist for all columns to prevent SQL injection.
+        # We only include columns that both exist in the DB and are in our whitelist.
         phase2_cols = [
             c
             for c in (
@@ -726,7 +747,7 @@ class DocsDB:
                 "summary",
                 "summary_provider",
             )
-            if c in existing_cols
+            if c in existing_cols and c in _ALLOWED_CHUNK_COLUMNS
         ]
 
         base_cols = (

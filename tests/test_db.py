@@ -533,6 +533,25 @@ class TestChunksCRUD:
         assert len(results) == 1
         assert results[0]["content"] == "just content"
 
+    def test_add_chunks_sql_injection_filtering(self, db):
+        """Verify that add_chunks filters out unauthorized columns (SQL injection protection)."""
+        lib_id = db.upsert_library("testlib")
+        ver_id = db.upsert_version(lib_id, "1.0.0")
+
+        # Manually add a "malicious" column to the table that is NOT in the whitelist
+        db._conn.execute("ALTER TABLE doc_chunks ADD COLUMN malicious_col TEXT")
+        db._conn.commit()
+
+        chunks = [{"content": "test content", "malicious_col": "malicious value"}]
+
+        # It should find "malicious_col" but then FILTER IT OUT because it is not in _ALLOWED_CHUNK_COLUMNS
+        count = db.add_chunks(ver_id, lib_id, chunks)
+        assert count == 1
+
+        row = db._conn.execute("SELECT * FROM doc_chunks").fetchone()
+        assert row["malicious_col"] is None
+        assert row["content"] == "test content"
+
 
 # -----------------------------------------------------------------------
 # JSONL Export / Import
