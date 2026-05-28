@@ -855,7 +855,7 @@ class DocsDB:
         sql = f"SELECT * FROM ({base_sql})"
 
         for fts_query in fts_queries:
-            params = [fts_query]
+            params: list = [fts_query]
             if library_id:
                 params.append(library_id)
             if version_id:
@@ -904,7 +904,7 @@ class DocsDB:
             LEFT JOIN libraries l ON c.library_id = l.id
             WHERE v.embedding MATCH ?
         """
-        vec_params = [_serialize_f32(query_embedding)]
+        vec_params: list = [_serialize_f32(query_embedding)]
 
         if library_id:
             vec_sql += " AND c.library_id = ?"
