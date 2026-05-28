@@ -209,7 +209,7 @@ def test_get_pip_command_uv(mock_which):
     with patch("pathlib.Path.resolve", autospec=True) as mock_resolve:
         mock_resolve.side_effect = lambda self: self
         cmd = _get_pip_command()
-    assert cmd == ["/path/to/uv", "pip", "install", "--python", "/usr/bin/python3"]
+    assert cmd == [str(Path("/path/to/uv")), "pip", "install", "--python", str(Path("/usr/bin/python3"))]
 
 
 @patch("shutil.which")
@@ -225,7 +225,7 @@ def test_get_pip_command_pip(mock_which):
     with patch("pathlib.Path.resolve", autospec=True) as mock_resolve:
         mock_resolve.side_effect = lambda self: self
         cmd = _get_pip_command()
-    assert cmd == ["/path/to/pip", "install"]
+    assert cmd == [str(Path("/path/to/pip")), "install"]
 
 
 @patch("shutil.which", return_value=None)
@@ -234,7 +234,7 @@ def test_get_pip_command_sys_executable(mock_which):
     with patch("pathlib.Path.resolve", autospec=True) as mock_resolve:
         mock_resolve.side_effect = lambda self: self
         cmd = _get_pip_command()
-    assert cmd == ["/usr/bin/python3", "-m", "pip", "install"]
+    assert cmd == [str(Path("/usr/bin/python3")), "-m", "pip", "install"]
 
 
 # Test _install_searxng
