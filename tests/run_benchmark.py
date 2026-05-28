@@ -18,6 +18,7 @@ from typing import Any
 
 # Fix Windows console encoding for Unicode output
 if sys.platform == "win32":
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 

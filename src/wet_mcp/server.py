@@ -5,6 +5,13 @@ import functools
 import json
 import os
 import sys
+
+# Fix Windows console encoding for Unicode output
+if sys.platform == "win32":
+    sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from contextlib import asynccontextmanager
 from importlib.resources import files
 from pathlib import Path
