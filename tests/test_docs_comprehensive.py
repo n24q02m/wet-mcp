@@ -167,9 +167,7 @@ async def test_try_llms_txt():
         mock_instance = AsyncMock()
         MockClient.return_value.__aenter__.return_value = mock_instance
 
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.text = "A" * 201
+        mock_response = httpx.Response(200, content="A" * 201)
         mock_instance.get.return_value = mock_response
 
         res = await try_llms_txt("https://docs.test")
@@ -186,38 +184,32 @@ async def test_try_llms_txt_edge_cases():
         MockClient.return_value.__aenter__.return_value = mock_instance
 
         # Test < 200 chars
-        mock_response_short = MagicMock()
-        mock_response_short.status_code = 200
-        mock_response_short.text = "Short text"
+        mock_response_short = httpx.Response(200, content="Short text")
         mock_instance.get.return_value = mock_response_short
         assert await try_llms_txt("https://docs.test") is None
 
         # Test DOCTYPE start
-        mock_response_doctype = MagicMock()
-        mock_response_doctype.status_code = 200
-        mock_response_doctype.text = "<!DOCTYPE html>\n<html>" + "A" * 200
+        mock_response_doctype = httpx.Response(
+            200, content="<!DOCTYPE html>\n<html>" + "A" * 200
+        )
         mock_instance.get.return_value = mock_response_doctype
         assert await try_llms_txt("https://docs.test") is None
 
         # Test non-200 status code
-        mock_response_err = MagicMock()
-        mock_response_err.status_code = 404
+        mock_response_err = httpx.Response(404, content="Not Found")
         mock_instance.get.return_value = mock_response_err
         assert await try_llms_txt("https://docs.test") is None
 
         # Test toc only (for llms.txt)
         with patch("wet_mcp.sources.docs._is_toc_only", return_value=True):
-            mock_response_toc = MagicMock()
-            mock_response_toc.status_code = 200
-            mock_response_toc.text = "TOC links" + "A" * 200
+            mock_response_toc = httpx.Response(200, content="TOC links" + "A" * 200)
 
             # First request (llms-full.txt) fails/not found, second request (llms.txt) returns TOC
             mock_instance.get.side_effect = [
-                MagicMock(status_code=404),
+                httpx.Response(404, content="Not Found"),
                 mock_response_toc,
             ]
             assert await try_llms_txt("https://docs.test") is None
-
         # Test exception handling (e.g. connection error)
         mock_instance.get.side_effect = Exception("Network error")
         assert await try_llms_txt("https://docs.test") is None
