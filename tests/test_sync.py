@@ -828,10 +828,11 @@ class TestStopAutoSync:
 
     def test_task_already_done(self):
         import asyncio
+        from typing import Any, cast
 
-        future = asyncio.Future()
+        future = cast("asyncio.Task[Any]", asyncio.Future())
         future.set_result(None)
-        wet_mcp.sync._sync_task = future  # ty: ignore[invalid-assignment]
+        wet_mcp.sync._sync_task = future
         stop_auto_sync()
         # Task is done, should not be cancelled or cleared
         assert wet_mcp.sync._sync_task is future
