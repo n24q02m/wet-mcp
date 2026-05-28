@@ -19,6 +19,7 @@ import subprocess
 import sys
 import unicodedata
 from pathlib import Path
+
 if sys.platform == "win32":
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
