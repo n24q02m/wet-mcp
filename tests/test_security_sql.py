@@ -105,3 +105,25 @@ def test_get_existing_invalid_table(tmp_path):
     # Just ensure we can instantiate DocsDB
     db = DocsDB(db_path)
     assert db._db_path == db_path
+
+
+def test_fts_search_malicious_input(tmp_path):
+    """Ensure FTS search handles malicious input without injection."""
+    db_path = tmp_path / "test_malicious.db"
+    db = DocsDB(db_path)
+
+    lib_id = db.upsert_library(name="testlib")
+    ver_id = db.upsert_version(lib_id)
+    db.add_chunks(ver_id, lib_id, [{"content": "safe content"}])
+
+    # Input designed to break out of SQL string or MATCH expression
+    malicious_query = "'; DROP TABLE doc_chunks; --"
+
+    # Should not raise exception and should return no results
+    results = db.search(query=malicious_query, library_name="testlib")
+    assert isinstance(results, list)
+
+    # Verify table still exists
+    db._conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()
+
+    db.close()
