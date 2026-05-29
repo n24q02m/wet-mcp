@@ -1,7 +1,7 @@
 {
   "name": "wet-mcp",
   "description": "Web search, content extraction, and media download",
-  "version": "3.2.2",
+  "version": "3.2.3",
   "userConfig": {
     "JINA_AI_API_KEY": {
       "type": "string",
