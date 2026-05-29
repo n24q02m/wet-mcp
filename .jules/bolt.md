@@ -16,3 +16,7 @@
 ## 2024-05-18 - String uniform validation
 **Learning:** For uniform string validation (where `len(set(text)) == 1`), replacing an O(N) generator check like `all(c in ALLOWED for c in text)` with a simple O(1) index check `text[0] in ALLOWED` significantly improves iteration overhead.
 **Action:** Always prefer array indexing to generator comprehensions when validating a uniformly matching string, and ensure that the stripped result is cached to avoid redundant allocations.
+
+## 2023-11-05 - Schema Metadata Inspection Caching
+**Learning:** Calling `PRAGMA table_info` repeatedly during tight database operations (like batched inserts or table validations) is surprisingly expensive and slows down throughput.
+**Action:** Always cache the results of schema inspection queries (`PRAGMA table_info`) at the instance level for stable database connections where the schema doesn't change post-initialization. Use an allowlist for table names to ensure safe query construction.
