@@ -45,7 +45,7 @@ def _resolve_db_url() -> str:
         return f"sqlite:///{path.as_posix()}"
 
     ini_url = config.get_main_option("sqlalchemy.url") or ""
-    if ini_url and not ini_url.startswith("driver://"):
+    if ini_url:
         return ini_url
 
     default_path = (Path.home() / ".wet-mcp" / "docs.db").resolve()
