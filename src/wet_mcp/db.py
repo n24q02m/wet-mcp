@@ -45,6 +45,43 @@ _DEF_RE = re.compile(
 _DOCSTRING_RE = re.compile(
     r'"""|\'\'\'|/\*\*|///|#\s+(?:Args|Returns|Raises|Example|Usage|Parameters|Note)'
 )
+# Security: Strict allowlists for dynamic column/table construction
+_LIBRARIES_COLUMNS = {
+    "id",
+    "name",
+    "docs_url",
+    "registry",
+    "description",
+    "canonical_name",
+    "homepage",
+    "github_url",
+    "package_managers",
+    "tier",
+    "last_indexed_at",
+    "total_versions",
+    "discovery_version",
+    "created_at",
+    "updated_at",
+}
+
+_DOC_CHUNKS_COLUMNS = {
+    "id",
+    "version_id",
+    "library_id",
+    "url",
+    "title",
+    "chunk_index",
+    "content",
+    "heading_path",
+    "created_at",
+    "topic",
+    "section",
+    "content_hash",
+    "token_count",
+    "summary",
+    "summary_provider",
+}
+
 # Directive-heavy content (mkdocs leftover, rst directives)
 _DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
 
@@ -508,19 +545,7 @@ class DocsDB:
             if updates:
                 # Security: Validate column names against an explicit allowlist
                 # to prevent injection if the update logic is made more dynamic.
-                allowed_cols = {
-                    "docs_url",
-                    "registry",
-                    "description",
-                    "canonical_name",
-                    "homepage",
-                    "github_url",
-                    "package_managers",
-                    "tier",
-                    "last_indexed_at",
-                    "discovery_version",
-                    "updated_at",
-                }
+                allowed_cols = _LIBRARIES_COLUMNS
                 for u in updates:
                     col = u.split("=")[0].strip()
                     if col not in allowed_cols:
@@ -568,6 +593,11 @@ class DocsDB:
             if col_name in existing_cols and (value is not None or include_when_none):
                 cols.append(col_name)
                 vals.append(value)
+        # Security: Validate all column names against a strict allowlist.
+        for c in cols:
+            if c not in _LIBRARIES_COLUMNS:
+                raise ValueError(f"Unauthorized library column: {c}")
+
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.execute(
             f"INSERT INTO libraries ({', '.join(cols)}) "
@@ -600,6 +630,12 @@ class DocsDB:
         if not sets:
             return
         params.append(library_id)
+        # Security: Validate all column names against a strict allowlist.
+        for s in sets:
+            col = s.split("=")[0].strip()
+            if col not in _LIBRARIES_COLUMNS:
+                raise ValueError(f"Unauthorized library column: {col}")
+
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.execute(
             "UPDATE libraries SET " + ", ".join(sets) + " WHERE id = ?",
@@ -758,6 +794,11 @@ class DocsDB:
             for col in phase2_cols:
                 row.append(chunk.get(col))
             chunk_rows.append(tuple(row))
+
+        # Security: Validate all column names against a strict allowlist.
+        for c in all_cols:
+            if c not in _DOC_CHUNKS_COLUMNS:
+                raise ValueError(f"Unauthorized doc_chunks column: {c}")
 
         # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._conn.executemany(
