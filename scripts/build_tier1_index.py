@@ -54,30 +54,32 @@ async def _amain() -> int:
     libraries = payload.get("libraries", [])
     print(f"Eager-ingesting {len(libraries)} Tier 1 libraries...")
 
-    metrics = []
-    started = time.time()
-    for entry in libraries:
+    async def _ingest_one(entry):
         name = entry["id"]
         t0 = time.time()
         try:
             result = await ingest_tier2(db, name)
             duration = time.time() - t0
-            metrics.append(
-                {
-                    "library": name,
-                    "status": result.get("status"),
-                    "page_count": result.get("page_count", 0),
-                    "chunk_count": result.get("chunk_count", 0),
-                    "duration_seconds": round(duration, 2),
-                }
-            )
+            metric = {
+                "library": name,
+                "status": result.get("status"),
+                "page_count": result.get("page_count", 0),
+                "chunk_count": result.get("chunk_count", 0),
+                "duration_seconds": round(duration, 2),
+            }
             print(
                 f"  {name}: {result.get('status')} "
                 f"({result.get('chunk_count', 0)} chunks, {duration:.1f}s)"
             )
-        except Exception as exc:  # pragma: no cover - script-level guard
-            metrics.append({"library": name, "status": "error", "error": str(exc)})
+            return metric
+        except Exception as exc:
+            metric = {"library": name, "status": "error", "error": str(exc)}
             print(f"  {name}: ERROR {exc}")
+            return metric
+
+    started = time.time()
+    tasks = [_ingest_one(entry) for entry in libraries]
+    metrics = await asyncio.gather(*tasks)
 
     summary = {
         "timestamp": time.time(),
