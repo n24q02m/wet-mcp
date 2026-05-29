@@ -16,3 +16,7 @@
 ## 2024-05-18 - String uniform validation
 **Learning:** For uniform string validation (where `len(set(text)) == 1`), replacing an O(N) generator check like `all(c in ALLOWED for c in text)` with a simple O(1) index check `text[0] in ALLOWED` significantly improves iteration overhead.
 **Action:** Always prefer array indexing to generator comprehensions when validating a uniformly matching string, and ensure that the stripped result is cached to avoid redundant allocations.
+
+## 2024-05-18 - Caching `PRAGMA table_info` Results
+**Learning:** Frequent database schema inspections using `PRAGMA table_info` inside heavily used database methods (`add_chunks`, `upsert_library`, `mark_library_indexed`) cause noticeable overhead, especially when inserting large amounts of data.
+**Action:** When working with SQLite, cache table schemas after the first query inside the class instance so subsequent operations can reuse the schema information without re-querying the database.
