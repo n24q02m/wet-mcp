@@ -16,3 +16,7 @@
 ## 2024-05-18 - String uniform validation
 **Learning:** For uniform string validation (where `len(set(text)) == 1`), replacing an O(N) generator check like `all(c in ALLOWED for c in text)` with a simple O(1) index check `text[0] in ALLOWED` significantly improves iteration overhead.
 **Action:** Always prefer array indexing to generator comprehensions when validating a uniformly matching string, and ensure that the stripped result is cached to avoid redundant allocations.
+
+## 2024-06-01 - BeautifulSoup vs Regex for Simple Extraction
+**Learning:** For simple text extraction tasks (like pulling JSON-LD from `<script>` tags), full HTML parsing with `BeautifulSoup` introduces massive CPU overhead compared to a pre-compiled regular expression (~30x slower in benchmarks).
+**Action:** Default to using regex for structured, predictable patterns within HTML/Markdown processing pipelines. Only fall back to or rely on heavy parsers like `BeautifulSoup` when full AST traversal or DOM manipulation is required.
