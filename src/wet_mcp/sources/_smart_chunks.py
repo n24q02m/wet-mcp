@@ -27,6 +27,10 @@ _CODE_BLOCK_RE = re.compile(r"```(\w*)\n(.*?)```", re.DOTALL)
 _HEADING_RE = re.compile(r"^(#{1,3})\s+(.+)$", re.MULTILINE)
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 _WHITESPACE_RE = re.compile(r"\s+")
+_JSONLD_RE = re.compile(
+    r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _looks_like_html(content: str) -> bool:
@@ -68,51 +72,25 @@ def _strip_html(html: str) -> str:
 def _extract_jsonld(html: str) -> list[dict[str, Any]]:
     """Find ``<script type="application/ld+json">`` blocks and parse them.
 
-    Uses BeautifulSoup when available; falls back to a regex-only parser
-    so the post-processor stays usable without bs4.
+    Uses a pre-compiled regular expression to minimize CPU overhead compared
+    to full HTML parsing libraries like BeautifulSoup.
     """
     blocks: list[dict[str, Any]] = []
-    try:
-        from bs4 import BeautifulSoup
-
-        soup = BeautifulSoup(html, "html.parser")
-        for tag in soup.find_all("script", type="application/ld+json"):
-            raw = tag.string or tag.get_text() or ""
-            raw = raw.strip()
-            if not raw:
-                continue
-            try:
-                payload = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, dict):
-                blocks.append(payload)
-            elif isinstance(payload, list):
-                for item in payload:
-                    if isinstance(item, dict):
-                        blocks.append(item)
-        return blocks
-    except ImportError:
-        # bs4 missing — regex fallback (good enough for well-formed pages).
-        pattern = re.compile(
-            r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
-            re.IGNORECASE | re.DOTALL,
-        )
-        for match in pattern.finditer(html):
-            raw = match.group(1).strip()
-            if not raw:
-                continue
-            try:
-                payload = json.loads(raw)
-            except json.JSONDecodeError:
-                continue
-            if isinstance(payload, dict):
-                blocks.append(payload)
-            elif isinstance(payload, list):
-                for item in payload:
-                    if isinstance(item, dict):
-                        blocks.append(item)
-        return blocks
+    for match in _JSONLD_RE.finditer(html):
+        raw = match.group(1).strip()
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            blocks.append(payload)
+        elif isinstance(payload, list):
+            for item in payload:
+                if isinstance(item, dict):
+                    blocks.append(item)
+    return blocks
 
 
 def _extract_code_blocks(markdown: str) -> list[dict[str, str]]:

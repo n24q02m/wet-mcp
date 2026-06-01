@@ -165,33 +165,6 @@ async def test_extra_metadata_merged() -> None:
 
 
 @pytest.mark.asyncio
-async def test_jsonld_regex_fallback_when_bs4_missing(monkeypatch) -> None:
-    """If BeautifulSoup is unavailable, the regex parser still finds JSON-LD blocks."""
-    import builtins
-
-    from wet_mcp.sources import _smart_chunks as sc
-
-    real_import = builtins.__import__
-
-    def deny_bs4(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "bs4":
-            raise ImportError("forced for test")
-        return real_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr(builtins, "__import__", deny_bs4)
-    html = (
-        "<!doctype html><html><head>"
-        '<script type="application/ld+json">{"@type":"Foo","name":"bar"}</script>'
-        '<script type="application/ld+json">[{"@type":"Arr"}]</script>'
-        '<script type="application/ld+json">not-json</script>'
-        "</head></html>"
-    )
-    blocks = sc._extract_jsonld(html)
-    types = sorted(b.get("@type", "") for b in blocks)
-    assert types == ["Arr", "Foo"]
-
-
-@pytest.mark.asyncio
 async def test_html_to_markdown_falls_back_on_markitdown_failure(monkeypatch) -> None:
     """When markitdown raises mid-conversion, the bridge degrades to strip-tags."""
     from wet_mcp.sources import _smart_chunks as sc
@@ -233,20 +206,10 @@ async def test_html_to_markdown_falls_back_when_markitdown_missing(monkeypatch) 
 
 
 @pytest.mark.asyncio
-async def test_jsonld_array_with_invalid_entries_via_regex(monkeypatch) -> None:
+async def test_jsonld_array_with_invalid_entries() -> None:
     """Regex fallback skips invalid JSON arrays cleanly without raising."""
-    import builtins
-
     from wet_mcp.sources import _smart_chunks as sc
 
-    real_import = builtins.__import__
-
-    def deny_bs4(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "bs4":
-            raise ImportError("forced for test")
-        return real_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr(builtins, "__import__", deny_bs4)
     html = (
         '<script type="application/ld+json">  </script>'  # empty
         '<script type="application/ld+json">[1, 2, 3]</script>'  # array of non-dict
@@ -256,8 +219,8 @@ async def test_jsonld_array_with_invalid_entries_via_regex(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_jsonld_bs4_path_handles_invalid_json() -> None:
-    """bs4 branch silently skips entries that aren't valid JSON or aren't dicts."""
+async def test_jsonld_handles_invalid_json() -> None:
+    """Silently skips entries that aren't valid JSON or aren't dicts."""
     html = (
         "<html><head>"
         '<script type="application/ld+json"></script>'
