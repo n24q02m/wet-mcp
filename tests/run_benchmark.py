@@ -9,6 +9,7 @@ Results are saved incrementally (after each library) to avoid data loss.
 """
 
 import asyncio
+import io
 import json
 import os
 import sys
@@ -18,8 +19,9 @@ from typing import Any
 
 # Fix Windows console encoding for Unicode output
 if sys.platform == "win32":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    for _s in (sys.stdin, sys.stdout, sys.stderr):
+        if isinstance(_s, io.TextIOWrapper):
+            _s.reconfigure(encoding="utf-8", errors="replace")
 
 # Suppress noisy ResourceWarnings from SearXNG subprocess cleanup
 warnings.filterwarnings("ignore", category=ResourceWarning)
