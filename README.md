@@ -95,7 +95,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 claude mcp add wet -- uvx wet-mcp
 
 # Method 3 (recommended for HTTP / multi-device / OAuth)
-docker run -d --name wet-mcp-http -p 8084:8084 \
+docker run -d --name wet-mcp-http -p 8084:8080 \
   -v wet-data:/data -e MCP_TRANSPORT=http \
   -e PUBLIC_URL=https://wet.example.com \
   n24q02m/wet-mcp:latest
@@ -156,7 +156,7 @@ into `config` action dispatch.
 | `search` | Web (SearXNG metasearch), news, images, academic research (Scholar / arXiv / PubMed / CrossRef / Semantic Scholar / BASE), library docs (HyDE + FTS5), find similar pages. Includes `docs_resolve` (library name -> ranked id), `docs_query` (version-aware + topic + 5000-token cap), `docs_lock_project` (Cabinets project pin via pyproject / package.json / go.mod / Cargo.toml manifest detection). |
 | `extract` | URL -> smart chunks dict (`clean_text` + `markdown` + `structured_data` + `code_blocks` + `metadata`) via web-core 5-strategy chain. Batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion (PDF/DOCX/XLSX/PPTX/EPUB), structured extraction (JSON Schema) |
 | `media` | `list` (discover URLs from gallery pages), `download` (SSRF-safe). `analyze` deprecated v&lt;auto&gt;+ -- forwards to `imagine-mcp.understand` |
-| `config` | `status`, `set`, `cache_clear`, `docs_reindex`, `warmup`, `setup_open_relay`, `setup_status`, `setup_skip`, `setup_reset`, `setup_complete`, `setup_sync` |
+| `config` | `status`, `set`, `cache_clear`, `docs_reindex`, `warmup`, `setup_sync`, `setup_status`, `setup_skip`, `setup_reset`, `setup_complete` |
 | `help` | Per-tool documentation: `search`, `extract`, `media`, `config` |
 
 > **Media boundary**: For vision / audio understanding (image captioning,

@@ -11,7 +11,7 @@ Xem `AGENTS.md` va `README.md` de hieu architecture va configuration.
   - `cache.py`, `db.py`, `embedder.py`, `reranker.py` -- Infrastructure
   - `relay_setup.py` -- Zero-config relay: create session, poll for config
   - `relay_schema.py` -- Relay form schema (2 modes: local/cloud)
-  - `sync.py` -- Google Drive sync (OAuth Device Code, httpx)
+  - `sync/` -- Docs sync backends: `gdrive.py` (Google Drive, OAuth Device Code, httpx) + `s3.py` (S3/R2/B2 operator mode) + `base.py`
   - `token_store.py` -- Local token storage cho OAuth (~/.wet-mcp/tokens/)
   - `setup_tool.py` -- Warmup + setup-sync logic (MCP-callable)
   - `sources/` -- Data source integrations (crawler, docs, searxng)
@@ -60,7 +60,7 @@ mise run dev       # uv run wet-mcp
 - Embedding: `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`
 - Reranking: `RERANK_BACKEND`, `RERANK_MODEL`
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
-- Sync: `SYNC_ENABLED` (default false), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
+- Sync: `SYNC_ENABLED` (default true), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
 - Sync dung Google Drive API truc tiep (httpx). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`
 - Relay: `MCP_RELAY_URL` (required for remote-relay mode, no default — wet-mcp default is local-relay per matrix)
 - Secrets: skret SSM namespace `/wet-mcp/prod` (region `ap-southeast-1`)
