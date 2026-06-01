@@ -21,12 +21,9 @@ import sys
 import unicodedata
 from pathlib import Path
 
-# Force UTF-8 on stderr so Vietnamese / Unicode chars display correctly on
-# Windows (default cp1252 otherwise replaces non-ASCII chars with '?').
-if hasattr(sys.stderr, "buffer"):
-    sys.stderr = io.TextIOWrapper(
-        sys.stderr.buffer, encoding="utf-8", errors="replace", line_buffering=True
-    )
+if sys.platform == "win32":
+    if isinstance(sys.stderr, io.TextIOWrapper):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Unicode char -> candidate ASCII replacements frequently produced by AI rewrites.
 UNICODE_REPLACEMENTS: dict[str, list[str]] = {

@@ -2,9 +2,17 @@
 
 import asyncio
 import functools
+import io
 import json
 import os
 import sys
+
+# Fix Windows console encoding for Unicode output
+if sys.platform == "win32":
+    for _s in (sys.stdin, sys.stdout, sys.stderr):
+        if isinstance(_s, io.TextIOWrapper):
+            _s.reconfigure(encoding="utf-8", errors="replace")
+
 from contextlib import asynccontextmanager
 from importlib.resources import files
 from pathlib import Path
