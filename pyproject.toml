@@ -20,7 +20,7 @@ classifiers = [
 requires-python = "==3.13.*"
 dependencies = [
     # Shared web infrastructure (SSRF, SearXNG, URL utils, ScrapingAgent + Crawl4AI transitive)
-    "n24q02m-web-core>=2.1.0",
+    "n24q02m-web-core>=2.1.1",
     # MCP Server
     "mcp[cli]",
     # HTTP Client
@@ -33,14 +33,14 @@ dependencies = [
     # Logging
     "loguru",
     # LLM + Embedding (native SDKs)
-    "cohere>=7.0.0",
+    "cohere>=7.0.2",
     "httpx>=0.28.1",
-    "google-genai>=2.6.0",
+    "google-genai>=2.7.0",
     "openai>=2.38.0",
     # Vector search for docs
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
-    "qwen3-embed>=1.10.0",
+    "qwen3-embed>=1.10.1",
     "pillow>=12.2.0",
     "diskcache>=5.6.3",
     "cryptography>=48.0.0",
@@ -59,10 +59,10 @@ dependencies = [
     # Must stay >=3.2.3,<4 until mcp-core bumps its own floor past 3.x.
     "fastmcp>=3.3.1,<4",
     # Google Drive sync
-    "google-api-python-client>=2.196.0",
+    "google-api-python-client>=2.197.0",
     "google-auth>=2.53.0",
     # S3-compatible sync (AWS S3, Cloudflare R2, Backblaze B2, MinIO)
-    "boto3>=1.43.16",
+    "boto3>=1.43.18",
     # Production WSGI server for embedded SearXNG on Windows
     # (Werkzeug dev server deadlocks under concurrent engine requests)
     "waitress>=3.0.2; sys_platform == 'win32'",
@@ -82,7 +82,7 @@ dependencies = [
     # langchain-core -> langsmith (used for tracing, not prompt pull, so
     # the vulnerable Client.pull_prompt path is not exercised by wet-mcp
     # — pinned as defense-in-depth). First patched in langsmith 0.8.0.
-    "langsmith>=0.8.5",
+    "langsmith>=0.8.8",
 ]
 
 [dependency-groups]
@@ -95,7 +95,7 @@ dev = [
     "pre-commit",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
-    "syrupy>=5.2.0",
+    "syrupy>=5.3.1",
     "moto[s3]>=5.2.1",
 ]
 
