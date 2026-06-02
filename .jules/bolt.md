@@ -16,3 +16,7 @@
 ## 2024-05-18 - String uniform validation
 **Learning:** For uniform string validation (where `len(set(text)) == 1`), replacing an O(N) generator check like `all(c in ALLOWED for c in text)` with a simple O(1) index check `text[0] in ALLOWED` significantly improves iteration overhead.
 **Action:** Always prefer array indexing to generator comprehensions when validating a uniformly matching string, and ensure that the stripped result is cached to avoid redundant allocations.
+
+## 2024-05-18 - Sliding Window Substring Checks
+**Learning:** Checking for substrings inside a sliding window loop (e.g., `term in window`) is highly inefficient if the term does not exist anywhere in the main content. Furthermore, using generator expressions like `sum(1 for term in query if term in window)` causes significant overhead in tight loops.
+**Action:** Pre-filter query terms by checking their existence in the full text first. Track the `max_possible_score` (the number of present terms) and use a standard `for` loop with an early `break` when the maximum score is reached, bypassing both unnecessary string lookups and generator overhead.

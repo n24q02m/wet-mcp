@@ -231,20 +231,31 @@ def _extract_passage(content: str, query_terms: list[str], max_chars: int = 500)
     """Extract most relevant passage from content around query terms."""
     content_lower = content.lower()
 
+    # Pre-filter query terms that actually exist in the content.
+    # This avoids searching for missing terms in every window.
+    present_terms = [term for term in query_terms if term in content_lower]
+    if not present_terms:
+        # No query terms found anywhere, return beginning
+        return content[:max_chars].strip()
+
     # Find best position (most query terms nearby)
     best_pos = 0
     best_score = 0
+    max_possible_score = len(present_terms)
 
     for i in range(0, len(content_lower) - 100, 50):
         window = content_lower[i : i + max_chars]
-        score = sum(1 for term in query_terms if term in window)
+        score = 0
+        for term in present_terms:
+            if term in window:
+                score += 1
+
         if score > best_score:
             best_score = score
             best_pos = i
-
-    if best_score == 0:
-        # No query terms found, return beginning
-        return content[:max_chars].strip()
+            # Early return: we found a window with all possible terms.
+            if best_score == max_possible_score:
+                break
 
     # Extract passage around best position
     start = max(0, best_pos)
