@@ -123,7 +123,7 @@ def _strip_html_to_markdown(html: str) -> str:
     html = re.sub(r"<script[\s\S]*?</script>", "", html, flags=re.IGNORECASE)
     html = re.sub(r"<style[\s\S]*?</style>", "", html, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", " ", html)
-    text = re.sub(r"\s+", " ", text).strip()
+    text = " ".join(text.split())
     if len(text) > 8000:
         text = text[:8000] + "\n...[snapshot truncated]"
     return text
