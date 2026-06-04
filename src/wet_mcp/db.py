@@ -190,6 +190,7 @@ class DocsDB:
     """SQLite-backed docs storage with FTS5 hybrid search."""
 
     def __init__(self, db_path: Path, embedding_dims: int = 0):
+        self._table_columns: dict[str, set[str]] = {}
         self._db_path = db_path
         if (
             type(embedding_dims) is not int
@@ -230,6 +231,18 @@ class DocsDB:
 
         self._create_tables()
         logger.debug(f"DocsDB initialized at {db_path} (vec={self._vec_enabled})")
+
+    def _get_table_columns(self, table: str) -> set[str]:
+        """Get column names for a table, with caching."""
+        if table not in {"libraries", "doc_chunks"}:
+            raise ValueError(f"Invalid table for column lookup: {table}")
+        if table not in self._table_columns:
+            cols = {
+                r["name"]
+                for r in self._conn.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+            self._table_columns[table] = cols
+        return self._table_columns[table]
 
     def _create_tables(self) -> None:
         self._create_libraries_table()
@@ -492,10 +505,7 @@ class DocsDB:
 
         # Phase 2 columns may be absent on a pre-Alembic legacy DB. Detect
         # presence once per call so we don't crash on older schemas.
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
-        }
+        existing_cols = self._get_table_columns("libraries")
         pkg_json = (
             json.dumps(package_managers, ensure_ascii=False)
             if package_managers is not None
@@ -615,10 +625,7 @@ class DocsDB:
         Silently no-ops on pre-Alembic legacy databases that lack the
         ``last_indexed_at`` / ``total_versions`` columns.
         """
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
-        }
+        existing_cols = self._get_table_columns("libraries")
         sets: list[str] = []
         params: list = []
         if "last_indexed_at" in existing_cols:
@@ -748,10 +755,7 @@ class DocsDB:
         chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
 
         # Detect optional columns once so we can branch on a single INSERT.
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(doc_chunks)").fetchall()
-        }
+        existing_cols = self._get_table_columns("doc_chunks")
         phase2_cols = [
             c
             for c in (
