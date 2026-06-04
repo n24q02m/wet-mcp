@@ -4,11 +4,11 @@ Tests the wet-mcp wrapper layer that bridges settings to web-core's API.
 Internal SearXNG process management is tested in web-core's test suite.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
+from wet_mcp.searxng_runner import _find_available_port, ensure_searxng, stop_searxng
 
 
 @pytest.fixture
@@ -106,3 +106,57 @@ def test_patched_installer_skips_patches_on_failure():
         assert result is False
         mock_version.assert_not_called()
         mock_windows.assert_not_called()
+
+
+def test_find_available_port_success():
+    """Verify _find_available_port returns a port when bind succeeds."""
+    with (
+        patch("socket.socket") as mock_socket,
+        patch("random.shuffle"),
+    ):
+        # mock_socket() returns a context manager that returns mock_s
+        mock_s = MagicMock()
+        mock_socket.return_value.__enter__.return_value = mock_s
+
+        # Success on first try (offset 0 if shuffle is mocked to do nothing)
+        port = _find_available_port(8080, max_tries=1)
+
+        assert port == 8080
+        mock_s.bind.assert_called_once_with(("127.0.0.1", 8080))
+
+
+def test_find_available_port_retry():
+    """Verify _find_available_port retries when bind fails."""
+    with (
+        patch("socket.socket") as mock_socket,
+        patch("random.shuffle"),
+    ):
+        mock_s = MagicMock()
+        mock_socket.return_value.__enter__.return_value = mock_s
+
+        # Fail first try, succeed second
+        mock_s.bind.side_effect = [OSError("Port in use"), None]
+
+        # Use max_tries=2 and ensure deterministic order by mocking shuffle
+        # Default offsets are [0, 1]
+        port = _find_available_port(8080, max_tries=2)
+
+        assert port in [8080, 8081]
+        assert mock_s.bind.call_count == 2
+
+
+def test_find_available_port_failure():
+    """Verify _find_available_port raises RuntimeError when no ports available."""
+    with (
+        patch("socket.socket") as mock_socket,
+        patch("random.shuffle"),
+    ):
+        mock_s = MagicMock()
+        mock_socket.return_value.__enter__.return_value = mock_s
+
+        mock_s.bind.side_effect = OSError("Port in use")
+
+        with pytest.raises(RuntimeError, match="No available port found"):
+            _find_available_port(8080, max_tries=5)
+
+        assert mock_s.bind.call_count == 5
