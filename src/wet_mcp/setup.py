@@ -219,6 +219,9 @@ def _setup_crawl4ai() -> bool:
     """
     logger.info("Running crawl4ai setup (browsers + system deps)...")
     try:
+        import subprocess
+        import sys
+
         # 1. Setup home directory and run migration safely in a subprocess
         subprocess.run(
             [
@@ -247,6 +250,13 @@ def _setup_crawl4ai() -> bool:
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"crawl4ai setup failed (code {e.returncode}): {e.stderr[:500]}")
+        logger.warning(
+            "crawl/extract features may not work. "
+            "Try running 'crawl4ai-setup' manually."
+        )
+        return False
+    except subprocess.TimeoutExpired:
+        logger.error("crawl4ai setup timed out")
         logger.warning(
             "crawl/extract features may not work. "
             "Try running 'crawl4ai-setup' manually."
