@@ -265,3 +265,12 @@ def test_load_token_for_sub_oserror(token_dir):
     """load_token_for_sub handles OSError during read."""
     with patch.object(Path, "exists", side_effect=OSError("disk error")):
         assert load_token_for_sub("user1", "drive") is None
+
+
+def test_get_token_path_for_sub_simple_assertion(token_dir, tmp_path):
+    """Simple assertion matching the output path for get_token_path_for_sub."""
+    sub = "test-user"
+    provider = "google"
+    expected = tmp_path / "subs" / sub / "tokens" / f"{provider}.json"
+    result = get_token_path_for_sub(sub, provider)
+    assert result == expected
