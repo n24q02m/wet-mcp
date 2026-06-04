@@ -201,12 +201,19 @@ async def test_try_reuse_existing():
 
 
 def test_find_available_port():
+    # Patch socket in wet_mcp.searxng_runner._find_available_port local scope
+    # Since it is imported INSIDE the function, we have to patch it where it is used.
+    # Actually, it is easier to patch the builtin __import__ or just patch the whole function.
+    # But wait, _find_available_port uses "import socket" locally.
+
     with patch("socket.socket") as mock_socket:
         mock_sock_instance = MagicMock()
         mock_socket.return_value.__enter__.return_value = mock_sock_instance
 
         # Success on first try
         mock_sock_instance.bind.return_value = None
+        # We need to make sure _find_available_port uses the patched socket.
+        # Since it does "import socket" locally, it will get the patched module from sys.modules.
         port = _find_available_port(8080)
         assert 8080 <= port < 8080 + 100
 
