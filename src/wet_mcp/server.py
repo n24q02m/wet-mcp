@@ -1245,9 +1245,22 @@ async def extract(  # noqa: PLR0913
 
         case "extract_structured":
             if not urls:
-                return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
+                return (
+                    "Error: urls is required for extract_structured action. "
+                    'Example: extract(action="extract_structured", '
+                    'urls=["https://example.com/pricing"], '
+                    'schema={"type": "object", "properties": '
+                    '{"price": {"type": "string"}}})'
+                )
             if not schema:
-                return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
+                return (
+                    "Error: schema (JSON Schema dict) is required for "
+                    "extract_structured action. Provide a JSON Schema "
+                    "defining the data structure to extract. Example: "
+                    'schema={"type": "object", "properties": '
+                    '{"title": {"type": "string"}, "items": '
+                    '{"type": "array", "items": {"type": "object"}}}}'
+                )
             from wet_mcp.sources.structured import extract_structured
 
             return await _with_timeout(
@@ -1259,7 +1272,11 @@ async def extract(  # noqa: PLR0913
 
         case "agent":
             if not query:
-                return 'Error: query is required for agent action. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)'
+                return (
+                    "Error: query is required for agent action. "
+                    'Example: extract(action="agent", '
+                    'query="latest pydantic 2 changes", max_urls=5)'
+                )
             from wet_mcp.sources.agent_orchestrator import run_agent
 
             result = await _with_timeout(
