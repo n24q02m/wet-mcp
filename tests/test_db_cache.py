@@ -1,7 +1,9 @@
+from unittest.mock import MagicMock, patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+
 from wet_mcp.db import DocsDB
+
 
 def test_get_table_columns_caching(tmp_path):
     db_path = tmp_path / "test.db"
@@ -28,10 +30,12 @@ def test_get_table_columns_caching(tmp_path):
         # call_count should still be 1 if cached
         assert mock_conn.execute.call_count == 1
 
+
 def test_get_table_columns_invalid_table(tmp_path):
     db = DocsDB(tmp_path / "test.db")
     with pytest.raises(ValueError, match="Invalid table for column lookup"):
         db._get_table_columns("non_existent_table")
+
 
 def test_get_table_columns_doc_chunks(tmp_path):
     db = DocsDB(tmp_path / "test.db")
