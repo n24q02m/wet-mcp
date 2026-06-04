@@ -19,9 +19,7 @@ from loguru import logger
 SETUP_MARKER = Path.home() / ".wet-mcp" / ".setup-complete"
 
 # SearXNG install URL (zip avoids git clone filename issues)
-_SEARXNG_INSTALL_URL = (
-    "https://github.com/searxng/searxng/archive/refs/heads/master.zip"
-)
+_SEARXNG_INSTALL_URL = "https://github.com/searxng/searxng/archive/e6559c9ad6f3f5216833cff843b76ef759eb6223.zip"
 
 
 def _find_searx_package_dir() -> Path | None:
@@ -56,7 +54,7 @@ def patch_searxng_version() -> None:
                 'VERSION_TAG = "v0.0.0"\n'
                 'DOCKER_TAG = ""\n'
                 'GIT_URL = "https://github.com/searxng/searxng"\n'
-                'GIT_BRANCH = "master"\n'
+                'GIT_BRANCH = "e6559c9ad6f3f5216833cff843b76ef759eb6223"\n'
             )
             logger.debug(f"Created SearXNG version_frozen: {vf}")
     except Exception as e:
