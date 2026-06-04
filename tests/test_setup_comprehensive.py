@@ -297,11 +297,50 @@ def test_install_searxng_exception(mock_get_pip, _mock_find):
 # Test _setup_crawl4ai
 
 
+@patch("sys.platform", "linux")
 @patch("subprocess.run")
-def test_setup_crawl4ai_success(mock_run):
+def test_setup_crawl4ai_linux_success(mock_run):
+    # Simulate all subprocesses returning 0
     mock_run.return_value = MagicMock(returncode=0)
+
     assert _setup_crawl4ai() is True
+    # Should call migration, install-deps, and install chromium
+    assert mock_run.call_count == 3
+
+    # Verify the calls
+    calls = mock_run.call_args_list
+    assert "setup_home_directory" in calls[0][0][0][2]
+    assert "install-deps" in calls[1][0][0]
+    assert "install" in calls[2][0][0]
+    assert "--with-deps" in calls[2][0][0]
+
+
+@patch("sys.platform", "linux")
+@patch("subprocess.run")
+def test_setup_crawl4ai_linux_deps_fail_fallback(mock_run):
+    # migration succeeds, install-deps fails, install chromium succeeds
+    mock_run.side_effect = [
+        MagicMock(returncode=0),
+        subprocess.CalledProcessError(1, "install-deps"),
+        MagicMock(returncode=0),
+    ]
+
+    assert _setup_crawl4ai() is True
+    assert mock_run.call_count == 3
+
+
+@patch("sys.platform", "darwin")
+@patch("subprocess.run")
+def test_setup_crawl4ai_macos_success(mock_run):
+    mock_run.return_value = MagicMock(returncode=0)
+
+    assert _setup_crawl4ai() is True
+    # Should call migration and install chromium, but NOT install-deps
     assert mock_run.call_count == 2
+
+    calls = mock_run.call_args_list
+    assert "setup_home_directory" in calls[0][0][0][2]
+    assert "install" in calls[1][0][0]
 
 
 @patch("subprocess.run", side_effect=Exception("Test error"))

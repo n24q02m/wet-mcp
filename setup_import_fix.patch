@@ -1,0 +1,12 @@
+<<<<<<< SEARCH
+    try:
+        import sys
+
+        # 1. Setup home directory and run migration safely in a subprocess
+=======
+    try:
+        import subprocess
+        import sys
+
+        # 1. Setup home directory and run migration safely in a subprocess
+>>>>>>> REPLACE

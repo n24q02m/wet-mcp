@@ -211,8 +211,8 @@ def _setup_crawl4ai() -> bool:
     - Patchright chromium for stealth/undetected mode
     - Database migration
 
-    This ensures all required system libraries are installed on every OS
-    (Windows, Ubuntu 20+, macOS, etc.) without requiring manual steps.
+    On Linux, attempts to install system deps (requires appropriate permissions).
+    Falls back to browser-only install if system deps fail.
 
     Returns:
         True if setup succeeded.
@@ -232,14 +232,37 @@ def _setup_crawl4ai() -> bool:
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=True,
         )
 
-        # 2. Run playwright install safely
+        # 2. Try installing system dependencies (Linux only, may need root)
+        if sys.platform == "linux":
+            logger.info("Installing Playwright system dependencies...")
+            try:
+                subprocess.run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "playwright",
+                        "install-deps",
+                        "chromium",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    check=True,
+                )
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                logger.warning(f"Failed to install system dependencies: {e}")
+                logger.info("Falling back to browser-only installation...")
+
+        # 3. Run playwright install safely
         subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            check=True,
         )
 
         logger.info("crawl4ai setup completed successfully")
