@@ -293,3 +293,108 @@ async def test_crawl_multiple_roots(mock_crawler_instance):
     results = json.loads(result_json)
     urls = [r["url"] for r in results]
     assert set(urls) == {"https://example.com", "https://other.com"}
+
+
+@pytest.mark.asyncio
+async def test_crawl_resilience_exception(mock_crawler_instance):
+    """Test that crawl continues if one URL raises an exception."""
+
+    def side_effect(url, **kwargs):
+        if url == "https://fail.com":
+            raise Exception("Critical failure")
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.markdown = f"Content from {url}"
+        mock_result.metadata = {"title": f"Title {url}"}
+        mock_result.links = {"internal": []}
+        return mock_result
+
+    mock_crawler_instance.arun = AsyncMock(side_effect=side_effect)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        result_json = await crawl(
+            urls=["https://fail.com", "https://success.com"], depth=0
+        )
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert results[0]["url"] == "https://success.com"
+
+
+@pytest.mark.asyncio
+async def test_crawl_resilience_failure_result(mock_crawler_instance):
+    """Test that crawl continues if one URL returns a failed result."""
+
+    def side_effect(url, **kwargs):
+        mock_result = MagicMock()
+        if url == "https://fail.com":
+            mock_result.success = False
+            mock_result.error_message = "Not found"
+        else:
+            mock_result.success = True
+            mock_result.markdown = f"Content from {url}"
+            mock_result.metadata = {"title": f"Title {url}"}
+            mock_result.links = {"internal": []}
+        return mock_result
+
+    mock_crawler_instance.arun = AsyncMock(side_effect=side_effect)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        result_json = await crawl(
+            urls=["https://fail.com", "https://success.com"], depth=0
+        )
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert results[0]["url"] == "https://success.com"
+
+
+@pytest.mark.asyncio
+async def test_crawl_deep_resilience(mock_crawler_instance):
+    """Test resilience during deep crawl (discovered links failing)."""
+
+    def side_effect(url, **kwargs):
+        mock_result = MagicMock()
+        if url == "https://root.com":
+            mock_result.success = True
+            mock_result.markdown = "Root content"
+            mock_result.metadata = {"title": "Root"}
+            mock_result.links = {
+                "internal": [
+                    {"href": "https://fail-child.com"},
+                    {"href": "https://success-child.com"},
+                ]
+            }
+        elif url == "https://fail-child.com":
+            raise Exception("Child failure")
+        else:
+            mock_result.success = True
+            mock_result.markdown = "Child content"
+            mock_result.metadata = {"title": "Child"}
+            mock_result.links = {"internal": []}
+        return mock_result
+
+    mock_crawler_instance.arun = AsyncMock(side_effect=side_effect)
+
+    with patch(
+        "wet_mcp.sources.crawler._get_crawler",
+        new_callable=AsyncMock,
+        return_value=mock_crawler_instance,
+    ):
+        result_json = await crawl(urls=["https://root.com"], depth=1)
+
+    results = json.loads(result_json)
+    assert len(results) == 2
+    urls = [r["url"] for r in results]
+    assert "https://root.com" in urls
+    assert "https://success-child.com" in urls
+    assert "https://fail-child.com" not in urls
