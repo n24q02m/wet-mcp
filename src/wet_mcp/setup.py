@@ -219,9 +219,6 @@ def _setup_crawl4ai() -> bool:
     """
     logger.info("Running crawl4ai setup (browsers + system deps)...")
     try:
-        import subprocess
-        import sys
-
         # 1. Setup home directory and run migration safely in a subprocess
         subprocess.run(
             [
@@ -230,20 +227,31 @@ def _setup_crawl4ai() -> bool:
                 "from crawl4ai.install import setup_home_directory, run_migration; setup_home_directory(); run_migration()",
             ],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=120,
         )
 
         # 2. Run playwright install safely
         subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=300,
         )
 
         logger.info("crawl4ai setup completed successfully")
         return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"crawl4ai setup failed (code {e.returncode}): {e.stderr[:500]}")
+        logger.warning(
+            "crawl/extract features may not work. "
+            "Try running 'crawl4ai-setup' manually."
+        )
+        return False
     except Exception as e:
         logger.error(f"crawl4ai setup failed: {e}")
         logger.warning(
