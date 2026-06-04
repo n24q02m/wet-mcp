@@ -2373,7 +2373,11 @@ async def _do_docs_search(
     return json.dumps(
         {
             "status": "indexing_in_progress",
-            "message": f"Library '{library}' is currently being downloaded and indexed in the background (this may take 3-5 minutes). In the meantime, here are temporary web search results.",
+            "message": (
+                f"Library '{library}' is currently being downloaded and indexed in the "
+                "background (this may take 3-5 minutes). In the meantime, here are "
+                "temporary web search results."
+            ),
             "temporary_results": fallback_data.get("results", []),
             "library": library,
             "docs_url": docs_url,
