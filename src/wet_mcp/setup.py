@@ -8,7 +8,9 @@ This module handles automatic first-run setup:
 Setup runs automatically on first server start.
 """
 
+import importlib.util
 import platform
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -27,8 +29,6 @@ _SEARXNG_INSTALL_URL = (
 def _find_searx_package_dir() -> Path | None:
     """Find SearXNG package directory via importlib."""
     try:
-        import importlib.util
-
         spec = importlib.util.find_spec("searx")
         if spec and spec.submodule_search_locations:
             return Path(spec.submodule_search_locations[0])
@@ -123,8 +123,6 @@ def needs_setup() -> bool:
 
 def _get_pip_command() -> list[str]:
     """Get cross-platform pip install command."""
-    import shutil
-
     uv_path = shutil.which("uv")
     if uv_path:
         return [uv_path, "pip", "install", "--python", sys.executable]
@@ -219,9 +217,6 @@ def _setup_crawl4ai() -> bool:
     """
     logger.info("Running crawl4ai setup (browsers + system deps)...")
     try:
-        import subprocess
-        import sys
-
         # 1. Setup home directory and run migration safely in a subprocess
         subprocess.run(
             [
