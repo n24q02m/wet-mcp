@@ -1235,7 +1235,11 @@ async def extract(  # noqa: PLR0913
 
         case "convert":
             if not paths:
-                return 'Error: paths is required for convert action. Example: extract(action="convert", paths=["/home/user/report.pdf"])'
+                return (
+                    "Error: paths is required for convert action. "
+                    'Example: extract(action="convert", '
+                    'paths=["/home/user/report.pdf"])'
+                )
             from wet_mcp.sources.crawler import convert_local_files
 
             return await _with_timeout(
@@ -1245,9 +1249,22 @@ async def extract(  # noqa: PLR0913
 
         case "extract_structured":
             if not urls:
-                return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
+                return (
+                    "Error: urls is required for extract_structured action. "
+                    'Example: extract(action="extract_structured", '
+                    'urls=["https://example.com/pricing"], '
+                    'schema={"type": "object", "properties": '
+                    '{"price": {"type": "string"}}})'
+                )
             if not schema:
-                return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
+                return (
+                    "Error: schema (JSON Schema dict) is required for "
+                    "extract_structured action. Provide a JSON Schema defining "
+                    "the data structure to extract. Example: "
+                    'schema={"type": "object", "properties": '
+                    '{"title": {"type": "string"}, "items": '
+                    '{"type": "array", "items": {"type": "object"}}}}'
+                )
             from wet_mcp.sources.structured import extract_structured
 
             return await _with_timeout(
@@ -1259,7 +1276,11 @@ async def extract(  # noqa: PLR0913
 
         case "agent":
             if not query:
-                return 'Error: query is required for agent action. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)'
+                return (
+                    "Error: query is required for agent action. "
+                    'Example: extract(action="agent", '
+                    'query="latest pydantic 2 changes", max_urls=5)'
+                )
             from wet_mcp.sources.agent_orchestrator import run_agent
 
             result = await _with_timeout(
@@ -1277,9 +1298,20 @@ async def extract(  # noqa: PLR0913
 
         case "interact":
             if not url:
-                return 'Error: url is required for interact action. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "click", "selector": "#submit"}])'
+                return (
+                    "Error: url is required for interact action. "
+                    'Example: extract(action="interact", '
+                    'url="https://example.com/login", '
+                    'actions=[{"type": "click", "selector": "#submit"}])'
+                )
             if not actions:
-                return 'Error: actions is required for interact action. Provide a list of {type, selector?, description?, value?} ops. Example: actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}]'
+                return (
+                    "Error: actions is required for interact action. Provide a list "
+                    "of {type, selector?, description?, value?} ops. Example: "
+                    'actions=[{"type": "fill", "selector": "#email", '
+                    '"value": "x@y.com"}, {"type": "submit", '
+                    '"selector": "form"}]'
+                )
             from wet_mcp.sources.interact_orchestrator import run_interact
 
             result = await _with_timeout(
