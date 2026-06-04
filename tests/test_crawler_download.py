@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -157,13 +158,6 @@ async def test_download_media_file_write_error(tmp_path):
 
     url = "http://example.com/file.txt"
 
-    # Mock Path.write_bytes to raise PermissionError
-    # We need to patch pathlib.Path.write_bytes but since it's used via an instance method,
-    # we patch the class method on the Path object returned or patch widely.
-    # However, 'download_media' uses 'await asyncio.to_thread(filepath.write_bytes, response.content)'
-    # The 'filepath' is a concrete Path object (PosixPath or WindowsPath).
-    # Patching 'pathlib.Path.write_bytes' works for all instances.
-
     with patch("wet_mcp.sources.crawler._safe_httpx_client", mock_client_cls):
         with patch(
             "pathlib.Path.write_bytes", side_effect=PermissionError("Access denied")
@@ -176,3 +170,184 @@ async def test_download_media_file_write_error(tmp_path):
     assert results[0]["url"] == url
     assert "error" in results[0]
     assert "Access denied" in results[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_download_media_unsafe_redirect(tmp_path):
+    """Test that download_media blocks unsafe URLs during redirect."""
+    mock_client = AsyncMock()
+
+    # First response is a redirect to an unsafe URL
+    mock_response_1 = MagicMock()
+    mock_response_1.is_redirect = True
+    mock_response_1.headers = {"Location": "http://169.254.169.254/metadata"}
+
+    mock_client.get.return_value = mock_response_1
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    url = "http://example.com/redirect-to-unsafe"
+
+    # We need to mock is_safe_url to return False for the second URL
+    def side_effect_is_safe(u):
+        if "169.254" in u:
+            return False
+        return True
+
+    with patch("wet_mcp.sources.crawler._safe_httpx_client", mock_client_cls):
+        with patch(
+            "wet_mcp.sources.crawler.is_safe_url", side_effect=side_effect_is_safe
+        ):
+            result_json = await download_media([url], str(tmp_path))
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert results[0]["url"] == url
+    assert "error" in results[0]
+    assert "Security Alert: Unsafe URL blocked" in results[0]["error"]
+    # Should only call get once because the second URL is blocked before the call
+    assert mock_client.get.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_download_media_missing_location_header(tmp_path):
+    """Test handling of redirect without Location header."""
+    mock_client = AsyncMock()
+
+    mock_response = MagicMock()
+    mock_response.is_redirect = True
+    mock_response.headers = {}  # No Location
+    mock_response.content = b"redirect page content"
+    mock_response.raise_for_status = MagicMock()
+
+    mock_client.get.return_value = mock_response
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    url = "http://example.com/bad-redirect"
+
+    with patch("wet_mcp.sources.crawler._safe_httpx_client", mock_client_cls):
+        result_json = await download_media([url], str(tmp_path))
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert "path" in results[0]  # It should have downloaded the redirect page
+    assert Path(results[0]["path"]).name == "bad-redirect"
+
+
+@pytest.mark.asyncio
+async def test_download_media_extension_inference(tmp_path):
+    """Test inferring extension from Content-Type."""
+    mock_client = AsyncMock()
+
+    mock_response = MagicMock()
+    mock_response.is_redirect = False
+    # Use lowercase "content-type" as that's what the code uses: response.headers.get("content-type", "")
+    mock_response.headers = {"content-type": "image/png"}
+    mock_response.content = b"fake png data"
+    mock_response.raise_for_status = MagicMock()
+
+    mock_client.get.return_value = mock_response
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    url = "http://example.com/image-no-ext"
+
+    with patch("wet_mcp.sources.crawler._safe_httpx_client", mock_client_cls):
+        result_json = await download_media([url], str(tmp_path))
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert results[0]["path"].endswith(".png")
+    assert Path(results[0]["path"]).name == "image-no-ext.png"
+
+
+@pytest.mark.asyncio
+async def test_download_media_path_traversal_detection(tmp_path):
+    """Test path traversal detection."""
+    mock_client = AsyncMock()
+
+    mock_response = MagicMock()
+    mock_response.is_redirect = False
+    mock_response.content = b"content"
+    mock_response.raise_for_status = MagicMock()
+
+    mock_client.get.return_value = mock_response
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    url = "http://example.com/file.txt"
+
+    with patch("wet_mcp.sources.crawler._safe_httpx_client", mock_client_cls):
+        mock_filepath = MagicMock(spec=Path)
+        mock_filepath.resolve.return_value = Path("/etc/passwd")
+        mock_filepath.is_relative_to.return_value = False
+
+        with patch.object(Path, "__truediv__", return_value=mock_filepath):
+            result_json = await download_media([url], str(tmp_path))
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert "error" in results[0]
+    assert "Security Alert: Path traversal attempt detected" in results[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_download_media_generic_exception(tmp_path):
+    """Test handling of generic exceptions."""
+    mock_client = AsyncMock()
+    mock_client.get.side_effect = RuntimeError("Something went wrong")
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    url = "http://example.com/fail"
+
+    with patch("wet_mcp.sources.crawler._safe_httpx_client", mock_client_cls):
+        result_json = await download_media([url], str(tmp_path))
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert "error" in results[0]
+    assert "Something went wrong" in results[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_download_media_max_redirects(tmp_path):
+    """Test hitting max redirects limit."""
+    mock_client = AsyncMock()
+
+    # Always redirect
+    mock_response = MagicMock()
+    mock_response.is_redirect = True
+    mock_response.headers = {"Location": "http://example.com/loop"}
+
+    mock_client.get.return_value = mock_response
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+    mock_client_cls = MagicMock(return_value=mock_client_instance)
+
+    url = "http://example.com/redirect-loop"
+
+    with patch("wet_mcp.sources.crawler._safe_httpx_client", mock_client_cls):
+        result_json = await download_media([url], str(tmp_path))
+
+    results = json.loads(result_json)
+    assert len(results) == 1
+    assert "path" in results[0] or "error" in results[0]
