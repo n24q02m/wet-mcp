@@ -312,6 +312,15 @@ class TestServerSetupToolNewActions:
             mock_settings.setup_providers.assert_called_once()
 
 
+class TestSaveCredentialsEdgeCases:
+    def test_save_credentials_missing_context(self):
+        from wet_mcp.credential_state import save_credentials
+        from unittest.mock import patch
+        with patch("wet_mcp.credential_state.PerPluginStore") as mock_store:
+            assert save_credentials({"key": "val"}, {}) is None
+            mock_store.assert_not_called()
+
+
 class TestCredentialIsolation:
     """save_credentials must NOT write to peer MCP server configs.
 
