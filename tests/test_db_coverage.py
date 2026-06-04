@@ -706,3 +706,17 @@ class TestMarkLibraryIndexed:
             # If it didn't return early, there would be a second call with UPDATE
             assert mock_conn.execute.call_count == 1
             assert "PRAGMA table_info" in mock_conn.execute.call_args[0][0]
+
+# ---------------------------------------------------------------------------
+# export_jsonl with empty database (edge case)
+# ---------------------------------------------------------------------------
+
+
+class TestExportJsonlEmpty:
+    def test_export_jsonl_empty_db(self, tmp_path):
+        """export_jsonl returns an empty string for a clean database."""
+        db = DocsDB(tmp_path / "empty.db", embedding_dims=0)
+        try:
+            assert db.export_jsonl() == ""
+        finally:
+            db.close()
