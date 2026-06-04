@@ -261,7 +261,7 @@ def test_install_searxng_success(
 @patch("wet_mcp.setup._get_pip_command", return_value=["pip", "install"])
 @patch("subprocess.run")
 def test_install_searxng_deps_fail(mock_run, mock_get_pip, _mock_find):
-    mock_run.return_value = MagicMock(returncode=1, stderr="deps failed")
+    mock_run.side_effect = subprocess.CalledProcessError(1, ["cmd"], stderr="deps failed")
 
     assert _install_searxng() is False
     assert mock_run.call_count == 1
@@ -274,7 +274,7 @@ def test_install_searxng_main_fail(mock_run, mock_get_pip, _mock_find):
     # First call (deps) succeeds, second call (main) fails
     mock_run.side_effect = [
         MagicMock(returncode=0),
-        MagicMock(returncode=1, stderr="main failed"),
+        subprocess.CalledProcessError(1, ["cmd"], stderr="main failed"),
     ]
 
     assert _install_searxng() is False

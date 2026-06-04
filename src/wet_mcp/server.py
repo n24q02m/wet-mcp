@@ -179,11 +179,11 @@ def _detect_gh_token() -> str | None:
             capture_output=True,
             text=True,
             timeout=5,
+            check=True,
         )
-        if result.returncode == 0:
-            token = result.stdout.strip()
-            if token:
-                return token
+        token = result.stdout.strip()
+        if token:
+            return token
     except Exception:
         pass
     return None

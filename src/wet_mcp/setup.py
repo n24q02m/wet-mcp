@@ -153,7 +153,7 @@ def _install_searxng() -> bool:
     try:
         # Pre-install build dependencies
         pip_cmd = _get_pip_command()
-        deps_result = subprocess.run(
+        subprocess.run(
             [
                 *pip_cmd,
                 "--quiet",
@@ -167,13 +167,11 @@ def _install_searxng() -> bool:
             encoding="utf-8",
             text=True,
             timeout=120,
+            check=True,
         )
-        if deps_result.returncode != 0:
-            logger.error(f"Build deps install failed: {deps_result.stderr[:300]}")
-            return False
 
         # Install SearXNG with --no-build-isolation
-        result = subprocess.run(
+        subprocess.run(
             [
                 *pip_cmd,
                 "--quiet",
@@ -185,15 +183,15 @@ def _install_searxng() -> bool:
             encoding="utf-8",
             text=True,
             timeout=300,
+            check=True,
         )
-        if result.returncode == 0:
-            logger.info("SearXNG installed successfully")
-            patch_searxng_version()
-            patch_searxng_windows()
-            return True
-        else:
-            logger.error(f"SearXNG install failed: {result.stderr[:300]}")
-            return False
+        logger.info("SearXNG installed successfully")
+        patch_searxng_version()
+        patch_searxng_windows()
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"SearXNG install failed (exit {e.returncode}): {e.stderr[:300]}")
+        return False
     except subprocess.TimeoutExpired:
         logger.error("SearXNG installation timed out")
         return False
@@ -230,16 +228,18 @@ def _setup_crawl4ai() -> bool:
                 "from crawl4ai.install import setup_home_directory, run_migration; setup_home_directory(); run_migration()",
             ],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=True,
         )
 
         # 2. Run playwright install safely
         subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"],
             stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=True,
         )
 
         logger.info("crawl4ai setup completed successfully")
