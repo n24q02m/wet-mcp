@@ -1462,7 +1462,7 @@ async def help(tool_name: str = "search") -> str:
 
     try:
         doc_file = files("wet_mcp.docs").joinpath(f"{tool_name}.md")
-        return doc_file.read_text()
+        return await asyncio.to_thread(doc_file.read_text)
     except FileNotFoundError:
         return f"Error: No documentation found for tool '{tool_name}'"
     except Exception as e:
