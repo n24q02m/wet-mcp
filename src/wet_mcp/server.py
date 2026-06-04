@@ -28,14 +28,17 @@ from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 from wet_mcp.security import wrap_external_content
 from wet_mcp.sources.crawler import (
+    batch_extract,
+    convert_local_files,
+    download_media,
+    list_media,
+    shutdown_crawler,
+)
+from wet_mcp.sources.crawler import (
     crawl as _crawl,
 )
 from wet_mcp.sources.crawler import (
     extract as _extract,
-)
-from wet_mcp.sources.crawler import (
-    list_media,
-    shutdown_crawler,
 )
 from wet_mcp.sources.crawler import (
     sitemap as _sitemap,
@@ -1178,7 +1181,6 @@ async def extract(  # noqa: PLR0913
         case "batch":
             if not urls:
                 return 'Error: urls is required for batch action. Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])'
-            from wet_mcp.sources.crawler import batch_extract
 
             return await _with_timeout(
                 batch_extract(urls=urls, format=format, stealth=stealth),
@@ -1236,7 +1238,6 @@ async def extract(  # noqa: PLR0913
         case "convert":
             if not paths:
                 return 'Error: paths is required for convert action. Example: extract(action="convert", paths=["/home/user/report.pdf"])'
-            from wet_mcp.sources.crawler import convert_local_files
 
             return await _with_timeout(
                 convert_local_files(paths=paths),
@@ -1363,8 +1364,6 @@ async def media(  # noqa: PLR0913
     blocked = _require_credentials()
     if blocked:
         return blocked
-
-    from wet_mcp.sources.crawler import download_media
 
     match action:
         case "list":
