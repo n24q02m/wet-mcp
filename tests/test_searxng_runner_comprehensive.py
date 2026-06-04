@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from web_core.search.runner import (
+
+from wet_mcp.config import settings
+from wet_mcp.searxng_runner import (
     _cleanup_process,
     _ensure_searxng_locked,
     _find_available_port,
@@ -28,10 +30,6 @@ from web_core.search.runner import (
     _try_reuse_existing,
     _wait_for_service,
     _write_discovery,
-)
-
-from wet_mcp.config import settings
-from wet_mcp.searxng_runner import (
     ensure_searxng,
 )
 
