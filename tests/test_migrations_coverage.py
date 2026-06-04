@@ -4,22 +4,23 @@ import sqlite3
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-from loguru import logger
 from alembic import command
 from alembic.config import Config
+from loguru import logger
 
 from wet_mcp.migrations import (
     _ALEMBIC_INI_PATH,
     _ALEMBIC_SCRIPT_LOCATION,
-    _read_alembic_version,
     _backup_db_file,
+    _read_alembic_version,
     run_migrations_on_startup,
 )
+
 
 def test_read_alembic_version_missing_db(tmp_path: Path):
     """_read_alembic_version returns None if DB file does not exist."""
     assert _read_alembic_version(tmp_path / "missing.db") is None
+
 
 def test_read_alembic_version_empty_table(tmp_path: Path):
     """_read_alembic_version returns None if table exists but is empty."""
@@ -30,9 +31,11 @@ def test_read_alembic_version_empty_table(tmp_path: Path):
     conn.close()
     assert _read_alembic_version(db_path) is None
 
+
 def test_backup_db_file_no_source(tmp_path: Path):
     """_backup_db_file returns None if source does not exist."""
     assert _backup_db_file(tmp_path / "missing.db") is None
+
 
 def test_backup_db_file_with_sidecars(tmp_path: Path):
     """_backup_db_file copies WAL/SHM sidecars if present."""
@@ -48,9 +51,16 @@ def test_backup_db_file_with_sidecars(tmp_path: Path):
     assert backup_path.exists()
     assert backup_path.read_text() == "db content"
     assert backup_path.with_suffix(backup_path.suffix + "-wal").exists()
-    assert backup_path.with_suffix(backup_path.suffix + "-wal").read_text() == "wal content"
+    assert (
+        backup_path.with_suffix(backup_path.suffix + "-wal").read_text()
+        == "wal content"
+    )
     assert backup_path.with_suffix(backup_path.suffix + "-shm").exists()
-    assert backup_path.with_suffix(backup_path.suffix + "-shm").read_text() == "shm content"
+    assert (
+        backup_path.with_suffix(backup_path.suffix + "-shm").read_text()
+        == "shm content"
+    )
+
 
 def test_run_migrations_on_startup_no_config(tmp_path: Path, caplog):
     """run_migrations_on_startup skips if alembic.ini is missing."""
@@ -65,6 +75,7 @@ def test_run_migrations_on_startup_no_config(tmp_path: Path, caplog):
     finally:
         logger.remove(handler_id)
 
+
 def test_run_migrations_on_startup_already_at_head(tmp_path: Path, caplog):
     """run_migrations_on_startup is a no-op if already at head."""
     db_path = tmp_path / "docs.db"
@@ -78,11 +89,13 @@ def test_run_migrations_on_startup_already_at_head(tmp_path: Path, caplog):
     handler_id = logger.add(caplog.handler, format="{message}")
     try:
         import logging
+
         with caplog.at_level(logging.DEBUG):
             run_migrations_on_startup(db_path)
         assert "already at head revision" in caplog.text
     finally:
         logger.remove(handler_id)
+
 
 def test_run_migrations_on_startup_unstamped(tmp_path: Path, caplog):
     """run_migrations_on_startup stamps and upgrades unstamped DB."""
