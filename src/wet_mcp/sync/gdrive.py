@@ -603,9 +603,9 @@ async def setup_google_auth(
         logger.error("GOOGLE_DRIVE_CLIENT_ID or CLIENT_SECRET not configured")
         return False
 
-    # 1. Request device code
-    try:
-        async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient() as client:
+        # 1. Request device code
+        try:
             response = await client.post(
                 _DEVICE_CODE_URL,
                 data={
@@ -621,34 +621,33 @@ async def setup_google_auth(
 
             device_data = response.json()
 
-    except Exception as e:
-        logger.error(f"Device code request error: {e}")
-        return False
+        except Exception as e:
+            logger.error(f"Device code request error: {e}")
+            return False
 
-    device_code = device_data["device_code"]
-    user_code = device_data["user_code"]
-    verification_url = device_data["verification_url"]
-    interval = device_data.get("interval", 5)
-    expires_in = device_data.get("expires_in", 1800)
+        device_code = device_data["device_code"]
+        user_code = device_data["user_code"]
+        verification_url = device_data["verification_url"]
+        interval = device_data.get("interval", 5)
+        expires_in = device_data.get("expires_in", 1800)
 
-    # Do NOT auto-open the browser from the background sync path: this
-    # function is also hit by the periodic sync loop (every SYNC_INTERVAL
-    # seconds) whenever the refresh token is missing or revoked, and we
-    # don't want to surprise an idle user with repeated tabs. The
-    # user-initiated form path (credential_state.gdrive_next_step) is the
-    # correct place to open the browser; here we just log the URL.
+        # Do NOT auto-open the browser from the background sync path: this
+        # function is also hit by the periodic sync loop (every SYNC_INTERVAL
+        # seconds) whenever the refresh token is missing or revoked, and we
+        # don't want to surprise an idle user with repeated tabs. The
+        # user-initiated form path (credential_state.gdrive_next_step) is the
+        # correct place to open the browser; here we just log the URL.
 
-    # 2. Present code to user
-    auth_message = (
-        f"Google Drive Authorization\n"
-        f"Visit: {verification_url}\n"
-        f"Enter code: {user_code}"
-    )
+        # 2. Present code to user
+        auth_message = (
+            f"Google Drive Authorization\n"
+            f"Visit: {verification_url}\n"
+            f"Enter code: {user_code}"
+        )
 
-    if relay_url and session_id:
-        # Send via relay messaging
-        try:
-            async with httpx.AsyncClient() as client:
+        if relay_url and session_id:
+            # Send via relay messaging
+            try:
                 await client.post(
                     f"{relay_url}/api/sessions/{session_id}/messages",
                     json={
@@ -660,19 +659,18 @@ async def setup_google_auth(
                         },
                     },
                 )
-        except Exception as e:
-            logger.warning(f"Failed to send code via relay: {e}")
-    else:
-        print(f"\n{auth_message}\n", file=sys.stderr, flush=True)
+            except Exception as e:
+                logger.warning(f"Failed to send code via relay: {e}")
+        else:
+            print(f"\n{auth_message}\n", file=sys.stderr, flush=True)
 
-    # 3. Poll for token
-    deadline = time.time() + expires_in
+        # 3. Poll for token
+        deadline = time.time() + expires_in
 
-    while time.time() < deadline:
-        await asyncio.sleep(interval)
+        while time.time() < deadline:
+            await asyncio.sleep(interval)
 
-        try:
-            async with httpx.AsyncClient() as client:
+            try:
                 response = await client.post(
                     _TOKEN_URL,
                     data={
@@ -703,7 +701,7 @@ async def setup_google_auth(
                 if error == "authorization_pending":
                     continue
                 elif error == "slow_down":
-                    interval += 1
+                    interval += 5
                     continue
                 elif error in ("access_denied", "expired_token"):
                     logger.error(f"Auth failed: {error}")
@@ -712,9 +710,9 @@ async def setup_google_auth(
                     logger.error(f"Unexpected error: {data}")
                     return False
 
-        except Exception as e:
-            logger.error(f"Token poll error: {e}")
-            return False
+            except Exception as e:
+                logger.error(f"Token poll error: {e}")
+                return False
 
     logger.error("Device code expired")
     return False
