@@ -314,8 +314,10 @@ class TestServerSetupToolNewActions:
 
 class TestSaveCredentialsEdgeCases:
     def test_save_credentials_missing_context(self):
-        from wet_mcp.credential_state import save_credentials
         from unittest.mock import patch
+
+        from wet_mcp.credential_state import save_credentials
+
         with patch("wet_mcp.credential_state.PerPluginStore") as mock_store:
             assert save_credentials({"key": "val"}, {}) is None
             mock_store.assert_not_called()
