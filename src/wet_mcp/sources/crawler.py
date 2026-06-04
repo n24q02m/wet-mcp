@@ -665,12 +665,17 @@ async def download_media(
                 # Extract filename and decode URL-encoded characters to
                 # prevent path traversal via %2F..%2F sequences.
                 import mimetypes
-                from urllib.parse import unquote
+                from urllib.parse import unquote, urlparse
 
-                raw_name = target_url.split("/")[-1].split("?")[0] or "download"
+                # Extract the last component of the path safely
+                parsed = urlparse(target_url)
+                raw_name = Path(parsed.path).name or "download"
                 decoded_name = unquote(raw_name)
-                # Strip any directory components to get a flat filename
-                filename = Path(decoded_name).name or "download"
+                # Strip any directory components again after unquoting to handle
+                # encoded separators (e.g. %2f) or traversal sequences.
+                filename = Path(decoded_name).name
+                if filename in (".", "..", ""):
+                    filename = "download"
 
                 # If filename has no extension, infer from Content-Type
                 if "." not in filename:
