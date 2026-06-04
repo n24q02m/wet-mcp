@@ -570,10 +570,14 @@ async def list_media(
     sem = _get_semaphore()
 
     async with sem:
-        result = await crawler.arun(  # ty: ignore[missing-argument]
-            url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
-            config=CrawlerRunConfig(verbose=False),
-        )
+        try:
+            result = await crawler.arun(  # ty: ignore[missing-argument]
+                url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+                config=CrawlerRunConfig(verbose=False),
+            )
+        except Exception as e:
+            logger.error(f"Error scanning media from {url}: {e}")
+            return json.dumps({"error": str(e)})
 
         if not result.success:
             return json.dumps({"error": result.error_message or "Failed to load page"})
