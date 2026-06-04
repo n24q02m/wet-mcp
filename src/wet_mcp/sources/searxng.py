@@ -158,3 +158,7 @@ async def search(
                 pass
 
         return json.dumps({"error": error_msg})
+    except Exception as e:
+        error_msg = f"Unexpected error: {str(e)}"
+        logger.error(f"SearXNG search failed: {error_msg}")
+        return json.dumps({"error": error_msg})
