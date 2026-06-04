@@ -16,7 +16,6 @@ transitive dependency, so we no longer require a direct
 """
 
 import asyncio
-import collections
 import json
 import os
 import tempfile
@@ -426,14 +425,18 @@ async def crawl(
 
             try:
                 url, current_depth = await asyncio.wait_for(queue.get(), timeout=0.1)
-            except (asyncio.TimeoutError, asyncio.QueueEmpty):
+            except (TimeoutError, asyncio.QueueEmpty):
                 if queue.empty():
                     break
                 continue
 
             try:
                 async with results_lock:
-                    if url in visited or current_depth > depth or len(all_results) >= max_pages:
+                    if (
+                        url in visited
+                        or current_depth > depth
+                        or len(all_results) >= max_pages
+                    ):
                         queue.task_done()
                         continue
 
@@ -544,14 +547,18 @@ async def sitemap(
 
             try:
                 url, current_depth = await asyncio.wait_for(queue.get(), timeout=0.1)
-            except (asyncio.TimeoutError, asyncio.QueueEmpty):
+            except (TimeoutError, asyncio.QueueEmpty):
                 if queue.empty():
                     break
                 continue
 
             try:
                 async with results_lock:
-                    if url in visited or current_depth > depth or len(all_urls) >= max_pages:
+                    if (
+                        url in visited
+                        or current_depth > depth
+                        or len(all_urls) >= max_pages
+                    ):
                         queue.task_done()
                         continue
 
@@ -573,7 +580,9 @@ async def sitemap(
                         if result.success and current_depth < depth:
                             for link in result.links.get("internal", [])[:20]:
                                 link_url = (
-                                    link.get("href", "") if isinstance(link, dict) else link
+                                    link.get("href", "")
+                                    if isinstance(link, dict)
+                                    else link
                                 )
                                 if link_url:
                                     queue.put_nowait((link_url, current_depth + 1))
@@ -772,6 +781,7 @@ class DomainRateLimiter:
         global_max: int = 10,
     ):
         from collections import defaultdict
+
         from aiolimiter import AsyncLimiter
 
         self._domain_sems: dict[str, asyncio.Semaphore] = defaultdict(
