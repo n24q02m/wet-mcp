@@ -103,58 +103,63 @@ async def search(
     """
     logger.info(f"Searching SearXNG: {query}")
 
-    # Pre-search health check + auto-restart if needed
-    active_url = await _ensure_searxng_healthy(searxng_url)
-
     try:
-        import dataclasses
+        # Pre-search health check + auto-restart if needed
+        active_url = await _ensure_searxng_healthy(searxng_url)
 
-        results = await _wc_search(
-            active_url,
-            query,
-            categories=categories,
-            max_results=max_results,
-            time_range=time_range,
-            language=language,
-            include_domains=include_domains,
-            exclude_domains=exclude_domains,
-        )
+        try:
+            import dataclasses
 
-        output = {
-            "results": [dataclasses.asdict(r) for r in results],
-            "total": len(results),
-            "query": query,
-        }
+            results = await _wc_search(
+                active_url,
+                query,
+                categories=categories,
+                max_results=max_results,
+                time_range=time_range,
+                language=language,
+                include_domains=include_domains,
+                exclude_domains=exclude_domains,
+            )
 
-        logger.info(f"Found {len(results)} results for: {query}")
-        return json.dumps(output, ensure_ascii=False, indent=2)
+            output = {
+                "results": [dataclasses.asdict(r) for r in results],
+                "total": len(results),
+                "query": query,
+            }
 
-    except SearchError as e:
-        error_msg = str(e)
-        logger.error(f"SearXNG search failed: {error_msg}")
+            logger.info(f"Found {len(results)} results for: {query}")
+            return json.dumps(output, ensure_ascii=False, indent=2)
 
-        # On connection errors, try restart + one more attempt
-        if "Request error" in error_msg:
-            logger.info("Attempting SearXNG restart before final retry...")
-            active_url = await _ensure_searxng_healthy(active_url)
-            try:
-                results = await _wc_search(
-                    active_url,
-                    query,
-                    categories=categories,
-                    max_results=max_results,
-                    time_range=time_range,
-                    language=language,
-                    include_domains=include_domains,
-                    exclude_domains=exclude_domains,
-                )
-                output = {
-                    "results": [dataclasses.asdict(r) for r in results],
-                    "total": len(results),
-                    "query": query,
-                }
-                return json.dumps(output, ensure_ascii=False, indent=2)
-            except SearchError:
-                pass
+        except SearchError as e:
+            error_msg = str(e)
+            logger.error(f"SearXNG search failed: {error_msg}")
 
+            # On connection errors, try restart + one more attempt
+            if "Request error" in error_msg:
+                logger.info("Attempting SearXNG restart before final retry...")
+                active_url = await _ensure_searxng_healthy(active_url)
+                try:
+                    results = await _wc_search(
+                        active_url,
+                        query,
+                        categories=categories,
+                        max_results=max_results,
+                        time_range=time_range,
+                        language=language,
+                        include_domains=include_domains,
+                        exclude_domains=exclude_domains,
+                    )
+                    output = {
+                        "results": [dataclasses.asdict(r) for r in results],
+                        "total": len(results),
+                        "query": query,
+                    }
+                    return json.dumps(output, ensure_ascii=False, indent=2)
+                except SearchError:
+                    pass
+
+            return json.dumps({"error": error_msg})
+    except Exception as e:
+        error_msg = f"Unexpected SearXNG search error: {e}"
+        logger.exception(error_msg)
         return json.dumps({"error": error_msg})
