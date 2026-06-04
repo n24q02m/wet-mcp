@@ -9,6 +9,7 @@ from pathlib import Path
 from loguru import logger
 
 from wet_mcp.config import settings
+from wet_mcp.security import is_safe_local_path
 
 # ---------------------------------------------------------------------------
 # Capability maps (vision / audio support detection)
@@ -376,13 +377,10 @@ async def analyze_media(
     """Analyze media file using configured LLM with auto-capability detection."""
     if not _has_llm_provider():
         return "Error: LLM analysis requires API keys (GEMINI_API_KEY, OPENAI_API_KEY, or XAI_API_KEY) to be configured."
-
-    path_obj = Path(media_path).resolve()
     download_dir = Path(settings.download_dir).expanduser().resolve()
-    if not path_obj.is_relative_to(download_dir):
-        return f"Error: Access denied — file must be within download directory ({download_dir})"
-    if not path_obj.exists():
-        return f"Error: File not found at {media_path}"
+    safe_path = is_safe_local_path(media_path, allowed_dirs=[download_dir])
+    if not safe_path:
+        return f"Error: Access denied or file not found at {media_path}. Ensure it is within the download directory ({download_dir}) and is not a sensitive or oversized file."
 
     # Determine mime type
     mime_type, _ = mimetypes.guess_type(media_path)

@@ -145,7 +145,7 @@ def test_analyze_media_file_not_found(mock_settings, tmp_path):
     settings.download_dir = str(tmp_path)
     with patch("wet_mcp.llm._has_llm_provider", return_value=True):
         result = asyncio.run(analyze_media(str(tmp_path / "non_existent_file.jpg")))
-    assert "Error: File not found" in result
+    assert "Error: Access denied or file not found" in result
 
 
 @patch("wet_mcp.llm.acompletion")
