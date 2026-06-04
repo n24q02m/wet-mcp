@@ -23,6 +23,28 @@ from wet_mcp.config import settings
 # ---------------------------------------------------------------------------
 
 _wc_original_install = _wc_runner._install_searxng
+def _get_pip_command() -> list[str]:
+    """Get cross-platform pip install command.
+
+    Priority:
+    1. uv pip (for uv environments - no pip module)
+    2. pip (for traditional venvs)
+    3. python -m pip (fallback)
+    """
+    import shutil
+    import sys
+
+    uv_path = shutil.which("uv")
+    if uv_path:
+        return [uv_path, "pip", "install", "--python", sys.executable]
+
+    pip_path = shutil.which("pip")
+    if pip_path:
+        return [pip_path, "install"]
+
+    return [sys.executable, "-m", "pip", "install"]
+
+
 
 
 def _patched_install_searxng() -> bool:
@@ -88,7 +110,6 @@ from web_core.search.runner import (  # noqa: F401, E402
     _ensure_searxng_locked,
     _find_available_port,
     _force_kill_process,
-    _get_pip_command,
     _get_process_kwargs,
     _get_settings_path,
     _get_startup_lock,
