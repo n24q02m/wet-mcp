@@ -113,7 +113,7 @@ def _set_secure_permissions(path: Path) -> None:
             subprocess.run(
                 ["icacls", str(path), "/inheritance:e"],
                 capture_output=True,
-                check=False,
+                check=True,
             )
     except (OSError, subprocess.SubprocessError) as e:
         logger.debug(f"icacls failed for {path}: {e}")
