@@ -312,7 +312,7 @@ async def extract(
     """Extract content from URLs via web-core ``ScrapingAgent``.
 
     The agent walks a 3-strategy chain (``basic_http`` → ``tls_spoof`` →
-    ``headless``) with cache-recommended ordering and LLM selector
+    ``headless``)) with cache-recommended ordering and LLM selector
     inference fallback. Output is post-processed into smart-chunks dicts
     (``clean_text`` / ``markdown`` / ``structured_data`` / ``code_blocks``
     / ``metadata``) per spec §4.2.
@@ -387,7 +387,10 @@ async def crawl(
     format: str = "markdown",
     stealth: bool = True,
 ) -> str:
-    """Deep crawl from root URLs.
+    """Deep crawl from root URLs in parallel.
+
+    Uses a worker pool to concurrently crawl URLs from multiple roots and
+    their discovered descendants, respecting depth and max_pages limits.
 
     Args:
         urls: List of root URLs
@@ -399,75 +402,104 @@ async def crawl(
     Returns:
         JSON string with crawled content
     """
-    logger.info(f"Crawling {len(urls)} URLs with depth={depth}")
+    logger.info(f"Crawling {len(urls)} URLs with depth={depth} (parallel)")
 
-    all_results = []
+    all_results: list[dict] = []
     visited: set[str] = set()
-
-    crawler = await _get_crawler(stealth)
-    sem = _get_semaphore()
+    queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue()
+    results_lock = asyncio.Lock()
 
     for root_url in urls:
         if not is_safe_url(root_url):
             logger.warning(f"Skipping unsafe URL: {root_url}")
             continue
+        queue.put_nowait((root_url, 0))
 
-        # Use deque for O(1) pops (BFS)
-        to_crawl: collections.deque[tuple[str, int]] = collections.deque(
-            [(root_url, 0)]
-        )
+    crawler = await _get_crawler(stealth)
+    sem = _get_semaphore()
 
-        while to_crawl and len(all_results) < max_pages:
-            url, current_depth = to_crawl.popleft()
+    async def worker():
+        while True:
+            async with results_lock:
+                if len(all_results) >= max_pages:
+                    break
 
-            if url in visited or current_depth > depth:
+            try:
+                url, current_depth = await asyncio.wait_for(queue.get(), timeout=0.1)
+            except (asyncio.TimeoutError, asyncio.QueueEmpty):
+                if queue.empty():
+                    break
                 continue
 
-            # Validate every URL (not just root) to prevent SSRF
-            # via malicious internal links on attacker-controlled pages
-            if not is_safe_url(url):
-                logger.warning(f"Skipping unsafe discovered URL: {url}")
-                continue
+            try:
+                async with results_lock:
+                    if url in visited or current_depth > depth or len(all_results) >= max_pages:
+                        queue.task_done()
+                        continue
 
-            visited.add(url)
+                    if not is_safe_url(url):
+                        logger.warning(f"Skipping unsafe discovered URL: {url}")
+                        queue.task_done()
+                        continue
 
-            async with sem:
-                try:
-                    result = await crawler.arun(  # ty: ignore[missing-argument]
-                        url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )
+                    visited.add(url)
 
-                    if result.success:
-                        content = (
-                            result.markdown
-                            if format == "markdown"
-                            else result.cleaned_html
-                        )
-                        all_results.append(
-                            {
-                                "url": url,
-                                "depth": current_depth,
-                                "title": result.metadata.get("title", ""),
-                                "content": content[:5000],  # Limit content size
-                            }
+                async with sem:
+                    try:
+                        result = await crawler.arun(  # ty: ignore[missing-argument]
+                            url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+                            config=CrawlerRunConfig(verbose=False),
                         )
 
-                        # Add internal links for next depth
-                        if current_depth < depth:
-                            internal_links = result.links.get("internal", [])
-                            for link_item in internal_links[:10]:
-                                # Crawl4AI returns dicts with 'href' key
-                                link_url = (
-                                    link_item.get("href", "")
-                                    if isinstance(link_item, dict)
-                                    else link_item
-                                )
-                                if link_url and link_url not in visited:
-                                    to_crawl.append((link_url, current_depth + 1))
+                        if result.success:
+                            content = (
+                                result.markdown
+                                if format == "markdown"
+                                else result.cleaned_html
+                            )
 
-                except Exception as e:
-                    logger.error(f"Error crawling {url}: {e}")
+                            async with results_lock:
+                                if len(all_results) < max_pages:
+                                    all_results.append(
+                                        {
+                                            "url": url,
+                                            "depth": current_depth,
+                                            "title": result.metadata.get("title", ""),
+                                            "content": content[:5000],
+                                        }
+                                    )
+
+                            if current_depth < depth:
+                                internal_links = result.links.get("internal", [])
+                                for link_item in internal_links[:10]:
+                                    link_url = (
+                                        link_item.get("href", "")
+                                        if isinstance(link_item, dict)
+                                        else link_item
+                                    )
+                                    if link_url:
+                                        queue.put_nowait((link_url, current_depth + 1))
+
+                    except Exception as e:
+                        logger.error(f"Error crawling {url}: {e}")
+            finally:
+                queue.task_done()
+
+    num_workers = min(_MAX_CONCURRENT_OPS, max_pages)
+    workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
+
+    while any(not w.done() for w in workers):
+        async with results_lock:
+            if len(all_results) >= max_pages:
+                break
+        if queue.empty() and queue._unfinished_tasks == 0:
+            break
+        await asyncio.sleep(0.1)
+
+    for w in workers:
+        w.cancel()
+    if workers:
+        await asyncio.gather(*workers, return_exceptions=True)
 
     logger.info(f"Crawled {len(all_results)} pages")
     return json.dumps(all_results, ensure_ascii=False, indent=2)
@@ -478,7 +510,7 @@ async def sitemap(
     depth: int = 2,
     max_pages: int = 50,
 ) -> str:
-    """Discover site structure.
+    """Discover site structure in parallel.
 
     Args:
         urls: List of root URLs
@@ -488,59 +520,84 @@ async def sitemap(
     Returns:
         JSON string with discovered URLs
     """
-    logger.info(f"Mapping {len(urls)} URLs")
+    logger.info(f"Mapping {len(urls)} URLs (parallel)")
 
     all_urls: list[dict[str, object]] = []
     visited: set[str] = set()
-
-    crawler = await _get_crawler(stealth=False)
-    sem = _get_semaphore()
+    queue: asyncio.Queue[tuple[str, int]] = asyncio.Queue()
+    results_lock = asyncio.Lock()
 
     for root_url in urls:
         if not is_safe_url(root_url):
             logger.warning(f"Skipping unsafe URL: {root_url}")
             continue
+        queue.put_nowait((root_url, 0))
 
-        # Use deque for O(1) pops (BFS)
-        to_visit: collections.deque[tuple[str, int]] = collections.deque(
-            [(root_url, 0)]
-        )
-        site_urls: list[dict[str, object]] = []
+    crawler = await _get_crawler(stealth=False)
+    sem = _get_semaphore()
 
-        while to_visit and len(site_urls) < max_pages:
-            url, current_depth = to_visit.popleft()
+    async def worker():
+        while True:
+            async with results_lock:
+                if len(all_urls) >= max_pages:
+                    break
 
-            if url in visited or current_depth > depth:
+            try:
+                url, current_depth = await asyncio.wait_for(queue.get(), timeout=0.1)
+            except (asyncio.TimeoutError, asyncio.QueueEmpty):
+                if queue.empty():
+                    break
                 continue
 
-            # Validate every URL (not just root) to prevent SSRF
-            if not is_safe_url(url):
-                logger.warning(f"Skipping unsafe discovered URL: {url}")
-                continue
+            try:
+                async with results_lock:
+                    if url in visited or current_depth > depth or len(all_urls) >= max_pages:
+                        queue.task_done()
+                        continue
 
-            visited.add(url)
-            site_urls.append({"url": url, "depth": current_depth})
+                    if not is_safe_url(url):
+                        logger.warning(f"Skipping unsafe discovered URL: {url}")
+                        queue.task_done()
+                        continue
 
-            async with sem:
-                try:
-                    result = await crawler.arun(  # ty: ignore[missing-argument]
-                        url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
-                    )
+                    visited.add(url)
+                    all_urls.append({"url": url, "depth": current_depth})
 
-                    if result.success and current_depth < depth:
-                        for link in result.links.get("internal", [])[:20]:
-                            # Extract URL from dict if necessary
-                            link_url = (
-                                link.get("href", "") if isinstance(link, dict) else link
-                            )
-                            if link_url and link_url not in visited:
-                                to_visit.append((link_url, current_depth + 1))
+                async with sem:
+                    try:
+                        result = await crawler.arun(  # ty: ignore[missing-argument]
+                            url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
+                            config=CrawlerRunConfig(verbose=False),
+                        )
 
-                except Exception as e:
-                    logger.debug(f"Error mapping {url}: {e}")
+                        if result.success and current_depth < depth:
+                            for link in result.links.get("internal", [])[:20]:
+                                link_url = (
+                                    link.get("href", "") if isinstance(link, dict) else link
+                                )
+                                if link_url:
+                                    queue.put_nowait((link_url, current_depth + 1))
 
-        all_urls.extend(site_urls)
+                    except Exception as e:
+                        logger.debug(f"Error mapping {url}: {e}")
+            finally:
+                queue.task_done()
+
+    num_workers = min(_MAX_CONCURRENT_OPS, max_pages)
+    workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
+
+    while any(not w.done() for w in workers):
+        async with results_lock:
+            if len(all_urls) >= max_pages:
+                break
+        if queue.empty() and queue._unfinished_tasks == 0:
+            break
+        await asyncio.sleep(0.1)
+
+    for w in workers:
+        w.cancel()
+    if workers:
+        await asyncio.gather(*workers, return_exceptions=True)
 
     logger.info(f"Mapped {len(all_urls)} URLs")
     return json.dumps(all_urls, ensure_ascii=False, indent=2)
@@ -587,7 +644,6 @@ async def list_media(
         if media_type in ("videos", "all"):
             output["videos"] = media.get("videos", [])[:max_items]
         if media_type in ("audio", "all"):
-            # Crawl4AI uses 'audios' (plural)
             output["audio"] = media.get("audios", [])[:max_items]
 
         logger.info(f"Found media: {sum(len(v) for v in output.values())} items")
@@ -628,12 +684,10 @@ async def download_media(
     async def _download_one(url: str, client: httpx.AsyncClient) -> dict:
         async with semaphore:
             try:
-                # Handle protocol-relative URLs
                 target_url = url
                 if target_url.startswith("//"):
                     target_url = f"https:{target_url}"
 
-                # Manually handle redirects to prevent SSRF bypass
                 redirect_count = 0
                 max_redirects = 5
                 response = None
@@ -662,35 +716,27 @@ async def download_media(
 
                 response.raise_for_status()
 
-                # Extract filename and decode URL-encoded characters to
-                # prevent path traversal via %2F..%2F sequences.
                 import mimetypes
                 from urllib.parse import unquote
 
                 raw_name = target_url.split("/")[-1].split("?")[0] or "download"
                 decoded_name = unquote(raw_name)
-                # Strip any directory components to get a flat filename
                 filename = Path(decoded_name).name or "download"
 
-                # If filename has no extension, infer from Content-Type
                 if "." not in filename:
                     content_type = response.headers.get("content-type", "")
-                    # Strip parameters like charset
                     mime = content_type.split(";")[0].strip()
                     ext = mimetypes.guess_extension(mime) if mime else None
                     if ext:
                         filename = f"{filename}{ext}"
                 filepath = (output_path / filename).resolve()
 
-                # Security check: Ensure the resolved path is still
-                # within the output directory
                 if not filepath.is_relative_to(output_path):
                     raise ValueError(
                         f"Security Alert: Path traversal attempt detected "
                         f"for {filename}"
                     )
 
-                # Write file in thread to avoid blocking event loop
                 await asyncio.to_thread(filepath.write_bytes, response.content)
 
                 return {
@@ -716,11 +762,6 @@ async def download_media(
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 
-# ---------------------------------------------------------------------------
-# Batch extraction with per-domain rate limiting
-# ---------------------------------------------------------------------------
-
-
 class DomainRateLimiter:
     """Per-domain concurrency + rate limiting for batch operations."""
 
@@ -731,7 +772,6 @@ class DomainRateLimiter:
         global_max: int = 10,
     ):
         from collections import defaultdict
-
         from aiolimiter import AsyncLimiter
 
         self._domain_sems: dict[str, asyncio.Semaphore] = defaultdict(
@@ -759,19 +799,7 @@ async def batch_extract(
     format: str = "markdown",
     stealth: bool = False,
 ) -> str:
-    """Batch extract content from URLs with per-domain rate limiting.
-
-    Uses DomainRateLimiter for polite crawling: max 2 concurrent per domain,
-    1 req/s per domain, 10 global concurrent. Partial results on failure.
-
-    Args:
-        urls: List of URLs (max 50)
-        format: Output format
-        stealth: Enable stealth mode
-
-    Returns:
-        JSON with {results, errors, summary: {total, success, failed}}
-    """
+    """Batch extract content from URLs with per-domain rate limiting."""
     if len(urls) > _MAX_BATCH_URLS:
         return f"Error: Maximum {_MAX_BATCH_URLS} URLs per batch (got {len(urls)})"
 
@@ -790,7 +818,6 @@ async def batch_extract(
             except Exception as e:
                 return {"url": url, "error": str(e)}
 
-    # Process with as_completed for partial results
     tasks = {asyncio.create_task(process_url(url)): url for url in urls}
 
     for coro in asyncio.as_completed(tasks):
@@ -815,20 +842,8 @@ async def batch_extract(
     )
 
 
-# ---------------------------------------------------------------------------
-# Local file conversion
-# ---------------------------------------------------------------------------
-
-
 async def convert_local_files(paths: list[str]) -> str:
-    """Convert local files to Markdown via markitdown.
-
-    Args:
-        paths: List of absolute file paths (max 10).
-
-    Returns:
-        JSON array of {path, content, title} or {path, error}.
-    """
+    """Convert local files to Markdown via markitdown."""
     if len(paths) > _MAX_CONVERT_FILES:
         return f"Error: Maximum {_MAX_CONVERT_FILES} files per call (got {len(paths)})"
 
@@ -842,12 +857,6 @@ async def convert_local_files(paths: list[str]) -> str:
             if d.strip()
         ]
     else:
-        # Default to allowing access only to the home directory and the
-        # platform temp directory to prevent arbitrary file read of
-        # sensitive system files. ``tempfile.gettempdir()`` returns the
-        # OS-level temp dir (``/tmp`` on Linux, ``$TMPDIR`` /
-        # ``/var/folders/...`` on macOS, ``C:\Users\<u>\AppData\Local\Temp``
-        # on Windows) — hardcoding ``/tmp`` breaks on non-Linux hosts.
         allowed_dirs = [
             Path.home().resolve(),
             Path(tempfile.gettempdir()).resolve(),

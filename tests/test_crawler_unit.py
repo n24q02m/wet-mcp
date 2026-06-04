@@ -8,6 +8,13 @@ import pytest
 from wet_mcp.sources.crawler import crawl
 
 
+@pytest.fixture(autouse=True)
+def _mock_is_safe_url():
+    """Mock is_safe_url to always return True for unit tests."""
+    with patch("wet_mcp.sources.crawler.is_safe_url", return_value=True):
+        yield
+
+
 @pytest.mark.asyncio
 async def test_crawl_basic_success(mock_crawler_instance):
     """Test basic crawling functionality."""
@@ -123,6 +130,7 @@ async def test_crawl_unsafe_url(mock_crawler_instance):
     """Test that unsafe URLs are skipped."""
     mock_crawler_instance.arun = AsyncMock()
 
+    # Specifically override the autouse fixture for this test
     with (
         patch(
             "wet_mcp.sources.crawler._get_crawler",
