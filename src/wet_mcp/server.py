@@ -27,6 +27,7 @@ from wet_mcp.config import _EMBEDDING_CANDIDATES, settings
 from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 from wet_mcp.security import wrap_external_content
+from wet_mcp.setup import run_auto_setup
 from wet_mcp.sources.crawler import (
     crawl as _crawl,
 )
@@ -145,8 +146,6 @@ async def _warmup_searxng() -> None:
     Non-fatal: if startup fails, the first search call will retry.
     """
     try:
-        from wet_mcp.setup import run_auto_setup
-
         await asyncio.to_thread(run_auto_setup)
 
         # Pre-import crawl4ai

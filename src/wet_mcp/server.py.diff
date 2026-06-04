@@ -1,0 +1,11 @@
+<<<<<<< SEARCH
+from wet_mcp.sources.crawler import (
+    sitemap as _sitemap,
+from wet_mcp.setup import run_auto_setup
+)
+=======
+from wet_mcp.sources.crawler import (
+    sitemap as _sitemap,
+)
+from wet_mcp.setup import run_auto_setup
+>>>>>>> REPLACE
