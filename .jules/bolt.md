@@ -16,3 +16,6 @@
 ## 2024-05-18 - String uniform validation
 **Learning:** For uniform string validation (where `len(set(text)) == 1`), replacing an O(N) generator check like `all(c in ALLOWED for c in text)` with a simple O(1) index check `text[0] in ALLOWED` significantly improves iteration overhead.
 **Action:** Always prefer array indexing to generator comprehensions when validating a uniformly matching string, and ensure that the stripped result is cached to avoid redundant allocations.
+## 2023-11-06 - Optimized Whitespace Collapsing
+**Learning:** Replaced `re.sub(r"\s+", " ", text).strip()` with `" ".join(text.split())`. This bypasses the regex engine and utilizes highly optimized C-level string operations, providing a significant performance boost for large string manipulations.
+**Action:** Use `" ".join(text.split())` instead of regex for collapsing arbitrary whitespace in strings.
