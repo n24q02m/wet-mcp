@@ -2603,11 +2603,16 @@ class TestSetupTool:
         """setup sync returns success."""
         from wet_mcp.setup_tool import run_setup_sync
 
-        with patch(
-            "wet_mcp.sync.setup_google_auth",
-            new_callable=AsyncMock,
-            return_value=True,
+        with (
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch("wet_mcp.config.settings") as mock_settings,
         ):
+            mock_settings.google_drive_client_id = "test-client-id"
+            mock_settings.google_drive_client_secret = "test-client-secret"
             result = await run_setup_sync()
             assert result["status"] == "ok"
 
@@ -2615,11 +2620,16 @@ class TestSetupTool:
         """setup sync returns failure."""
         from wet_mcp.setup_tool import run_setup_sync
 
-        with patch(
-            "wet_mcp.sync.setup_google_auth",
-            new_callable=AsyncMock,
-            return_value=False,
+        with (
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch("wet_mcp.config.settings") as mock_settings,
         ):
+            mock_settings.google_drive_client_id = "test-client-id"
+            mock_settings.google_drive_client_secret = "test-client-secret"
             result = await run_setup_sync()
             assert result["status"] == "error"
 
@@ -2627,11 +2637,16 @@ class TestSetupTool:
         """setup sync exception handled."""
         from wet_mcp.setup_tool import run_setup_sync
 
-        with patch(
-            "wet_mcp.sync.setup_google_auth",
-            new_callable=AsyncMock,
-            side_effect=Exception("auth error"),
+        with (
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                side_effect=Exception("auth error"),
+            ),
+            patch("wet_mcp.config.settings") as mock_settings,
         ):
+            mock_settings.google_drive_client_id = "test-client-id"
+            mock_settings.google_drive_client_secret = "test-client-secret"
             result = await run_setup_sync()
             assert result["status"] == "error"
 

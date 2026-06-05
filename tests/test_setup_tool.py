@@ -169,7 +169,12 @@ class TestRunSetupSync:
 
     async def test_setup_sync_returns_dict_with_status(self):
         """run_setup_sync() must return a dict with 'status' key."""
-        with patch("wet_mcp.sync.setup_google_auth", return_value=True):
+        with (
+            patch("wet_mcp.sync.setup_google_auth", return_value=True),
+            patch("wet_mcp.config.settings") as mock_settings,
+        ):
+            mock_settings.google_drive_client_id = "test-client-id"
+            mock_settings.google_drive_client_secret = "test-client-secret"
             from wet_mcp.setup_tool import run_setup_sync
 
             result = await run_setup_sync("drive")
@@ -180,7 +185,12 @@ class TestRunSetupSync:
 
     async def test_setup_sync_auth_fails(self):
         """Returns error when auth fails."""
-        with patch("wet_mcp.sync.setup_google_auth", return_value=False):
+        with (
+            patch("wet_mcp.sync.setup_google_auth", return_value=False),
+            patch("wet_mcp.config.settings") as mock_settings,
+        ):
+            mock_settings.google_drive_client_id = "test-client-id"
+            mock_settings.google_drive_client_secret = "test-client-secret"
             from wet_mcp.setup_tool import run_setup_sync
 
             result = await run_setup_sync()
@@ -190,10 +200,15 @@ class TestRunSetupSync:
 
     async def test_setup_sync_exception(self):
         """Sync setup exception returns error dict."""
-        with patch(
-            "wet_mcp.sync.setup_google_auth",
-            side_effect=Exception("auth error"),
+        with (
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                side_effect=Exception("auth error"),
+            ),
+            patch("wet_mcp.config.settings") as mock_settings,
         ):
+            mock_settings.google_drive_client_id = "test-client-id"
+            mock_settings.google_drive_client_secret = "test-client-secret"
             from wet_mcp.setup_tool import run_setup_sync
 
             result = await run_setup_sync()
