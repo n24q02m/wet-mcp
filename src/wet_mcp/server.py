@@ -1112,24 +1112,41 @@ async def extract(  # noqa: PLR0913
     screenshot: bool = False,
     url: str | None = None,
 ) -> str:
-    """Read and return full page content from URLs or local files. Use this when you have a specific URL and need its content. For finding URLs first, use the `search` tool instead.
+    """Read and return full page content from URLs or local files. Use this when you
+    have a specific URL and need its content. For finding URLs first, use the
+    `search` tool instead.
 
     Actions:
-    - extract: Get clean content from URLs. Example: extract(action="extract", urls=["https://example.com/article"])
-    - batch: Batch extract with per-domain rate limiting (max 50 URLs). Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])
-    - crawl: Deep crawl following links from root URLs. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)
-    - map: Discover site URL structure without extracting content. Example: extract(action="map", urls=["https://example.com"])
-    - convert: Convert local files (PDF, DOCX, PPTX, XLSX) to Markdown. Example: extract(action="convert", paths=["/home/user/report.pdf"])
-    - extract_structured: Extract structured data using JSON Schema + LLM. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})
-    - agent: Multi-step research orchestration -- search the web, extract top results, synthesize a cited Markdown answer. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)
-    - interact: Drive a page with click/fill/submit via patchright. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}])
+    - extract: Get clean content from URLs.
+      Example: extract(action="extract", urls=["https://example.com/article"])
+    - batch: Batch extract with per-domain rate limiting (max 50 URLs).
+      Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])
+    - crawl: Deep crawl following links from root URLs.
+      Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)
+    - map: Discover site URL structure without extracting content.
+      Example: extract(action="map", urls=["https://example.com"])
+    - convert: Convert local files (PDF, DOCX, PPTX, XLSX) to Markdown.
+      Example: extract(action="convert", paths=["/home/user/report.pdf"])
+    - extract_structured: Extract structured data using JSON Schema + LLM.
+      Example: extract(action="extract_structured",
+      urls=["https://example.com/pricing"],
+      schema={"type": "object", "properties": {"price": {"type": "string"}}})
+    - agent: Multi-step research orchestration -- search the web, extract top
+      results, synthesize a cited Markdown answer.
+      Example: extract(action="agent", query="latest pydantic 2 changes",
+      max_urls=5)
+    - interact: Drive a page with click/fill/submit via patchright.
+      Example: extract(action="interact", url="https://example.com/login",
+      actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"},
+      {"type": "submit", "selector": "form"}])
 
     Key parameters:
     - urls (required for extract/batch/crawl/map/extract_structured): List of URLs
     - paths (required for convert): List of local file paths
     - query (required for agent): Research question to answer
     - url (required for interact): Page URL to drive
-    - actions (required for interact): List of {type, selector?, description?, value?} ops
+    - actions (required for interact): List of {type, selector?, description?,
+      value?} ops
     - max_urls (agent): Default 5, hard cap 20
     - synthesis_model (agent): Override LLM model for the synthesis step
     - token_budget (agent): Max prompt tokens (default 10000)
