@@ -189,8 +189,11 @@ def _chunk_quality_score(content: str) -> float:
 class DocsDB:
     """SQLite-backed docs storage with FTS5 hybrid search."""
 
+    _column_cache: dict[tuple[str, str], set[str]] = {}
+    _table_exists_cache: dict[tuple[str, str], bool] = {}
+
     def __init__(self, db_path: Path, embedding_dims: int = 0):
-        self._db_path = db_path
+        self._db_path = db_path.resolve()
         if (
             type(embedding_dims) is not int
             or embedding_dims < 0
@@ -239,6 +242,35 @@ class DocsDB:
         self._create_vector_table()
         self._create_project_context_table()
         self._conn.commit()
+
+    def _get_table_columns(self, table_name: str) -> set[str]:
+        """Get columns for a table, with class-level caching."""
+        key = (str(self._db_path), table_name)
+        if key in self._column_cache:
+            return self._column_cache[key]
+
+        cols = {
+            r["name"]
+            for r in self._conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        if cols:
+            self._column_cache[key] = cols
+        return cols
+
+    def _check_table_exists(self, table_name: str) -> bool:
+        """Check if a table exists, with class-level caching."""
+        key = (str(self._db_path), table_name)
+        if key in self._table_exists_cache:
+            return self._table_exists_cache[key]
+
+        row = self._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        ).fetchone()
+        exists = row is not None
+        if exists:
+            self._table_exists_cache[key] = exists
+        return exists
 
     def _create_project_context_table(self) -> None:
         # Phase 2 (spec section 5.4) — Cabinets project isolation.
@@ -427,10 +459,7 @@ class DocsDB:
     def _create_vector_table(self) -> None:
         # Vector table (optional)
         if self._vec_enabled and self._embedding_dims > 0:
-            row = self._conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
-            ).fetchone()
-            if not row:
+            if not self._check_table_exists("doc_chunks_vec"):
                 # Security: Dimensions are validated as 0-65536 integer in __init__.
                 # Schema construction (CREATE VIRTUAL TABLE) does not support parameters.
                 dims_str = str(int(self._embedding_dims))
@@ -490,12 +519,8 @@ class DocsDB:
         # Normalize name to lowercase
         norm_name = name.lower().strip()
 
-        # Phase 2 columns may be absent on a pre-Alembic legacy DB. Detect
-        # presence once per call so we don't crash on older schemas.
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
-        }
+        # Phase 2 columns may be absent on a pre-Alembic legacy DB.
+        existing_cols = self._get_table_columns("libraries")
         pkg_json = (
             json.dumps(package_managers, ensure_ascii=False)
             if package_managers is not None
@@ -615,10 +640,7 @@ class DocsDB:
         Silently no-ops on pre-Alembic legacy databases that lack the
         ``last_indexed_at`` / ``total_versions`` columns.
         """
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
-        }
+        existing_cols = self._get_table_columns("libraries")
         sets: list[str] = []
         params: list = []
         if "last_indexed_at" in existing_cols:
@@ -748,10 +770,7 @@ class DocsDB:
         chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
 
         # Detect optional columns once so we can branch on a single INSERT.
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(doc_chunks)").fetchall()
-        }
+        existing_cols = self._get_table_columns("doc_chunks")
         phase2_cols = [
             c
             for c in (
@@ -1344,11 +1363,7 @@ class DocsDB:
 
     def _ensure_project_context(self) -> bool:
         """Return True iff the project_context table exists."""
-        row = self._conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='table' AND name='project_context'"
-        ).fetchone()
-        return row is not None
+        return self._check_table_exists("project_context")
 
     def upsert_project_context(
         self, project_path: str, locked_libraries: list[dict]
