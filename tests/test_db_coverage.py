@@ -706,3 +706,14 @@ class TestMarkLibraryIndexed:
             # If it didn't return early, there would be a second call with UPDATE
             assert mock_conn.execute.call_count == 1
             assert "PRAGMA table_info" in mock_conn.execute.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# export_jsonl empty (line 1136)
+# ---------------------------------------------------------------------------
+
+
+class TestExportJsonlEmpty:
+    def test_export_jsonl_empty(self, db):
+        """export_jsonl returns empty string for empty database (line 1136)."""
+        assert db.export_jsonl() == ""
