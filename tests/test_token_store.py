@@ -63,6 +63,12 @@ def test_path_traversal_validation(token_dir):
     with pytest.raises(ValueError, match="Name cannot be empty"):
         get_token_path("")
 
+    with pytest.raises(ValueError, match="Name cannot be empty"):
+        get_token_path_for_sub("", "drive")
+
+    with pytest.raises(ValueError, match="Name cannot be empty"):
+        get_token_path_for_sub("user", "")
+
 
 def test_load_missing_token(token_dir):
     """load_token returns None if file doesn't exist."""
@@ -265,3 +271,14 @@ def test_load_token_for_sub_oserror(token_dir):
     """load_token_for_sub handles OSError during read."""
     with patch.object(Path, "exists", side_effect=OSError("disk error")):
         assert load_token_for_sub("user1", "drive") is None
+
+def test_save_token_windows_no_user(token_dir):
+    """Test save_token on Windows when username cannot be determined."""
+    with (
+        patch("wet_mcp.token_store.os.name", "nt"),
+        patch("wet_mcp.token_store.getpass.getuser", return_value=""),
+        patch("wet_mcp.token_store.subprocess.run") as mock_run,
+    ):
+        save_token("drive", {"access_token": "test"})
+        # Should return early after logging warning, no icacls called
+        assert mock_run.call_count == 0
