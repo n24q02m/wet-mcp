@@ -17,6 +17,23 @@ _skip_win_iocp = pytest.mark.skipif(
 )
 
 
+def _close_and_dummy_task(coro):
+    """Drop-in for ``asyncio.create_task`` in tests.
+
+    The production ``_do_docs_search`` fires the background indexer with
+    ``asyncio.create_task(...)`` and discards the handle. In tests that
+    leaves an orphan Task pending in the event loop; closing the loop at
+    teardown then intermittently hangs on the macOS kqueue / Windows IOCP
+    selectors (caught by pytest-timeout and reddening release-commit CI).
+
+    Closing the coroutine here makes the call a no-op with no scheduled
+    Task, so teardown is deterministic on every platform. The return value
+    is unused by the caller.
+    """
+    coro.close()
+    return None
+
+
 @pytest.fixture(autouse=True)
 def mock_settings():
     with patch("wet_mcp.server.settings") as mock:
@@ -356,7 +373,6 @@ async def test_do_docs_search_cached():
 
 
 @pytest.mark.asyncio
-@_skip_win_iocp
 async def test_do_docs_search_new():
     server._docs_db.get_library.return_value = None
 
@@ -369,6 +385,19 @@ async def test_do_docs_search_new():
         patch(
             "wet_mcp.server._background_index_and_search",
             new_callable=AsyncMock,
+        ),
+        # Patch create_task so the fire-and-forget background indexer is
+        # never scheduled as an orphan Task that survives into event-loop
+        # teardown (closing the loop with a pending task hangs on the
+        # Windows IOCP / macOS kqueue selectors -> pytest-timeout kill).
+        patch("wet_mcp.server.asyncio.create_task", _close_and_dummy_task),
+        # Mock the immediate fallback so the test makes no real network IO
+        # (the un-mocked searxng_search hit httpx against a junk URL and
+        # could hang on a slow/blocked CI runner).
+        patch(
+            "wet_mcp.server._do_immediate_fallback_search",
+            new_callable=AsyncMock,
+            return_value={"results": []},
         ),
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock),
     ):
@@ -484,7 +513,6 @@ async def test_do_docs_search_db_not_init():
 
 
 @pytest.mark.asyncio
-@_skip_win_iocp
 async def test_do_docs_search_force_reindex():
     from wet_mcp.sources.docs import DISCOVERY_VERSION
 
@@ -501,6 +529,14 @@ async def test_do_docs_search_force_reindex():
             return_value=("http://docs", "", "", ""),
         ),
         patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
+        # See test_do_docs_search_new: prevent orphan background Task and
+        # mock the immediate fallback so the test is fully hermetic.
+        patch("wet_mcp.server.asyncio.create_task", _close_and_dummy_task),
+        patch(
+            "wet_mcp.server._do_immediate_fallback_search",
+            new_callable=AsyncMock,
+            return_value={"results": []},
+        ),
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock),
     ):
         res = await server._do_docs_search("test", "test")
