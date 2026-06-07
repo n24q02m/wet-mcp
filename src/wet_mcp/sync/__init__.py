@@ -279,5 +279,8 @@ def stop_s3_auto_sync() -> None:
     """Cancel the background S3 auto-sync task if running."""
     global _s3_sync_task
     if _s3_sync_task is not None and not _s3_sync_task.done():
-        _s3_sync_task.cancel()
+        try:
+            _s3_sync_task.cancel()
+        except RuntimeError:
+            pass
     _s3_sync_task = None
