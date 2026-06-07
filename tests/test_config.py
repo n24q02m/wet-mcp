@@ -74,6 +74,39 @@ def test_setup_api_keys_whitespace():
         assert os.environ["OTHER"] == "key2"
 
 
+def test_setup_api_keys_aliases():
+    """Test that GOOGLE_API_KEY is aliased to GEMINI_API_KEY."""
+    settings = Settings(api_keys=SecretStr("GOOGLE_API_KEY:google-key"))
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        keys = settings.setup_api_keys()
+        assert os.environ["GOOGLE_API_KEY"] == "google-key"
+        assert os.environ["GEMINI_API_KEY"] == "google-key"
+        assert keys["GOOGLE_API_KEY"] == ["google-key"]
+
+
+def test_setup_api_keys_alias_no_overwrite():
+    """Test that alias is not overwritten if already in environment."""
+    settings = Settings(api_keys=SecretStr("GOOGLE_API_KEY:new-key"))
+
+    with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "existing-key"}, clear=True):
+        settings.setup_api_keys()
+        assert os.environ["GOOGLE_API_KEY"] == "new-key"
+        assert os.environ["GEMINI_API_KEY"] == "existing-key"
+
+
+def test_setup_api_keys_complex_whitespace():
+    """Test complex whitespace and empty parts."""
+    settings = Settings(api_keys=SecretStr("  KEY1 : val1 , , KEY2:val2  , KEY3:  "))
+
+    with mock.patch.dict(os.environ, {}, clear=True):
+        keys = settings.setup_api_keys()
+        assert keys == {"KEY1": ["val1"], "KEY2": ["val2"]}
+        assert os.environ["KEY1"] == "val1"
+        assert os.environ["KEY2"] == "val2"
+        assert "KEY3" not in os.environ
+
+
 # -----------------------------------------------------------------------
 # Embedding backend resolution
 # -----------------------------------------------------------------------
