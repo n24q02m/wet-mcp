@@ -1278,14 +1278,14 @@ async def extract(  # noqa: PLR0913
         case "interact":
             if not url:
                 return (
-                    'Error: url is required for interact action. Example: '
+                    "Error: url is required for interact action. Example: "
                     'extract(action="interact", url="https://example.com/login", '
                     'actions=[{"type": "click", "selector": "#submit"}])'
                 )
             if not actions:
                 return (
-                    'Error: actions is required for interact action. Provide a '
-                    'list of {type, selector?, description?, value?} ops. '
+                    "Error: actions is required for interact action. Provide a "
+                    "list of {type, selector?, description?, value?} ops. "
                     'Example: actions=[{"type": "fill", "selector": "#email", '
                     '"value": "x@y.com"}, {"type": "submit", '
                     '"selector": "form"}]'
