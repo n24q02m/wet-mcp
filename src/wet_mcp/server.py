@@ -1369,7 +1369,11 @@ async def media(  # noqa: PLR0913
     match action:
         case "list":
             if not url:
-                return 'Error: url is required for list action. Example: media(action="list", url="https://example.com/gallery", media_type="images")'
+                return (
+                    "Error: url is required for list action. Example: "
+                    'media(action="list", url="https://example.com/gallery", '
+                    'media_type="images")'
+                )
             return await _with_timeout(
                 list_media(url=url, media_type=media_type, max_items=max_items),
                 "media.list",
@@ -1377,7 +1381,11 @@ async def media(  # noqa: PLR0913
 
         case "download":
             if not media_urls:
-                return 'Error: media_urls is required for download action. Example: media(action="download", media_urls=["https://example.com/image.jpg"]). Use media(action="list", url="...") first to discover media URLs.'
+                return (
+                    "Error: media_urls is required for download action. Example: "
+                    'media(action="download", media_urls=["https://example.com/image.jpg"]). '
+                    'Use media(action="list", url="...") first to discover media URLs.'
+                )
 
             # Security: validate output_dir is within the configured
             # download directory to prevent arbitrary file writes.
