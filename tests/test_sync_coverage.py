@@ -194,17 +194,19 @@ class TestSetupSyncTokenSuccess:
         ):
             setup_sync()
 
+
 class TestCheckHealthCoverage:
     """Cover check_health exception paths."""
 
     @pytest.mark.asyncio
     async def test_health_httpx_exception(self):
-        from wet_mcp.sync import check_health
         import httpx
+
+        from wet_mcp.sync import check_health
 
         with (
             patch("wet_mcp.sync._get_valid_token", return_value={"access_token": "t"}),
-            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
         ):
             mock_instance = AsyncMock()
             mock_instance.request.side_effect = httpx.ReadTimeout("timeout")
