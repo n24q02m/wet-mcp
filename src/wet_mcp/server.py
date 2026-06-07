@@ -585,6 +585,17 @@ mcp = FastMCP(
     lifespan=_lifespan,
 )
 
+# Report wet-mcp's own package version in serverInfo.version. FastMCP (the SDK
+# class) does not accept a `version=` kwarg, so the underlying lowlevel Server
+# defaults `.version` to None and the SDK fills serverInfo with the `mcp`
+# package version instead. Setting it here propagates to
+# create_initialization_options().server_version. Read the version via
+# importlib.metadata (not `from wet_mcp import __version__`) to avoid a
+# circular import: wet_mcp/__init__.py imports `mcp` from this module.
+from importlib.metadata import version as _pkgver  # noqa: E402
+
+mcp._mcp_server.version = _pkgver("wet-mcp")
+
 # Register the standard `config__open_relay` MCP tool so an LLM can re-trigger
 # the relay form when the server is reachable over HTTP. Helper lives in
 # mcp-core >=1.13.0b4; signature: (mcp, server_name, public_url). Pass
