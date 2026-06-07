@@ -355,13 +355,17 @@ class CloudEmbeddingBackend:
             f"(max {self.MAX_BATCH_SIZE}/batch)"
         )
 
+        tasks = []
         for i in range(0, len(texts), self.MAX_BATCH_SIZE):
             batch = texts[i : i + self.MAX_BATCH_SIZE]
             batch_num = i // self.MAX_BATCH_SIZE + 1
             logger.debug(
                 f"Embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
             )
-            batch_result = await self._embed_batch_inner(batch, dimensions)
+            tasks.append(self._embed_batch_inner(batch, dimensions))
+
+        results = await asyncio.gather(*tasks)
+        for batch_result in results:
             all_embeddings.extend(batch_result)
 
         return all_embeddings
