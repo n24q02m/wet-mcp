@@ -2666,7 +2666,7 @@ def main() -> None:
     binds 0.0.0.0:8080 and scopes credentials per JWT ``sub``;
     otherwise it binds 127.0.0.1 for single-user local browser setup.
 
-    See ``~/projects/.superpower/mcp-core/specs/2026-05-01-stdio-pure-http-multiuser.md``.
+    See spec in ``mcp-core/specs/2026-05-01-stdio-pure-http-multiuser.md``.
     """
     http_requested = (
         "--http" in sys.argv
