@@ -1135,50 +1135,35 @@ class DocsDB:
 
     def export_jsonl(self) -> str:
         """Export all docs data as JSONL for sync."""
-        lines = []
-
-        # Export libraries (using SQLite native JSON serialization for performance)
-        for row in self._conn.execute(
-            """
+        # ⚡ Bolt Optimization: Use a single UNION ALL query with engine-side sorting
+        # and a generator expression to avoid multiple DB roundtrips and reduce
+        # memory overhead from intermediate lists.
+        query = """
             SELECT json_insert(json_object(
                 'id', id, 'name', name, 'docs_url', docs_url,
                 'registry', registry, 'description', description,
                 'created_at', created_at, 'updated_at', updated_at
-            ), '$._type', 'library')
-            FROM libraries ORDER BY name
-            """
-        ).fetchall():
-            lines.append(row[0])
-
-        # Export versions
-        for row in self._conn.execute(
-            """
+            ), '$._type', 'library') as data, 1 as type_pri, name as s1, NULL as s2
+            FROM libraries
+            UNION ALL
             SELECT json_insert(json_object(
                 'id', id, 'library_id', library_id, 'version', version,
                 'docs_url', docs_url, 'indexed_at', indexed_at,
                 'page_count', page_count, 'chunk_count', chunk_count,
                 'status', status
-            ), '$._type', 'version')
-            FROM versions ORDER BY library_id
-            """
-        ).fetchall():
-            lines.append(row[0])
-
-        # Export chunks (without embeddings — re-generate on target)
-        for row in self._conn.execute(
-            """
+            ), '$._type', 'version') as data, 2 as type_pri, library_id as s1, version as s2
+            FROM versions
+            UNION ALL
             SELECT json_insert(json_object(
                 'id', id, 'version_id', version_id, 'library_id', library_id,
                 'url', url, 'title', title, 'chunk_index', chunk_index,
                 'content', content, 'heading_path', heading_path,
                 'created_at', created_at
-            ), '$._type', 'chunk')
-            FROM doc_chunks ORDER BY library_id, chunk_index
-            """
-        ).fetchall():
-            lines.append(row[0])
-
-        return "\n".join(lines)
+            ), '$._type', 'chunk') as data, 3 as type_pri, library_id as s1, chunk_index as s2
+            FROM doc_chunks
+            ORDER BY type_pri, s1, s2
+        """
+        return "\n".join(row[0] for row in self._conn.execute(query))
 
     def import_jsonl(self, data: str, mode: str = "merge") -> dict:
         """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""
