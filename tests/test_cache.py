@@ -78,6 +78,24 @@ class TestGetSet:
         result = cache.get("search", {"query": "hello"})
         assert result == "Search Results"
 
+    def test_get_with_age(self, cache):
+        """get_with_age returns content and age in seconds."""
+        params = {"query": "aged"}
+        cache.set("search", params, "Content")
+
+        # Mock time to be 10 seconds after creation
+        now = time.time()
+        with patch("wet_mcp.cache.time.time", return_value=now + 10):
+            res = cache.get_with_age("search", params)
+            assert res is not None
+            content, age = res
+            assert content == "Content"
+            assert age >= 10
+
+    def test_get_with_age_miss(self, cache):
+        """get_with_age returns None on miss."""
+        assert cache.get_with_age("search", {"q": "none"}) is None
+
     def test_miss_different_params(self, cache):
         cache.set("search", {"query": "hello"}, "Results")
         result = cache.get("search", {"query": "world"})
@@ -186,6 +204,32 @@ class TestPurge:
         stats = short_ttl_cache.stats()
         assert stats.get("search", {}).get("total", 0) == 0
 
+    def test_periodic_purge(self, short_ttl_cache):
+        """Automatic purge triggers every _PURGE_INTERVAL operations."""
+        from wet_mcp.cache import _PURGE_INTERVAL
+
+        # 1. Fill with expired entries
+        short_ttl_cache.set("search", {"q": "expired"}, "value")
+
+        # 2. Advance time so it's expired
+        future = time.time() + 10
+
+        # 3. Trigger _PURGE_INTERVAL sets. The last one should trigger purge.
+        with patch("wet_mcp.cache.time.time", return_value=future):
+            for i in range(_PURGE_INTERVAL):
+                short_ttl_cache.set("search", {"q": f"new_{i}"}, "val")
+
+        # 4. Check if "expired" is gone.
+        stats = short_ttl_cache.stats()
+        assert stats["search"]["total"] == _PURGE_INTERVAL
+
+    def test_purge_no_expired(self, cache):
+        """_purge_expired handles case with no expired entries."""
+        cache.set("search", {"q": "fresh"}, "value")
+        # Ensure rowcount == 0 branch is covered
+        cache._purge_expired()
+        assert cache.stats()["search"]["total"] == 1
+
 
 # -----------------------------------------------------------------------
 # Stats
@@ -248,11 +292,18 @@ class TestCacheEdgeCases:
         assert len(result) == 1024 * 1024
 
     def test_close_exception_handling(self, tmp_path):
-        """close() silently handles exceptions."""
+        """close() silently handles exceptions and logs them."""
         mock_conn = MagicMock()
         mock_conn.close.side_effect = Exception("Mock close error")
 
-        with patch("sqlite3.connect", return_value=mock_conn):
+        with (
+            patch("sqlite3.connect", return_value=mock_conn),
+            patch("wet_mcp.cache.logger") as mock_logger,
+        ):
             cache = WebCache(tmp_path / "mock.db")
             # Should not raise
             cache.close()
+
+            mock_logger.debug.assert_any_call(
+                "Failed to close cache database connection: Mock close error"
+            )
