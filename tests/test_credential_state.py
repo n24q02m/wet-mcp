@@ -977,3 +977,14 @@ class TestGdriveTokenPoll:
         ):
             await _gdrive_token_poll("cid", "csec", "dev", 1, 1000)
             mock_save.assert_called_once()
+
+
+class TestSaveCredentialsEdgeCases:
+    """Edge cases for save_credentials, specifically missing context."""
+
+    def test_save_credentials_empty_context_returns_none(self):
+        """save_credentials must return None early if context is empty."""
+        from wet_mcp.credential_state import save_credentials
+
+        result = save_credentials({"ANY": "key"}, {})
+        assert result is None

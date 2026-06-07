@@ -59,7 +59,7 @@ def test_save_writes_to_new_path(tmp_path, monkeypatch):
         mock_settings.google_drive_client_id = ""
         mock_settings.google_drive_client_secret = ""
         mock_settings.setup_providers = lambda: None
-        save_credentials({"GEMINI_API_KEY": "saved-key"}, {})
+        save_credentials({"GEMINI_API_KEY": "saved-key"}, {"sub": "local-user"})
 
     from mcp_core.storage.per_plugin_store import PerPluginStore
 

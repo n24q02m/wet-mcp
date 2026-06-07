@@ -340,6 +340,9 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
     """
     global _state
 
+    if not context:
+        return None
+
     # Remote multi-user branch: scope credential storage by JWT sub so
     # concurrent /authorize sessions do not clobber each other. The GDrive
     # device-code flow ALSO needs to be per-sub: token lands in
