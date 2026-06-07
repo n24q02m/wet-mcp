@@ -227,8 +227,9 @@ def test_get_pip_command_pip(mock_which):
 @patch("shutil.which", return_value=None)
 @patch("sys.executable", "/usr/bin/python3")
 def test_get_pip_command_sys_executable(mock_which):
-    cmd = _get_pip_command()
-    assert cmd == ["/usr/bin/python3", "-m", "pip", "install"]
+    with patch("importlib.util.find_spec", return_value=MagicMock()):
+        cmd = _get_pip_command()
+        assert cmd == ["/usr/bin/python3", "-m", "pip", "install"]
 
 
 # Test _install_searxng
@@ -354,3 +355,20 @@ def test_run_auto_setup_crawl4ai_fail(
 ):
     assert run_auto_setup() is False
     mock_marker.touch.assert_not_called()
+
+
+def test_get_pip_command_none():
+    """Test that _get_pip_command returns None when no pip-related command is available."""
+    with (
+        patch("shutil.which", return_value=None),
+        patch("importlib.util.find_spec", return_value=None),
+    ):
+        cmd = _get_pip_command()
+        assert cmd is None
+
+
+@patch("wet_mcp.setup.needs_setup", return_value=True)
+@patch("wet_mcp.setup._get_pip_command", return_value=None)
+def test_run_auto_setup_no_pip(mock_get_pip, mock_needs_setup):
+    """Test that run_auto_setup returns False when pip command is not found."""
+    assert run_auto_setup() is False

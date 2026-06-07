@@ -121,9 +121,10 @@ def needs_setup() -> bool:
     return not SETUP_MARKER.exists()
 
 
-def _get_pip_command() -> list[str]:
+def _get_pip_command() -> list[str] | None:
     """Get cross-platform pip install command."""
     import shutil
+    import importlib.util
 
     uv_path = shutil.which("uv")
     if uv_path:
@@ -133,7 +134,10 @@ def _get_pip_command() -> list[str]:
     if pip_path:
         return [pip_path, "install"]
 
-    return [sys.executable, "-m", "pip", "install"]
+    if importlib.util.find_spec("pip"):
+        return [sys.executable, "-m", "pip", "install"]
+
+    return None
 
 
 def _install_searxng() -> bool:
@@ -153,6 +157,9 @@ def _install_searxng() -> bool:
     try:
         # Pre-install build dependencies
         pip_cmd = _get_pip_command()
+        if not pip_cmd:
+            return False
+
         deps_result = subprocess.run(
             [
                 *pip_cmd,
@@ -268,6 +275,11 @@ def run_auto_setup() -> bool:
         return True
 
     logger.info("First run detected, running auto-setup...")
+
+    pip_cmd = _get_pip_command()
+    if not pip_cmd:
+        logger.error("pip command not found, cannot proceed with auto-setup")
+        return False
 
     success = True
 
