@@ -576,7 +576,8 @@ mcp = FastMCP(
     instructions=(
         "Web Extended Toolkit MCP Server. "
         "IMPORTANT: `search` and `extract` serve different purposes. "
-        "`search` FINDS information (returns result listings with titles, URLs, snippets). "
+        "`search` FINDS information (returns result listings with "
+        "titles, URLs, snippets). "
         "`extract` READS content from a specific URL (returns full page text). "
         "Typical workflow: search first to find URLs, then extract to read them. "
         "`media` discovers and downloads images/videos/audio from pages. "
@@ -698,23 +699,35 @@ async def search(  # noqa: PLR0913
     expand: bool = False,
     enrich: bool = False,
 ) -> str:
-    """Find information across web, academic sources, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
+    """Find information across web, academic sources, or library docs. Returns
+    search result listings (titles, URLs, snippets) -- NOT full page content.
+    To read full content from a URL, use the `extract` tool instead.
 
     Actions:
-    - search: Web search via SearXNG. Example: search(action="search", query="python async patterns")
-    - research: Academic/scientific search (Google Scholar, arXiv, PubMed). Example: search(action="research", query="transformer attention mechanism")
-    - docs: Search library documentation with auto-indexing. Example: search(action="docs", query="how to create routes", library="fastapi")
-    - docs_resolve: Free-form library name to ranked library_id list. Example: search(action="docs_resolve", query="react")
-    - docs_query: Version-aware library docs query honoring project lock + token cap. Example: search(action="docs_query", library="react", version="latest", topic="useState", query="how to set initial state")
-    - docs_lock_project: Detect project manifests (pyproject/package.json/go.mod/Cargo.toml) and lock the library set for Cabinets isolation. Example: search(action="docs_lock_project", project_path="/repo/my-app")
-    - similar: Find pages similar to a URL (pass URL as query). Example: search(action="similar", query="https://example.com/article")
+    - search: Web search via SearXNG.
+      Example: search(action="search", query="python async patterns")
+    - research: Academic/scientific search (Google Scholar, arXiv, PubMed).
+      Example: search(action="research", query="transformer attention mechanism")
+    - docs: Search library documentation with auto-indexing.
+      Example: search(action="docs", query="how to create routes", library="fastapi")
+    - docs_resolve: Free-form library name to ranked library_id list.
+      Example: search(action="docs_resolve", query="react")
+    - docs_query: Version-aware library docs query honoring project lock + token cap.
+      Example: search(action="docs_query", library="react", version="latest",
+      topic="useState", query="how to set initial state")
+    - docs_lock_project: Detect project manifests (pyproject/package.json/go.mod/
+      Cargo.toml) and lock the library set for Cabinets isolation.
+      Example: search(action="docs_lock_project", project_path="/repo/my-app")
+    - similar: Find pages similar to a URL (pass URL as query).
+      Example: search(action="similar", query="https://example.com/article")
 
     Key parameters:
     - query (required for all actions): Search terms or URL (for similar)
     - library (required for docs): Library name, e.g. "react", "fastapi"
     - language: Programming language for disambiguation in docs, e.g. "python", "java"
     - expand: Enable LLM query expansion for broader coverage (default: false)
-    - enrich: Fetch actual page content for richer snippets (default: false, adds latency)
+    - enrich: Fetch actual page content for richer snippets (default: false,
+      adds latency)
     - max_results: Number of results (default: 10)
     - time_range: Recency filter -- day, week, month, year
     - include_domains / exclude_domains: Domain filters
@@ -741,7 +754,11 @@ async def search(  # noqa: PLR0913
     match action:
         case "search":
             if not query:
-                return 'Error: query is required for search action. Example: search(action="search", query="python async patterns")'
+                return (
+                    "Error: query is required for search action. "
+                    'Example: search(action="search", '
+                    'query="python async patterns")'
+                )
             from wet_mcp.sources._search_polish import (
                 normalize_query,
                 search_ttl_seconds,
@@ -783,7 +800,10 @@ async def search(  # noqa: PLR0913
                     ensure_searxng(), timeout=_SEARXNG_TIMEOUT
                 )
             except TimeoutError:
-                return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
+                return (
+                    f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). "
+                    "Try again or check logs."
+                )
             except (SystemExit, Exception) as exc:
                 return f"Error: SearXNG startup failed: {exc}"
             # Optional query expansion (LLM-driven, opt-in)
@@ -875,7 +895,11 @@ async def search(  # noqa: PLR0913
 
         case "research":
             if not query:
-                return 'Error: query is required for research action. Example: search(action="research", query="transformer attention mechanism")'
+                return (
+                    "Error: query is required for research action. "
+                    'Example: search(action="research", '
+                    'query="transformer attention mechanism")'
+                )
             cache_params = {
                 "query": query,
                 "max_results": max_results,
@@ -909,9 +933,17 @@ async def search(  # noqa: PLR0913
 
         case "docs":
             if not library:
-                return 'Error: library is required for docs action. Example: search(action="docs", query="routing", library="fastapi")'
+                return (
+                    "Error: library is required for docs action. "
+                    'Example: search(action="docs", query="routing", '
+                    'library="fastapi")'
+                )
             if not query:
-                return 'Error: query is required for docs action. Example: search(action="docs", query="how to create routes", library="fastapi")'
+                return (
+                    "Error: query is required for docs action. "
+                    'Example: search(action="docs", '
+                    'query="how to create routes", library="fastapi")'
+                )
             return await _with_timeout(
                 _do_docs_search(
                     library=library,
@@ -925,9 +957,18 @@ async def search(  # noqa: PLR0913
 
         case "similar":
             if not query:
-                return 'Error: query (URL) is required for similar action. Example: search(action="similar", query="https://example.com/article")'
+                return (
+                    "Error: query (URL) is required for similar action. "
+                    'Example: search(action="similar", '
+                    'query="https://example.com/article")'
+                )
             if not query.startswith(("http://", "https://")):
-                return 'Error: query must be a full URL starting with http:// or https://. Example: search(action="similar", query="https://example.com/article"). If you want to search by keywords instead, use action="search".'
+                return (
+                    "Error: query must be a full URL starting with http:// or "
+                    'https://. Example: search(action="similar", '
+                    'query="https://example.com/article"). If you want to '
+                    'search by keywords instead, use action="search".'
+                )
             try:
                 searxng_url = await asyncio.wait_for(
                     ensure_searxng(), timeout=_SEARXNG_TIMEOUT
@@ -945,7 +986,10 @@ async def search(  # noqa: PLR0913
 
         case "docs_resolve":
             if not query:
-                return 'Error: query (library name) is required for docs_resolve. Example: search(action="docs_resolve", query="react")'
+                return (
+                    "Error: query (library name) is required for docs_resolve. "
+                    'Example: search(action="docs_resolve", query="react")'
+                )
             if not _docs_db:
                 return "Error: Docs database not initialized"
             from wet_mcp.sources.docs import resolve_library
@@ -959,9 +1003,17 @@ async def search(  # noqa: PLR0913
 
         case "docs_query":
             if not query:
-                return 'Error: query is required for docs_query. Example: search(action="docs_query", library="react", query="useState")'
+                return (
+                    "Error: query is required for docs_query. "
+                    'Example: search(action="docs_query", library="react", '
+                    'query="useState")'
+                )
             if not library:
-                return 'Error: library is required for docs_query. Example: search(action="docs_query", library="react", query="useState")'
+                return (
+                    "Error: library is required for docs_query. "
+                    'Example: search(action="docs_query", library="react", '
+                    'query="useState")'
+                )
             if not _docs_db:
                 return "Error: Docs database not initialized"
             from wet_mcp.sources.docs import (
@@ -1038,7 +1090,11 @@ async def search(  # noqa: PLR0913
 
         case "docs_lock_project":
             if not project_path:
-                return 'Error: project_path is required for docs_lock_project. Example: search(action="docs_lock_project", project_path="/repo/my-app")'
+                return (
+                    "Error: project_path is required for docs_lock_project. "
+                    'Example: search(action="docs_lock_project", '
+                    'project_path="/repo/my-app")'
+                )
             if not _docs_db:
                 return "Error: Docs database not initialized"
             from wet_mcp.sources.project_lock import lock_project
@@ -1077,7 +1133,8 @@ async def search(  # noqa: PLR0913
                 "docs_query (version-aware docs query with token cap), "
                 "docs_lock_project (Cabinets project isolation), "
                 "similar (find related pages). "
-                "If you want to read content from a URL, use the `extract` tool instead."
+                "If you want to read content from a URL, use the "
+                "`extract` tool instead."
             )
 
 
@@ -1112,24 +1169,40 @@ async def extract(  # noqa: PLR0913
     screenshot: bool = False,
     url: str | None = None,
 ) -> str:
-    """Read and return full page content from URLs or local files. Use this when you have a specific URL and need its content. For finding URLs first, use the `search` tool instead.
+    """Read and return full page content from URLs or local files. Use this when you
+    have a specific URL and need its content. For finding URLs first, use the
+    `search` tool instead.
 
     Actions:
-    - extract: Get clean content from URLs. Example: extract(action="extract", urls=["https://example.com/article"])
-    - batch: Batch extract with per-domain rate limiting (max 50 URLs). Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])
-    - crawl: Deep crawl following links from root URLs. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)
-    - map: Discover site URL structure without extracting content. Example: extract(action="map", urls=["https://example.com"])
-    - convert: Convert local files (PDF, DOCX, PPTX, XLSX) to Markdown. Example: extract(action="convert", paths=["/home/user/report.pdf"])
-    - extract_structured: Extract structured data using JSON Schema + LLM. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})
-    - agent: Multi-step research orchestration -- search the web, extract top results, synthesize a cited Markdown answer. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)
-    - interact: Drive a page with click/fill/submit via patchright. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}])
+    - extract: Get clean content from URLs.
+      Example: extract(action="extract", urls=["https://example.com/article"])
+    - batch: Batch extract with per-domain rate limiting (max 50 URLs).
+      Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])
+    - crawl: Deep crawl following links from root URLs.
+      Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)
+    - map: Discover site URL structure without extracting content.
+      Example: extract(action="map", urls=["https://example.com"])
+    - convert: Convert local files (PDF, DOCX, PPTX, XLSX) to Markdown.
+      Example: extract(action="convert", paths=["/home/user/report.pdf"])
+    - extract_structured: Extract structured data using JSON Schema + LLM.
+      Example: extract(action="extract_structured",
+      urls=["https://example.com/pricing"],
+      schema={"type": "object", "properties": {"price": {"type": "string"}}})
+    - agent: Multi-step research orchestration -- search the web, extract top results,
+      synthesize a cited Markdown answer.
+      Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)
+    - interact: Drive a page with click/fill/submit via patchright.
+      Example: extract(action="interact", url="https://example.com/login",
+      actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"},
+      {"type": "submit", "selector": "form"}])
 
     Key parameters:
     - urls (required for extract/batch/crawl/map/extract_structured): List of URLs
     - paths (required for convert): List of local file paths
     - query (required for agent): Research question to answer
     - url (required for interact): Page URL to drive
-    - actions (required for interact): List of {type, selector?, description?, value?} ops
+    - actions (required for interact): List of {type, selector?, description?, value?}
+      ops
     - max_urls (agent): Default 5, hard cap 20
     - synthesis_model (agent): Override LLM model for the synthesis step
     - token_budget (agent): Max prompt tokens (default 10000)
@@ -1158,7 +1231,11 @@ async def extract(  # noqa: PLR0913
     match action:
         case "extract":
             if not urls:
-                return 'Error: urls is required for extract action. Example: extract(action="extract", urls=["https://example.com/page"])'
+                return (
+                    "Error: urls is required for extract action. "
+                    'Example: extract(action="extract", '
+                    'urls=["https://example.com/page"])'
+                )
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
             if _web_cache:
@@ -1177,7 +1254,11 @@ async def extract(  # noqa: PLR0913
 
         case "batch":
             if not urls:
-                return 'Error: urls is required for batch action. Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])'
+                return (
+                    "Error: urls is required for batch action. "
+                    'Example: extract(action="batch", '
+                    'urls=["https://a.com/1", "https://b.com/2"])'
+                )
             from wet_mcp.sources.crawler import batch_extract
 
             return await _with_timeout(
@@ -1187,7 +1268,11 @@ async def extract(  # noqa: PLR0913
 
         case "crawl":
             if not urls:
-                return 'Error: urls is required for crawl action. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)'
+                return (
+                    "Error: urls is required for crawl action. "
+                    'Example: extract(action="crawl", '
+                    'urls=["https://docs.example.com"], depth=2)'
+                )
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -1214,7 +1299,11 @@ async def extract(  # noqa: PLR0913
 
         case "map":
             if not urls:
-                return 'Error: urls is required for map action. Example: extract(action="map", urls=["https://example.com"])'
+                return (
+                    "Error: urls is required for map action. "
+                    'Example: extract(action="map", '
+                    'urls=["https://example.com"])'
+                )
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -1235,7 +1324,11 @@ async def extract(  # noqa: PLR0913
 
         case "convert":
             if not paths:
-                return 'Error: paths is required for convert action. Example: extract(action="convert", paths=["/home/user/report.pdf"])'
+                return (
+                    "Error: paths is required for convert action. "
+                    'Example: extract(action="convert", '
+                    'paths=["/home/user/report.pdf"])'
+                )
             from wet_mcp.sources.crawler import convert_local_files
 
             return await _with_timeout(
@@ -1245,9 +1338,23 @@ async def extract(  # noqa: PLR0913
 
         case "extract_structured":
             if not urls:
-                return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
+                return (
+                    "Error: urls is required for extract_structured action. "
+                    'Example: extract(action="extract_structured", '
+                    'urls=["https://example.com/pricing"], '
+                    'schema={"type": "object", '
+                    '"properties": {"price": {"type": "string"}}})'
+                )
             if not schema:
-                return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
+                return (
+                    "Error: schema (JSON Schema dict) is required for "
+                    "extract_structured action. Provide a JSON Schema "
+                    "defining the data structure to extract. "
+                    'Example: schema={"type": "object", '
+                    '"properties": {"title": {"type": "string"}, '
+                    '"items": {"type": "array", '
+                    '"items": {"type": "object"}}}}'
+                )
             from wet_mcp.sources.structured import extract_structured
 
             return await _with_timeout(
@@ -1259,7 +1366,11 @@ async def extract(  # noqa: PLR0913
 
         case "agent":
             if not query:
-                return 'Error: query is required for agent action. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)'
+                return (
+                    "Error: query is required for agent action. "
+                    'Example: extract(action="agent", '
+                    'query="latest pydantic 2 changes", max_urls=5)'
+                )
             from wet_mcp.sources.agent_orchestrator import run_agent
 
             result = await _with_timeout(
@@ -1277,9 +1388,21 @@ async def extract(  # noqa: PLR0913
 
         case "interact":
             if not url:
-                return 'Error: url is required for interact action. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "click", "selector": "#submit"}])'
+                return (
+                    "Error: url is required for interact action. "
+                    'Example: extract(action="interact", '
+                    'url="https://example.com/login", '
+                    'actions=[{"type": "click", '
+                    '"selector": "#submit"}])'
+                )
             if not actions:
-                return 'Error: actions is required for interact action. Provide a list of {type, selector?, description?, value?} ops. Example: actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}]'
+                return (
+                    "Error: actions is required for interact action. "
+                    "Provide a list of {type, selector?, description?, value?} "
+                    'ops. Example: actions=[{"type": "fill", '
+                    '"selector": "#email", "value": "x@y.com"}, '
+                    '{"type": "submit", "selector": "form"}]'
+                )
             from wet_mcp.sources.interact_orchestrator import run_interact
 
             result = await _with_timeout(
@@ -1316,9 +1439,12 @@ async def extract(  # noqa: PLR0913
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             return (
                 f"Error: Unknown action '{action}'.{suggestion} "
-                "Valid actions: extract (read URL content), batch (bulk extract), crawl (follow links), "
-                "map (site structure), convert (local files to markdown), extract_structured (schema-based), "
-                "agent (multi-step research orchestration), interact (drive a page with click/fill/submit). "
+                "Valid actions: extract (read URL content), batch (bulk "
+                "extract), crawl (follow links), "
+                "map (site structure), convert (local files to markdown), "
+                "extract_structured (schema-based), "
+                "agent (multi-step research orchestration), interact "
+                "(drive a page with click/fill/submit). "
                 "If you want to search for information, use the `search` tool instead."
             )
 
@@ -1342,13 +1468,18 @@ async def media(  # noqa: PLR0913
     """Discover and download media files (images, videos, audio) from web pages.
 
     Actions:
-    - list: Scan a page and return media URLs with metadata. Example: media(action="list", url="https://example.com/gallery", media_type="images")
-    - download: Download media files to local storage. Example: media(action="download", media_urls=["https://example.com/photo.jpg"])
+    - list: Scan a page and return media URLs with metadata.
+      Example: media(action="list", url="https://example.com/gallery",
+      media_type="images")
+    - download: Download media files to local storage.
+      Example: media(action="download",
+      media_urls=["https://example.com/photo.jpg"])
 
     Key parameters:
     - url (required for list): Page URL to scan
     - media_urls (required for download): List of media URLs to download
-    - media_type: Filter for list -- "images", "videos", "audio", "files", "all" (default: "all")
+    - media_type: Filter for list -- "images", "videos", "audio", "files", "all"
+      (default: "all")
     - output_dir: Download directory (default: ~/.wet-mcp/downloads)
     - prompt: Reserved -- accepted for backward compatibility, ignored
 
@@ -1369,7 +1500,12 @@ async def media(  # noqa: PLR0913
     match action:
         case "list":
             if not url:
-                return 'Error: url is required for list action. Example: media(action="list", url="https://example.com/gallery", media_type="images")'
+                return (
+                    "Error: url is required for list action. "
+                    'Example: media(action="list", '
+                    'url="https://example.com/gallery", '
+                    'media_type="images")'
+                )
             return await _with_timeout(
                 list_media(url=url, media_type=media_type, max_items=max_items),
                 "media.list",
@@ -1377,7 +1513,13 @@ async def media(  # noqa: PLR0913
 
         case "download":
             if not media_urls:
-                return 'Error: media_urls is required for download action. Example: media(action="download", media_urls=["https://example.com/image.jpg"]). Use media(action="list", url="...") first to discover media URLs.'
+                return (
+                    "Error: media_urls is required for download action. "
+                    'Example: media(action="download", '
+                    'media_urls=["https://example.com/image.jpg"]). '
+                    'Use media(action="list", url="...") first to '
+                    "discover media URLs."
+                )
 
             # Security: validate output_dir is within the configured
             # download directory to prevent arbitrary file writes.
@@ -1438,7 +1580,8 @@ async def media(  # noqa: PLR0913
     ),
 )
 async def help(tool_name: str = "search") -> str:
-    """Get detailed documentation for any tool. Call this when you need full parameter reference or usage examples.
+    """Get detailed documentation for any tool. Call this when you need full
+    parameter reference or usage examples.
 
     Valid tool_name values: search, extract, media, config.
 
@@ -1458,7 +1601,10 @@ async def help(tool_name: str = "search") -> str:
             else []
         )
         suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-        return f"Error: Invalid tool_name '{tool_name}'.{suggestion} Valid options: {', '.join(sorted(allowed_tools))}."
+        return (
+            f"Error: Invalid tool_name '{tool_name}'.{suggestion} "
+            f"Valid options: {', '.join(sorted(allowed_tools))}."
+        )
 
     try:
         doc_file = files("wet_mcp.docs").joinpath(f"{tool_name}.md")
@@ -1786,7 +1932,10 @@ async def _do_research(
     try:
         searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
     except TimeoutError:
-        return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
+        return (
+            f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). "
+            "Try again or check logs."
+        )
     except (SystemExit, Exception) as exc:
         return f"Error: SearXNG startup failed: {exc}"
 
@@ -2112,7 +2261,8 @@ async def _background_index_and_search(
         )
         _docs_db.mark_version_indexed(ver_id, page_count, len(all_chunks))
         logger.info(
-            f"Background indexing complete for '{library}'. Pages: {page_count}, Chunks: {len(all_chunks)}"
+            f"Background indexing complete for '{library}'. "
+            f"Pages: {page_count}, Chunks: {len(all_chunks)}"
         )
 
     except Exception as e:
@@ -2373,7 +2523,11 @@ async def _do_docs_search(
     return json.dumps(
         {
             "status": "indexing_in_progress",
-            "message": f"Library '{library}' is currently being downloaded and indexed in the background (this may take 3-5 minutes). In the meantime, here are temporary web search results.",
+            "message": (
+                f"Library '{library}' is currently being downloaded and indexed "
+                "in the background (this may take 3-5 minutes). In the "
+                "meantime, here are temporary web search results."
+            ),
             "temporary_results": fallback_data.get("results", []),
             "library": library,
             "docs_url": docs_url,
@@ -2514,7 +2668,8 @@ def main() -> None:
     binds 0.0.0.0:8080 and scopes credentials per JWT ``sub``;
     otherwise it binds 127.0.0.1 for single-user local browser setup.
 
-    See ``~/projects/.superpower/mcp-core/specs/2026-05-01-stdio-pure-http-multiuser.md``.
+    See ``~/projects/.superpower/mcp-core/specs/
+    2026-05-01-stdio-pure-http-multiuser.md``.
     """
     http_requested = (
         "--http" in sys.argv
