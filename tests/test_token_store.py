@@ -272,6 +272,7 @@ def test_load_token_for_sub_oserror(token_dir):
     with patch.object(Path, "exists", side_effect=OSError("disk error")):
         assert load_token_for_sub("user1", "drive") is None
 
+
 def test_save_token_windows_no_user(token_dir):
     """Test save_token on Windows when username cannot be determined."""
     with (
