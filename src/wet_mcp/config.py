@@ -139,7 +139,7 @@ class Settings(BaseSettings):
     google_drive_client_id: str = (
         "147668446467-olf2cf6e49rshqv9quvhq639110oc6hc.apps.googleusercontent.com"
     )
-    google_drive_client_secret: str = "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"
+    google_drive_client_secret: str = ""
 
     # S3-compatible sync (operator deploy mode).
     # When SYNC_S3_BUCKET is non-empty the active backend resolves to "s3"
