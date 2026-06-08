@@ -81,7 +81,6 @@ _wc_runner._find_available_port = _find_available_port  # type: ignore[assignmen
 from web_core.search.runner import (  # noqa: F401, E402
     _DISCOVERY_FILE,
     _HEALTH_CHECK_TIMEOUT,
-    _MAX_RESTART_ATTEMPTS,
     _RESTART_COOLDOWN,
     _STARTUP_HEALTH_TIMEOUT,
     _cleanup_process,
