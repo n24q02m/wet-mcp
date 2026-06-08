@@ -42,37 +42,44 @@ depends_on = None
 logger = logging.getLogger("alembic.runtime.migration")
 
 
-def _existing_columns(table: str) -> set[str]:
+def _get_existing_columns(table: str) -> set[str]:
+    """Return existing columns for a table using hardcoded table names for security."""
     bind = op.get_bind()
-    rows = bind.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
-    return {row[1] for row in rows}
-
-
-def _existing_indexes(table: str) -> set[str]:
-    bind = op.get_bind()
-    rows = bind.exec_driver_sql(f"PRAGMA index_list({table})").fetchall()
-    return {row[1] for row in rows}
-
-
-def _add_column_if_missing(table: str, name: str, ddl: str) -> None:
-    if name not in _existing_columns(table):
-        op.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+    if table == "libraries":
+        rows = bind.exec_driver_sql("PRAGMA table_info(libraries)").fetchall()
+    elif table == "versions":
+        rows = bind.exec_driver_sql("PRAGMA table_info(versions)").fetchall()
+    elif table == "doc_chunks":
+        rows = bind.exec_driver_sql("PRAGMA table_info(doc_chunks)").fetchall()
     else:
-        logger.info(f"docs_002: {table}.{name} already present, skipping")
+        raise ValueError(f"Unauthorized table inspection: {table}")
+    return {row[1] for row in rows}
 
 
 def upgrade() -> None:
     """Add Phase 2 columns idempotently + backfill key fields."""
     # libraries
-    _add_column_if_missing("libraries", "canonical_name", "canonical_name TEXT")
-    _add_column_if_missing("libraries", "homepage", "homepage TEXT")
-    _add_column_if_missing("libraries", "github_url", "github_url TEXT")
-    _add_column_if_missing("libraries", "package_managers", "package_managers TEXT")
-    _add_column_if_missing("libraries", "tier", "tier INTEGER NOT NULL DEFAULT 2")
-    _add_column_if_missing("libraries", "last_indexed_at", "last_indexed_at REAL")
-    _add_column_if_missing(
-        "libraries", "total_versions", "total_versions INTEGER NOT NULL DEFAULT 0"
-    )
+    lib_cols = _get_existing_columns("libraries")
+    if "discovery_version" not in lib_cols:
+        op.execute(
+            "ALTER TABLE libraries ADD COLUMN discovery_version INTEGER DEFAULT 0"
+        )
+    if "canonical_name" not in lib_cols:
+        op.execute("ALTER TABLE libraries ADD COLUMN canonical_name TEXT")
+    if "homepage" not in lib_cols:
+        op.execute("ALTER TABLE libraries ADD COLUMN homepage TEXT")
+    if "github_url" not in lib_cols:
+        op.execute("ALTER TABLE libraries ADD COLUMN github_url TEXT")
+    if "package_managers" not in lib_cols:
+        op.execute("ALTER TABLE libraries ADD COLUMN package_managers TEXT")
+    if "tier" not in lib_cols:
+        op.execute("ALTER TABLE libraries ADD COLUMN tier INTEGER NOT NULL DEFAULT 2")
+    if "last_indexed_at" not in lib_cols:
+        op.execute("ALTER TABLE libraries ADD COLUMN last_indexed_at REAL")
+    if "total_versions" not in lib_cols:
+        op.execute(
+            "ALTER TABLE libraries ADD COLUMN total_versions INTEGER NOT NULL DEFAULT 0"
+        )
 
     # Backfill canonical_name + last_indexed_at for pre-existing rows.
     op.execute(
@@ -84,16 +91,28 @@ def upgrade() -> None:
     )
 
     # versions
-    _add_column_if_missing("versions", "release_date", "release_date REAL")
-    _add_column_if_missing("versions", "source_url", "source_url TEXT")
+    ver_cols = _get_existing_columns("versions")
+    if "release_date" not in ver_cols:
+        op.execute("ALTER TABLE versions ADD COLUMN release_date REAL")
+    if "source_url" not in ver_cols:
+        op.execute("ALTER TABLE versions ADD COLUMN source_url TEXT")
 
     # doc_chunks
-    _add_column_if_missing("doc_chunks", "section", "section TEXT")
-    _add_column_if_missing("doc_chunks", "topic", "topic TEXT")
-    _add_column_if_missing("doc_chunks", "content_hash", "content_hash TEXT")
-    _add_column_if_missing("doc_chunks", "token_count", "token_count INTEGER")
+    chunk_cols = _get_existing_columns("doc_chunks")
+    if "section" not in chunk_cols:
+        op.execute("ALTER TABLE doc_chunks ADD COLUMN section TEXT")
+    if "topic" not in chunk_cols:
+        op.execute("ALTER TABLE doc_chunks ADD COLUMN topic TEXT")
+    if "content_hash" not in chunk_cols:
+        op.execute("ALTER TABLE doc_chunks ADD COLUMN content_hash TEXT")
+    if "token_count" not in chunk_cols:
+        op.execute("ALTER TABLE doc_chunks ADD COLUMN token_count INTEGER")
 
-    if "idx_doc_chunks_lib_ver_topic" not in _existing_indexes("doc_chunks"):
+    # Composite index
+    bind = op.get_bind()
+    rows = bind.exec_driver_sql("PRAGMA index_list(doc_chunks)").fetchall()
+    existing_indexes = {row[1] for row in rows}
+    if "idx_doc_chunks_lib_ver_topic" not in existing_indexes:
         op.execute(
             "CREATE INDEX idx_doc_chunks_lib_ver_topic "
             "ON doc_chunks(library_id, version_id, topic)"
