@@ -2603,13 +2603,16 @@ class TestSetupTool:
         """setup sync returns success."""
         from wet_mcp.setup_tool import run_setup_sync
 
-        with patch(
-            "wet_mcp.sync.setup_google_auth",
-            new_callable=AsyncMock,
-            return_value=True,
-        ), patch(
-            "wet_mcp.config.settings.google_drive_client_secret",
-            "dummy_secret",
+        with (
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "wet_mcp.config.settings.google_drive_client_secret",
+                "dummy_secret",
+            ),
         ):
             result = await run_setup_sync()
             assert result["status"] == "ok"
@@ -2618,13 +2621,16 @@ class TestSetupTool:
         """setup sync returns failure."""
         from wet_mcp.setup_tool import run_setup_sync
 
-        with patch(
-            "wet_mcp.sync.setup_google_auth",
-            new_callable=AsyncMock,
-            return_value=False,
-        ), patch(
-            "wet_mcp.config.settings.google_drive_client_secret",
-            "dummy_secret",
+        with (
+            patch(
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "wet_mcp.config.settings.google_drive_client_secret",
+                "dummy_secret",
+            ),
         ):
             result = await run_setup_sync()
             assert result["status"] == "error"
