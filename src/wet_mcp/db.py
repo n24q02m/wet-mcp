@@ -1234,7 +1234,9 @@ class DocsDB:
             batch_size = 1000
             # Security: Use json_each(?) to ensure the SQL string is 100% static
             # and properly parameterized, avoiding dynamic placeholder generation.
-            query = allowed_queries[table].replace("{}", "SELECT value FROM json_each(?)")
+            query = allowed_queries[table].replace(
+                "{}", "SELECT value FROM json_each(?)"
+            )
             for i in range(0, len(ids), batch_size):
                 batch = ids[i : i + batch_size]
                 res = self._conn.execute(query, (json.dumps(batch),)).fetchall()
