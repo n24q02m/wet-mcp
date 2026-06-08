@@ -1220,9 +1220,9 @@ class DocsDB:
 
         def _get_existing(table: str, items: list) -> set:
             allowed_queries = {
-                "libraries": "SELECT id FROM libraries WHERE id IN ({})",
-                "versions": "SELECT id FROM versions WHERE id IN ({})",
-                "doc_chunks": "SELECT id FROM doc_chunks WHERE id IN ({})",
+                "libraries": "SELECT id FROM libraries WHERE id IN (SELECT value FROM json_each(?))",
+                "versions": "SELECT id FROM versions WHERE id IN (SELECT value FROM json_each(?))",
+                "doc_chunks": "SELECT id FROM doc_chunks WHERE id IN (SELECT value FROM json_each(?))",
             }
             if table not in allowed_queries:
                 raise ValueError(f"Invalid table name: {table}")
@@ -1230,15 +1230,13 @@ class DocsDB:
                 return set()
             ids = [obj["id"] for obj in items]
             existing = set()
-            batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
+            # Use json_each to safely pass IDs as a JSON array parameter.
+            # Batching avoids excessive memory usage for very large imports.
+            batch_size = 5000
             for i in range(0, len(ids), batch_size):
                 batch = ids[i : i + batch_size]
-                placeholders = ",".join("?" * len(batch))
-                # Safe because table is strictly validated against allowlist
-                # and placeholders string contains only static "?" and ",".
-                query = allowed_queries[table].replace("{}", placeholders)
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(query, batch).fetchall()
+                query = allowed_queries[table]
+                res = self._conn.execute(query, (json.dumps(batch),)).fetchall()
                 existing.update(r[0] for r in res)
             return existing
 
