@@ -698,20 +698,40 @@ class DocsDB:
         self._conn.commit()
 
     def get_best_version(
-        self, library_id: str, target: str | None = None
+        self, library_id: str, preferred_version: str | None = None
     ) -> dict | None:
-        """Get best matching version for library."""
-        if target:
-            # Try exact match first
+        """Find best matching version, handling 'stable' vs 'latest' semantics."""
+        # 1. Try exact match if preferred_version is specified
+        if preferred_version:
             row = self._conn.execute(
                 """SELECT * FROM versions
                    WHERE library_id = ? AND version = ? AND status = 'indexed'""",
-                (library_id, target),
+                (library_id, preferred_version),
             ).fetchone()
             if row:
                 return dict(row)
 
-        # Fallback to latest indexed
+        # 2. If no exact match (or no preferred_version), try 'stable'
+        if preferred_version != "stable":
+            row = self._conn.execute(
+                """SELECT * FROM versions
+                   WHERE library_id = ? AND version = 'stable' AND status = 'indexed'""",
+                (library_id,),
+            ).fetchone()
+            if row:
+                return dict(row)
+
+        # 3. Try 'latest'
+        if preferred_version != "latest":
+            row = self._conn.execute(
+                """SELECT * FROM versions
+                   WHERE library_id = ? AND version = 'latest' AND status = 'indexed'""",
+                (library_id,),
+            ).fetchone()
+            if row:
+                return dict(row)
+
+        # 4. Fallback to the most recently indexed version
         row = self._conn.execute(
             """SELECT * FROM versions
                WHERE library_id = ? AND status = 'indexed'
