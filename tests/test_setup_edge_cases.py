@@ -1,5 +1,7 @@
 from unittest.mock import patch
+
 from wet_mcp.setup import patch_searxng_version, patch_searxng_windows
+
 
 @patch("wet_mcp.setup._find_searx_package_dir")
 @patch("wet_mcp.setup.Path")
@@ -20,6 +22,7 @@ def test_patch_searxng_version_no_dir_noop(mock_path, mock_find_dir):
     # but here we specifically want to see that searx_dir was not used.
     # If it returned early, it shouldn't have reached 'vf = searx_dir / "version_frozen.py"'
     mock_path.assert_not_called()
+
 
 @patch("platform.system", return_value="Windows")
 @patch("wet_mcp.setup._find_searx_package_dir")
