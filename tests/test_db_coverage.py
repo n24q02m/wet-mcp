@@ -367,6 +367,27 @@ class TestAddChunksWithEmbeddings:
         assert count == 2
         d.close()
 
+    def test_add_chunks_serialization_error(self, tmp_path):
+        """Serialization error in one embedding is caught, others proceed (lines 817-818)."""
+        d = DocsDB(tmp_path / "ser.db", embedding_dims=2)
+        lib_id = d.upsert_library(name="serlib")
+        ver_id = d.upsert_version(lib_id)
+
+        d._vec_enabled = True
+        # Second embedding is invalid (string) -> serialization fails
+        embeddings = [[1.0, 2.0], "invalid"]
+        chunks = [
+            {"content": "good chunk"},
+            {"content": "bad chunk"},
+        ]
+        count = d.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
+        assert count == 2
+
+        # Only the first (valid) embedding should be in the vec table
+        vec_count = d._conn.execute("SELECT COUNT(*) FROM doc_chunks_vec").fetchone()[0]
+        assert vec_count == 1
+        d.close()
+
 
 # ---------------------------------------------------------------------------
 # FTS search error handling (lines 694-697)
