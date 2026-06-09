@@ -34,7 +34,7 @@ def upgrade() -> None:
     existing_cols = {
         row[1]
         for row in op.get_bind()
-        .exec_driver_sql("PRAGMA table_info(doc_chunks)")
+        .exec_driver_sql("PRAGMA table_info('doc_chunks')")
         .fetchall()
     }
     if "summary" not in existing_cols:

@@ -43,14 +43,18 @@ logger = logging.getLogger("alembic.runtime.migration")
 
 
 def _existing_columns(table: str) -> set[str]:
+    if table not in ("libraries", "versions", "doc_chunks"):
+        raise ValueError(f"Invalid table: {table}")
     bind = op.get_bind()
-    rows = bind.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+    rows = bind.exec_driver_sql(f"PRAGMA table_info('{table}')").fetchall()
     return {row[1] for row in rows}
 
 
 def _existing_indexes(table: str) -> set[str]:
+    if table not in ("libraries", "versions", "doc_chunks"):
+        raise ValueError(f"Invalid table: {table}")
     bind = op.get_bind()
-    rows = bind.exec_driver_sql(f"PRAGMA index_list({table})").fetchall()
+    rows = bind.exec_driver_sql(f"PRAGMA index_list('{table}')").fetchall()
     return {row[1] for row in rows}
 
 
