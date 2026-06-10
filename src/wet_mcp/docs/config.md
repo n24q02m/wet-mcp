@@ -34,6 +34,24 @@ Valid keys:
 | `sync_folder` | String | Remote folder path |
 | `sync_interval` | Integer (seconds) | Sync interval |
 
+### models
+
+List cloud models (chat/embedding/rerank) from the litellm catalog,
+filtered to providers with configured API keys.
+
+```json
+{"action": "models"}
+```
+
+Full catalog (including unconfigured providers):
+
+```json
+{"action": "models", "key": "all"}
+```
+
+Returns: model list with provider/mode/vision flags. Any litellm
+`provider/model` string works via passthrough, even if not listed.
+
 ### cache_clear
 
 Clear web cache (search, extract, crawl, map results).

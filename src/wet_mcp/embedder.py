@@ -1,8 +1,9 @@
-"""Dual-backend embedding: Cloud (native SDKs) + qwen3-embed (local).
+"""Dual-backend embedding: Cloud (litellm passthrough) + qwen3-embed (local).
 
 Supports two backends:
-- **cloud**: Cloud providers via native SDKs (Google Gemini, OpenAI, Cohere).
-  Requires API keys. Auto-detects provider from API_KEYS config.
+- **cloud**: Cloud providers via mcp_core.llm (litellm passthrough — Jina,
+  Gemini, OpenAI, Cohere, or any litellm 'provider/model'). Requires API
+  keys. Auto-detects provider from API_KEYS config.
 - **local**: Local inference via qwen3-embed. GGUF if GPU + llama-cpp-python,
   ONNX otherwise. No API keys needed, ~0.5GB model download on first use.
 
@@ -18,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Protocol
+from typing import Any, Protocol
 
 from loguru import logger
 
@@ -144,12 +145,12 @@ def _strip_provider(model: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Cloud Backend (native SDKs)
+# Cloud Backend (litellm passthrough via mcp_core.llm)
 # ---------------------------------------------------------------------------
 
 
 class CloudEmbeddingBackend:
-    """Cloud embedding via native SDKs (Gemini, OpenAI, Cohere)."""
+    """Cloud embedding via mcp_core.llm (litellm passthrough)."""
 
     MAX_BATCH_SIZE = 96  # Common safe batch size across providers
 
@@ -163,7 +164,6 @@ class CloudEmbeddingBackend:
         self.api_base = api_base
         self.api_key = api_key
         self._provider = _detect_embedding_provider(model)
-        self._bare_model = _strip_provider(model)
 
     async def _embed_batch_inner(
         self,
@@ -216,124 +216,54 @@ class CloudEmbeddingBackend:
         assert last_exc is not None  # guaranteed by loop logic
         raise last_exc
 
+    def _litellm_model(self) -> str:
+        """Map wet's model naming to a litellm ``provider/model`` string."""
+        if "/" in self.model:
+            return self.model
+        if self._provider == "jina":
+            return f"jina_ai/{self.model}"
+        if self._provider == "gemini":
+            return f"gemini/{self.model}"
+        if self._provider == "cohere":
+            return f"cohere/{self.model}"
+        # OpenAI-style bare names (text-embedding-3-*) pass through as-is.
+        return self.model
+
     async def _call_provider(
         self, texts: list[str], dimensions: int | None = None
     ) -> list[list[float]]:
-        """Route to the correct provider SDK."""
-        if self._provider == "gemini":
-            return await self._embed_gemini(texts, dimensions)
-        elif self._provider == "cohere":
-            return await self._embed_cohere(texts, dimensions)
-        elif self._provider == "jina":
-            return await self._embed_jina(texts, dimensions)
-        else:
-            return await self._embed_openai(texts, dimensions)
+        """Single cloud path via mcp_core.llm (litellm passthrough)."""
+        # Lazy import: litellm costs ~1-2s on first import.
+        from mcp_core.llm import aembedding
 
-    async def _embed_gemini(
-        self, texts: list[str], dimensions: int | None = None
-    ) -> list[list[float]]:
-        """Embed via Gemini SDK (google-genai)."""
-        from google import genai
-        from google.genai import types
-
-        key = (
-            self.api_key
-            or os.getenv("GEMINI_API_KEY")
-            or os.getenv("GOOGLE_API_KEY")
-            or ""
-        )
-        client = genai.Client(api_key=key)
-
-        config_kwargs: dict = {}
-        if dimensions:
-            config_kwargs["output_dimensionality"] = dimensions
-
-        # google-genai Client.models.embed_content is synchronous, use to_thread
-        result = await asyncio.to_thread(
-            client.models.embed_content,
-            model=self._bare_model,
-            contents=texts,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]  # SDK accepts list[str]
-            config=types.EmbedContentConfig(**config_kwargs) if config_kwargs else None,
-        )
-
-        embeddings = result.embeddings or []
-        return [list(e.values or []) for e in embeddings]
-
-    async def _embed_openai(
-        self, texts: list[str], dimensions: int | None = None
-    ) -> list[list[float]]:
-        """Embed via OpenAI SDK."""
-        from openai import AsyncOpenAI
-
-        key = self.api_key or os.getenv("OPENAI_API_KEY") or ""
-        base = self.api_base or "https://api.openai.com/v1"
-        client = AsyncOpenAI(api_key=key, base_url=base)
-
-        kwargs: dict = {
-            "model": self._bare_model,
-            "input": texts,
-        }
+        kwargs: dict = {}
         if dimensions:
             kwargs["dimensions"] = dimensions
+        if self._provider == "cohere":
+            kwargs["input_type"] = "search_document"
 
-        response = await client.embeddings.create(**kwargs)
-        data = sorted(response.data, key=lambda x: x.index)
-        return [d.embedding for d in data]
-
-    async def _embed_cohere(
-        self, texts: list[str], dimensions: int | None = None
-    ) -> list[list[float]]:
-        """Embed via Cohere SDK (ClientV2)."""
-        import cohere
-
-        key = self.api_key or os.getenv("COHERE_API_KEY") or ""
-        # Cohere V2 SDK's ClientV2.embed is synchronous, use to_thread
-        client = cohere.ClientV2(api_key=key)
-
-        response = await asyncio.to_thread(
-            client.embed,
-            model=self._bare_model,
-            texts=texts,
-            input_type="search_document",
-            embedding_types=["float"],
-            truncate="END",
+        response = await aembedding(
+            model=self._litellm_model(),
+            input=texts,
+            api_base=self.api_base or os.getenv("EMBEDDING_API_BASE") or None,
+            api_key=self.api_key or None,
+            **kwargs,
         )
 
-        raw = response.embeddings.float_ or []
-        embeddings = [list(e) for e in raw]
-        # Truncate locally if dimensions requested (Cohere doesn't support it natively)
-        if dimensions and embeddings and len(embeddings[0]) > dimensions:
-            embeddings = [e[:dimensions] for e in embeddings]
-        return embeddings
-
-    async def _embed_jina(
-        self, texts: list[str], dimensions: int | None = None
-    ) -> list[list[float]]:
-        """Embed via Jina AI (httpx, REST API)."""
-        import httpx
-
-        key = self.api_key or os.getenv("JINA_AI_API_KEY") or ""
-        payload: dict = {
-            "model": self._bare_model,
-            "input": texts,
-        }
-        if dimensions:
-            payload["dimensions"] = dimensions
-
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.jina.ai/v1/embeddings",
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {key}",
-                    "Content-Type": "application/json",
-                },
-                timeout=60,
+        # litellm embedding items may be pydantic ``Embedding`` objects or
+        # plain dicts depending on provider/version — handle both shapes.
+        def _idx(item: Any) -> int:
+            return (
+                item.get("index", 0)
+                if isinstance(item, dict)
+                else getattr(item, "index", 0)
             )
-            response.raise_for_status()
-            data = response.json()["data"]
-            data_sorted = sorted(data, key=lambda x: x["index"])
-            return [d["embedding"] for d in data_sorted]
+
+        def _vec(item: Any) -> list[float]:
+            return item["embedding"] if isinstance(item, dict) else item.embedding
+
+        data = sorted(response.data or [], key=_idx)
+        return [_vec(item) for item in data]
 
     async def embed_texts(
         self,

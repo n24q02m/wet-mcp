@@ -24,9 +24,9 @@ class TestRelaySchema:
         assert "fields" in RELAY_SCHEMA
         assert "modes" not in RELAY_SCHEMA
 
-    def test_schema_has_five_provider_fields(self):
+    def test_schema_has_six_provider_fields(self):
         fields = RELAY_SCHEMA["fields"]
-        assert len(fields) == 5
+        assert len(fields) == 6
 
     def test_schema_field_keys(self):
         field_keys = [f["key"] for f in RELAY_SCHEMA["fields"]]
@@ -34,6 +34,7 @@ class TestRelaySchema:
         assert "GEMINI_API_KEY" in field_keys
         assert "OPENAI_API_KEY" in field_keys
         assert "COHERE_API_KEY" in field_keys
+        assert "XAI_API_KEY" in field_keys
         assert "GITHUB_TOKEN" in field_keys
 
     def test_schema_server_name(self):

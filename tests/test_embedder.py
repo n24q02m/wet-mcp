@@ -1,10 +1,11 @@
 """Tests for src/wet_mcp/embedder.py -- Dual-backend embedding.
 
-Covers CloudEmbeddingBackend (native SDK providers: OpenAI, Cohere, Gemini, Jina),
+Covers CloudEmbeddingBackend (litellm passthrough via mcp_core.llm),
 batch splitting, retry logic, Qwen3EmbedBackend (local ONNX), factory functions,
 and provider detection helpers.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -218,201 +219,198 @@ class TestCloudEmbeddingBackend:
 
 
 # -----------------------------------------------------------------------
-# CloudEmbeddingBackend: Provider-specific SDK mocks
+# CloudEmbeddingBackend: litellm passthrough (_call_provider + _litellm_model)
 # -----------------------------------------------------------------------
 
 
-class TestProviderSDKs:
-    """Test that each provider SDK is called correctly."""
+def _embedding_response(embeddings: list[list[float]]) -> MagicMock:
+    """Build a litellm-shaped EmbeddingResponse mock (.data list of dicts)."""
+    mock_response = MagicMock()
+    mock_response.data = [
+        {"index": i, "embedding": emb, "object": "embedding"}
+        for i, emb in enumerate(embeddings)
+    ]
+    return mock_response
 
-    async def test_embed_openai(self):
-        """OpenAI SDK is called with correct params."""
+
+class TestLitellmModelMapping:
+    """_litellm_model maps wet's model naming to litellm provider prefixes."""
+
+    def test_prefixed_models_pass_through(self):
+        assert (
+            CloudEmbeddingBackend("gemini/gemini-embedding-001")._litellm_model()
+            == "gemini/gemini-embedding-001"
+        )
+        assert (
+            CloudEmbeddingBackend(
+                "jina_ai/jina-embeddings-v5-text-small"
+            )._litellm_model()
+            == "jina_ai/jina-embeddings-v5-text-small"
+        )
+        assert (
+            CloudEmbeddingBackend("cohere/embed-v4")._litellm_model()
+            == "cohere/embed-v4"
+        )
+
+    def test_bare_jina_gets_prefix(self):
+        backend = CloudEmbeddingBackend("jina-embeddings-v3")
+        assert backend._litellm_model() == "jina_ai/jina-embeddings-v3"
+
+    def test_bare_gemini_gets_prefix(self):
+        backend = CloudEmbeddingBackend("gemini-embedding-001")
+        assert backend._litellm_model() == "gemini/gemini-embedding-001"
+
+    def test_bare_cohere_gets_prefix(self):
+        backend = CloudEmbeddingBackend("embed-multilingual-v3.0")
+        assert backend._litellm_model() == "cohere/embed-multilingual-v3.0"
+
+    def test_bare_openai_stays_bare(self):
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        assert backend._litellm_model() == "text-embedding-3-small"
+
+
+class TestCallProvider:
+    """_call_provider dispatches through mcp_core.llm.aembedding."""
+
+    async def test_basic_call(self):
+        """Model, input, api_base and api_key are forwarded."""
         backend = CloudEmbeddingBackend("text-embedding-3-small", api_key="test-key")
 
-        mock_embedding = MagicMock()
-        mock_embedding.index = 0
-        mock_embedding.embedding = [0.1, 0.2, 0.3]
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1, 0.2, 0.3]])
+            result = await backend._call_provider(["test"])
 
-        mock_response = MagicMock()
-        mock_response.data = [mock_embedding]
-
-        mock_client = MagicMock()
-        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
-
-        mock_openai_cls = MagicMock(return_value=mock_client)
-        mock_openai_mod = MagicMock(AsyncOpenAI=mock_openai_cls)
-
-        with patch.dict("sys.modules", {"openai": mock_openai_mod}):
-            result = await backend._embed_openai(["test"])
-            mock_openai_cls.assert_called_once_with(
-                api_key="test-key", base_url="https://api.openai.com/v1"
-            )
-            mock_client.embeddings.create.assert_called_once_with(
-                model="text-embedding-3-small", input=["test"]
-            )
+            call_kwargs = mock_embed.call_args[1]
+            assert call_kwargs["model"] == "text-embedding-3-small"
+            assert call_kwargs["input"] == ["test"]
+            assert call_kwargs["api_key"] == "test-key"
+            assert call_kwargs["api_base"] is None
+            assert "dimensions" not in call_kwargs
 
         assert result == [[0.1, 0.2, 0.3]]
 
-    async def test_embed_openai_with_dimensions(self):
-        """OpenAI passes dimensions param."""
+    async def test_dimensions_forwarded(self):
+        """dimensions kwarg is only sent when set."""
         backend = CloudEmbeddingBackend("text-embedding-3-small", api_key="test-key")
 
-        mock_embedding = MagicMock()
-        mock_embedding.index = 0
-        mock_embedding.embedding = [0.1]
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1]])
+            await backend._call_provider(["test"], dimensions=256)
+            assert mock_embed.call_args[1]["dimensions"] == 256
 
-        mock_response = MagicMock()
-        mock_response.data = [mock_embedding]
-
-        mock_client = MagicMock()
-        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
-
-        mock_openai_cls = MagicMock(return_value=mock_client)
-        mock_openai_mod = MagicMock(AsyncOpenAI=mock_openai_cls)
-
-        with patch.dict("sys.modules", {"openai": mock_openai_mod}):
-            await backend._embed_openai(["test"], dimensions=256)
-            mock_client.embeddings.create.assert_called_once_with(
-                model="text-embedding-3-small", input=["test"], dimensions=256
-            )
-
-    async def test_embed_openai_with_api_base(self):
-        """OpenAI uses custom api_base."""
+    async def test_explicit_api_base_forwarded(self):
+        """Constructor api_base wins over EMBEDDING_API_BASE env."""
         backend = CloudEmbeddingBackend(
             "text-embedding-3-small",
             api_key="test-key",
             api_base="https://custom.api/v1",
         )
 
-        mock_embedding = MagicMock()
-        mock_embedding.index = 0
-        mock_embedding.embedding = [0.1]
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1]])
+            await backend._call_provider(["test"])
+            assert mock_embed.call_args[1]["api_base"] == "https://custom.api/v1"
 
-        mock_response = MagicMock()
-        mock_response.data = [mock_embedding]
+    async def test_env_api_base_fallback(self, monkeypatch):
+        """EMBEDDING_API_BASE env is used when no explicit api_base."""
+        monkeypatch.setenv("EMBEDDING_API_BASE", "https://env.api/v1")
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
 
-        mock_client = MagicMock()
-        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1]])
+            await backend._call_provider(["test"])
+            assert mock_embed.call_args[1]["api_base"] == "https://env.api/v1"
 
-        mock_openai_cls = MagicMock(return_value=mock_client)
-        mock_openai_mod = MagicMock(AsyncOpenAI=mock_openai_cls)
-
-        with patch.dict("sys.modules", {"openai": mock_openai_mod}):
-            await backend._embed_openai(["test"])
-            mock_openai_cls.assert_called_once_with(
-                api_key="test-key", base_url="https://custom.api/v1"
-            )
-
-    async def test_embed_cohere(self):
-        """Cohere SDK (ClientV2) is called with correct params."""
+    async def test_cohere_input_type_forwarded(self):
+        """Cohere models pass input_type=search_document through kwargs."""
         backend = CloudEmbeddingBackend("embed-multilingual-v3.0", api_key="test-key")
 
-        mock_embeddings = MagicMock()
-        mock_embeddings.float_ = [[0.1, 0.2, 0.3]]
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1, 0.2, 0.3]])
+            result = await backend._call_provider(["test"])
 
-        mock_response = MagicMock()
-        mock_response.embeddings = mock_embeddings
-
-        mock_client = MagicMock()
-        mock_client.embed.return_value = mock_response
-
-        mock_cohere_mod = MagicMock()
-        mock_cohere_mod.ClientV2.return_value = mock_client
-
-        with patch.dict("sys.modules", {"cohere": mock_cohere_mod}):
-            result = await backend._embed_cohere(["test"])
-            mock_cohere_mod.ClientV2.assert_called_once_with(api_key="test-key")
-            mock_client.embed.assert_called_once_with(
-                model="embed-multilingual-v3.0",
-                texts=["test"],
-                input_type="search_document",
-                embedding_types=["float"],
-                truncate="END",
-            )
+            call_kwargs = mock_embed.call_args[1]
+            assert call_kwargs["model"] == "cohere/embed-multilingual-v3.0"
+            assert call_kwargs["input_type"] == "search_document"
 
         assert result == [[0.1, 0.2, 0.3]]
 
-    async def test_embed_cohere_truncates_locally(self):
-        """Cohere truncates locally when dimensions requested."""
-        backend = CloudEmbeddingBackend("embed-multilingual-v3.0", api_key="test-key")
-
-        mock_embeddings = MagicMock()
-        mock_embeddings.float_ = [[0.1] * 1024]
-
-        mock_response = MagicMock()
-        mock_response.embeddings = mock_embeddings
-
-        mock_client = MagicMock()
-        mock_client.embed.return_value = mock_response
-
-        mock_cohere_mod = MagicMock()
-        mock_cohere_mod.ClientV2.return_value = mock_client
-
-        with patch.dict("sys.modules", {"cohere": mock_cohere_mod}):
-            result = await backend._embed_cohere(["test"], dimensions=768)
-
-        assert len(result[0]) == 768
-
-    async def test_embed_gemini(self):
-        """Gemini SDK is called with correct params."""
-        backend = CloudEmbeddingBackend(
-            "gemini/gemini-embedding-001", api_key="test-key"
-        )
-
-        mock_embedding = MagicMock()
-        mock_embedding.values = [0.1, 0.2, 0.3]
-
-        mock_result = MagicMock()
-        mock_result.embeddings = [mock_embedding]
-
-        mock_client = MagicMock()
-        mock_client.models.embed_content.return_value = mock_result
-
-        mock_genai = MagicMock()
-        mock_genai.Client.return_value = mock_client
-
-        mock_google = MagicMock()
-        mock_google.genai = mock_genai
-
-        with patch.dict(
-            "sys.modules",
-            {
-                "google": mock_google,
-                "google.genai": mock_genai,
-                "google.genai.types": MagicMock(),
-            },
-        ):
-            result = await backend._embed_gemini(["test"])
-            mock_genai.Client.assert_called_once_with(api_key="test-key")
-
-        assert result == [[0.1, 0.2, 0.3]]
-
-    async def test_embed_jina(self):
-        """Jina AI REST API is called with correct params."""
+    async def test_non_cohere_has_no_input_type(self):
+        """Non-cohere providers do not send input_type."""
         backend = CloudEmbeddingBackend(
             "jina_ai/jina-embeddings-v3", api_key="test-key"
         )
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "data": [{"index": 0, "embedding": [0.1, 0.2, 0.3]}]
-        }
-        mock_response.raise_for_status = MagicMock()
-
-        # _embed_jina uses httpx.AsyncClient as an async context manager,
-        # then awaits client.post(). Build mocks to match that shape.
-        mock_async_client = MagicMock()
-        mock_async_client.post = AsyncMock(return_value=mock_response)
-        mock_async_client.__aenter__ = AsyncMock(return_value=mock_async_client)
-        mock_async_client.__aexit__ = AsyncMock(return_value=None)
-
-        mock_httpx = MagicMock()
-        mock_httpx.AsyncClient.return_value = mock_async_client
-
-        with patch.dict("sys.modules", {"httpx": mock_httpx}):
-            result = await backend._embed_jina(["test"])
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1, 0.2, 0.3]])
+            result = await backend._call_provider(["test"])
+            assert "input_type" not in mock_embed.call_args[1]
 
         assert result == [[0.1, 0.2, 0.3]]
+
+    async def test_no_api_key_passes_none(self):
+        """Without an explicit key, api_key=None lets litellm use env vars."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1]])
+            await backend._call_provider(["test"])
+            assert mock_embed.call_args[1]["api_key"] is None
+
+    async def test_results_sorted_by_index(self):
+        """Out-of-order response data is re-sorted by index."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+
+        mock_response = MagicMock()
+        mock_response.data = [
+            {"index": 1, "embedding": [0.2]},
+            {"index": 0, "embedding": [0.1]},
+        ]
+
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = mock_response
+            result = await backend._call_provider(["a", "b"])
+
+        assert result == [[0.1], [0.2]]
+
+    async def test_empty_api_key_normalised_to_none(self):
+        """Empty-string api_key is normalised to None (litellm env fallback)."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small", api_key="")
+
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1]])
+            await backend._call_provider(["test"])
+            assert mock_embed.call_args[1]["api_key"] is None
+
+    async def test_pydantic_object_response_shape(self):
+        """litellm Embedding pydantic objects (.index/.embedding) are handled."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+
+        # Plain objects (no dict subscript) mimicking litellm's Embedding type.
+        item0 = SimpleNamespace(index=1, embedding=[0.2])
+        item1 = SimpleNamespace(index=0, embedding=[0.1])
+        mock_response = MagicMock()
+        mock_response.data = [item0, item1]
+
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = mock_response
+            result = await backend._call_provider(["a", "b"])
+
+        # Re-sorted by .index even with object items.
+        assert result == [[0.1], [0.2]]
+
+    async def test_none_data_guarded(self):
+        """response.data=None yields [] instead of raising."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+
+        mock_response = MagicMock()
+        mock_response.data = None
+
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = mock_response
+            result = await backend._call_provider(["a"])
+
+        assert result == []
 
 
 # -----------------------------------------------------------------------

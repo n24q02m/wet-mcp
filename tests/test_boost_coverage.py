@@ -428,116 +428,82 @@ class TestEnsureConfigForced:
 
 
 class TestLLMACompletion:
-    """Cover acompletion routing and fallback logic."""
+    """Cover acompletion passthrough and fallback logic."""
 
-    async def test_gemini_completion_routes(self):
-        """acompletion routes to _gemini_completion for gemini models."""
-        from wet_mcp.llm import _Response, acompletion
+    @staticmethod
+    def _response(content: str) -> MagicMock:
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=MagicMock(content=content))]
+        return mock_response
 
-        with patch(
-            "wet_mcp.llm._gemini_completion", new_callable=AsyncMock
-        ) as mock_gemini:
-            mock_gemini.return_value = _Response("Hello from Gemini")
+    async def test_passthrough_returns_core_response(self):
+        """acompletion forwards model + messages to mcp_core.llm."""
+        from wet_mcp.llm import acompletion
+
+        with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+            mock_core.return_value = self._response("Hello from Gemini")
             result = await acompletion(
                 model="gemini/gemini-3-flash-preview",
                 messages=[{"role": "user", "content": "Hi"}],
             )
             assert result.choices[0].message.content == "Hello from Gemini"
-            mock_gemini.assert_called_once()
+            mock_core.assert_called_once()
+            call_kwargs = mock_core.call_args[1]
+            assert call_kwargs["model"] == "gemini/gemini-3-flash-preview"
+            assert call_kwargs["messages"] == [{"role": "user", "content": "Hi"}]
 
-    async def test_openai_completion_routes(self):
-        """acompletion routes to _openai_completion for openai models."""
+    async def test_xai_model_passthrough(self):
+        """xai/ prefixed models pass through unchanged (litellm native)."""
         from wet_mcp.llm import acompletion
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Hello from OpenAI"
-
-        with patch(
-            "wet_mcp.llm._openai_completion", new_callable=AsyncMock
-        ) as mock_openai:
-            mock_openai.return_value = mock_response
-            result = await acompletion(
-                model="openai/gpt-4",
-                messages=[{"role": "user", "content": "Hi"}],
-            )
-            assert result.choices[0].message.content == "Hello from OpenAI"
-            mock_openai.assert_called_once()
-
-    async def test_xai_completion_routes(self):
-        """acompletion routes to _openai_completion for xai models."""
-        from wet_mcp.llm import acompletion
-
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "Hello from Grok"
-
-        with patch(
-            "wet_mcp.llm._openai_completion", new_callable=AsyncMock
-        ) as mock_openai:
-            mock_openai.return_value = mock_response
+        with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+            mock_core.return_value = self._response("Hello from Grok")
             result = await acompletion(
                 model="xai/grok-4-1-fast-reasoning",
                 messages=[{"role": "user", "content": "Hi"}],
             )
             assert result.choices[0].message.content == "Hello from Grok"
+            assert mock_core.call_args[1]["model"] == "xai/grok-4-1-fast-reasoning"
+
+    async def test_extra_kwargs_forwarded(self):
+        """Arbitrary litellm kwargs pass through the facade."""
+        from wet_mcp.llm import acompletion
+
+        with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+            mock_core.return_value = self._response("ok")
+            await acompletion(
+                model="gemini/gemini-3-flash-preview",
+                messages=[{"role": "user", "content": "Hi"}],
+                top_p=0.9,
+            )
+            assert mock_core.call_args[1]["top_p"] == 0.9
 
     async def test_fallback_on_primary_failure(self):
         """acompletion tries fallbacks when primary fails."""
-        from wet_mcp.llm import _Response, acompletion
+        from wet_mcp.llm import acompletion
 
-        call_count = 0
-
-        async def mock_completion(**kwargs):
-            nonlocal call_count
-            call_count += 1
-            model = kwargs.get("model", "")
-            if "primary" in model:
-                raise Exception("primary failed")
-            return _Response("Fallback worked")
-
-        with patch("wet_mcp.llm.acompletion", side_effect=mock_completion):
-            # Direct test of fallback logic
-            pass
-
-        # Test via the actual function with mocked backends
-        with (
-            patch(
-                "wet_mcp.llm._gemini_completion",
-                new_callable=AsyncMock,
-                side_effect=Exception("gemini down"),
-            ),
-            patch(
-                "wet_mcp.llm._openai_completion",
-                new_callable=AsyncMock,
-                return_value=MagicMock(
-                    choices=[MagicMock(message=MagicMock(content="fallback ok"))]
-                ),
-            ),
-        ):
+        with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+            mock_core.side_effect = [
+                Exception("gemini down"),
+                self._response("fallback ok"),
+            ]
             result = await acompletion(
                 model="gemini/primary-model",
                 messages=[{"role": "user", "content": "Hi"}],
                 fallbacks=["openai/gpt-4"],
             )
             assert result.choices[0].message.content == "fallback ok"
+            assert mock_core.call_args[1]["model"] == "openai/gpt-4"
 
     async def test_fallback_all_fail_raises(self):
         """When all fallbacks fail, raises the original error."""
         from wet_mcp.llm import acompletion
 
-        with (
-            patch(
-                "wet_mcp.llm._gemini_completion",
-                new_callable=AsyncMock,
-                side_effect=Exception("gemini down"),
-            ),
-            patch(
-                "wet_mcp.llm._openai_completion",
-                new_callable=AsyncMock,
-                side_effect=Exception("openai down"),
-            ),
-        ):
+        with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+            mock_core.side_effect = [
+                Exception("gemini down"),
+                Exception("openai down"),
+            ]
             with pytest.raises(Exception, match="gemini down"):
                 await acompletion(
                     model="gemini/primary-model",
@@ -549,314 +515,13 @@ class TestLLMACompletion:
         """When no fallbacks and primary fails, raises."""
         from wet_mcp.llm import acompletion
 
-        with patch(
-            "wet_mcp.llm._gemini_completion",
-            new_callable=AsyncMock,
-            side_effect=Exception("gemini down"),
-        ):
+        with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+            mock_core.side_effect = Exception("gemini down")
             with pytest.raises(Exception, match="gemini down"):
                 await acompletion(
                     model="gemini/primary-model",
                     messages=[{"role": "user", "content": "Hi"}],
                 )
-
-
-class TestGeminiCompletion:
-    """Cover _gemini_completion internals."""
-
-    async def test_gemini_with_temperature_and_max_tokens(self):
-        """Config kwargs passed to Gemini."""
-        from wet_mcp.llm import _gemini_completion
-
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.text = "Gemini response"
-        mock_client.models.generate_content.return_value = mock_response
-
-        with (
-            patch("google.genai.Client", return_value=mock_client),
-            patch("wet_mcp.llm._convert_messages_to_gemini", return_value=[]),
-        ):
-            result = await _gemini_completion(
-                model="gemini-3-flash-preview",
-                messages=[{"role": "user", "content": "Hi"}],
-                temperature=0.7,
-                max_tokens=1000,
-                api_key="test-key",
-            )
-            assert result.choices[0].message.content == "Gemini response"
-
-    async def test_gemini_json_response_format(self):
-        """json_object response format sets mime type."""
-        from wet_mcp.llm import _gemini_completion
-
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.text = '{"key": "value"}'
-        mock_client.models.generate_content.return_value = mock_response
-
-        with (
-            patch("google.genai.Client", return_value=mock_client),
-            patch("wet_mcp.llm._convert_messages_to_gemini", return_value=[]),
-        ):
-            result = await _gemini_completion(
-                model="gemini-3-flash-preview",
-                messages=[{"role": "user", "content": "Hi"}],
-                response_format={"type": "json_object"},
-            )
-            assert result.choices[0].message.content == '{"key": "value"}'
-
-    async def test_gemini_json_schema_format(self):
-        """json_schema response format sets mime type."""
-        from wet_mcp.llm import _gemini_completion
-
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.text = '{"data": []}'
-        mock_client.models.generate_content.return_value = mock_response
-
-        with (
-            patch("google.genai.Client", return_value=mock_client),
-            patch("wet_mcp.llm._convert_messages_to_gemini", return_value=[]),
-        ):
-            result = await _gemini_completion(
-                model="gemini-3-flash-preview",
-                messages=[{"role": "user", "content": "Hi"}],
-                response_format={"type": "json_schema"},
-            )
-            assert result.choices[0].message.content == '{"data": []}'
-
-    async def test_gemini_empty_response(self):
-        """Empty Gemini response handled."""
-        from wet_mcp.llm import _gemini_completion
-
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.text = None
-        mock_client.models.generate_content.return_value = mock_response
-
-        with (
-            patch("google.genai.Client", return_value=mock_client),
-            patch("wet_mcp.llm._convert_messages_to_gemini", return_value=[]),
-        ):
-            result = await _gemini_completion(
-                model="gemini-3-flash-preview",
-                messages=[{"role": "user", "content": "Hi"}],
-            )
-            assert result.choices[0].message.content == ""
-
-
-class TestConvertMessagesToGemini:
-    """Cover _convert_messages_to_gemini edge cases."""
-
-    def test_system_message_prepended(self):
-        """System message prepended to first user message."""
-        from wet_mcp.llm import _convert_messages_to_gemini
-
-        with patch("google.genai.types") as mock_types:
-            mock_types.Part.from_text.return_value = MagicMock()
-            mock_types.Content.return_value = MagicMock()
-
-            messages = [
-                {"role": "system", "content": "You are helpful"},
-                {"role": "user", "content": "Hello"},
-            ]
-            _convert_messages_to_gemini(messages)
-            # System text prepended to first user message as Part
-            assert mock_types.Part.from_text.call_count >= 2
-
-    def test_assistant_role_mapped_to_model(self):
-        """Assistant role maps to 'model' in Gemini."""
-        from wet_mcp.llm import _convert_messages_to_gemini
-
-        with patch("google.genai.types") as mock_types:
-            mock_types.Part.from_text.return_value = MagicMock()
-            mock_types.Content.return_value = MagicMock()
-
-            messages = [
-                {"role": "assistant", "content": "Previous response"},
-                {"role": "user", "content": "Follow up"},
-            ]
-            _convert_messages_to_gemini(messages)
-            # Verify Content was called with role="model" for assistant
-            calls = mock_types.Content.call_args_list
-            assert any(
-                c[1].get("role") == "model" or (c[0] and len(c[0]) > 0) for c in calls
-            )
-
-    def test_multipart_content_with_image(self):
-        """Image content handled in multipart messages."""
-        from wet_mcp.llm import _convert_messages_to_gemini
-
-        with patch("google.genai.types") as mock_types:
-            mock_types.Part.from_text.return_value = MagicMock()
-            mock_types.Part.from_bytes.return_value = MagicMock()
-            mock_types.Part.from_uri.return_value = MagicMock()
-            mock_types.Content.return_value = MagicMock()
-
-            # data URL image
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Describe"},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": "data:image/png;base64,aGVsbG8="},
-                        },
-                    ],
-                }
-            ]
-            _convert_messages_to_gemini(messages)
-            mock_types.Part.from_bytes.assert_called_once()
-
-    def test_multipart_content_with_url_image(self):
-        """HTTP URL image handled in multipart messages."""
-        from wet_mcp.llm import _convert_messages_to_gemini
-
-        with patch("google.genai.types") as mock_types:
-            mock_types.Part.from_text.return_value = MagicMock()
-            mock_types.Part.from_uri.return_value = MagicMock()
-            mock_types.Content.return_value = MagicMock()
-
-            messages = [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Describe"},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": "https://example.com/img.jpg"},
-                        },
-                    ],
-                }
-            ]
-            _convert_messages_to_gemini(messages)
-            mock_types.Part.from_uri.assert_called_once()
-
-    def test_non_dict_list_items(self):
-        """Non-dict items in content list are converted to text."""
-        from wet_mcp.llm import _convert_messages_to_gemini
-
-        with patch("google.genai.types") as mock_types:
-            mock_types.Part.from_text.return_value = MagicMock()
-            mock_types.Content.return_value = MagicMock()
-
-            messages = [
-                {
-                    "role": "user",
-                    "content": ["plain string item"],
-                }
-            ]
-            _convert_messages_to_gemini(messages)
-            # Should call from_text with str(item)
-            mock_types.Part.from_text.assert_called()
-
-    def test_non_string_non_list_content(self):
-        """Non-string, non-list content converted to string."""
-        from wet_mcp.llm import _convert_messages_to_gemini
-
-        with patch("google.genai.types") as mock_types:
-            mock_types.Part.from_text.return_value = MagicMock()
-            mock_types.Content.return_value = MagicMock()
-
-            messages = [
-                {
-                    "role": "user",
-                    "content": 42,
-                }
-            ]
-            _convert_messages_to_gemini(messages)
-            mock_types.Part.from_text.assert_called()
-
-
-class TestOpenAICompletion:
-    """Cover _openai_completion for OpenAI and xAI providers."""
-
-    async def test_openai_provider(self):
-        """OpenAI provider uses correct base URL."""
-        from wet_mcp.llm import _openai_completion
-
-        mock_client = AsyncMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content="ok"))]
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-
-        with patch("openai.AsyncOpenAI", return_value=mock_client) as mock_cls:
-            result = await _openai_completion(
-                provider="openai",
-                model="gpt-4",
-                messages=[{"role": "user", "content": "Hi"}],
-                api_key="test-key",
-            )
-            assert result.choices[0].message.content == "ok"
-            mock_cls.assert_called_once_with(
-                api_key="test-key", base_url="https://api.openai.com/v1"
-            )
-
-    async def test_xai_provider(self):
-        """xAI provider uses correct base URL."""
-        from wet_mcp.llm import _openai_completion
-
-        mock_client = AsyncMock()
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content="grok"))]
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-
-        with patch("openai.AsyncOpenAI", return_value=mock_client) as mock_cls:
-            result = await _openai_completion(
-                provider="xai",
-                model="grok-4",
-                messages=[{"role": "user", "content": "Hi"}],
-                api_key="xai-key",
-            )
-            assert result.choices[0].message.content == "grok"
-            mock_cls.assert_called_once_with(
-                api_key="xai-key", base_url="https://api.x.ai/v1"
-            )
-
-    async def test_with_temperature_max_tokens_format(self):
-        """Optional params passed to OpenAI create call."""
-        from wet_mcp.llm import _openai_completion
-
-        mock_client = AsyncMock()
-        mock_response = MagicMock()
-        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
-
-        with patch("openai.AsyncOpenAI", return_value=mock_client):
-            await _openai_completion(
-                provider="openai",
-                model="gpt-4",
-                messages=[{"role": "user", "content": "Hi"}],
-                temperature=0.5,
-                max_tokens=500,
-                response_format={"type": "json_object"},
-            )
-            call_kwargs = mock_client.chat.completions.create.call_args[1]
-            assert call_kwargs["temperature"] == 0.5
-            assert call_kwargs["max_tokens"] == 500
-            assert call_kwargs["response_format"] == {"type": "json_object"}
-
-    async def test_custom_api_base(self, monkeypatch):
-        """Custom api_base overrides default."""
-        from wet_mcp.llm import _openai_completion
-
-        # Clear env vars to ensure predictable api_key
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
-        mock_client = AsyncMock()
-        mock_client.chat.completions.create = AsyncMock(return_value=MagicMock())
-
-        with patch("openai.AsyncOpenAI", return_value=mock_client) as mock_cls:
-            await _openai_completion(
-                provider="openai",
-                model="gpt-4",
-                messages=[{"role": "user", "content": "Hi"}],
-                api_base="https://custom.api.com/v1",
-            )
-            mock_cls.assert_called_once_with(
-                api_key="", base_url="https://custom.api.com/v1"
-            )
 
 
 class TestDetectProvider:
@@ -1072,19 +737,6 @@ class TestAnalyzeMediaExtended:
             assert "Error analyzing media" in result
 
         settings.download_dir = orig_dir
-
-
-class TestResponseObjects:
-    """Cover _Response, _Choice, _Message classes."""
-
-    def test_response_structure(self):
-        from wet_mcp.llm import _Choice, _Message, _Response
-
-        resp = _Response("test content")
-        assert len(resp.choices) == 1
-        assert isinstance(resp.choices[0], _Choice)
-        assert isinstance(resp.choices[0].message, _Message)
-        assert resp.choices[0].message.content == "test content"
 
 
 # =====================================================================
