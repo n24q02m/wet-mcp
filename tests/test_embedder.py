@@ -5,6 +5,7 @@ batch splitting, retry logic, Qwen3EmbedBackend (local ONNX), factory functions,
 and provider detection helpers.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
@@ -371,6 +372,45 @@ class TestCallProvider:
             result = await backend._call_provider(["a", "b"])
 
         assert result == [[0.1], [0.2]]
+
+    async def test_empty_api_key_normalised_to_none(self):
+        """Empty-string api_key is normalised to None (litellm env fallback)."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small", api_key="")
+
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = _embedding_response([[0.1]])
+            await backend._call_provider(["test"])
+            assert mock_embed.call_args[1]["api_key"] is None
+
+    async def test_pydantic_object_response_shape(self):
+        """litellm Embedding pydantic objects (.index/.embedding) are handled."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+
+        # Plain objects (no dict subscript) mimicking litellm's Embedding type.
+        item0 = SimpleNamespace(index=1, embedding=[0.2])
+        item1 = SimpleNamespace(index=0, embedding=[0.1])
+        mock_response = MagicMock()
+        mock_response.data = [item0, item1]
+
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = mock_response
+            result = await backend._call_provider(["a", "b"])
+
+        # Re-sorted by .index even with object items.
+        assert result == [[0.1], [0.2]]
+
+    async def test_none_data_guarded(self):
+        """response.data=None yields [] instead of raising."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+
+        mock_response = MagicMock()
+        mock_response.data = None
+
+        with patch("mcp_core.llm.aembedding", new_callable=AsyncMock) as mock_embed:
+            mock_embed.return_value = mock_response
+            result = await backend._call_provider(["a"])
+
+        assert result == []
 
 
 # -----------------------------------------------------------------------

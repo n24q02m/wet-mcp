@@ -540,6 +540,33 @@ async def test_acompletion_no_api_base_when_unset(monkeypatch):
         assert mock_core.call_args[1]["api_base"] is None
 
 
+@pytest.mark.asyncio
+async def test_acompletion_normalises_empty_api_key(monkeypatch):
+    """Empty-string api_key is normalised to None (litellm env fallback)."""
+
+    monkeypatch.delenv("LLM_API_BASE", raising=False)
+    mock_response = MagicMock()
+
+    with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+        mock_core.return_value = mock_response
+
+        await acompletion(
+            model="gemini/test-model",
+            messages=[{"role": "user", "content": "hi"}],
+            api_key="",
+        )
+        assert mock_core.call_args[1]["api_key"] is None
+
+        # An explicit non-empty key is forwarded verbatim.
+        mock_core.reset_mock()
+        await acompletion(
+            model="gemini/test-model",
+            messages=[{"role": "user", "content": "hi"}],
+            api_key="real-key",
+        )
+        assert mock_core.call_args[1]["api_key"] == "real-key"
+
+
 def test_get_model_capabilities_catalog_hit():
     """Registry-known models take vision from mcp_core.llm.supports_vision."""
 

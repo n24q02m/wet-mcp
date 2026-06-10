@@ -4,6 +4,7 @@ Covers CloudReranker (litellm passthrough via mcp_core.llm), Qwen3Reranker,
 factory functions, and graceful fallback behavior.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -121,6 +122,42 @@ class TestCloudReranker:
             mock_rerank.return_value = _rerank_response([(0, 0.5)])
             reranker.rerank("query", ["doc"])
             assert mock_rerank.call_args[1]["api_key"] is None
+
+    def test_empty_api_key_normalised_to_none(self):
+        """Empty-string api_key is normalised to None (litellm env fallback)."""
+        reranker = CloudReranker(api_key="")
+        assert reranker.api_key is None
+
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.5)])
+            reranker.rerank("query", ["doc"])
+            assert mock_rerank.call_args[1]["api_key"] is None
+
+    def test_none_results_guarded(self):
+        """RerankResponse.results=None yields [] instead of raising."""
+        reranker = CloudReranker(api_key="test-key")
+
+        mock_response = MagicMock()
+        mock_response.results = None
+
+        with patch("mcp_core.llm.rerank", return_value=mock_response):
+            assert reranker.rerank("query", ["doc1", "doc2"]) == []
+
+    def test_pydantic_object_results_shape(self):
+        """litellm rerank pydantic items (.index/.relevance_score) are handled."""
+        reranker = CloudReranker(api_key="test-key")
+
+        mock_response = MagicMock()
+        mock_response.results = [
+            SimpleNamespace(index=0, relevance_score=0.3),
+            SimpleNamespace(index=1, relevance_score=0.9),
+        ]
+
+        with patch("mcp_core.llm.rerank", return_value=mock_response):
+            results = reranker.rerank("query", ["doc a", "doc b"], top_n=2)
+
+        # Sorted by score descending, object items parsed via attr-access.
+        assert results == [(1, 0.9), (0, 0.3)]
 
 
 class TestCloudRerankerModelMapping:

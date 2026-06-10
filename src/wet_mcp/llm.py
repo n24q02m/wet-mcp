@@ -116,13 +116,16 @@ async def acompletion(
         call_kwargs["response_format"] = response_format
 
     resolved_api_base = api_base or os.getenv("LLM_API_BASE") or None
+    # Normalise empty string to None: mcp_core.llm forwards a non-None
+    # api_key to litellm, which suppresses provider env-var fallback (401).
+    resolved_api_key = api_key or None
 
     try:
         return await core_acompletion(
             model=model,
             messages=messages,
             api_base=resolved_api_base,
-            api_key=api_key,
+            api_key=resolved_api_key,
             **call_kwargs,
         )
     except Exception as e:
@@ -134,7 +137,7 @@ async def acompletion(
                         model=fb_model,
                         messages=messages,
                         api_base=resolved_api_base,
-                        api_key=api_key,
+                        api_key=resolved_api_key,
                         **call_kwargs,
                     )
                 except Exception:

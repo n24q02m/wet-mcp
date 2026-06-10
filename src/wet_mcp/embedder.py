@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Protocol
+from typing import Any, Protocol
 
 from loguru import logger
 
@@ -250,8 +250,20 @@ class CloudEmbeddingBackend:
             **kwargs,
         )
 
-        data = sorted(response.data, key=lambda item: item.get("index", 0))
-        return [item["embedding"] for item in data]
+        # litellm embedding items may be pydantic ``Embedding`` objects or
+        # plain dicts depending on provider/version — handle both shapes.
+        def _idx(item: Any) -> int:
+            return (
+                item.get("index", 0)
+                if isinstance(item, dict)
+                else getattr(item, "index", 0)
+            )
+
+        def _vec(item: Any) -> list[float]:
+            return item["embedding"] if isinstance(item, dict) else item.embedding
+
+        data = sorted(response.data or [], key=_idx)
+        return [_vec(item) for item in data]
 
     async def embed_texts(
         self,

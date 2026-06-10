@@ -14,7 +14,7 @@ for better precision. Pipeline: retrieve top-30 -> rerank -> return top-N.
 from __future__ import annotations
 
 import os
-from typing import Protocol
+from typing import Any, Protocol
 
 from loguru import logger
 
@@ -87,9 +87,22 @@ class CloudReranker:
             documents=documents,
             top_n=top_n,
             api_base=os.getenv("RERANK_API_BASE") or None,
-            api_key=self.api_key,
+            api_key=self.api_key or None,
         )
-        return [(r["index"], r["relevance_score"]) for r in response.results]
+
+        # litellm RerankResponse.results defaults to None and rerank items
+        # may be pydantic objects or plain dicts — guard + handle both shapes.
+        def _idx(r: Any) -> int:
+            return r["index"] if isinstance(r, dict) else getattr(r, "index", 0)
+
+        def _score(r: Any) -> float:
+            return (
+                r["relevance_score"]
+                if isinstance(r, dict)
+                else getattr(r, "relevance_score", 0.0)
+            )
+
+        return [(_idx(r), _score(r)) for r in (response.results or [])]
 
     def rerank(
         self,
