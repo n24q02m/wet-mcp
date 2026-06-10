@@ -17,7 +17,6 @@ from loguru import logger
 # Note: web-core uses stdlib ``logging``, not loguru.
 # ---------------------------------------------------------------------------
 from web_core.http.client import (  # noqa: F401
-    _DNS_CACHE_TTL,
     _check_ip_safe,
     _dns_cache,
     _dns_cache_lock,
