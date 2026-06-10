@@ -282,7 +282,6 @@ class DocsDB:
             ON libraries(name)
         """)
 
-
     def _create_versions_table(self) -> None:
         # Versions (Phase 2 schema with release_date + source_url).
         self._conn.execute("""

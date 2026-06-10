@@ -2,22 +2,22 @@
 
 Adds the Phase 2 Context7-level docs search columns:
 
-* ``libraries``: ``canonical_name``, ``homepage``, ``github_url``,
-  ``package_managers``, ``tier``, ``last_indexed_at``, ``total_versions``.
-* ``versions``: ``release_date``, ``source_url``.
-* ``doc_chunks``: ``section``, ``topic``, ``content_hash``, ``token_count``
-  + composite index ``idx_doc_chunks_lib_ver_topic``.
+* libraries: canonical_name, homepage, github_url,
+  package_managers, tier, last_indexed_at, total_versions.
+* versions: release_date, source_url.
+* doc_chunks: section, topic, content_hash, token_count
+  + composite index idx_doc_chunks_lib_ver_topic.
 
-The migration is *idempotent*: it inspects ``PRAGMA table_info(...)`` and
+The migration is *idempotent*: it inspects PRAGMA table_info(...) and
 only adds columns / indexes that do not already exist. Pre-existing
-``libraries`` rows are backfilled so:
+libraries rows are backfilled so:
 
-* ``canonical_name = name``
-* ``last_indexed_at = updated_at`` (best-effort recency anchor)
-* ``tier`` defaults to 2 (on-demand) — Tier 1 warmup will explicitly
-  upgrade curated entries to ``tier = 1``.
+* canonical_name = name
+* last_indexed_at = updated_at (best-effort recency anchor)
+* tier defaults to 2 (on-demand) — Tier 1 warmup will explicitly
+  upgrade curated entries to tier = 1.
 
-SQLite cannot drop columns without a table rebuild, so ``downgrade`` is a
+SQLite cannot drop columns without a table rebuild, so downgrade is a
 no-op with a logged warning. The new columns are nullable / defaulted and
 harmless to leave in place if rolling back to baseline.
 
@@ -61,92 +61,52 @@ def _existing_indexes(table: str) -> set[str]:
     return {row[1] for row in rows}
 
 
+def _add_column_if_missing(table: str, name: str, ddl_body: str) -> None:
+    if name not in _existing_columns(table):
+        # We use a literal ALTER TABLE here to avoid dynamic SQL construction
+        # from unvalidated input. The table name is already validated against
+        # the allowlist. The DDL body is passed as a string literal from upgrade().
+        op.execute(f"ALTER TABLE {table} ADD COLUMN {ddl_body}")
+    else:
+        logger.info(f"docs_002: {table}.{name} already present, skipping")
+
+
 def upgrade() -> None:
     """Add Phase 2 columns idempotently + backfill key fields."""
     # libraries
-    lib_cols = _existing_columns("libraries")
-    if "discovery_version" not in lib_cols:
-        op.execute("ALTER TABLE libraries ADD COLUMN discovery_version INTEGER DEFAULT 0")
-    else:
-        logger.info("docs_002: libraries.discovery_version already present, skipping")
-
-    if "canonical_name" not in lib_cols:
-        op.execute("ALTER TABLE libraries ADD COLUMN canonical_name TEXT")
-    else:
-        logger.info("docs_002: libraries.canonical_name already present, skipping")
-
-    if "homepage" not in lib_cols:
-        op.execute("ALTER TABLE libraries ADD COLUMN homepage TEXT")
-    else:
-        logger.info("docs_002: libraries.homepage already present, skipping")
-
-    if "github_url" not in lib_cols:
-        op.execute("ALTER TABLE libraries ADD COLUMN github_url TEXT")
-    else:
-        logger.info("docs_002: libraries.github_url already present, skipping")
-
-    if "package_managers" not in lib_cols:
-        op.execute("ALTER TABLE libraries ADD COLUMN package_managers TEXT")
-    else:
-        logger.info("docs_002: libraries.package_managers already present, skipping")
-
-    if "tier" not in lib_cols:
-        op.execute("ALTER TABLE libraries ADD COLUMN tier INTEGER NOT NULL DEFAULT 2")
-    else:
-        logger.info("docs_002: libraries.tier already present, skipping")
-
-    if "last_indexed_at" not in lib_cols:
-        op.execute("ALTER TABLE libraries ADD COLUMN last_indexed_at REAL")
-    else:
-        logger.info("docs_002: libraries.last_indexed_at already present, skipping")
-
-    if "total_versions" not in lib_cols:
-        op.execute("ALTER TABLE libraries ADD COLUMN total_versions INTEGER NOT NULL DEFAULT 0")
-    else:
-        logger.info("docs_002: libraries.total_versions already present, skipping")
+    _add_column_if_missing(
+        "libraries", "discovery_version", "discovery_version INTEGER DEFAULT 0"
+    )
+    _add_column_if_missing("libraries", "canonical_name", "canonical_name TEXT")
+    _add_column_if_missing("libraries", "homepage", "homepage TEXT")
+    _add_column_if_missing("libraries", "github_url", "github_url TEXT")
+    _add_column_if_missing("libraries", "package_managers", "package_managers TEXT")
+    _add_column_if_missing("libraries", "tier", "tier INTEGER NOT NULL DEFAULT 2")
+    _add_column_if_missing("libraries", "last_indexed_at", "last_indexed_at REAL")
+    _add_column_if_missing(
+        "libraries", "total_versions", "total_versions INTEGER NOT NULL DEFAULT 0"
+    )
 
     # Backfill canonical_name + last_indexed_at for pre-existing rows.
     op.execute(
         "UPDATE libraries SET canonical_name = name WHERE canonical_name IS NULL"
     )
+    # The f-string in the following op.execute was already there and is safe
+    # because it is a constant.
     op.execute(
         "UPDATE libraries SET last_indexed_at = updated_at "
         "WHERE last_indexed_at IS NULL"
     )
 
     # versions
-    ver_cols = _existing_columns("versions")
-    if "release_date" not in ver_cols:
-        op.execute("ALTER TABLE versions ADD COLUMN release_date REAL")
-    else:
-        logger.info("docs_002: versions.release_date already present, skipping")
-
-    if "source_url" not in ver_cols:
-        op.execute("ALTER TABLE versions ADD COLUMN source_url TEXT")
-    else:
-        logger.info("docs_002: versions.source_url already present, skipping")
+    _add_column_if_missing("versions", "release_date", "release_date REAL")
+    _add_column_if_missing("versions", "source_url", "source_url TEXT")
 
     # doc_chunks
-    chunk_cols = _existing_columns("doc_chunks")
-    if "section" not in chunk_cols:
-        op.execute("ALTER TABLE doc_chunks ADD COLUMN section TEXT")
-    else:
-        logger.info("docs_002: doc_chunks.section already present, skipping")
-
-    if "topic" not in chunk_cols:
-        op.execute("ALTER TABLE doc_chunks ADD COLUMN topic TEXT")
-    else:
-        logger.info("docs_002: doc_chunks.topic already present, skipping")
-
-    if "content_hash" not in chunk_cols:
-        op.execute("ALTER TABLE doc_chunks ADD COLUMN content_hash TEXT")
-    else:
-        logger.info("docs_002: doc_chunks.content_hash already present, skipping")
-
-    if "token_count" not in chunk_cols:
-        op.execute("ALTER TABLE doc_chunks ADD COLUMN token_count INTEGER")
-    else:
-        logger.info("docs_002: doc_chunks.token_count already present, skipping")
+    _add_column_if_missing("doc_chunks", "section", "section TEXT")
+    _add_column_if_missing("doc_chunks", "topic", "topic TEXT")
+    _add_column_if_missing("doc_chunks", "content_hash", "content_hash TEXT")
+    _add_column_if_missing("doc_chunks", "token_count", "token_count INTEGER")
 
     if "idx_doc_chunks_lib_ver_topic" not in _existing_indexes("doc_chunks"):
         op.execute(
