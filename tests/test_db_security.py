@@ -63,4 +63,4 @@ def test_db_invalid_dims(tmp_path):
     with pytest.raises(ValueError, match="embedding_dims must be an integer"):
         DocsDB(db_path, embedding_dims=70000)
     with pytest.raises(ValueError, match="embedding_dims must be an integer"):
-        DocsDB(db_path, embedding_dims="768")
+        DocsDB(db_path, embedding_dims="768")  # type: ignore
