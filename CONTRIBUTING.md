@@ -76,23 +76,18 @@ We use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ### Types
 
+Only `feat` and `fix` are accepted. The pre-commit commit-message hook
+(`scripts/enforce-commit.sh`) rejects any other type (e.g. `docs`,
+`chore`, `refactor`, `ci`). Do not use the `!` breaking-change marker.
+
 - `feat`: New feature
 - `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes
-- `refactor`: Code refactoring
-- `perf`: Performance improvements
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks
-- `ci`: CI/CD changes
-- `build`: Build system changes
 
 ### Examples
 
 ```text
 feat: add support for PDF extraction
 fix: handle SearXNG connection timeout
-docs: update configuration examples
 ```
 
 ## Release Process
