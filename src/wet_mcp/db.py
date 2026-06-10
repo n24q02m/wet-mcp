@@ -301,7 +301,10 @@ class DocsDB:
                 "tier",
                 "ALTER TABLE libraries ADD COLUMN tier INTEGER NOT NULL DEFAULT 2",
             ),
-            ("last_indexed_at", "ALTER TABLE libraries ADD COLUMN last_indexed_at REAL"),
+            (
+                "last_indexed_at",
+                "ALTER TABLE libraries ADD COLUMN last_indexed_at REAL",
+            ),
             (
                 "total_versions",
                 "ALTER TABLE libraries ADD COLUMN total_versions INTEGER NOT NULL DEFAULT 0",
