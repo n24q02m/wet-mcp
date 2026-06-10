@@ -59,7 +59,9 @@ def cap_snippet_tokens(snippet: str, max_tokens: int = _SNIPPET_TOKEN_CAP) -> st
     """
     if not snippet:
         return ""
-    tokens = snippet.split()
+    # Optimization: Use maxsplit to avoid parsing the entire string
+    # when the snippet significantly exceeds max_tokens.
+    tokens = snippet.split(None, max_tokens)
     if len(tokens) <= max_tokens:
         return snippet
     return " ".join(tokens[:max_tokens]) + "..."
