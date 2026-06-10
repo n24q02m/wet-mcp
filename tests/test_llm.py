@@ -2,7 +2,7 @@
 
 import asyncio
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import SecretStr
@@ -416,19 +416,16 @@ def test_has_llm_provider():
 async def test_acompletion_fallback_skips_error():
     """Test that acompletion skips failed fallbacks and continues to the next one."""
 
-    # We mock _gemini_completion to fail (triggering fallback)
-    # We mock _openai_completion to fail on first call and succeed on second call
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "Fallback success"
 
-    with (
-        patch(
-            "wet_mcp.llm._gemini_completion", side_effect=Exception("Primary failed")
-        ),
-        patch("wet_mcp.llm._openai_completion") as mock_openai,
-    ):
-        # Mocking the side effect to fail then succeed
-        mock_response = MagicMock()
-        mock_response.choices[0].message.content = "Fallback success"
-        mock_openai.side_effect = [Exception("First fallback failed"), mock_response]
+    # Primary fails, first fallback fails, second fallback succeeds.
+    with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+        mock_core.side_effect = [
+            Exception("Primary failed"),
+            Exception("First fallback failed"),
+            mock_response,
+        ]
 
         result = await acompletion(
             model="gemini/primary",
@@ -437,7 +434,8 @@ async def test_acompletion_fallback_skips_error():
         )
 
         assert result.choices[0].message.content == "Fallback success"
-        assert mock_openai.call_count == 2
+        assert mock_core.call_count == 3
+        assert mock_core.call_args_list[2][1]["model"] == "openai/success"
 
 
 @pytest.mark.asyncio
@@ -446,12 +444,13 @@ async def test_acompletion_all_fallbacks_fail():
 
     primary_error = Exception("Primary failed")
 
-    with (
-        patch("wet_mcp.llm._gemini_completion", side_effect=primary_error),
-        patch(
-            "wet_mcp.llm._openai_completion", side_effect=Exception("Fallback failed")
-        ),
-    ):
+    with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+        mock_core.side_effect = [
+            primary_error,
+            Exception("Fallback failed"),
+            Exception("Fallback failed"),
+        ]
+
         with pytest.raises(Exception) as excinfo:
             await acompletion(
                 model="gemini/primary",
@@ -460,3 +459,108 @@ async def test_acompletion_all_fallbacks_fail():
             )
 
         assert excinfo.value is primary_error
+        assert mock_core.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_acompletion_passes_optional_params():
+    """Optional params are forwarded only when set; None values are omitted."""
+
+    mock_response = MagicMock()
+    mock_response.choices[0].message.content = "ok"
+
+    with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+        mock_core.return_value = mock_response
+
+        await acompletion(
+            model="gemini/test-model",
+            messages=[{"role": "user", "content": "hi"}],
+            temperature=0.5,
+            max_tokens=100,
+            response_format={"type": "json_object"},
+        )
+
+        call_kwargs = mock_core.call_args[1]
+        assert call_kwargs["model"] == "gemini/test-model"
+        assert call_kwargs["temperature"] == 0.5
+        assert call_kwargs["max_tokens"] == 100
+        assert call_kwargs["response_format"] == {"type": "json_object"}
+
+        mock_core.reset_mock()
+        await acompletion(
+            model="gemini/test-model",
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        call_kwargs = mock_core.call_args[1]
+        assert "temperature" not in call_kwargs
+        assert "max_tokens" not in call_kwargs
+        assert "response_format" not in call_kwargs
+
+
+@pytest.mark.asyncio
+async def test_acompletion_resolves_llm_api_base_env(monkeypatch):
+    """LLM_API_BASE env var is used when no explicit api_base is given."""
+
+    monkeypatch.setenv("LLM_API_BASE", "https://proxy.example.com/v1")
+    mock_response = MagicMock()
+
+    with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+        mock_core.return_value = mock_response
+
+        await acompletion(
+            model="gemini/test-model",
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        assert mock_core.call_args[1]["api_base"] == "https://proxy.example.com/v1"
+
+        # Explicit api_base wins over the env var.
+        mock_core.reset_mock()
+        await acompletion(
+            model="gemini/test-model",
+            messages=[{"role": "user", "content": "hi"}],
+            api_base="https://explicit.example.com/v1",
+        )
+        assert mock_core.call_args[1]["api_base"] == "https://explicit.example.com/v1"
+
+
+@pytest.mark.asyncio
+async def test_acompletion_no_api_base_when_unset(monkeypatch):
+    """api_base resolves to None when neither arg nor env var is set."""
+
+    monkeypatch.delenv("LLM_API_BASE", raising=False)
+    mock_response = MagicMock()
+
+    with patch("mcp_core.llm.acompletion", new_callable=AsyncMock) as mock_core:
+        mock_core.return_value = mock_response
+
+        await acompletion(
+            model="gemini/test-model",
+            messages=[{"role": "user", "content": "hi"}],
+        )
+        assert mock_core.call_args[1]["api_base"] is None
+
+
+def test_get_model_capabilities_catalog_hit():
+    """Registry-known models take vision from mcp_core.llm.supports_vision."""
+
+    with patch("mcp_core.llm.supports_vision", return_value=True):
+        caps = get_model_capabilities("some/registry-vision-model")
+        assert caps["vision"] is True
+
+    with patch("mcp_core.llm.supports_vision", return_value=False):
+        # Registry verdict overrides the hardcoded map.
+        caps = get_model_capabilities("gemini/gemini-2.5-flash")
+        assert caps["vision"] is False
+        # Audio flags still come from the hardcoded maps.
+        assert caps["audio_input"] is True
+
+
+def test_get_model_capabilities_fallback_map():
+    """Registry-unknown models (None) fall back to the hardcoded map."""
+
+    with patch("mcp_core.llm.supports_vision", return_value=None):
+        caps = get_model_capabilities("gemini/gemini-2.5-flash")
+        assert caps["vision"] is True
+
+        caps = get_model_capabilities("some/unknown-model")
+        assert caps["vision"] is False

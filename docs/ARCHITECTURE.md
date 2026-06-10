@@ -134,12 +134,15 @@ wet-mcp does not pin a default LLM model. Provider selection at runtime
 walks env vars in priority order:
 
 ```text
-GEMINI_API_KEY / GOOGLE_API_KEY  -> google-genai SDK
-OPENAI_API_KEY                   -> openai SDK
-ANTHROPIC_API_KEY                -> anthropic SDK
-XAI_API_KEY                      -> openai SDK (with base_url override)
+GEMINI_API_KEY / GOOGLE_API_KEY  -> gemini/* (litellm passthrough)
+OPENAI_API_KEY                   -> openai/* (litellm passthrough)
+XAI_API_KEY                      -> xai/* (litellm passthrough)
 LLM_MODELS env                   -> explicit comma-separated fallback chain
+LLM_API_BASE env                 -> custom OpenAI-compatible endpoint
 ```
+
+All calls dispatch through `mcp_core.llm` (litellm passthrough via the
+`mcp-core[llm]` extra); any litellm `provider/model` string works.
 
 If none is set:
 

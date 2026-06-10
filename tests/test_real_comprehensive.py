@@ -1,8 +1,8 @@
 """Comprehensive real-world testing for wet-mcp.
 
 Tests all configuration combinations:
-1. Embedding: local ONNX vs LiteLLM proxy
-2. Reranking: local ONNX vs LiteLLM proxy
+1. Embedding: local ONNX vs custom LLM API base (litellm passthrough)
+2. Reranking: local ONNX vs custom LLM API base (litellm passthrough)
 3. SearXNG: embedded vs external (oci-vm-infra)
 4. All 4 tools: search, extract, media, config
 5. Docs search: fixed cases (vinejs, inertia, dry-rb)
@@ -21,8 +21,10 @@ import pytest
 # Fixtures for different config modes
 # ---------------------------------------------------------------------------
 
-LITELLM_PROXY_URL = "https://litellm.n24q02m.com"
-LITELLM_PROXY_KEY = os.environ.get("LITELLM_PROXY_KEY", "")
+# Self-hosted OpenAI-compatible proxy for the custom-api-base tests below.
+# Env-supplied only — there is no centralized n24q02m proxy deployment.
+LLM_API_BASE = os.environ.get("LLM_API_BASE", "")
+LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 _SEARXNG_AUTH_PASS = os.environ.get("SEARXNG_AUTH_PASS")
 SEARXNG_EXTERNAL_URL = "https://klprism:{}@searxng.n24q02m.com".format(
     _SEARXNG_AUTH_PASS or ""
@@ -216,18 +218,19 @@ class TestExtractTool:
 
 
 # ---------------------------------------------------------------------------
-# 5. LiteLLM proxy mode — embedding + reranking
+# 5. Custom LLM API base mode — embedding + reranking
 # ---------------------------------------------------------------------------
 
 
-class TestLiteLLMProxy:
-    """Test with LiteLLM proxy (oci-vm-infra)."""
+@pytest.mark.skipif(not LLM_API_BASE, reason="LLM_API_BASE not set")
+class TestCustomApiBaseProxy:
+    """Test against a self-hosted OpenAI-compatible proxy (env-supplied)."""
 
     async def test_proxy_reachable(self):
         import httpx
 
         async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(f"{LITELLM_PROXY_URL}/health/liveliness")
+            resp = await client.get(f"{LLM_API_BASE}/health/liveliness")
             assert resp.status_code == 200
 
     async def test_proxy_chat(self):
@@ -236,9 +239,9 @@ class TestLiteLLMProxy:
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"{LITELLM_PROXY_URL}/chat/completions",
+                f"{LLM_API_BASE}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {LITELLM_PROXY_KEY}",
+                    "Authorization": f"Bearer {LLM_API_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -257,9 +260,9 @@ class TestLiteLLMProxy:
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
-                f"{LITELLM_PROXY_URL}/rerank",
+                f"{LLM_API_BASE}/rerank",
                 headers={
-                    "Authorization": f"Bearer {LITELLM_PROXY_KEY}",
+                    "Authorization": f"Bearer {LLM_API_KEY}",
                     "Content-Type": "application/json",
                 },
                 json={
@@ -276,49 +279,30 @@ class TestLiteLLMProxy:
             data = resp.json()
             assert len(data["results"]) > 0
 
-    async def test_proxy_rerank_via_litellm_sdk(self):
-        """Test reranking via proxy using LiteLLM SDK with proxy mode flag."""
-        import os
+    async def test_proxy_rerank_via_cloud_reranker(self, monkeypatch):
+        """Test reranking through wet's CloudReranker with RERANK_API_BASE."""
+        monkeypatch.setenv("RERANK_API_BASE", LLM_API_BASE)
 
-        import litellm
+        from wet_mcp.reranker import CloudReranker
 
-        # Enable proxy mode (same as config.setup_litellm in proxy mode)
-        old_base = os.environ.get("LITELLM_PROXY_API_BASE")
-        old_key = os.environ.get("LITELLM_PROXY_API_KEY")
-        old_proxy = litellm.use_litellm_proxy
-        try:
-            os.environ["LITELLM_PROXY_API_BASE"] = LITELLM_PROXY_URL
-            os.environ["LITELLM_PROXY_API_KEY"] = LITELLM_PROXY_KEY
-            litellm.use_litellm_proxy = True
-
-            from wet_mcp.reranker import LiteLLMReranker
-
-            reranker = LiteLLMReranker(model="mcp/rerank-multilingual-v3")
-            results = reranker.rerank(
-                query="What is Python?",
-                documents=[
-                    "Python is a programming language",
-                    "Java is a programming language",
-                    "The weather is nice today",
-                ],
-                top_n=2,
-            )
-            assert len(results) == 2, f"Expected 2 results, got {len(results)}"
-            # Python doc should score highest
-            assert results[0][0] == 0, (
-                f"Expected Python doc first, got index {results[0][0]}"
-            )
-            assert results[0][1] > 0.5, f"Expected high score, got {results[0][1]}"
-        finally:
-            litellm.use_litellm_proxy = old_proxy
-            if old_base is None:
-                os.environ.pop("LITELLM_PROXY_API_BASE", None)
-            else:
-                os.environ["LITELLM_PROXY_API_BASE"] = old_base
-            if old_key is None:
-                os.environ.pop("LITELLM_PROXY_API_KEY", None)
-            else:
-                os.environ["LITELLM_PROXY_API_KEY"] = old_key
+        reranker = CloudReranker(
+            model="cohere/rerank-multilingual-v3", api_key=LLM_API_KEY
+        )
+        results = reranker.rerank(
+            query="What is Python?",
+            documents=[
+                "Python is a programming language",
+                "Java is a programming language",
+                "The weather is nice today",
+            ],
+            top_n=2,
+        )
+        assert len(results) == 2, f"Expected 2 results, got {len(results)}"
+        # Python doc should score highest
+        assert results[0][0] == 0, (
+            f"Expected Python doc first, got index {results[0][0]}"
+        )
+        assert results[0][1] > 0.5, f"Expected high score, got {results[0][1]}"
 
 
 # ---------------------------------------------------------------------------
@@ -560,13 +544,13 @@ class TestConfigTool:
         from wet_mcp.config import settings
 
         backend = settings.resolve_embedding_backend()
-        assert backend in ("litellm", "local")
+        assert backend in ("cloud", "local")
 
     async def test_config_rerank_backend_resolution(self):
         from wet_mcp.config import settings
 
         backend = settings.resolve_rerank_backend()
-        assert backend in ("litellm", "local")
+        assert backend in ("cloud", "local")
 
 
 # ---------------------------------------------------------------------------

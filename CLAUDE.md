@@ -56,7 +56,7 @@ mise run dev       # uv run wet-mcp
 ## Env vars
 
 - KHONG co prefix ung dung (day la open-source MCP server)
-- LLM: google-genai + openai (SDK) > disable if no key. Embed/Rerank: Jina > Gemini > OpenAI > Cohere (cloud) > local ONNX
+- LLM/Embed/Rerank: litellm passthrough qua `mcp_core.llm` (mcp-core[llm]) > disable if no key. Embed/Rerank priority: Jina > Gemini > OpenAI > Cohere (cloud) > local ONNX. Custom endpoint: `LLM_API_BASE`, `EMBEDDING_API_BASE`, `RERANK_API_BASE`
 - Embedding: `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`
 - Reranking: `RERANK_BACKEND`, `RERANK_MODEL`
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)

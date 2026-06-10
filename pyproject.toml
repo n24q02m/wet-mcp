@@ -26,17 +26,18 @@ dependencies = [
     # HTTP Client
     "httpx",
     # Config
-    # Pydantic upper bound lives here (not in web-core) because cohere>=6.1.0
-    # pins pydantic-core <2.44 and pydantic 2.13.x ships pydantic-core 2.46.
+    # Pydantic upper bound predates the litellm-passthrough migration: it was
+    # required by the now-removed direct cohere SDK dep (cohere>=6.1.0 pinned
+    # pydantic-core <2.44 while pydantic 2.13.x ships pydantic-core 2.46).
+    # Kept conservatively; relax in a dedicated bump.
     "pydantic>=2.13.4,<2.14",
     "pydantic-settings",
     # Logging
     "loguru",
-    # LLM + Embedding (native SDKs)
-    "cohere>=7.0.3",
+    # LLM + Embedding + Reranking dispatch through mcp_core.llm (litellm
+    # passthrough via the mcp-core[llm] extra below). No direct provider SDK
+    # deps; the openai SDK remains transitive via litellm.
     "httpx>=0.28.1",
-    "google-genai>=2.8.0",
-    "openai>=2.41.0",
     # Vector search for docs
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
@@ -50,8 +51,9 @@ dependencies = [
     "jsonschema>=4.26.0",
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
-    # Relay setup (zero-env-config)
-    "n24q02m-mcp-core>=1.17.2,<2",
+    # Relay setup (zero-env-config) + LLM passthrough (litellm via [llm] extra).
+    # Beta pin until 1.18.0 stable.
+    "n24q02m-mcp-core[llm]>=1.18.0b1,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.4",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance

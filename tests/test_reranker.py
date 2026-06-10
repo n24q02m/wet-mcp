@@ -1,7 +1,7 @@
 """Tests for src/wet_mcp/reranker.py — Dual-backend reranking.
 
-Covers CohereReranker, Qwen3Reranker, factory functions, and
-graceful fallback behavior.
+Covers CloudReranker (litellm passthrough via mcp_core.llm), Qwen3Reranker,
+factory functions, and graceful fallback behavior.
 """
 
 from unittest.mock import MagicMock, patch
@@ -9,38 +9,34 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from wet_mcp.reranker import (
-    CohereReranker,
+    CloudReranker,
     Qwen3Reranker,
     get_reranker,
     init_reranker,
 )
 
+
+def _rerank_response(items: list[tuple[int, float]]) -> MagicMock:
+    """Build a litellm-shaped RerankResponse mock (.results list of dicts)."""
+    mock_response = MagicMock()
+    mock_response.results = [
+        {"index": idx, "relevance_score": score} for idx, score in items
+    ]
+    return mock_response
+
+
 # -----------------------------------------------------------------------
-# CohereReranker
+# CloudReranker
 # -----------------------------------------------------------------------
 
 
-class TestCohereReranker:
+class TestCloudReranker:
     def test_rerank_success(self):
         """Reranking returns sorted (index, score) tuples."""
-        reranker = CohereReranker(model="rerank-v4.0-pro", api_key="test-key")
+        reranker = CloudReranker(model="rerank-v4.0-pro", api_key="test-key")
 
-        mock_response = MagicMock()
-        item0 = MagicMock()
-        item0.index = 0
-        item0.relevance_score = 0.3
-        item1 = MagicMock()
-        item1.index = 1
-        item1.relevance_score = 0.9
-        item2 = MagicMock()
-        item2.index = 2
-        item2.relevance_score = 0.6
-        mock_response.results = [item0, item1, item2]
-
-        mock_client = MagicMock()
-        mock_client.rerank.return_value = mock_response
-
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.3), (1, 0.9), (2, 0.6)])
             results = reranker.rerank(
                 "test query",
                 ["doc a", "doc b", "doc c"],
@@ -56,75 +52,100 @@ class TestCohereReranker:
 
     def test_rerank_empty_documents(self):
         """Empty documents return empty results."""
-        reranker = CohereReranker(api_key="test-key")
+        reranker = CloudReranker(api_key="test-key")
         results = reranker.rerank("query", [], top_n=5)
         assert results == []
 
     def test_rerank_api_error_returns_empty(self):
         """API errors return empty results (graceful fallback)."""
-        reranker = CohereReranker(api_key="test-key")
+        reranker = CloudReranker(api_key="test-key")
 
-        mock_client = MagicMock()
-        mock_client.rerank.side_effect = Exception("API error")
-
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        with patch("mcp_core.llm.rerank", side_effect=Exception("API error")):
             results = reranker.rerank("query", ["doc1", "doc2"])
 
         assert results == []
 
+    def test_rerank_forwards_params(self):
+        """Model mapping, query, documents, top_n and api_key are forwarded."""
+        reranker = CloudReranker(model="rerank-v4.0-pro", api_key="test-key")
+
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.9)])
+            reranker.rerank("test query", ["doc a"], top_n=3)
+
+            call_kwargs = mock_rerank.call_args[1]
+            assert call_kwargs["model"] == "cohere/rerank-v4.0-pro"
+            assert call_kwargs["query"] == "test query"
+            assert call_kwargs["documents"] == ["doc a"]
+            assert call_kwargs["top_n"] == 3
+            assert call_kwargs["api_key"] == "test-key"
+            assert call_kwargs["api_base"] is None
+
+    def test_rerank_api_base_env(self, monkeypatch):
+        """RERANK_API_BASE env var is forwarded as api_base."""
+        monkeypatch.setenv("RERANK_API_BASE", "https://proxy.example.com")
+        reranker = CloudReranker(api_key="test-key")
+
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.9)])
+            reranker.rerank("query", ["doc"])
+            assert mock_rerank.call_args[1]["api_base"] == "https://proxy.example.com"
+
     def test_check_available_success(self):
         """Returns True when model is available."""
-        reranker = CohereReranker(api_key="test-key")
+        reranker = CloudReranker(api_key="test-key")
 
-        mock_response = MagicMock()
-        item = MagicMock()
-        item.index = 0
-        item.relevance_score = 0.5
-        mock_response.results = [item]
-
-        mock_client = MagicMock()
-        mock_client.rerank.return_value = mock_response
-
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.5)])
             assert reranker.check_available() is True
 
     def test_check_available_failure(self):
         """Returns False when model is not available."""
-        reranker = CohereReranker(api_key="test-key")
+        reranker = CloudReranker(api_key="test-key")
 
-        mock_client = MagicMock()
-        mock_client.rerank.side_effect = Exception("Not found")
-
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        with patch("mcp_core.llm.rerank", side_effect=Exception("Not found")):
             assert reranker.check_available() is False
 
     def test_default_model(self):
-        """Default model is rerank-v4.0-pro."""
-        reranker = CohereReranker(api_key="test-key")
+        """Default model is rerank-v4.0-pro (mapped to cohere/ at call time)."""
+        reranker = CloudReranker(api_key="test-key")
         assert reranker.model == "rerank-v4.0-pro"
+        assert reranker._litellm_model() == "cohere/rerank-v4.0-pro"
 
-    def test_api_key_from_env(self):
-        """API key falls back to COHERE_API_KEY env var."""
-        with patch.dict("os.environ", {"COHERE_API_KEY": "env-key"}, clear=False):
-            reranker = CohereReranker()
-            assert reranker.api_key == "env-key"
+    def test_no_api_key_stays_none(self):
+        """Without an explicit key, api_key=None lets litellm use env vars."""
+        reranker = CloudReranker()
+        assert reranker.api_key is None
 
-    def test_api_key_from_co_env(self):
-        """API key falls back to CO_API_KEY env var."""
-        with patch.dict(
-            "os.environ",
-            {"CO_API_KEY": "co-key"},
-            clear=False,
-        ):
-            # Remove COHERE_API_KEY if present
-            import os
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.5)])
+            reranker.rerank("query", ["doc"])
+            assert mock_rerank.call_args[1]["api_key"] is None
 
-            env = os.environ.copy()
-            env.pop("COHERE_API_KEY", None)
-            env["CO_API_KEY"] = "co-key"
-            with patch.dict("os.environ", env, clear=True):
-                reranker = CohereReranker()
-                assert reranker.api_key == "co-key"
+
+class TestCloudRerankerModelMapping:
+    """_litellm_model maps wet's model naming to litellm provider prefixes."""
+
+    def test_prefixed_models_pass_through(self):
+        assert (
+            CloudReranker(model="cohere/rerank-v4.0-pro")._litellm_model()
+            == "cohere/rerank-v4.0-pro"
+        )
+        assert (
+            CloudReranker(model="jina_ai/jina-reranker-v3")._litellm_model()
+            == "jina_ai/jina-reranker-v3"
+        )
+
+    def test_bare_jina_gets_prefix(self):
+        assert (
+            CloudReranker(model="jina-reranker-v3")._litellm_model()
+            == "jina_ai/jina-reranker-v3"
+        )
+
+    def test_bare_cohere_gets_prefix(self):
+        assert (
+            CloudReranker(model="rerank-v3.5")._litellm_model() == "cohere/rerank-v3.5"
+        )
 
 
 # -----------------------------------------------------------------------
@@ -207,49 +228,38 @@ class TestQwen3Reranker:
 # -----------------------------------------------------------------------
 
 
-class TestCohereRerankerApiKeyValidation:
+class TestCloudRerankerApiKeyValidation:
     """check_available() distinguishes API key errors from other failures."""
 
     def test_api_key_401_returns_false(self):
         """401 errors return False."""
-        reranker = CohereReranker(api_key="bad-key")
-        mock_client = MagicMock()
-        mock_client.rerank.side_effect = Exception("401 Unauthorized")
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        reranker = CloudReranker(api_key="bad-key")
+        with patch("mcp_core.llm.rerank", side_effect=Exception("401 Unauthorized")):
             assert reranker.check_available() is False
 
     def test_api_key_403_returns_false(self):
         """403 errors return False."""
-        reranker = CohereReranker(api_key="bad-key")
-        mock_client = MagicMock()
-        mock_client.rerank.side_effect = Exception("403 Forbidden")
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        reranker = CloudReranker(api_key="bad-key")
+        with patch("mcp_core.llm.rerank", side_effect=Exception("403 Forbidden")):
             assert reranker.check_available() is False
 
     def test_invalid_key_detected(self):
         """'invalid' keyword triggers warning path."""
-        reranker = CohereReranker(api_key="bad-key")
-        mock_client = MagicMock()
-        mock_client.rerank.side_effect = Exception("Invalid API key")
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        reranker = CloudReranker(api_key="bad-key")
+        with patch("mcp_core.llm.rerank", side_effect=Exception("Invalid API key")):
             assert reranker.check_available() is False
 
     def test_non_auth_error_returns_false(self):
         """Non-auth errors also return False."""
-        reranker = CohereReranker(api_key="test-key")
-        mock_client = MagicMock()
-        mock_client.rerank.side_effect = Exception("Model not found")
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        reranker = CloudReranker(api_key="test-key")
+        with patch("mcp_core.llm.rerank", side_effect=Exception("Model not found")):
             assert reranker.check_available() is False
 
     def test_success_returns_true(self):
         """Successful check returns True."""
-        reranker = CohereReranker(api_key="test-key")
-        mock_response = MagicMock()
-        mock_response.results = [MagicMock(index=0, relevance_score=0.9)]
-        mock_client = MagicMock()
-        mock_client.rerank.return_value = mock_response
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        reranker = CloudReranker(api_key="test-key")
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.9)])
             assert reranker.check_available() is True
 
 
@@ -273,9 +283,9 @@ class TestQwen3RerankerGetModelWarning:
 
 class TestRerankerFactory:
     def test_init_cloud_reranker(self):
-        """init_reranker('cloud') creates CohereReranker."""
+        """init_reranker('cloud') creates CloudReranker."""
         reranker = init_reranker("cloud", api_key="test-key")
-        assert isinstance(reranker, CohereReranker)
+        assert isinstance(reranker, CloudReranker)
         assert get_reranker() is reranker
 
     def test_init_local_reranker(self):
@@ -299,11 +309,11 @@ class TestRerankerFactory:
     def test_init_cloud_default_model(self):
         """Cloud reranker uses default model when none specified."""
         reranker = init_reranker("cloud", api_key="test-key")
-        assert isinstance(reranker, CohereReranker)
+        assert isinstance(reranker, CloudReranker)
         assert reranker.model == "rerank-v4.0-pro"
 
     def test_init_cloud_custom_model(self):
         """Cloud reranker accepts custom model."""
         reranker = init_reranker("cloud", model="rerank-v3.5", api_key="test-key")
-        assert isinstance(reranker, CohereReranker)
+        assert isinstance(reranker, CloudReranker)
         assert reranker.model == "rerank-v3.5"

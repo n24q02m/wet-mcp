@@ -1,4 +1,4 @@
-"""LLM utilities for WET MCP Server using native provider SDKs."""
+"""LLM utilities for WET MCP Server — litellm passthrough via mcp_core.llm."""
 
 import asyncio
 import base64
@@ -80,7 +80,7 @@ def _detect_provider(model: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Native async completion
+# Async completion (litellm passthrough via mcp_core.llm)
 # ---------------------------------------------------------------------------
 
 
@@ -96,218 +96,50 @@ async def acompletion(
     api_key: str | None = None,
     **kwargs,
 ) -> object:
-    """Unified async completion using native SDKs.
+    """Unified async completion via mcp_core.llm (litellm passthrough).
 
-    Routes to google-genai or openai based on model prefix.
-    Returns an OpenAI-compatible response object.
+    litellm infers the provider from the ``provider/model`` prefix and
+    returns OpenAI-shaped responses (``resp.choices[0].message.content``).
+    Fallback policy stays wet-owned: fallbacks are tried sequentially,
+    their exceptions are swallowed, and the primary exception is re-raised
+    when all fail.
     """
-    provider = _detect_provider(model)
-    bare_model = _strip_provider(model)
+    # Lazy import: litellm costs ~1-2s on first import.
+    from mcp_core.llm import acompletion as core_acompletion
+
+    call_kwargs: dict = dict(kwargs)
+    if temperature is not None:
+        call_kwargs["temperature"] = temperature
+    if max_tokens is not None:
+        call_kwargs["max_tokens"] = max_tokens
+    if response_format is not None:
+        call_kwargs["response_format"] = response_format
+
+    resolved_api_base = api_base or os.getenv("LLM_API_BASE") or None
 
     try:
-        if provider == "gemini":
-            return await _gemini_completion(
-                model=bare_model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                api_key=api_key,
-            )
-        else:
-            # OpenAI-compatible (openai, xai/grok)
-            return await _openai_completion(
-                provider=provider,
-                model=bare_model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format=response_format,
-                api_base=api_base,
-                api_key=api_key,
-            )
+        return await core_acompletion(
+            model=model,
+            messages=messages,
+            api_base=resolved_api_base,
+            api_key=api_key,
+            **call_kwargs,
+        )
     except Exception as e:
         # Try fallbacks
         if fallbacks:
             for fb_model in fallbacks:
                 try:
-                    return await acompletion(
+                    return await core_acompletion(
                         model=fb_model,
                         messages=messages,
-                        temperature=temperature,
-                        max_tokens=max_tokens,
-                        response_format=response_format,
-                        api_base=api_base,
+                        api_base=resolved_api_base,
                         api_key=api_key,
+                        **call_kwargs,
                     )
                 except Exception:
                     continue
         raise e
-
-
-class _Choice:
-    """Minimal OpenAI-compatible choice object."""
-
-    def __init__(self, content: str):
-        self.message = _Message(content)
-
-
-class _Message:
-    """Minimal OpenAI-compatible message object."""
-
-    def __init__(self, content: str):
-        self.content = content
-
-
-class _Response:
-    """Minimal OpenAI-compatible response object."""
-
-    def __init__(self, content: str):
-        self.choices = [_Choice(content)]
-
-
-async def _gemini_completion(
-    *,
-    model: str,
-    messages: list[dict],
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    response_format: dict | None = None,
-    api_key: str | None = None,
-) -> _Response:
-    """Call Gemini via google-genai SDK."""
-    from google import genai
-
-    key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
-    client = genai.Client(api_key=key)
-
-    # Convert OpenAI-style messages to Gemini format
-    contents = _convert_messages_to_gemini(messages)
-
-    # Build config
-    config_kwargs: dict = {}
-    if temperature is not None:
-        config_kwargs["temperature"] = temperature
-    if max_tokens is not None:
-        config_kwargs["max_output_tokens"] = max_tokens
-
-    # Handle response_format
-    if response_format:
-        fmt_type = response_format.get("type", "")
-        if fmt_type == "json_object":
-            config_kwargs["response_mime_type"] = "application/json"
-        elif fmt_type == "json_schema":
-            config_kwargs["response_mime_type"] = "application/json"
-
-    config = (
-        genai.types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
-    )
-
-    response = await asyncio.to_thread(
-        client.models.generate_content,
-        model=model,
-        contents=contents,
-        config=config,
-    )
-
-    text = response.text or ""
-    return _Response(text)
-
-
-def _convert_messages_to_gemini(messages: list[dict]) -> list:
-    """Convert OpenAI-style messages to Gemini contents format."""
-    from google.genai import types
-
-    contents = []
-    system_text = ""
-
-    for msg in messages:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-
-        if role == "system":
-            system_text = content if isinstance(content, str) else str(content)
-            continue
-
-        gemini_role = "user" if role == "user" else "model"
-
-        if isinstance(content, str):
-            parts = [types.Part.from_text(text=content)]
-        elif isinstance(content, list):
-            parts = []
-            for item in content:
-                if isinstance(item, dict):
-                    if item.get("type") == "text":
-                        parts.append(types.Part.from_text(text=item.get("text", "")))
-                    elif item.get("type") == "image_url":
-                        url = item.get("image_url", {}).get("url", "")
-                        if url.startswith("data:"):
-                            # Parse data URL: data:mime;base64,data
-                            header, b64_data = url.split(",", 1)
-                            mime = header.split(":")[1].split(";")[0]
-                            import base64 as b64mod
-
-                            raw = b64mod.b64decode(b64_data)
-                            parts.append(
-                                types.Part.from_bytes(data=raw, mime_type=mime)
-                            )
-                        else:
-                            parts.append(
-                                types.Part.from_uri(
-                                    file_uri=url, mime_type="image/jpeg"
-                                )
-                            )
-                else:
-                    parts.append(types.Part.from_text(text=str(item)))
-        else:
-            parts = [types.Part.from_text(text=str(content))]
-
-        # Prepend system instruction to first user message
-        if system_text and gemini_role == "user":
-            parts.insert(0, types.Part.from_text(text=f"[System: {system_text}]\n\n"))
-            system_text = ""
-
-        contents.append(types.Content(role=gemini_role, parts=parts))
-
-    return contents
-
-
-async def _openai_completion(
-    *,
-    provider: str,
-    model: str,
-    messages: list[dict],
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    response_format: dict | None = None,
-    api_base: str | None = None,
-    api_key: str | None = None,
-) -> object:
-    """Call OpenAI-compatible API (OpenAI, xAI/Grok)."""
-    from openai import AsyncOpenAI
-
-    if provider == "xai":
-        key = api_key or os.getenv("XAI_API_KEY") or ""
-        base = api_base or "https://api.x.ai/v1"
-    else:
-        key = api_key or os.getenv("OPENAI_API_KEY") or ""
-        base = api_base or "https://api.openai.com/v1"
-
-    client = AsyncOpenAI(api_key=key, base_url=base)
-
-    kwargs: dict = {
-        "model": model,
-        "messages": messages,
-    }
-    if temperature is not None:
-        kwargs["temperature"] = temperature
-    if max_tokens is not None:
-        kwargs["max_tokens"] = max_tokens
-    if response_format:
-        # OpenAI supports response_format directly
-        kwargs["response_format"] = response_format
-
-    return await client.chat.completions.create(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -332,14 +164,23 @@ def get_llm_config() -> dict:
 
 
 def get_model_capabilities(model: str) -> dict:
-    """Check model's media capabilities using hardcoded maps.
+    """Check model's media capabilities.
+
+    Vision comes from the litellm registry (``mcp_core.llm.supports_vision``);
+    models unknown to the registry fall back to the hardcoded map. Audio
+    flags stay hardcoded-map-based (no registry coverage).
 
     Returns:
         Dict with 'vision', 'audio_input', 'audio_output' booleans.
     """
+    from mcp_core.llm import supports_vision
+
     bare = _strip_provider(model)
+    vision = supports_vision(model)
+    if vision is None:
+        vision = bare in _VISION_MODELS
     return {
-        "vision": bare in _VISION_MODELS,
+        "vision": vision,
         "audio_input": bare in _AUDIO_INPUT_MODELS,
         "audio_output": bare in _AUDIO_OUTPUT_MODELS,
     }

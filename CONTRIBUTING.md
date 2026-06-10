@@ -156,7 +156,7 @@ wet-mcp/
 │       ├── server.py          # MCP server
 │       ├── searxng_runner.py   # Embedded SearXNG subprocess
 │       ├── setup.py           # Auto-setup (SearXNG + Playwright)
-│       ├── llm.py             # LLM utilities (LiteLLM)
+│       ├── llm.py             # LLM utilities (litellm passthrough via mcp-core[llm])
 │       ├── security.py        # URL security validation
 │       ├── docs/              # Tool documentation (Markdown)
 │       └── sources/

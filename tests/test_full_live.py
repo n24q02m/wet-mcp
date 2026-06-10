@@ -327,19 +327,19 @@ class TestFullSetup:
 
 
 # ---------------------------------------------------------------------------
-# LiteLLM mode (skipped if no LITELLM_PROXY_URL)
+# Custom LLM API base mode (skipped if no LLM_API_BASE)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.skipif(
-    not os.environ.get("LITELLM_PROXY_URL"),
-    reason="LITELLM_PROXY_URL not set",
+    not os.environ.get("LLM_API_BASE"),
+    reason="LLM_API_BASE not set",
 )
 @pytest.mark.timeout(120)
-class TestFullLiteLLMMode:
+class TestFullLLMApiBaseMode:
     @pytest.fixture
-    async def litellm_session(self, tmp_path):
-        """MCP session using LiteLLM proxy mode."""
+    async def api_base_session(self, tmp_path):
+        """MCP session using a custom LLM API base (litellm passthrough)."""
         server_params = StdioServerParameters(
             command="uv",
             args=["run", "wet-mcp"],
@@ -366,17 +366,17 @@ class TestFullLiteLLMMode:
             else:
                 raise
 
-    async def test_search_docs_litellm(self, litellm_session: ClientSession):
-        """search.docs with LiteLLM embedding."""
-        r = await litellm_session.call_tool(
+    async def test_search_docs_api_base(self, api_base_session: ClientSession):
+        """search.docs with custom-api-base embedding."""
+        r = await api_base_session.call_tool(
             "search", {"action": "docs", "library": "requests", "query": "get"}
         )
         text = parse(r)
         assert len(text) > 50, f"Docs result too short: {len(text)} chars"
 
-    async def test_config_status_litellm(self, litellm_session: ClientSession):
-        """config.status should show litellm mode."""
-        r = await litellm_session.call_tool("config", {"action": "status"})
+    async def test_config_status_api_base(self, api_base_session: ClientSession):
+        """config.status should show cloud embedding available."""
+        r = await api_base_session.call_tool("config", {"action": "status"})
         text = parse(r)
         data = json.loads(text)
         embedding = data.get("embedding", {})

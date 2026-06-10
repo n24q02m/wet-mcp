@@ -377,7 +377,7 @@ class Settings(BaseSettings):
 
         if mode == "sdk":
             self.setup_api_keys()
-            logger.info("SDK direct mode (native provider SDKs)")
+            logger.info("SDK direct mode (litellm passthrough via mcp_core.llm)")
         else:
             logger.info("Local mode (no cloud providers)")
 

@@ -4,9 +4,9 @@ Targets uncovered lines in:
 - searxng_runner.py: process management, config, health checks, restart logic
 - searxng.py: unhealthy restart path, URL dedup merge logic
 - crawler.py: markitdown errors, _detect_document_content_type, _get_crawler retry
-- embedder.py: LiteLLM backend fallback, ONNX model loading errors
+- embedder.py: cloud backend fallback, ONNX model loading errors
 - llm.py: error handling paths
-- reranker.py: LiteLLM reranker fallback paths
+- reranker.py: cloud reranker fallback paths
 """
 
 import asyncio
@@ -1255,43 +1255,32 @@ class TestAnalyzeMediaErrorPaths:
 # -----------------------------------------------------------------------
 
 
-class TestCohereRerankerWithApiKey:
-    """Cover CohereReranker api_key pass-through."""
+class TestCloudRerankerWithApiKey:
+    """Cover CloudReranker api_key pass-through."""
 
     async def test_rerank_with_api_key(self):
-        from wet_mcp.reranker import CohereReranker
+        from wet_mcp.reranker import CloudReranker
 
-        reranker = CohereReranker(model="rerank-v4.0-pro", api_key="sk-test")
+        reranker = CloudReranker(model="rerank-v4.0-pro", api_key="sk-test")
 
         mock_response = MagicMock()
-        item = MagicMock()
-        item.index = 0
-        item.relevance_score = 0.9
-        mock_response.results = [item]
+        mock_response.results = [{"index": 0, "relevance_score": 0.9}]
 
-        mock_client = MagicMock()
-        mock_client.rerank.return_value = mock_response
-
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        with patch("mcp_core.llm.rerank", return_value=mock_response) as mock_rerank:
             results = reranker.rerank("query", ["doc1"])
             assert len(results) == 1
             assert reranker.api_key == "sk-test"
+            assert mock_rerank.call_args[1]["api_key"] == "sk-test"
 
     async def test_check_available_with_api_key(self):
-        from wet_mcp.reranker import CohereReranker
+        from wet_mcp.reranker import CloudReranker
 
-        reranker = CohereReranker(model="rerank-v4.0-pro", api_key="sk-test")
+        reranker = CloudReranker(model="rerank-v4.0-pro", api_key="sk-test")
 
         mock_response = MagicMock()
-        item = MagicMock()
-        item.index = 0
-        item.relevance_score = 0.5
-        mock_response.results = [item]
+        mock_response.results = [{"index": 0, "relevance_score": 0.5}]
 
-        mock_client = MagicMock()
-        mock_client.rerank.return_value = mock_response
-
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        with patch("mcp_core.llm.rerank", return_value=mock_response):
             result = reranker.check_available()
             assert result is True
             assert reranker.api_key == "sk-test"
@@ -1327,18 +1316,15 @@ class TestQwen3RerankerLoadModel:
                     reranker._get_model()
 
 
-class TestCohereRerankerCheckAvailableEmpty:
+class TestCloudRerankerCheckAvailableEmpty:
     """Cover edge case: check_available with empty results."""
 
     async def test_check_available_empty_results(self):
-        from wet_mcp.reranker import CohereReranker
+        from wet_mcp.reranker import CloudReranker
 
-        reranker = CohereReranker(api_key="test-key")
+        reranker = CloudReranker(api_key="test-key")
         mock_response = MagicMock()
         mock_response.results = []
 
-        mock_client = MagicMock()
-        mock_client.rerank.return_value = mock_response
-
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        with patch("mcp_core.llm.rerank", return_value=mock_response):
             assert reranker.check_available() is False

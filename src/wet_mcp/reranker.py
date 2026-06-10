@@ -1,8 +1,9 @@
-"""Dual-backend reranking: Cohere SDK (cloud) + qwen3-embed (local ONNX).
+"""Dual-backend reranking: Cloud (litellm passthrough) + qwen3-embed (local ONNX).
 
 Supports two backends:
-- **cloud**: Cloud reranking via Cohere SDK (rerank-v4.0-pro).
-  Requires COHERE_API_KEY or CO_API_KEY env var.
+- **cloud**: Cloud reranking via mcp_core.llm (litellm passthrough — Jina,
+  Cohere, or any litellm rerank 'provider/model'). Requires the matching
+  provider API key env var (JINA_AI_API_KEY, COHERE_API_KEY / CO_API_KEY).
 - **local**: Local ONNX cross-encoder via qwen3-embed (Qwen3-Reranker-0.6B).
   No API keys needed, ~0.57GB model download on first use.
 
@@ -50,26 +51,45 @@ class RerankerBackend(Protocol):
 
 
 # ---------------------------------------------------------------------------
-# Cohere Backend (cloud)
+# Cloud Backend (litellm passthrough via mcp_core.llm)
 # ---------------------------------------------------------------------------
 
 
-class CohereReranker:
-    """Cloud reranking via Cohere SDK (ClientV2)."""
+class CloudReranker:
+    """Cloud reranking via mcp_core.llm (litellm passthrough)."""
 
     DEFAULT_MODEL = "rerank-v4.0-pro"
 
     def __init__(self, model: str | None = None, api_key: str | None = None):
         self.model = model or self.DEFAULT_MODEL
-        self.api_key = api_key or os.environ.get(
-            "COHERE_API_KEY", os.environ.get("CO_API_KEY", "")
+        # Explicit key only. When None, litellm falls back to the provider
+        # env var (JINA_AI_API_KEY, COHERE_API_KEY / CO_API_KEY) at call time.
+        self.api_key = api_key or None
+
+    def _litellm_model(self) -> str:
+        """Map wet's model naming to a litellm ``provider/model`` string."""
+        if "/" in self.model:
+            return self.model
+        if self.model.lower().startswith("jina"):
+            return f"jina_ai/{self.model}"
+        return f"cohere/{self.model}"
+
+    def _call_rerank(
+        self, query: str, documents: list[str], top_n: int
+    ) -> list[tuple[int, float]]:
+        """Single cloud path via mcp_core.llm (sync mirror — runs in to_thread)."""
+        # Lazy import: litellm costs ~1-2s on first import.
+        from mcp_core.llm import rerank as core_rerank
+
+        response = core_rerank(
+            model=self._litellm_model(),
+            query=query,
+            documents=documents,
+            top_n=top_n,
+            api_base=os.getenv("RERANK_API_BASE") or None,
+            api_key=self.api_key,
         )
-
-    def _get_client(self):
-        """Create a Cohere ClientV2 instance."""
-        import cohere
-
-        return cohere.ClientV2(api_key=self.api_key)
+        return [(r["index"], r["relevance_score"]) for r in response.results]
 
     def rerank(
         self,
@@ -77,55 +97,39 @@ class CohereReranker:
         documents: list[str],
         top_n: int = 10,
     ) -> list[tuple[int, float]]:
-        """Rerank using Cohere rerank API."""
+        """Rerank using the cloud rerank API."""
         if not documents:
             return []
 
         try:
-            client = self._get_client()
-            response = client.rerank(
-                model=self.model,
-                query=query,
-                documents=documents,
-                top_n=top_n,
-            )
-
-            results = []
-            for item in response.results:
-                results.append((item.index, item.relevance_score))
+            results = self._call_rerank(query, documents, top_n)
 
             # Sort by score descending
             results.sort(key=lambda x: x[1], reverse=True)
             return results[:top_n]
 
         except Exception as e:
-            logger.warning(f"Cohere reranking failed: {e}")
+            logger.warning(f"Cloud reranking failed: {e}")
             return []
 
     def check_available(self) -> bool:
-        """Check if Cohere reranking model is available.
+        """Check if the cloud reranking model is available.
 
         Distinguishes between invalid API keys (warning) and other
         failures (debug) so users know when their keys are wrong.
         """
         try:
-            client = self._get_client()
-            response = client.rerank(
-                model=self.model,
-                query="test",
-                documents=["test document"],
-                top_n=1,
-            )
-            return bool(response.results)
+            results = self._call_rerank("test", ["test document"], 1)
+            return bool(results)
         except Exception as e:
             msg = str(e).lower()
             if any(p in msg for p in _AUTH_ERROR_PATTERNS):
                 logger.warning(
                     f"API key invalid for reranker {self.model}: {e}. "
-                    "Check your COHERE_API_KEY or CO_API_KEY configuration."
+                    "Check your JINA_AI_API_KEY or COHERE_API_KEY configuration."
                 )
             else:
-                logger.debug(f"Cohere reranker {self.model} not available: {e}")
+                logger.debug(f"Cloud reranker {self.model} not available: {e}")
             return False
 
 
@@ -233,7 +237,7 @@ def init_reranker(
     global _backend
 
     if backend_type == "cloud":
-        _backend = CohereReranker(model=model, api_key=api_key)
+        _backend = CloudReranker(model=model, api_key=api_key)
     elif backend_type == "local":
         _backend = Qwen3Reranker(model)
     else:

@@ -1686,10 +1686,30 @@ async def _handle_config_setup_complete() -> str:
     )
 
 
+async def _handle_config_models(key: str | None) -> str:
+    from mcp_core.llm import list_models
+
+    show_all = key == "all"
+    # to_thread: first list_models call imports litellm (~1-2s, blocking).
+    models = await asyncio.to_thread(
+        list_models,
+        modes=("chat", "embedding", "rerank"),
+        configured_only=not show_all,
+        limit=200,
+    )
+    return json.dumps(
+        {
+            "models": models,
+            "note": "Any litellm 'provider/model' works via passthrough, "
+            "even if not listed here.",
+        }
+    )
+
+
 @mcp.tool(
     description=(
         "Server config and management. Actions: "
-        "status|set|cache_clear|docs_reindex|warmup|setup_sync|"
+        "status|set|models|cache_clear|docs_reindex|warmup|setup_sync|"
         "setup_status|setup_skip|setup_reset|setup_complete. "
         "Use help tool with tool_name='config' for full docs."
     ),
@@ -1713,6 +1733,8 @@ async def config(
     Actions:
     - status: Show current config and status
     - set: Update runtime setting (key + value required)
+    - models: List cloud models (chat/embedding/rerank) for configured
+      providers; key='all' lists the full catalog
     - cache_clear: Clear web cache
     - docs_reindex: Force re-index a library (key = library name)
     - warmup: Pre-download models and run first-time setup
@@ -1728,6 +1750,9 @@ async def config(
 
         case "set":
             return _handle_config_set(key, value)
+
+        case "models":
+            return await _handle_config_models(key)
 
         case "cache_clear":
             return await _handle_config_cache_clear()
@@ -1759,6 +1784,7 @@ async def config(
             valid_actions = [
                 "cache_clear",
                 "docs_reindex",
+                "models",
                 "set",
                 "setup_complete",
                 "setup_reset",

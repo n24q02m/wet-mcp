@@ -322,27 +322,21 @@ class TestCachePurgeAndClose:
 # ---------------------------------------------------------------------------
 
 
-class TestCohereRerankerResults:
-    """Cover CohereReranker rerank result parsing."""
+class TestCloudRerankerResults:
+    """Cover CloudReranker rerank result parsing."""
 
-    def test_rerank_with_object_results(self):
-        from wet_mcp.reranker import CohereReranker
+    def test_rerank_with_dict_results(self):
+        from wet_mcp.reranker import CloudReranker
 
-        reranker = CohereReranker(api_key="test-key")
+        reranker = CloudReranker(api_key="test-key")
 
         mock_response = MagicMock()
-        item0 = MagicMock()
-        item0.index = 0
-        item0.relevance_score = 0.8
-        item1 = MagicMock()
-        item1.index = 1
-        item1.relevance_score = 0.95
-        mock_response.results = [item0, item1]
+        mock_response.results = [
+            {"index": 0, "relevance_score": 0.8},
+            {"index": 1, "relevance_score": 0.95},
+        ]
 
-        mock_client = MagicMock()
-        mock_client.rerank.return_value = mock_response
-
-        with patch.object(reranker, "_get_client", return_value=mock_client):
+        with patch("mcp_core.llm.rerank", return_value=mock_response):
             results = reranker.rerank("query", ["doc1", "doc2"], top_n=2)
 
         assert results == [(1, 0.95), (0, 0.8)]
