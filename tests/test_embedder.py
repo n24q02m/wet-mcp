@@ -174,6 +174,34 @@ class TestCloudEmbeddingBackend:
             with pytest.raises(Exception, match="Invalid model"):
                 await backend.embed_texts(["test"])
 
+    async def test_embed_texts_multiple_batches(self):
+        """Correctly splits into batches and combines results."""
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        # Override batch size for easier testing
+        backend.MAX_BATCH_SIZE = 2
+
+        texts = ["t1", "t2", "t3", "t4", "t5"]
+        # Expected results for 3 batches
+        expected_results = [
+            [[0.1, 0.1], [0.2, 0.2]],
+            [[0.3, 0.3], [0.4, 0.4]],
+            [[0.5, 0.5]],
+        ]
+
+        with patch.object(
+            backend,
+            "_embed_batch_inner",
+            new_callable=AsyncMock,
+            side_effect=expected_results,
+        ) as mock_inner:
+            vecs = await backend.embed_texts(texts)
+
+        assert len(vecs) == 5
+        assert vecs[0] == [0.1, 0.1]
+        assert vecs[2] == [0.3, 0.3]
+        assert vecs[4] == [0.5, 0.5]
+        assert mock_inner.call_count == 3
+
     async def test_embed_single_success(self):
         """Single text embedding returns one vector."""
         backend = CloudEmbeddingBackend("text-embedding-3-small")
