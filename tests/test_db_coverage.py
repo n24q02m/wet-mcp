@@ -540,7 +540,7 @@ class TestGetBestVersion:
         lib_id = db.upsert_library(name="verlib2")
         ver_id = db.upsert_version(lib_id, version="3.0.0")
         db.mark_version_indexed(ver_id, 1, 10)
-        result = db.get_best_version(lib_id, target="3.0.0")
+        result = db.get_best_version(lib_id, preferred_version="3.0.0")
         assert result is not None
         assert result["version"] == "3.0.0"
 
@@ -549,7 +549,7 @@ class TestGetBestVersion:
         lib_id = db.upsert_library(name="verlib3")
         ver_id = db.upsert_version(lib_id, version="2.0.0")
         db.mark_version_indexed(ver_id, 1, 5)
-        result = db.get_best_version(lib_id, target="9.9.9")
+        result = db.get_best_version(lib_id, preferred_version="9.9.9")
         assert result is not None
         assert result["version"] == "2.0.0"
 
