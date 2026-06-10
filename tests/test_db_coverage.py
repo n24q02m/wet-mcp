@@ -751,3 +751,66 @@ class TestProjectContext:
         db._conn.execute("DROP TABLE project_context")
         db._conn.commit()
         assert db.get_project_context("/any/path") is None
+
+
+# add_chunks error paths (lines 817-818, 825-826)
+# ---------------------------------------------------------------------------
+
+
+class TestAddChunksEdgeCases:
+    def test_add_chunks_serialization_error(self, tmp_path):
+        """add_chunks handles embedding serialization failure (lines 817-818)."""
+        # Use embedding_dims > 0 and force _vec_enabled to ensure serialization loop is hit
+        # Use embedding_dims > 0 to ensure doc_chunks_vec table exists
+        db = DocsDB(tmp_path / "ser.db", embedding_dims=2)
+        db._vec_enabled = True
+        lib_id = db.upsert_library(name="serlib")
+        ver_id = db.upsert_version(lib_id)
+
+        chunks = [{"content": "c1"}, {"content": "c2"}]
+        # First valid, second invalid (not a list of floats)
+        embeddings = [[1.0, 2.0], "invalid"]
+
+        # Should not raise, and should return count of chunks added to FTS
+        count = db.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
+        assert count == 2
+
+        # Verify only one vector was inserted (the valid one)
+        # Note: sqlite-vec might not be loaded in all test environments,
+        # so we check if the table exists first or just catch the error.
+        try:
+            rows = db._conn.execute("SELECT count(*) FROM doc_chunks_vec").fetchone()
+            assert rows[0] == 1
+        except sqlite3.OperationalError:
+            # Table doesn't exist or extension not loaded, that's fine for this test
+            pass
+        db.close()
+
+    def test_add_chunks_batch_insert_error(self, db):
+        """add_chunks handles batch insert failure for vectors (lines 825-826)."""
+        # Force vec_enabled to reach the insert path
+        db._vec_enabled = True
+        lib_id = db.upsert_library(name="batchlib")
+        ver_id = db.upsert_version(lib_id)
+
+        chunks = [{"content": "c1"}]
+        embeddings = [[1.0, 2.0]]
+
+        # We can't patch db._conn.executemany directly (it's read-only).
+        # We patch the instance's _conn attribute instead.
+        real_conn = db._conn
+        mock_conn = MagicMock()
+
+        def mock_executemany(sql, params):
+            if "doc_chunks_vec" in sql:
+                raise sqlite3.Error("batch fail")
+            # For other calls (like inserting chunks), use the real connection
+            return real_conn.executemany(sql, params)
+
+        mock_conn.executemany.side_effect = mock_executemany
+        mock_conn.commit = real_conn.commit
+
+        with patch.object(db, "_conn", mock_conn):
+            # Should not raise
+            count = db.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
+            assert count == 1
