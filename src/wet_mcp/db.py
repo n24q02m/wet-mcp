@@ -14,6 +14,7 @@ import sqlite3
 import struct
 import time
 import uuid
+from typing import ClassVar
 from functools import lru_cache
 from pathlib import Path
 
@@ -189,8 +190,13 @@ def _chunk_quality_score(content: str) -> float:
 class DocsDB:
     """SQLite-backed docs storage with FTS5 hybrid search."""
 
+    _column_cache: ClassVar[dict[tuple[str, str], set[str]]] = {}
+    _table_exists_cache: ClassVar[dict[tuple[str, str], bool]] = {}
+
+
     def __init__(self, db_path: Path, embedding_dims: int = 0):
-        self._db_path = db_path
+        # Resolve absolute path for cache key isolation.
+        self._db_path = db_path.resolve()
         if (
             type(embedding_dims) is not int
             or embedding_dims < 0
@@ -202,11 +208,11 @@ class DocsDB:
         self._embedding_dims = embedding_dims
         self._vec_enabled = False
 
-        db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._db_path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False allows the connection to be used from
         # asyncio.to_thread workers (PRAGMA busy_timeout below serializes
         # concurrent writes safely; SQLite WAL is multi-reader-safe).
-        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")
@@ -229,7 +235,48 @@ class DocsDB:
                 logger.debug(f"sqlite-vec not available, FTS-only mode: {e}")
 
         self._create_tables()
-        logger.debug(f"DocsDB initialized at {db_path} (vec={self._vec_enabled})")
+        logger.debug(f"DocsDB initialized at {self._db_path} (vec={self._vec_enabled})")
+
+    def _get_table_columns(self, table_name: str) -> set[str]:
+        """Get columns for a table, with class-level caching.
+
+        Security: Table name must be one of the known tables to prevent
+        SQL injection in the PRAGMA statement.
+        """
+        if table_name not in ("libraries", "versions", "doc_chunks"):
+            raise ValueError(f"Invalid table name for schema fetch: {table_name}")
+
+        key = (str(self._db_path), table_name)
+        if key in self._column_cache:
+            return self._column_cache[key]
+
+        # Use single quotes for table name in PRAGMA as it cannot be parameterized
+        # and we verified it against an allowlist above.
+        res = self._conn.execute(f"PRAGMA table_info('{table_name}')").fetchall()
+        cols = {r["name"] for r in res}
+        if cols:
+            self._column_cache[key] = cols
+        return cols
+
+    def _table_exists(self, table_name: str) -> bool:
+        """Check if a table exists, with class-level caching."""
+        key = (str(self._db_path), table_name)
+        if key in self._table_exists_cache:
+            return self._table_exists_cache[key]
+
+        row = self._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table_name,),
+        ).fetchone()
+        exists = row is not None
+        self._table_exists_cache[key] = exists
+        return exists
+
+    def _invalidate_table_cache(self, table_name: str) -> None:
+        """Invalidate column and existence cache for a table."""
+        key = (str(self._db_path), table_name)
+        self._column_cache.pop(key, None)
+        self._table_exists_cache.pop(key, None)
 
     def _create_tables(self) -> None:
         self._create_libraries_table()
@@ -250,6 +297,7 @@ class DocsDB:
                 last_used_at REAL NOT NULL
             )
         """)
+        self._invalidate_table_cache("project_context")
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_project_context_last_used
             ON project_context(last_used_at)
@@ -277,6 +325,7 @@ class DocsDB:
                 updated_at REAL NOT NULL
             )
         """)
+        self._invalidate_table_cache("libraries")
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_libraries_name
             ON libraries(name)
@@ -298,6 +347,7 @@ class DocsDB:
             try:
                 self._conn.execute(f"ALTER TABLE libraries ADD COLUMN {col_ddl}")
                 self._conn.commit()
+                self._invalidate_table_cache("libraries")
                 col_name = col_ddl.split()[0]
                 logger.debug(f"Migrated libraries table: added {col_name}")
             except sqlite3.OperationalError:
@@ -321,11 +371,13 @@ class DocsDB:
                 UNIQUE(library_id, version)
             )
         """)
+        self._invalidate_table_cache("versions")
         # Idempotent column adds for legacy DBs.
         for col_ddl in ("release_date REAL", "source_url TEXT"):
             try:
                 self._conn.execute(f"ALTER TABLE versions ADD COLUMN {col_ddl}")
                 self._conn.commit()
+                self._invalidate_table_cache("versions")
             except sqlite3.OperationalError:
                 pass
 
@@ -350,6 +402,7 @@ class DocsDB:
                 FOREIGN KEY (library_id) REFERENCES libraries(id) ON DELETE CASCADE
             )
         """)
+        self._invalidate_table_cache("doc_chunks")
         # Idempotent column adds for legacy DBs.
         for col_ddl in (
             "section TEXT",
@@ -360,6 +413,7 @@ class DocsDB:
             try:
                 self._conn.execute(f"ALTER TABLE doc_chunks ADD COLUMN {col_ddl}")
                 self._conn.commit()
+                self._invalidate_table_cache("doc_chunks")
             except sqlite3.OperationalError:
                 pass
         self._conn.execute("""
@@ -427,10 +481,7 @@ class DocsDB:
     def _create_vector_table(self) -> None:
         # Vector table (optional)
         if self._vec_enabled and self._embedding_dims > 0:
-            row = self._conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='doc_chunks_vec'"
-            ).fetchone()
-            if not row:
+            if not self._table_exists("doc_chunks_vec"):
                 # Security: Dimensions are validated as 0-65536 integer in __init__.
                 # Schema construction (CREATE VIRTUAL TABLE) does not support parameters.
                 dims_str = str(int(self._embedding_dims))
@@ -442,6 +493,7 @@ class DocsDB:
                 )
                 # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
                 self._conn.execute(sql)
+                self._invalidate_table_cache("doc_chunks_vec")
 
     # -----------------------------------------------------------------------
     # Stats
@@ -492,10 +544,7 @@ class DocsDB:
 
         # Phase 2 columns may be absent on a pre-Alembic legacy DB. Detect
         # presence once per call so we don't crash on older schemas.
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
-        }
+        existing_cols = self._get_table_columns("libraries")
         pkg_json = (
             json.dumps(package_managers, ensure_ascii=False)
             if package_managers is not None
@@ -615,10 +664,7 @@ class DocsDB:
         Silently no-ops on pre-Alembic legacy databases that lack the
         ``last_indexed_at`` / ``total_versions`` columns.
         """
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
-        }
+        existing_cols = self._get_table_columns("libraries")
         sets: list[str] = []
         params: list = []
         if "last_indexed_at" in existing_cols:
@@ -748,10 +794,7 @@ class DocsDB:
         chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
 
         # Detect optional columns once so we can branch on a single INSERT.
-        existing_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(doc_chunks)").fetchall()
-        }
+        existing_cols = self._get_table_columns("doc_chunks")
         phase2_cols = [
             c
             for c in (
@@ -1344,11 +1387,7 @@ class DocsDB:
 
     def _ensure_project_context(self) -> bool:
         """Return True iff the project_context table exists."""
-        row = self._conn.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type='table' AND name='project_context'"
-        ).fetchone()
-        return row is not None
+        return self._table_exists("project_context")
 
     def upsert_project_context(
         self, project_path: str, locked_libraries: list[dict]
