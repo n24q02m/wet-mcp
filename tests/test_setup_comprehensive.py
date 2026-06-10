@@ -71,11 +71,13 @@ def test_patch_searxng_version_already_exists(mock_find_dir):
     mock_file.write_text.assert_not_called()
 
 
+@patch("wet_mcp.setup.Path")
 @patch("wet_mcp.setup._find_searx_package_dir")
-def test_patch_searxng_version_no_dir(mock_find_dir):
+def test_patch_searxng_version_no_dir(mock_find_dir, mock_path):
     mock_find_dir.return_value = None
     patch_searxng_version()
-    # No error should be raised
+    # Should exit early without any Path operations
+    mock_path.assert_not_called()
 
 
 @patch("wet_mcp.setup._find_searx_package_dir", side_effect=Exception("Test error"))
@@ -152,11 +154,14 @@ def test_patch_searxng_windows_no_pwd_import(mock_find_dir, mock_system):
     mock_file.write_text.assert_not_called()
 
 
+@patch("wet_mcp.setup.Path")
 @patch("platform.system", return_value="Windows")
 @patch("wet_mcp.setup._find_searx_package_dir")
-def test_patch_searxng_windows_no_dir(mock_find_dir, mock_system):
+def test_patch_searxng_windows_no_dir(mock_find_dir, mock_system, mock_path):
     mock_find_dir.return_value = None
     patch_searxng_windows()
+    # Should exit early without any Path operations
+    mock_path.assert_not_called()
 
 
 @patch("platform.system", return_value="Windows")
