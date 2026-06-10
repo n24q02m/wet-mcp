@@ -44,7 +44,7 @@ def _get_token_dir() -> Path:
 
 
 def get_token_path(provider: str) -> Path:
-    """Get path for a provider's token file."""
+    """Return the secure file path for a provider token."""
     _validate_safe_name(provider)
     return _get_token_dir() / f"{provider}.json"
 

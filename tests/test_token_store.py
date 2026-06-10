@@ -274,3 +274,27 @@ def test_get_token_path_for_sub_simple_assertion(token_dir, tmp_path):
     expected = tmp_path / "subs" / sub / "tokens" / f"{provider}.json"
     result = get_token_path_for_sub(sub, provider)
     assert result == expected
+
+
+def test_get_token_path_standard(token_dir):
+    """Test get_token_path with standard provider strings."""
+    for provider in ["google", "github", "slack"]:
+        assert get_token_path(provider) == token_dir / f"{provider}.json"
+
+
+def test_path_traversal_validation_empty_sub(token_dir):
+    """Test that empty sub is blocked in get_token_path_for_sub."""
+    with pytest.raises(ValueError, match="Name cannot be empty"):
+        get_token_path_for_sub("", "drive")
+
+
+def test_save_token_windows_no_user(token_dir):
+    """Test Windows permission logic when username cannot be determined."""
+    with (
+        patch("wet_mcp.token_store.os.name", "nt"),
+        patch("wet_mcp.token_store.getpass.getuser", return_value=""),
+        patch("wet_mcp.token_store.subprocess.run") as mock_run,
+    ):
+        # Should log warning and exit without calling icacls
+        save_token("drive", {"access_token": "test"})
+        mock_run.assert_not_called()
