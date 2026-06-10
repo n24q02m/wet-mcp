@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+import typing
 from typing import Any
+
+from pydantic import BaseModel, Field
+
+
+class ConfigData(BaseModel):
+    token: str = Field(..., description="The API token")
+
 
 RELAY_SCHEMA: dict[str, Any] = {
     "server": "wet-mcp",
