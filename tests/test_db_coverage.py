@@ -706,3 +706,48 @@ class TestMarkLibraryIndexed:
             # If it didn't return early, there would be a second call with UPDATE
             assert mock_conn.execute.call_count == 1
             assert "PRAGMA table_info" in mock_conn.execute.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# Project Context (Lines 1392-1408)
+# ---------------------------------------------------------------------------
+
+
+class TestProjectContext:
+    def test_get_project_context_valid(self, db):
+        """get_project_context returns parsed JSON for valid entries."""
+        project_path = "/path/to/project"
+        libs = [{"id": "lib1", "version": "1.0.0"}]
+        db.upsert_project_context(project_path, libs)
+
+        result = db.get_project_context(project_path)
+        assert result is not None
+        assert result["project_path"] == project_path
+        assert result["locked_libraries"] == libs
+        assert "created_at" in result
+        assert "last_used_at" in result
+
+    def test_get_project_context_invalid_json(self, db):
+        """get_project_context returns empty list on JSON decode error (line 1406)."""
+        project_path = "/path/to/bad_json"
+        # Manually insert invalid JSON
+        db._conn.execute(
+            "INSERT INTO project_context (project_path, locked_libraries, created_at, last_used_at) "
+            "VALUES (?, ?, ?, ?)",
+            (project_path, "{invalid", 1000.0, 1000.0),
+        )
+        db._conn.commit()
+
+        result = db.get_project_context(project_path)
+        assert result is not None
+        assert result["locked_libraries"] == []
+
+    def test_get_project_context_none(self, db):
+        """get_project_context returns None for missing project."""
+        assert db.get_project_context("/non/existent") is None
+
+    def test_get_project_context_no_table(self, db):
+        """get_project_context returns None if table is missing (line 1395)."""
+        db._conn.execute("DROP TABLE project_context")
+        db._conn.commit()
+        assert db.get_project_context("/any/path") is None
