@@ -56,6 +56,7 @@ CLOUD_KEYS = [
     "GEMINI_API_KEY",
     "OPENAI_API_KEY",
     "COHERE_API_KEY",
+    "XAI_API_KEY",
 ]
 
 

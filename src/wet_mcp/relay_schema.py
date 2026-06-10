@@ -46,6 +46,15 @@ RELAY_SCHEMA: dict[str, Any] = {
             "required": False,
         },
         {
+            "key": "XAI_API_KEY",
+            "label": "xAI API Key",
+            "type": "password",
+            "placeholder": "xai-...",
+            "helpUrl": "https://console.x.ai",
+            "helpText": "LLM (xAI/Grok).",
+            "required": False,
+        },
+        {
             "key": "GITHUB_TOKEN",
             "label": "GitHub Personal Access Token",
             "type": "password",
@@ -78,7 +87,7 @@ RELAY_SCHEMA: dict[str, Any] = {
         },
         {
             "label": "LLM",
-            "priority": "Gemini > OpenAI",
+            "priority": "Gemini > OpenAI > xAI",
             "description": "Used for structured extraction. Without a key, these features are limited.",
         },
     ],
