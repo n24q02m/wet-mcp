@@ -62,6 +62,10 @@ def upgrade() -> None:
     """Add Phase 2 columns idempotently + backfill key fields."""
     # libraries
     lib_cols = _existing_columns("libraries")
+    if "discovery_version" not in lib_cols:
+        op.execute(
+            "ALTER TABLE libraries ADD COLUMN discovery_version INTEGER DEFAULT 0"
+        )
     if "canonical_name" not in lib_cols:
         op.execute("ALTER TABLE libraries ADD COLUMN canonical_name TEXT")
     if "homepage" not in lib_cols:

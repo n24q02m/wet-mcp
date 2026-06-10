@@ -300,6 +300,7 @@ class DocsDB:
                 UNIQUE(library_id, version)
             )
         """)
+
     def _create_doc_chunks_table(self) -> None:
         # Document chunks (Phase 2 schema with section/topic/content_hash/token_count).
         self._conn.execute("""
