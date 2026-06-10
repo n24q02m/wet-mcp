@@ -8,10 +8,11 @@ mcp-name: io.github.n24q02m/wet-mcp
 |---|---|---|
 | Phase 1 | Shipped | web-core ScrapingAgent migration, smart chunks output, search polish, media slim |
 | Phase 2 | Shipped | Context7-level docs search: library index (Tier 1 + Tier 2), version-aware queries with token cap, project lock (Cabinets) |
-| Phase 3 | **Current (BREAKING v2.0.0)** | `extract.agent` multi-step research with cited synthesis, `extract.interact` click/fill/submit via patchright (optional session persistence), `docs_004_chunk_summaries` migration, **`media.analyze` removed** |
+| Phase 3 | **Shipped** | `extract.agent` multi-step research with cited synthesis, `extract.interact` click/fill/submit via patchright (optional session persistence), `docs_004_chunk_summaries` migration, **`media.analyze` removed (v2.0.0)** |
 
-> **BREAKING in v2.0.0** -- `media(action="analyze")` was removed entirely.
-> Use [`imagine-mcp`](https://github.com/n24q02m/imagine-mcp)'s
+> **Current release: v3.x.** `media(action="analyze")` was removed in the
+> v2.0.0 BREAKING release. Use
+> [`imagine-mcp`](https://github.com/n24q02m/imagine-mcp)'s
 > `understand` action for vision/audio/video analysis. See
 > [`docs/migration.md`](docs/migration.md) for the upgrade recipe.
 
@@ -129,7 +130,7 @@ and the paste-to-agent snippets at
 
 ## Documentation
 
-Full docs at **[mcp.n24q02m.com/servers/wet-mcp/](https://mcp.n24q02m.com/servers/wet-mcp/)**:
+Full docs at **[mcp.n24q02m.com/servers/wet-mcp/setup/](https://mcp.n24q02m.com/servers/wet-mcp/setup/)**:
 
 - [Setup](https://mcp.n24q02m.com/servers/wet-mcp/setup/) -- install methods for Claude Code, Codex, Gemini CLI, Cursor, Windsurf, mcp.json
 - [Modes overview](https://mcp.n24q02m.com/get-started/modes-overview/) -- stdio / local-relay / remote-relay / remote-oauth
@@ -148,8 +149,8 @@ In-repo references (Spec F single source of truth: setup docs live in
 
 ## Tools
 
-5 MCP tools (3 domain + `config` + `help`). The legacy `setup` tool merged
-into `config` action dispatch.
+6 MCP tools (3 domain + `config` + `help` + `config__open_relay`). The legacy
+`setup` tool merged into `config` action dispatch.
 
 | Tool | Description |
 |:-----|:------------|
@@ -158,6 +159,7 @@ into `config` action dispatch.
 | `media` | `list` (discover URLs from gallery pages), `download` (SSRF-safe). `analyze` deprecated v&lt;auto&gt;+ -- forwards to `imagine-mcp.understand` |
 | `config` | `status`, `set`, `cache_clear`, `docs_reindex`, `warmup`, `setup_sync`, `setup_status`, `setup_skip`, `setup_reset`, `setup_complete` |
 | `help` | Per-tool documentation: `search`, `extract`, `media`, `config` |
+| `config__open_relay` | Re-trigger the zero-config relay setup flow (prints a fresh relay URL for the browser form). Registered via `mcp-core`'s `register_open_relay_tool` so an LLM can restart setup without a manual restart. |
 
 > **Media boundary**: For vision / audio understanding (image captioning,
 > OCR, audio transcription, video summarization), use
@@ -196,7 +198,7 @@ uv run wet-mcp
 
 ## Trust Model
 
-This plugin implements **TC-Local** (machine-bound, single trust principal). See [mcp-core/docs/TRUST-MODEL.md](https://github.com/n24q02m/mcp-core/blob/main/docs/TRUST-MODEL.md) for full classification.
+This plugin implements **TC-Local** (machine-bound, single trust principal). See [mcp-core trust model](https://mcp.n24q02m.com/servers/mcp-core/trust-model/) for full classification.
 
 | Mode | Storage | Encryption | Who can read your data? |
 |---|---|---|---|

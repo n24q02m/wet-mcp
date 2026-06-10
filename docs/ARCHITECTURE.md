@@ -313,4 +313,4 @@ Reserved for the future LLM-enhanced summaries feature.
 - Web-core repo: `n24q02m/web-core` (`web_core.scraper.ScrapingAgent`,
   future `web_core.browsers.patchright.InteractOps`)
 - mcp-core repo: `n24q02m/mcp-core` (relay, JWT issuer, config storage primitives)
-- Trust model: <https://github.com/n24q02m/mcp-core/blob/main/docs/TRUST-MODEL.md>
+- Trust model: <https://mcp.n24q02m.com/servers/mcp-core/trust-model/>
