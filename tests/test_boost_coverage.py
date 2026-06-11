@@ -2049,40 +2049,6 @@ class TestSearxngRunnerExtras:
 
         runner._DISCOVERY_FILE = old
 
-    async def test_quick_health_check_success(self):
-        """Health check succeeds on 200."""
-        from web_core.search.runner import _quick_health_check
-
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
-
-        with patch("web_core.search.runner.httpx.AsyncClient") as mock_httpx:
-            mock_httpx.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_httpx.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await _quick_health_check("http://127.0.0.1:8080", retries=1)
-            assert result is True
-
-    async def test_quick_health_check_failure(self):
-        """Health check fails after retries."""
-        from web_core.search.runner import _quick_health_check
-
-        mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=Exception("connection refused"))
-
-        with (
-            patch("web_core.search.runner.httpx.AsyncClient") as mock_httpx,
-            patch("web_core.search.runner.asyncio.sleep", new_callable=AsyncMock),
-        ):
-            mock_httpx.return_value.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_httpx.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            result = await _quick_health_check("http://127.0.0.1:9999", retries=2)
-            assert result is False
-
     def test_get_pip_command_uv(self):
         """Returns uv pip command when uv available."""
         from web_core.search.runner import _get_pip_command

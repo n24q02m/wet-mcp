@@ -13,16 +13,15 @@ from pathlib import Path
 from loguru import logger
 
 # ---------------------------------------------------------------------------
-# Re-export SSRF functions from web-core (backward compatible).
+# Re-export web-core's PUBLIC SSRF surface only. wet depends solely on the
+# public API (``is_safe_url`` / ``safe_httpx_client``); web-core's private
+# internals (DNS cache, IP checks, the SSRF event-hook factory) are
+# intentionally NOT imported, so web-core can refactor them without breaking
+# wet (web-core 2.2.x moved the module-level ``_ssrf_event_hook`` into a
+# per-client factory inside ``safe_httpx_client``).
 # Note: web-core uses stdlib ``logging``, not loguru.
 # ---------------------------------------------------------------------------
 from web_core.http.client import (  # noqa: F401
-    _check_ip_safe,
-    _dns_cache,
-    _dns_cache_lock,
-    _original_getaddrinfo,
-    _pinned_getaddrinfo,
-    _ssrf_event_hook,
     is_safe_url,
     safe_httpx_client,
 )
