@@ -113,31 +113,33 @@ def test_setup_api_keys_complex_whitespace():
 
 
 def test_resolve_embedding_backend_explicit():
-    """Explicit EMBEDDING_BACKEND is returned as-is."""
+    """Deprecated EMBEDDING_BACKEND is still honored (one release)."""
     settings = Settings(embedding_backend="cloud")
     assert settings.resolve_embedding_backend() == "cloud"
 
 
 def test_resolve_embedding_backend_local_auto():
-    """Auto-detect returns 'local' when qwen3-embed is importable."""
-    settings = Settings(embedding_backend="")
-    with mock.patch.dict("sys.modules", {"qwen3_embed": mock.MagicMock()}):
+    """Inferred 'local' when chain is empty (no keys)."""
+    settings = Settings(embedding_backend="", embedding_models="")
+    with mock.patch.dict(os.environ, {}, clear=True):
         assert settings.resolve_embedding_backend() == "local"
 
 
 def test_resolve_embedding_backend_cloud_auto():
-    """Auto-detect returns 'cloud' when API keys are set."""
-    settings = Settings(embedding_backend="", api_keys=SecretStr("GOOGLE_API_KEY:abc"))
-    result = settings.resolve_embedding_backend()
-    assert result == "cloud"
+    """Inferred 'cloud' when an explicit chain is set."""
+    settings = Settings(
+        embedding_backend="",
+        embedding_models="gemini/gemini-embedding-001",
+    )
+    assert settings.resolve_embedding_backend() == "cloud"
 
 
 def test_resolve_embedding_backend_none():
-    """Returns 'local' when no backend is available and no keys."""
+    """Returns 'local' when chain is empty and no keys."""
     settings = Settings(embedding_backend="", api_keys=None)
     with mock.patch.dict(os.environ, {}, clear=True):
         result = settings.resolve_embedding_backend()
-        assert isinstance(result, str)
+        assert result == "local"
 
 
 # -----------------------------------------------------------------------
@@ -152,37 +154,27 @@ def test_resolve_rerank_backend_disabled():
 
 
 def test_resolve_rerank_backend_explicit():
-    """Explicit RERANK_BACKEND is returned as-is."""
+    """Deprecated RERANK_BACKEND is still honored (one release)."""
     settings = Settings(rerank_backend="cloud", rerank_enabled=True)
     assert settings.resolve_rerank_backend() == "cloud"
 
 
-def test_resolve_rerank_backend_follows_embedding():
-    """Rerank backend follows embedding backend when not explicit."""
+def test_resolve_rerank_backend_local_when_empty():
+    """Inferred 'local' when rerank chain is empty (no keys)."""
     settings = Settings(
-        embedding_backend="local",
         rerank_backend="",
+        rerank_models="",
         rerank_enabled=True,
     )
-    with mock.patch.dict("sys.modules", {"qwen3_embed": mock.MagicMock()}):
+    for v in ("JINA_AI_API_KEY", "COHERE_API_KEY"):
+        os.environ.pop(v, None)
+    with mock.patch.dict(os.environ, {}, clear=True):
         assert settings.resolve_rerank_backend() == "local"
 
 
 # -----------------------------------------------------------------------
 # Embedding model resolution
 # -----------------------------------------------------------------------
-
-
-def test_resolve_embedding_model_explicit():
-    """Explicit EMBEDDING_MODEL is returned."""
-    settings = Settings(embedding_model="gemini/gemini-embedding-2-preview")
-    assert settings.resolve_embedding_model() == "gemini/gemini-embedding-2-preview"
-
-
-def test_resolve_embedding_model_auto():
-    """Returns None for auto-detection when no explicit model."""
-    settings = Settings(embedding_model="")
-    assert settings.resolve_embedding_model() is None
 
 
 def test_resolve_embedding_dims():
@@ -274,12 +266,12 @@ def test_setup_api_keys_file_read_error(tmp_path):
 
 
 # -----------------------------------------------------------------------
-# resolve_rerank_backend: rerank_model, env var, api_keys detection
+# resolve_rerank_backend: chain-inferred + disabled
 # -----------------------------------------------------------------------
 
 
 def test_resolve_rerank_backend_rerank_model_set():
-    """Returns 'cloud' when rerank_model is explicitly set."""
+    """Deprecated rerank_model folds into the chain -> 'cloud'."""
     settings = Settings(
         rerank_enabled=True,
         rerank_backend="",
@@ -288,75 +280,27 @@ def test_resolve_rerank_backend_rerank_model_set():
     assert settings.resolve_rerank_backend() == "cloud"
 
 
-def test_resolve_rerank_backend_env_var_detection():
-    """Returns 'cloud' when COHERE_API_KEY is in env."""
+def test_resolve_rerank_backend_explicit_chain_cloud():
+    """Explicit RERANK_MODELS chain -> 'cloud'."""
     settings = Settings(
         rerank_enabled=True,
         rerank_backend="",
-        api_keys=None,
+        rerank_models="cohere/rerank-v3.5",
     )
-    with mock.patch.dict(os.environ, {"COHERE_API_KEY": "test-key"}, clear=False):
-        assert settings.resolve_rerank_backend() == "cloud"
-
-
-def test_resolve_rerank_backend_api_keys_cohere():
-    """Returns 'cloud' when API_KEYS contains COHERE_API_KEY."""
-    settings = Settings(
-        rerank_enabled=True,
-        rerank_backend="",
-        api_keys=SecretStr("COHERE_API_KEY:test"),
-    )
-    with mock.patch.dict(os.environ, {}, clear=True):
-        assert settings.resolve_rerank_backend() == "cloud"
+    assert settings.resolve_rerank_backend() == "cloud"
 
 
 def test_resolve_rerank_backend_local_fallback():
-    """Returns 'local' when no rerank provider is detected."""
+    """Returns 'local' when no rerank provider key / chain configured."""
     settings = Settings(
         rerank_enabled=True,
         rerank_backend="",
+        rerank_models="",
         api_keys=None,
     )
     with mock.patch.dict(os.environ, {}, clear=True):
-        # Remove COHERE_API_KEY if present
         os.environ.pop("COHERE_API_KEY", None)
         assert settings.resolve_rerank_backend() == "local"
-
-
-# -----------------------------------------------------------------------
-# resolve_rerank_model: auto-detection
-# -----------------------------------------------------------------------
-
-
-def test_resolve_rerank_model_explicit():
-    """Returns explicit rerank_model when set."""
-    settings = Settings(rerank_model="cohere/custom-model")
-    assert settings.resolve_rerank_model() == "cohere/custom-model"
-
-
-def test_resolve_rerank_model_env_var_auto():
-    """Auto-detects model from COHERE_API_KEY env var."""
-    settings = Settings(rerank_model="")
-    with mock.patch.dict(os.environ, {"COHERE_API_KEY": "test-key"}, clear=False):
-        assert settings.resolve_rerank_model() == "cohere/rerank-v4.0-pro"
-
-
-def test_resolve_rerank_model_api_keys_auto():
-    """Auto-detects model from API_KEYS containing COHERE_API_KEY."""
-    settings = Settings(
-        rerank_model="",
-        api_keys=SecretStr("COHERE_API_KEY:test-key"),
-    )
-    with mock.patch.dict(os.environ, {}, clear=True):
-        assert settings.resolve_rerank_model() == "cohere/rerank-v4.0-pro"
-
-
-def test_resolve_rerank_model_none():
-    """Returns None when no rerank provider detected."""
-    settings = Settings(rerank_model="", api_keys=None)
-    with mock.patch.dict(os.environ, {}, clear=True):
-        os.environ.pop("COHERE_API_KEY", None)
-        assert settings.resolve_rerank_model() is None
 
 
 # -----------------------------------------------------------------------
@@ -505,3 +449,93 @@ def test_resolve_local_rerank_model():
         result = settings.resolve_local_rerank_model()
         assert result == "test-rerank"
         m.assert_called_once()
+
+
+# -----------------------------------------------------------------------
+# Per-task model chains (model-chain migration, 2026-06-11)
+# -----------------------------------------------------------------------
+
+
+def test_wet_embedding_chain_explicit(monkeypatch):
+    monkeypatch.setenv(
+        "EMBEDDING_MODELS",
+        "jina_ai/jina-embeddings-v5-text-small,gemini/gemini-embedding-001",
+    )
+    s = Settings()
+    assert s.embedding_chain()[0] == "jina_ai/jina-embeddings-v5-text-small"
+    assert s.resolve_embedding_backend() == "cloud"
+
+
+def test_wet_embedding_empty_local(monkeypatch):
+    for v in (
+        "EMBEDDING_MODELS",
+        "EMBEDDING_MODEL",
+        "JINA_AI_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "OPENAI_API_KEY",
+        "COHERE_API_KEY",
+    ):
+        monkeypatch.delenv(v, raising=False)
+    assert Settings().embedding_chain() == []
+    assert Settings().resolve_embedding_backend() == "local"
+
+
+def test_wet_rerank_openai_only_is_local(monkeypatch):
+    for v in ("RERANK_MODELS", "RERANK_MODEL", "JINA_AI_API_KEY", "COHERE_API_KEY"):
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
+    assert Settings().rerank_chain() == []  # no jina/cohere key -> empty -> local
+    assert Settings().resolve_rerank_backend() == "local"
+
+
+def test_wet_llm_chain_default(monkeypatch):
+    monkeypatch.delenv("LLM_MODELS", raising=False)
+    assert Settings().llm_chain()[0] == "gemini/gemini-3-flash-preview"
+
+
+def test_wet_embedding_primary(monkeypatch):
+    monkeypatch.setenv("EMBEDDING_MODELS", "cohere/embed-multilingual-v3.0")
+    assert Settings().embedding_primary() == "cohere/embed-multilingual-v3.0"
+
+
+def test_wet_rerank_primary(monkeypatch):
+    monkeypatch.setenv("RERANK_MODELS", "jina_ai/jina-reranker-v3,cohere/rerank-v3.5")
+    assert Settings().rerank_primary() == "jina_ai/jina-reranker-v3"
+
+
+def test_wet_rerank_chain_disabled():
+    s = Settings(rerank_enabled=False, rerank_models="cohere/rerank-v3.5")
+    assert s.rerank_chain() == []
+    assert s.resolve_rerank_backend() == ""
+
+
+def test_wet_default_chain_filters_to_configured_keys(monkeypatch):
+    for v in (
+        "EMBEDDING_MODELS",
+        "EMBEDDING_MODEL",
+        "JINA_AI_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "OPENAI_API_KEY",
+        "COHERE_API_KEY",
+    ):
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
+    # Default chain filtered to providers with a configured key.
+    assert Settings().embedding_chain() == ["gemini/gemini-embedding-001"]
+
+
+def test_wet_google_alias_satisfies_gemini(monkeypatch):
+    for v in (
+        "EMBEDDING_MODELS",
+        "EMBEDDING_MODEL",
+        "JINA_AI_API_KEY",
+        "GEMINI_API_KEY",
+        "OPENAI_API_KEY",
+        "COHERE_API_KEY",
+    ):
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "x")
+    # GOOGLE_API_KEY alias satisfies GEMINI_API_KEY for the gemini default.
+    assert "gemini/gemini-embedding-001" in Settings().embedding_chain()

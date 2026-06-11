@@ -1004,7 +1004,7 @@ async def test_init_embedding_backend_litellm_explicit_model():
         patch("wet_mcp.embedder.init_backend") as mock_init,
     ):
         ms.resolve_embedding_backend.return_value = "cloud"
-        ms.resolve_embedding_model.return_value = "text-embedding-3-large"
+        ms.embedding_chain.return_value = ["text-embedding-3-large"]
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -1024,7 +1024,7 @@ async def test_init_embedding_backend_litellm_explicit_model_fail():
         patch("wet_mcp.embedder.init_backend") as mock_init,
     ):
         ms.resolve_embedding_backend.return_value = "cloud"
-        ms.resolve_embedding_model.return_value = "bad-model"
+        ms.embedding_chain.return_value = ["bad-model"]
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -1049,7 +1049,12 @@ async def test_init_embedding_backend_autodetect_candidates():
         patch("wet_mcp.embedder.init_backend") as mock_init,
     ):
         ms.resolve_embedding_backend.return_value = "cloud"
-        ms.resolve_embedding_model.return_value = None
+        ms.embedding_chain.return_value = [
+            "jina_ai/jina-embeddings-v5-text-small",
+            "gemini/gemini-embedding-001",
+            "openai/text-embedding-3-large",
+            "cohere/embed-multilingual-v3.0",
+        ]
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -1078,7 +1083,12 @@ async def test_init_embedding_backend_all_candidates_fail():
         patch("wet_mcp.embedder.init_backend") as mock_init,
     ):
         ms.resolve_embedding_backend.return_value = "cloud"
-        ms.resolve_embedding_model.return_value = None
+        ms.embedding_chain.return_value = [
+            "jina_ai/jina-embeddings-v5-text-small",
+            "gemini/gemini-embedding-001",
+            "openai/text-embedding-3-large",
+            "cohere/embed-multilingual-v3.0",
+        ]
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
 
@@ -1154,7 +1164,7 @@ async def test_init_reranker_backend_cloud_fail_no_local_fallback():
         patch("wet_mcp.reranker.init_reranker") as mock_init,
     ):
         ms.resolve_rerank_backend.return_value = "cloud"
-        ms.resolve_rerank_model.return_value = "rerank-model"
+        ms.rerank_chain.return_value = ["rerank-model"]
 
         ms.resolve_local_rerank_model.return_value = "local-rerank"
 

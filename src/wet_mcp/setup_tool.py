@@ -12,7 +12,7 @@ from pathlib import Path
 
 from loguru import logger
 
-from wet_mcp.config import _EMBEDDING_CANDIDATES, settings
+from wet_mcp.config import settings
 
 
 def clear_model_cache(model_name: str) -> str | None:
@@ -39,11 +39,8 @@ async def _validate_cloud_models(settings_obj) -> dict:
     from wet_mcp.embedder import init_backend
     from wet_mcp.reranker import init_reranker
 
-    model = settings_obj.resolve_embedding_model()
-    candidates = [model] if model else _EMBEDDING_CANDIDATES
-
     embedding_info = None
-    for candidate in candidates:
+    for candidate in settings_obj.embedding_chain():
         try:
             backend = init_backend("cloud", candidate)
             dims = await backend.check_available()
@@ -58,16 +55,17 @@ async def _validate_cloud_models(settings_obj) -> dict:
         return {"cloud_ready": False}
 
     reranker_info = None
-    rerank_model = settings_obj.resolve_rerank_model()
-    if rerank_model:
+    for rerank_model in settings_obj.rerank_chain():
         try:
             reranker = init_reranker("cloud", rerank_model)
             # reranker.check_available() is sync (unlike embedder.check_available());
             # adding async reranker backends will require awaiting here
             if reranker.check_available():
                 reranker_info = {"model": rerank_model}
+                break
         except Exception as exc:
             logger.debug(f"Cloud reranker {rerank_model} failed: {exc}")
+            continue
 
     return {
         "cloud_ready": True,

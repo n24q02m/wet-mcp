@@ -58,7 +58,7 @@ dependencies = [
     "aiolimiter>=1.2.1",
     # Relay setup (zero-env-config) + LLM passthrough (litellm via [llm] extra).
     # Beta pin until 1.18.0 stable.
-    "n24q02m-mcp-core[llm]>=1.18.0b1,<2",
+    "n24q02m-mcp-core[llm]>=1.18.0b2,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.4",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance

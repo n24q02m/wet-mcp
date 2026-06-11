@@ -236,15 +236,14 @@ class TestDownloadLocalReranker:
 class TestValidateCloudModels:
     """_validate_cloud_models checks cloud embedding and reranking."""
 
-    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed-1"])
     @patch("wet_mcp.reranker.init_reranker")
     @patch("wet_mcp.embedder.init_backend")
     async def test_cloud_embedding_and_reranker_success(self, mock_init, mock_rr_init):
         from wet_mcp.setup_tool import _validate_cloud_models
 
         mock_settings = MagicMock()
-        mock_settings.resolve_embedding_model.return_value = None
-        mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
+        mock_settings.embedding_chain.return_value = ["gemini/embed-1"]
+        mock_settings.rerank_chain.return_value = ["cohere/rerank"]
 
         mock_backend = MagicMock()
         mock_backend.check_available = AsyncMock(return_value=768)
@@ -260,13 +259,12 @@ class TestValidateCloudModels:
         assert result["embedding"]["model"] == "gemini/embed-1"
         assert result["reranker"]["model"] == "cohere/rerank"
 
-    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["model-a"])
     @patch("wet_mcp.embedder.init_backend")
     async def test_cloud_embedding_fails(self, mock_init):
         from wet_mcp.setup_tool import _validate_cloud_models
 
         mock_settings = MagicMock()
-        mock_settings.resolve_embedding_model.return_value = None
+        mock_settings.embedding_chain.return_value = ["model-a"]
 
         mock_backend = MagicMock()
         mock_backend.check_available = AsyncMock(return_value=0)
@@ -275,15 +273,14 @@ class TestValidateCloudModels:
         result = await _validate_cloud_models(mock_settings)
         assert result["cloud_ready"] is False
 
-    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
     @patch("wet_mcp.reranker.init_reranker")
     @patch("wet_mcp.embedder.init_backend")
     async def test_cloud_reranker_fails(self, mock_init, mock_rr_init):
         from wet_mcp.setup_tool import _validate_cloud_models
 
         mock_settings = MagicMock()
-        mock_settings.resolve_embedding_model.return_value = None
-        mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
+        mock_settings.embedding_chain.return_value = ["gemini/embed"]
+        mock_settings.rerank_chain.return_value = ["cohere/rerank"]
 
         mock_backend = MagicMock()
         mock_backend.check_available = AsyncMock(return_value=768)
@@ -297,15 +294,14 @@ class TestValidateCloudModels:
         assert result["cloud_ready"] is True
         assert result["reranker"] is None
 
-    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
     @patch("wet_mcp.reranker.init_reranker")
     @patch("wet_mcp.embedder.init_backend")
     async def test_cloud_reranker_init_exception(self, mock_init, mock_rr_init):
         from wet_mcp.setup_tool import _validate_cloud_models
 
         mock_settings = MagicMock()
-        mock_settings.resolve_embedding_model.return_value = None
-        mock_settings.resolve_rerank_model.return_value = "cohere/rerank"
+        mock_settings.embedding_chain.return_value = ["gemini/embed"]
+        mock_settings.rerank_chain.return_value = ["cohere/rerank"]
 
         mock_backend = MagicMock()
         mock_backend.check_available = AsyncMock(return_value=768)
@@ -317,14 +313,13 @@ class TestValidateCloudModels:
         assert result["cloud_ready"] is True
         assert result["reranker"] is None
 
-    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
     @patch("wet_mcp.embedder.init_backend")
     async def test_explicit_model_tried_first(self, mock_init):
         from wet_mcp.setup_tool import _validate_cloud_models
 
         mock_settings = MagicMock()
-        mock_settings.resolve_embedding_model.return_value = "explicit/model"
-        mock_settings.resolve_rerank_model.return_value = None
+        mock_settings.embedding_chain.return_value = ["explicit/model"]
+        mock_settings.rerank_chain.return_value = []
 
         mock_backend = MagicMock()
         mock_backend.check_available = AsyncMock(return_value=512)
@@ -335,14 +330,13 @@ class TestValidateCloudModels:
         mock_init.assert_called_once_with("cloud", "explicit/model")
         assert result["cloud_ready"] is True
 
-    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["gemini/embed"])
     @patch("wet_mcp.embedder.init_backend")
     async def test_no_rerank_model_skips_check(self, mock_init):
         from wet_mcp.setup_tool import _validate_cloud_models
 
         mock_settings = MagicMock()
-        mock_settings.resolve_embedding_model.return_value = None
-        mock_settings.resolve_rerank_model.return_value = None
+        mock_settings.embedding_chain.return_value = ["gemini/embed"]
+        mock_settings.rerank_chain.return_value = []
 
         mock_backend = MagicMock()
         mock_backend.check_available = AsyncMock(return_value=768)
@@ -352,13 +346,12 @@ class TestValidateCloudModels:
         assert result["cloud_ready"] is True
         assert result["reranker"] is None
 
-    @patch("wet_mcp.setup_tool._EMBEDDING_CANDIDATES", ["model-a"])
     @patch("wet_mcp.embedder.init_backend")
     async def test_cloud_exception_returns_not_ready(self, mock_init):
         from wet_mcp.setup_tool import _validate_cloud_models
 
         mock_settings = MagicMock()
-        mock_settings.resolve_embedding_model.return_value = None
+        mock_settings.embedding_chain.return_value = ["model-a"]
 
         mock_init.side_effect = Exception("init failed")
 
