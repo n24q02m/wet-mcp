@@ -24,9 +24,13 @@ class TestRelaySchema:
         assert "fields" in RELAY_SCHEMA
         assert "modes" not in RELAY_SCHEMA
 
-    def test_schema_has_six_provider_fields(self):
+    def test_schema_has_provider_and_chain_fields(self):
         fields = RELAY_SCHEMA["fields"]
-        assert len(fields) == 6
+        # 3 model-chain tasks + 6 derived provider keys + ANTHROPIC + GITHUB_TOKEN
+        chains = [f for f in fields if f.get("type") == "model-chain"]
+        keys = [f for f in fields if f.get("type") == "password"]
+        assert len(chains) == 3
+        assert len(keys) == 7
 
     def test_schema_field_keys(self):
         field_keys = [f["key"] for f in RELAY_SCHEMA["fields"]]
@@ -34,6 +38,7 @@ class TestRelaySchema:
         assert "GEMINI_API_KEY" in field_keys
         assert "OPENAI_API_KEY" in field_keys
         assert "COHERE_API_KEY" in field_keys
+        assert "ANTHROPIC_API_KEY" in field_keys
         assert "XAI_API_KEY" in field_keys
         assert "GITHUB_TOKEN" in field_keys
 
@@ -44,8 +49,10 @@ class TestRelaySchema:
         assert RELAY_SCHEMA["displayName"] == "Web Extended Toolkit"
 
     def test_all_fields_optional(self):
+        # Password key fields are explicitly optional; model-chain fields have
+        # no "required" flag (the widget treats them as optional by default).
         for f in RELAY_SCHEMA["fields"]:
-            assert f.get("required") is False
+            assert f.get("required", False) is False
 
     def test_capability_info_present(self):
         assert "capabilityInfo" in RELAY_SCHEMA

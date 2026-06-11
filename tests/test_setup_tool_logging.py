@@ -17,8 +17,8 @@ async def test_validate_cloud_models_logging(caplog):
     logger.add(loguru_caplog_bridge, level="DEBUG")
 
     mock_settings = MagicMock()
-    mock_settings.resolve_embedding_model.return_value = "test-embed"
-    mock_settings.resolve_rerank_model.return_value = "test-rerank"
+    mock_settings.embedding_chain.return_value = ["test-embed"]
+    mock_settings.rerank_chain.return_value = ["test-rerank"]
 
     with (
         patch(
@@ -54,8 +54,8 @@ async def test_validate_cloud_models_reranker_logging(caplog):
     logger.add(loguru_caplog_bridge, level="DEBUG")
 
     mock_settings = MagicMock()
-    mock_settings.resolve_embedding_model.return_value = "test-embed"
-    mock_settings.resolve_rerank_model.return_value = "test-rerank"
+    mock_settings.embedding_chain.return_value = ["test-embed"]
+    mock_settings.rerank_chain.return_value = ["test-rerank"]
 
     mock_backend = MagicMock()
     mock_backend.check_available = AsyncMock(return_value=768)

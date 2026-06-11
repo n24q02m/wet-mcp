@@ -33,8 +33,8 @@ def _mock_settings():
         mock.resolve_embedding_dims.return_value = 768
         mock.resolve_embedding_backend.return_value = "cloud"
         mock.resolve_rerank_backend.return_value = "cloud"
-        mock.resolve_embedding_model.return_value = "gemini"
-        mock.resolve_rerank_model.return_value = "gemini-rerank"
+        mock.embedding_chain.return_value = ["gemini/gemini-embedding-001"]
+        mock.rerank_chain.return_value = ["cohere/rerank-v3.5"]
         mock.resolve_local_embedding_model.return_value = "local-model"
         mock.resolve_local_rerank_model.return_value = "local-rerank"
         mock.wet_auto_searxng = False
@@ -266,8 +266,11 @@ async def test_init_embedding_litellm_explicit_model_failure_no_local_fallback()
 
 
 async def test_init_embedding_litellm_autodetect(_mock_settings):
-    """Lines 225-242: auto-detect candidate models when no explicit model."""
-    _mock_settings.resolve_embedding_model.return_value = None
+    """Lines 225-242: iterate the embedding chain (litellm fallback order)."""
+    _mock_settings.embedding_chain.return_value = [
+        "gemini/gemini-embedding-001",
+        "text-embedding-3-large",
+    ]
     _mock_settings.resolve_embedding_backend.return_value = "cloud"
 
     attempts = []
