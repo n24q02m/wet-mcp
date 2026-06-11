@@ -719,41 +719,16 @@ async def test_config_unknown_action():
     assert "error" in data
     assert "Unknown action" in data["error"]
     assert "valid_actions" in data
-    assert "models" in data["valid_actions"]
+    assert "models" not in data["valid_actions"]
 
 
 @pytest.mark.asyncio
-async def test_config_models_configured_only():
-    """models action lists configured-provider models with passthrough note."""
-    fake_models = [
-        {
-            "model": "gemini/gemini-3-flash-preview",
-            "provider": "gemini",
-            "mode": "chat",
-            "supports_vision": True,
-        }
-    ]
-    with patch("mcp_core.llm.list_models", return_value=fake_models) as mock_list:
-        res = await server.config("models")
-        data = json.loads(res)
-
-    assert data["models"] == fake_models
-    assert "passthrough" in data["note"]
-    call_kwargs = mock_list.call_args[1]
-    assert call_kwargs["modes"] == ("chat", "embedding", "rerank")
-    assert call_kwargs["configured_only"] is True
-    assert call_kwargs["limit"] == 200
-
-
-@pytest.mark.asyncio
-async def test_config_models_all():
-    """models action with key='all' lists the full catalog."""
-    with patch("mcp_core.llm.list_models", return_value=[]) as mock_list:
-        res = await server.config("models", key="all")
-        data = json.loads(res)
-
-    assert data["models"] == []
-    assert mock_list.call_args[1]["configured_only"] is False
+async def test_config_models_action_removed():
+    """The 'models' catalog-listing action no longer exists."""
+    res = await server.config("models")
+    data = json.loads(res)
+    assert "Unknown action 'models'" in data["error"]
+    assert "models" not in data["valid_actions"]
 
 
 @pytest.mark.asyncio
