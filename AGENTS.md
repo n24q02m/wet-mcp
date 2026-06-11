@@ -1,6 +1,6 @@
 # AGENTS.md - wet-mcp
 
-Python MCP Server: web search, content extraction, library docs, media analysis.
+Python MCP Server: web search, content extraction, library docs, structured extraction.
 Xem `AGENTS.md` va `README.md` de hieu architecture va configuration.
 
 ## Cau truc
@@ -56,14 +56,48 @@ mise run dev       # uv run wet-mcp
 ## Env vars
 
 - KHONG co prefix ung dung (day la open-source MCP server)
-- LLM/Embed/Rerank: litellm passthrough qua `mcp_core.llm` (mcp-core[llm]) > disable if no key. Embed/Rerank priority: Jina > Gemini > OpenAI > Cohere (cloud) > local ONNX. Custom endpoint: `LLM_API_BASE`, `EMBEDDING_API_BASE`, `RERANK_API_BASE`
-- Embedding: `EMBEDDING_BACKEND`, `EMBEDDING_MODEL`
-- Reranking: `RERANK_BACKEND`, `RERANK_MODEL`
+- LLM/Embed/Rerank: litellm passthrough qua `mcp_core.llm` (mcp-core[llm]). Per-task model chains, CSV `provider/model,provider/model`, order = litellm fallback:
+  - `EMBEDDING_MODELS` -- chain embedding. Rong = local ONNX (qwen3-embed).
+  - `RERANK_MODELS` -- chain rerank. Rong = local ONNX cross-encoder.
+  - `LLM_MODELS` -- chain LLM. Rong = tat feature LLM.
+- Provider duoc suy ra tu prefix model. API key theo convention litellm `<PROVIDER>_API_KEY`. 6 provider servers goi y:
+
+  | model prefix | key env var | get it at |
+  |---|---|---|
+  | `gemini/` | `GEMINI_API_KEY` | aistudio.google.com/apikey |
+  | `openai/` (or bare) | `OPENAI_API_KEY` | platform.openai.com |
+  | `jina_ai/` | `JINA_AI_API_KEY` | jina.ai/api-key |
+  | `cohere/` | `COHERE_API_KEY` | dashboard.cohere.com |
+  | `xai/` | `XAI_API_KEY` | console.x.ai |
+  | `anthropic/` | `ANTHROPIC_API_KEY` | console.anthropic.com |
+
+  For any other litellm provider (used via env passthrough), see https://docs.litellm.ai/docs/providers/<provider> for its `<PROVIDER>_API_KEY` name.
+- Custom endpoint (SSRF-guarded): `LLM_API_BASE`, `EMBEDDING_API_BASE`, `RERANK_API_BASE`
+- Deprecated (honored mot release voi warning): singular `EMBEDDING_MODEL`/`RERANK_MODEL` + `EMBEDDING_BACKEND`/`RERANK_BACKEND` (backend gio suy ra tu chain rong hay khong). Priority-router cu "Jina > Gemini > OpenAI > Cohere" da bo.
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
 - Sync: `SYNC_ENABLED` (default true), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
 - Sync dung Google Drive API truc tiep (httpx). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`
 - Relay: `MCP_RELAY_URL` (required for remote-relay mode, no default — wet-mcp default is local-relay per matrix)
 - Secrets: skret SSM namespace `/wet-mcp/prod` (region `ap-southeast-1`)
+
+### Manual config example
+
+```json
+{
+  "mcpServers": {
+    "wet": {
+      "command": "uvx", "args": ["wet-mcp"],
+      "env": {
+        "EMBEDDING_MODELS": "jina_ai/jina-embeddings-v5-text-small,gemini/gemini-embedding-001",
+        "RERANK_MODELS": "jina_ai/jina-reranker-v3",
+        "LLM_MODELS": "gemini/gemini-3-flash-preview",
+        "JINA_AI_API_KEY": "jina_xxx",
+        "GEMINI_API_KEY": "AIza_xxx"
+      }
+    }
+  }
+}
+```
 
 ## Release & Deploy
 
