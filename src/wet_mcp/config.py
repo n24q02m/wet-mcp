@@ -343,9 +343,14 @@ class Settings(BaseSettings):
     # --- Reranking resolution ---
 
     def resolve_local_rerank_model(self) -> str:
-        """Resolve local rerank model: GGUF if GPU + llama-cpp, else ONNX."""
+        """Resolve local rerank model: GGUF if GPU + llama-cpp, else ONNX.
+
+        The ONNX default is the YesNo variant (~598 MB at inference vs ~12 GB
+        for the full-vocab build); it is mathematically equivalent and, since
+        qwen3-embed 1.11.2b3, produces batch-invariant scores (issue #725).
+        """
         return _resolve_local_model(
-            "n24q02m/Qwen3-Reranker-0.6B-ONNX",
+            "n24q02m/Qwen3-Reranker-0.6B-ONNX-YesNo",
             "n24q02m/Qwen3-Reranker-0.6B-GGUF",
         )
 
