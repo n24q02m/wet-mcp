@@ -20,12 +20,10 @@ classifiers = [
 requires-python = "==3.13.*"
 dependencies = [
     # Shared web infrastructure (SSRF, SearXNG, URL utils, ScrapingAgent + Crawl4AI transitive).
-    # Cap <2.2: wet's security.py + tests consume web-core private SSRF internals
-    # (_ssrf_event_hook, _original_getaddrinfo). web-core 2.2.x refactored these to a
-    # factory (_ssrf_event_hook_factory), so a fresh install resolving >=2.1.1 picks
-    # 2.2.x and ImportErrors at boot. Cap to the tested 2.1.x API until wet is
-    # decoupled to web-core's public surface (is_safe_url / safe_httpx_client).
-    "n24q02m-web-core>=2.1.1,<2.2",
+    # wet consumes only web-core's PUBLIC SSRF surface (is_safe_url / safe_httpx_client);
+    # security.py + tests no longer reach into private internals, so web-core 2.2.x's
+    # factory refactor (_ssrf_event_hook -> _ssrf_event_hook_factory) is transparent here.
+    "n24q02m-web-core>=2.2.1,<2.3",
     # MCP Server
     "mcp[cli]",
     # HTTP Client

@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from web_core.http.client import _ssrf_event_hook
 
 from wet_mcp.sources.docs import (
     _apply_version_to_url,
@@ -82,22 +81,31 @@ def _make_mock_client(route_map=None, default_status=404):
 
 
 # ---------------------------------------------------------------------------
-# _ssrf_event_hook
+# SSRF protection (behavioral — via the safe client's request hooks, not
+# web-core internals; web-core 2.2.x moved the hook into a per-client factory)
 # ---------------------------------------------------------------------------
+
+
+async def _run_request_hooks(client, request):
+    """Invoke every request event hook the client registered."""
+    for hook in client.event_hooks.get("request", []):
+        await hook(request)
 
 
 class TestSSRFEventHook:
     async def test_blocks_private_url(self):
-        """SSRF hook blocks requests to private addresses."""
+        """The safe client's SSRF request hook blocks private addresses."""
+        client = _safe_httpx_client(timeout=5)
         request = httpx.Request("GET", "http://169.254.169.254/latest/meta-data/")
         with pytest.raises(httpx.RequestError, match="SSRF blocked"):
-            await _ssrf_event_hook(request)
+            await _run_request_hooks(client, request)
 
     async def test_allows_public_url(self):
-        """SSRF hook allows requests to public addresses."""
+        """The safe client's SSRF request hook allows public addresses."""
+        client = _safe_httpx_client(timeout=5)
         request = httpx.Request("GET", "https://registry.npmjs.org/react")
         # Should not raise
-        await _ssrf_event_hook(request)
+        await _run_request_hooks(client, request)
 
 
 # ---------------------------------------------------------------------------
@@ -107,12 +115,14 @@ class TestSSRFEventHook:
 
 class TestSafeHttpxClient:
     def test_creates_client_with_ssrf_hook(self):
-        """Client is created with SSRF event hook attached."""
+        """Client is created with an SSRF request event hook attached."""
         client = _safe_httpx_client(timeout=5)
         assert client is not None
-        # Verify event hooks are set
-        hooks = client.event_hooks
-        assert _ssrf_event_hook in hooks.get("request", [])
+        # Verify a request hook is registered (the SSRF guard); web-core
+        # inserts it as the first request hook in safe_httpx_client.
+        assert client.event_hooks.get("request"), (
+            "safe client must register a request hook for SSRF protection"
+        )
 
 
 # ---------------------------------------------------------------------------
