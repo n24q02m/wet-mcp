@@ -3587,7 +3587,7 @@ requires-dist = [
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
     { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.18.0b1,<2" },
-    { name = "n24q02m-web-core", specifier = ">=2.1.1" },
+    { name = "n24q02m-web-core", specifier = ">=2.1.1,<2.2" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pydantic", specifier = ">=2.13.4,<2.14" },
     { name = "pydantic-settings" },
