@@ -3,31 +3,49 @@
   "description": "Web search, content extraction, and media download",
   "version": "3.3.0-beta.5",
   "userConfig": {
+    "EMBEDDING_MODELS": {
+      "type": "string",
+      "title": "Embedding model chain (optional)",
+      "description": "CSV 'provider/model,provider/model' (order = litellm fallback); provider inferred from prefix. Empty = local ONNX (qwen3-embed). Example: jina_ai/jina-embeddings-v5-text-small,gemini/gemini-embedding-001",
+      "required": false
+    },
+    "RERANK_MODELS": {
+      "type": "string",
+      "title": "Rerank model chain (optional)",
+      "description": "CSV 'provider/model,...'; provider inferred from prefix. Empty = local ONNX cross-encoder. Example: jina_ai/jina-reranker-v3",
+      "required": false
+    },
+    "LLM_MODELS": {
+      "type": "string",
+      "title": "LLM model chain (optional)",
+      "description": "CSV 'provider/model,...'; provider inferred from prefix. Empty = LLM features off. Example: gemini/gemini-3-flash-preview,openai/gpt-5.4-mini",
+      "required": false
+    },
     "JINA_AI_API_KEY": {
       "type": "string",
       "title": "Jina AI API key (optional)",
-      "description": "Optional cloud reranker key. Without it, server uses local ONNX rerank. https://jina.ai/api-dashboard/",
+      "description": "Enables jina_ai/ models referenced in a model chain. Without any cloud key the server uses local ONNX. https://jina.ai/api-dashboard/",
       "sensitive": true,
       "required": false
     },
     "GEMINI_API_KEY": {
       "type": "string",
       "title": "Gemini API key (optional)",
-      "description": "Optional cloud embedding fallback. https://ai.google.dev/",
+      "description": "Enables gemini/ models referenced in a model chain. https://ai.google.dev/",
       "sensitive": true,
       "required": false
     },
     "OPENAI_API_KEY": {
       "type": "string",
       "title": "OpenAI API key (optional)",
-      "description": "Optional cloud LLM + embedding fallback (lower priority than Gemini). https://platform.openai.com/api-keys",
+      "description": "Enables openai/ models referenced in a model chain. https://platform.openai.com/api-keys",
       "sensitive": true,
       "required": false
     },
     "COHERE_API_KEY": {
       "type": "string",
       "title": "Cohere API key (optional)",
-      "description": "Optional cloud embedding + reranking fallback. https://dashboard.cohere.com/api-keys",
+      "description": "Enables cohere/ models referenced in a model chain. https://dashboard.cohere.com/api-keys",
       "sensitive": true,
       "required": false
     },
@@ -63,6 +81,9 @@
       ],
       "env": {
         "MCP_TRANSPORT": "stdio",
+        "EMBEDDING_MODELS": "${user_config.EMBEDDING_MODELS}",
+        "RERANK_MODELS": "${user_config.RERANK_MODELS}",
+        "LLM_MODELS": "${user_config.LLM_MODELS}",
         "JINA_AI_API_KEY": "${user_config.JINA_AI_API_KEY}",
         "GEMINI_API_KEY": "${user_config.GEMINI_API_KEY}",
         "OPENAI_API_KEY": "${user_config.OPENAI_API_KEY}",
