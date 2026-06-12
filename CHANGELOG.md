@@ -1,373 +1,3292 @@
-## [3.1.0](https://github.com/n24q02m/wet-mcp/compare/v3.0.0-beta.4...v3.1.0) (2026-05-19)
+# CHANGELOG
 
-First stable release of the v3 line. (Version `3.0.0` was permanently
-reserved by a GitHub immutable release and cannot be reused, so the v3
-line ships from `3.1.0`; release contents are unchanged.)
+<!-- version list -->
 
+## v3.3.0-beta.5 (2026-06-11)
+
+### Bug Fixes
+
+- Default local reranker to YesNo ONNX variant (~598MB vs ~12GB)
+  ([#1324](https://github.com/n24q02m/wet-mcp/pull/1324),
+  [`c5785e2`](https://github.com/n24q02m/wet-mcp/commit/c5785e26a6339cbd9c7bf7d1f37b17e70d05889b))
+
+### Chores
+
+- **deps**: Lock file maintenance ([#1318](https://github.com/n24q02m/wet-mcp/pull/1318),
+  [`c19a35c`](https://github.com/n24q02m/wet-mcp/commit/c19a35c674271e8aac27de26cef459a83e3a4dd6))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to eaa5f1a
+  ([#1316](https://github.com/n24q02m/wet-mcp/pull/1316),
+  [`5e93b61`](https://github.com/n24q02m/wet-mcp/commit/5e93b6118471b859af148cc769cc7bbebbc9ef1d))
+
+
+## v3.3.0-beta.4 (2026-06-11)
+
+### Bug Fixes
+
+- Document model chains + tagline (wet) ([#1322](https://github.com/n24q02m/wet-mcp/pull/1322),
+  [`f0f54ba`](https://github.com/n24q02m/wet-mcp/commit/f0f54ba14ab03e7227b4e6b3963abdffaa691404))
+
+- Document per-task model chains + provider->key table (drop priority-router docs)
+  ([#1322](https://github.com/n24q02m/wet-mcp/pull/1322),
+  [`f0f54ba`](https://github.com/n24q02m/wet-mcp/commit/f0f54ba14ab03e7227b4e6b3963abdffaa691404))
 
 ### Features
 
-* Context7-style library documentation retrieval
-* Content extraction agent with interaction modes
-* Sync backend selection: operator-configured S3 (env) XOR Google Drive
-  (relay), mutually exclusive
+- Drop config(action="models") catalog-listing tool action
+  ([#1323](https://github.com/n24q02m/wet-mcp/pull/1323),
+  [`4c7034e`](https://github.com/n24q02m/wet-mcp/commit/4c7034eeb9c225b868646df42ab03cabc0ee7b91))
+
+- Wet per-task model chains + relay model-chain widget, drop priority-router
+  ([#1322](https://github.com/n24q02m/wet-mcp/pull/1322),
+  [`f0f54ba`](https://github.com/n24q02m/wet-mcp/commit/f0f54ba14ab03e7227b4e6b3963abdffaa691404))
 
 
-### Bug Fixes
-
-* Bundle Alembic migrations into the wheel so DB migrations run on uvx installs
-* Align sync configuration parity between wet-mcp and mnemo-mcp
-* Pin urllib3 and langsmith floors to patch 3 high-severity CVEs
-* Scrub internal dev-process terminology from user-facing docs
-
-## [2.1.4-beta.4](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.3...v2.1.4-beta.4) (2026-02-05)
-
-
-### Bug Fixes
-
-* **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
-
-## [2.5.0-beta.8](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.7...v2.5.0-beta.8) (2026-02-14)
-
-
-### Bug Fixes
-
-* **cd:** make scripts executable and clean working tree before promote merge ([9d94df1](https://github.com/n24q02m/wet-mcp/commit/9d94df10e21cf746eb5d15b06ccb9b9ee3811b67))
-
-## [2.5.0-beta.7](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.6...v2.5.0-beta.7) (2026-02-14)
-
-
-### Bug Fixes
-
-* optimize Docker build with BuildKit cache and non-root user ([9114ada](https://github.com/n24q02m/wet-mcp/commit/9114adabcbd6e7b662f0338bcd4041845a726b0e))
-
-## [2.5.0-beta.6](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.5...v2.5.0-beta.6) (2026-02-14)
-
+## v3.3.0-beta.3 (2026-06-11)
 
 ### Features
 
-* Add tests for LiteLLMReranker and Qwen3Reranker; update dependencies in uv.lock ([a45c99e](https://github.com/n24q02m/wet-mcp/commit/a45c99ed68d30b5a7108f61916af1dfc7f541183))
+- Wet per-task model chains + relay model-chain widget, drop priority-router
+  ([#1321](https://github.com/n24q02m/wet-mcp/pull/1321),
+  [`531944e`](https://github.com/n24q02m/wet-mcp/commit/531944e3936cd87eca9429069864ad318da1b26c))
 
-## [2.5.0-beta.5](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.4...v2.5.0-beta.5) (2026-02-13)
 
-
-### Features
-
-* add batch splitting and retry with exponential backoff to embedder ([9fe0e94](https://github.com/n24q02m/wet-mcp/commit/9fe0e946b28430ab5254739dc51415c9ed4a1e0e))
-
+## v3.3.0-beta.2 (2026-06-11)
 
 ### Bug Fixes
 
-* resolve ruff C420 lint and f-string format issues in db.py ([bdc3808](https://github.com/n24q02m/wet-mcp/commit/bdc380820b7d0aff5b1f49bf0c710cb3d16a863b))
-
-## [2.5.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.3...v2.5.0-beta.4) (2026-02-13)
-
-
-### Bug Fixes
-
-* correct changelog descriptions for FTS5 search overhaul ([828eb9a](https://github.com/n24q02m/wet-mcp/commit/828eb9a068350c4b84c67a3b6ae59d0265cae85d))
-
-## [2.5.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.2...v2.5.0-beta.3) (2026-02-13)
+- Cap n24q02m-web-core to <2.2 (private SSRF API drift)
+  ([#1320](https://github.com/n24q02m/wet-mcp/pull/1320),
+  [`6a26421`](https://github.com/n24q02m/wet-mcp/commit/6a26421f68d87469f74770a26e6bf92aea8cb0e2))
 
 
-### Features
-
-* overhaul FTS5 search engine with BM25 column weights, tiered AND-to-OR queries, min-max normalization, RRF fusion, chunk quality scoring, language-agnostic stop word handling via BM25 IDF, content cleaning, sitemap discovery, and GitHub raw markdown fallback ([d79e07b](https://github.com/n24q02m/wet-mcp/commit/d79e07b5e1b42bc12b85b3d5b50a833c3ed2cc80))
-
-## [2.5.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta.1...v2.5.0-beta.2) (2026-02-13)
-
+## v3.3.0-beta.1 (2026-06-11)
 
 ### Bug Fixes
 
-* improve docs discovery scoring, crawl scope, and cache validation ([cd3466a](https://github.com/n24q02m/wet-mcp/commit/cd3466a71ffc39ee6015acc9dc67abb74be716ac))
-* refine discovery scoring with library-name-in-domain bonus ([3dcdb4f](https://github.com/n24q02m/wet-mcp/commit/3dcdb4f2fd0e913f6514febf394428021f8d7266))
-* replace broken repo-name cache validation with discovery version ([23b1eee](https://github.com/n24q02m/wet-mcp/commit/23b1eee51927afcf3e6160774423a5fc80b1192c))
+- Add XAI_API_KEY to relay schema and cloud credential keys
+  ([#1315](https://github.com/n24q02m/wet-mcp/pull/1315),
+  [`366f5cb`](https://github.com/n24q02m/wet-mcp/commit/366f5cb989f517182d75286c0a5048568cd5647c))
 
-## [2.5.0-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.5.0-beta...v2.5.0-beta.1) (2026-02-13)
+- Harden litellm response-shape parsing (None-guard rerank, api_key normalise, attr-access)
+  ([#1315](https://github.com/n24q02m/wet-mcp/pull/1315),
+  [`366f5cb`](https://github.com/n24q02m/wet-mcp/commit/366f5cb989f517182d75286c0a5048568cd5647c))
 
+### Features
+
+- Migrate LLM, embedding and rerank dispatch to mcp_core.llm litellm passthrough
+  ([#1315](https://github.com/n24q02m/wet-mcp/pull/1315),
+  [`366f5cb`](https://github.com/n24q02m/wet-mcp/commit/366f5cb989f517182d75286c0a5048568cd5647c))
+
+- Migrate LLM/embedding/rerank to litellm passthrough via mcp-core[llm]
+  ([#1315](https://github.com/n24q02m/wet-mcp/pull/1315),
+  [`366f5cb`](https://github.com/n24q02m/wet-mcp/commit/366f5cb989f517182d75286c0a5048568cd5647c))
+
+### Testing
+
+- Add comprehensive tests for token_store.py ([#1308](https://github.com/n24q02m/wet-mcp/pull/1308),
+  [`8c3842c`](https://github.com/n24q02m/wet-mcp/commit/8c3842cb975d5fe4c01d4ecf681b0cdaafcbbedb))
+
+- Add coverage for get_project_context error paths
+  ([#1301](https://github.com/n24q02m/wet-mcp/pull/1301),
+  [`39ea3ba`](https://github.com/n24q02m/wet-mcp/commit/39ea3ba8d07e252a53796d380c54239522c92c7b))
+
+- Add error path coverage for DocsDB.add_chunks
+  ([#1313](https://github.com/n24q02m/wet-mcp/pull/1313),
+  [`d48b54b`](https://github.com/n24q02m/wet-mcp/commit/d48b54bc1aadfd79196989d997db70af4265f7f5))
+
+- Add stronger assertions for searxng missing package dir edge cases
+  ([#1314](https://github.com/n24q02m/wet-mcp/pull/1314),
+  [`bb89056`](https://github.com/n24q02m/wet-mcp/commit/bb8905612c80f187a26ee7a970a655cd921b84d7))
+
+
+## v3.2.7-beta.1 (2026-06-10)
 
 ### Bug Fixes
 
-* SearXNG port contention, docs discovery priority, and llms.txt quality check ([b7565f8](https://github.com/n24q02m/wet-mcp/commit/b7565f846785867c2e32bcae1c565e98b74da864))
+- Correct docs drift (tool count, version framing, dead links)
+  ([#1298](https://github.com/n24q02m/wet-mcp/pull/1298),
+  [`88e355f`](https://github.com/n24q02m/wet-mcp/commit/88e355f074ad7b031ba8614515d0aef357bf3091))
+
+### Chores
+
+- **deps**: Update step-security/harden-runner digest to 9af89fc
+  ([#1293](https://github.com/n24q02m/wet-mcp/pull/1293),
+  [`dbb6ba7`](https://github.com/n24q02m/wet-mcp/commit/dbb6ba7f4f45a8d30fe1545ce8c8de298f06fbc6))
 
 
-### Documentation
-
-* fix Docker volume persistence and config documentation ([9ded9b1](https://github.com/n24q02m/wet-mcp/commit/9ded9b13c7e3f5ed89127254ed5448a3d885a329))
-
-## [2.5.0-beta](https://github.com/n24q02m/wet-mcp/compare/v2.4.1...v2.5.0-beta) (2026-02-13)
+## v3.2.6 (2026-06-09)
 
 
-### Features
-
-* add automated cleanup for stale release-please PRs ([2247ae6](https://github.com/n24q02m/wet-mcp/commit/2247ae634e0a02f68acce7c12909b0174eca0f3d))
-* Add docs indexing, research tools, and caching ([398e013](https://github.com/n24q02m/wet-mcp/commit/398e013634fde701a9921a45ed51614cd3556a0f))
-
-
-### Bug Fixes
-
-* **cd:** auto-resolve merge conflicts in promote workflow ([4971c6c](https://github.com/n24q02m/wet-mcp/commit/4971c6c29225a605d707d9f1807e4e71f1c64b33))
-* use dynamic version from package metadata instead of hardcoded string ([a2cd072](https://github.com/n24q02m/wet-mcp/commit/a2cd0723e23bd97408432a1e4867805df1e6ba16))
-
-
-### Documentation
-
-* add CODEOWNERS and update README description ([5782dab](https://github.com/n24q02m/wet-mcp/commit/5782dabb4afee4c4de868b4357ed40e778c7ba3c))
-
-## [2.4.1](https://github.com/n24q02m/wet-mcp/compare/v2.4.0...v2.4.1) (2026-02-12)
-
+## v3.2.6-beta.1 (2026-06-09)
 
 ### Bug Fixes
 
-* **cd:** add git config identity for sync-dev step ([2c0ad85](https://github.com/n24q02m/wet-mcp/commit/2c0ad851cc353612e2ccb69d3acec4ddb83d4aa2))
+- Make docs-search tests hermetic to stop macOS teardown timeout
+  ([#1269](https://github.com/n24q02m/wet-mcp/pull/1269),
+  [`8a6a7f7`](https://github.com/n24q02m/wet-mcp/commit/8a6a7f7c3d8540a47d3f3f395f145df6a4bd152b))
 
-## [2.4.0](https://github.com/n24q02m/wet-mcp/compare/v2.3.0...v2.4.0) (2026-02-12)
+### Chores
 
-
-### Features
-
-* promote dev to main (v2.4.0-beta.2) ([#68](https://github.com/n24q02m/wet-mcp/issues/68)) ([053ec38](https://github.com/n24q02m/wet-mcp/commit/053ec38c664880de5aab638154441559990bd239))
-* promote dev to main (v2.4.0-beta.4) ([#76](https://github.com/n24q02m/wet-mcp/issues/76)) ([749e997](https://github.com/n24q02m/wet-mcp/commit/749e99704112cbadb8fd565325bb76705c35733b))
-
-## [2.4.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v2.4.0-beta.3...v2.4.0-beta.4) (2026-02-12)
+- **deps**: Update codecov/codecov-action action to v7
+  ([#1272](https://github.com/n24q02m/wet-mcp/pull/1272),
+  [`4b7fd3a`](https://github.com/n24q02m/wet-mcp/commit/4b7fd3ab86d22b2a867c5ea0a2bf029e79d0af25))
 
 
-### Bug Fixes
-
-* **chore:** trigger cicd ([57274a2](https://github.com/n24q02m/wet-mcp/commit/57274a241ad0a05b4bcc19bcfe3a9e0edeca30ad))
-
-## [2.4.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.4.0-beta.2...v2.4.0-beta.3) (2026-02-12)
-
+## v3.2.5 (2026-06-07)
 
 ### Bug Fixes
 
-* **tests:** replace URL membership checks with set equality for CodeQL ([95d3923](https://github.com/n24q02m/wet-mcp/commit/95d392382e31e6300491f807193757639482a6b0))
+- Force clean re-import in serverInfo version test
+  ([#1265](https://github.com/n24q02m/wet-mcp/pull/1265),
+  [`6eee850`](https://github.com/n24q02m/wet-mcp/commit/6eee850c0eb7eb5d2a9a7ea6b49a44df6c94d1e5))
 
-## [2.4.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.4.0-beta.1...v2.4.0-beta.2) (2026-02-12)
-
-
-### Documentation
-
-* **readme:** require Python 3.13 and show uvx arg ([26ddaa0](https://github.com/n24q02m/wet-mcp/commit/26ddaa03ea230375f72fc8c0d5b9e4fc39a9cdb9))
-
-## [2.4.0-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.4.0-beta...v2.4.0-beta.1) (2026-02-12)
+- Report wet-mcp package version in serverInfo.version
+  ([#1265](https://github.com/n24q02m/wet-mcp/pull/1265),
+  [`6eee850`](https://github.com/n24q02m/wet-mcp/commit/6eee850c0eb7eb5d2a9a7ea6b49a44df6c94d1e5))
 
 
-### Features
-
-* **searxng:** add auto-restart and health checks ([03f9d94](https://github.com/n24q02m/wet-mcp/commit/03f9d94cab8cdcde339769df4b1c3cace6d72607))
-
-## [2.4.0-beta](https://github.com/n24q02m/wet-mcp/compare/v2.3.0...v2.4.0-beta) (2026-02-10)
-
-
-### Features
-
-* consolidate Jules AI PRs ([#20](https://github.com/n24q02m/wet-mcp/issues/20)-[#56](https://github.com/n24q02m/wet-mcp/issues/56)) ([#57](https://github.com/n24q02m/wet-mcp/issues/57)) ([b417812](https://github.com/n24q02m/wet-mcp/commit/b417812c25b0841c02617255a7ab2fc65035dccb))
-
-## [2.3.0](https://github.com/n24q02m/wet-mcp/compare/v2.2.0...v2.3.0) (2026-02-09)
-
-
-### Features
-
-* promote dev to main (v2.3.0-beta) ([#48](https://github.com/n24q02m/wet-mcp/issues/48)) ([a6de42f](https://github.com/n24q02m/wet-mcp/commit/a6de42fe0bd58f65c3e086d71fa20976f32b6eca))
-* promote dev to main (v2.3.0-beta) ([#51](https://github.com/n24q02m/wet-mcp/issues/51)) ([f0404cb](https://github.com/n24q02m/wet-mcp/commit/f0404cb886113fbc3f6e9370ae5fedcf183944fc))
-
+## v3.2.5-beta.1 (2026-06-07)
 
 ### Bug Fixes
 
-* **release:** reset manifest to stable version for proper stable release ([0a72c67](https://github.com/n24q02m/wet-mcp/commit/0a72c67422df750b98f1cac26569f14b0701b8b8))
+- Add cache get_with_age and periodic purge tests
+  ([`cb9e33d`](https://github.com/n24q02m/wet-mcp/commit/cb9e33d3eb74146820b2931d987be158761e8d32))
 
-## [2.3.0-beta](https://github.com/n24q02m/wet-mcp/compare/v2.2.0...v2.3.0-beta) (2026-02-09)
+- Add check_health error-path tests for gdrive sync
+  ([`f24d648`](https://github.com/n24q02m/wet-mcp/commit/f24d648d85963576b4ecbc45d31a2b5504c2c237))
 
+- Add coverage tests for migrations module
+  ([`207a33d`](https://github.com/n24q02m/wet-mcp/commit/207a33d6f367f9191478b4e14ec11faec88460d9))
 
-### Features
+- Add setup_api_keys alias and whitespace tests
+  ([`0b7f5be`](https://github.com/n24q02m/wet-mcp/commit/0b7f5be602bedf56ff76b25f9d0d58d84eec9cfa))
 
-* add media analysis action and enhance SearXNG installation robustness. ([27dfa89](https://github.com/n24q02m/wet-mcp/commit/27dfa8918c67d6b6e3d5f1a649cb9521529dcae9))
+- Add SyncBackend abstract base class tests
+  ([`767d841`](https://github.com/n24q02m/wet-mcp/commit/767d841503e9e81fe063af97707c85a44ee06bae))
 
-## [2.2.0](https://github.com/n24q02m/wet-mcp/compare/v2.1.3...v2.2.0) (2026-02-08)
+- Add test for get_token_path_for_sub
+  ([`3d59e48`](https://github.com/n24q02m/wet-mcp/commit/3d59e48f160a732f91c8692c2729158ecbfed1a3))
 
+- Update actions/checkout digest to df4cb1c
+  ([`44632be`](https://github.com/n24q02m/wet-mcp/commit/44632be2a82db3b76529c81f298c169fb71b73a8))
 
-### Features
+- Update codeql-action digest to 8aad20d
+  ([`a63d3b6`](https://github.com/n24q02m/wet-mcp/commit/a63d3b631469d0c3e11add5783ffe12486c1101b))
 
-* promote dev to main (v3.1.0-beta.4) ([#17](https://github.com/n24q02m/wet-mcp/issues/17)) ([fd54513](https://github.com/n24q02m/wet-mcp/commit/fd545134a2cc338051c0e2dc4dfc8c91d5a00d16))
+- Update non-major dependencies
+  ([`86615ff`](https://github.com/n24q02m/wet-mcp/commit/86615ffdde6d607ef4b9bac0c30eeb5b21bd375d))
 
-## [3.1.0-beta.4](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.3...v3.1.0-beta.4) (2026-02-08)
+- Update uv docker digest to b46b03d
+  ([`bca3b48`](https://github.com/n24q02m/wet-mcp/commit/bca3b48128c1e54689a1d427d0285106912b893f))
 
+### Chores
 
-### Features
-
-* add tool timeout setting and improve SearXNG compatibility on Windows ([2f42fb7](https://github.com/n24q02m/wet-mcp/commit/2f42fb72cf0fffe4c00607dfc9b946aa4da63170))
-
-## [3.1.0-beta.3](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.2...v3.1.0-beta.3) (2026-02-08)
-
-
-### Features
-
-* implement version patching for SearXNG installation from zip archive ([18e678a](https://github.com/n24q02m/wet-mcp/commit/18e678a504f4fe091a933fded9665682bcdb5288))
-
-## [3.1.0-beta.2](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta.1...v3.1.0-beta.2) (2026-02-08)
-
-
-### Bug Fixes
-
-* add git installation in Dockerfile for SearXNG build system ([9c850ad](https://github.com/n24q02m/wet-mcp/commit/9c850adb54de66de42b7c49aa05b03fdc807be6c))
-
-## [3.1.0-beta.1](https://github.com/n24q02m/wet-mcp/compare/v3.1.0-beta...v3.1.0-beta.1) (2026-02-08)
+- **deps**: Bump aiohttp in the uv group across 1 directory
+  ([#1190](https://github.com/n24q02m/wet-mcp/pull/1190),
+  [`9a2b862`](https://github.com/n24q02m/wet-mcp/commit/9a2b862658bbdf04a493794b6817833e2ccd638e))
 
 
-### Bug Fixes
-
-* update pip commands to use uv for SearXNG and Playwright installation ([566cfde](https://github.com/n24q02m/wet-mcp/commit/566cfdeacd4cee30681c1b2d954319be1e4e5287))
-
-## [3.1.0-beta](https://github.com/n24q02m/wet-mcp/compare/v3.0.1-beta...v3.1.0-beta) (2026-02-08)
-
-
-### Features
-
-* transition from Docker-based SearXNG to embedded subprocess management ([b4b468e](https://github.com/n24q02m/wet-mcp/commit/b4b468ee600db9d5f1c674424dda04e4404d8a48))
-* update CI configuration and add pytest hook to pre-commit ([543d2e4](https://github.com/n24q02m/wet-mcp/commit/543d2e42f33b4d21190bb195682f885bb82800b9))
-
-## [3.0.1-beta](https://github.com/n24q02m/wet-mcp/compare/v3.0.0...v3.0.1-beta) (2026-02-06)
-
+## v3.2.4 (2026-06-01)
 
 ### Bug Fixes
 
-* add prerelease versioning strategy to beta config ([7e8e87b](https://github.com/n24q02m/wet-mcp/commit/7e8e87bdbb67a7da97875fe4757ff319c49c57db))
+- Pin mcp-core 1.17.2 (stable)
+  ([`b3e1d77`](https://github.com/n24q02m/wet-mcp/commit/b3e1d77aa029e3b431dc359c1b2c60570dbe26b2))
 
-## [3.0.0](https://github.com/n24q02m/wet-mcp/compare/v2.1.4...v3.0.0) (2026-02-06)
 
-
-### ⚠ BREAKING CHANGES
-
-* API_KEYS now expects ENV_VAR:key format e.g. GOOGLE_API_KEY:abc instead of gemini:abc
-
-### Features
-
-* add development and production rulesets, update CI/CD workflows, and enhance project dependencies ([34da1e8](https://github.com/n24q02m/wet-mcp/commit/34da1e84af56ea68bac2e6253a587f81de85e5c0))
-* add initial project documentation including README, developer handbook, and agent context files ([f39cfab](https://github.com/n24q02m/wet-mcp/commit/f39cfabc2ccea02678a39acac9812c8c35832fe9))
-* enable LLM analysis for text files and enhance SearXNG container startup with port readiness checks. ([4fb3f4e](https://github.com/n24q02m/wet-mcp/commit/4fb3f4eb1dc6ed7fd47c29da7e824fc03b8eb146))
-* Enhance crawler with retries, user-agent, redirect following, and protocol-relative URL handling. ([ab1ecea](https://github.com/n24q02m/wet-mcp/commit/ab1ecead5ae0fbbd4e7f33cd6d82e0a6e2215ea2))
-* Establish initial project structure with SearXNG integration, Docker management, and CI/CD. ([57fcc33](https://github.com/n24q02m/wet-mcp/commit/57fcc330e94b4590955458b727999b81ca3cf39a))
-* integrate LiteLLM for media analysis (analyze tool) ([77003ce](https://github.com/n24q02m/wet-mcp/commit/77003ce43c3641a1d755398a03806826720a343c))
-* integrate LiteLLM for media analysis (analyze tool) ([fe4d365](https://github.com/n24q02m/wet-mcp/commit/fe4d36571f6d2104f989e60178aac0e01d225002))
-* refactor API_KEYS format and add auto-detect capabilities ([77e277b](https://github.com/n24q02m/wet-mcp/commit/77e277b8989a692cd3ede287ba25f83f949d3f4b))
-
+## v3.2.4-beta.1 (2026-06-01)
 
 ### Bug Fixes
 
-* **cd:** checkout main branch for PR merge release ([5247100](https://github.com/n24q02m/wet-mcp/commit/524710028b2b25e6dff0393a0ace067abffc3054))
-* **cd:** use dry-run check to prevent workflow failure when no release needed ([e9686fe](https://github.com/n24q02m/wet-mcp/commit/e9686fe6115cd360aa9842148bd03c80c5c70a03))
-* **searxng:** robust connection fix ([140eecb](https://github.com/n24q02m/wet-mcp/commit/140eecb5ee064033df30b6ad62da708b990c4427))
-* **server:** remove url cache to ensure auto-restart ([36f44d2](https://github.com/n24q02m/wet-mcp/commit/36f44d23b624a2422ef18597b4d855aea07de7b5))
-* silence Crawl4AI verbose output to prevent JSON parse errors ([62d5f92](https://github.com/n24q02m/wet-mcp/commit/62d5f92a1a398fef7e4c1c9bd88cb52e2c63a2e0))
-* **tests:** update version test to validate semantic versioning format ([768b82d](https://github.com/n24q02m/wet-mcp/commit/768b82de838e9c11e4087276611d4c49e1100a9e))
-* trigger cd ([b825a4c](https://github.com/n24q02m/wet-mcp/commit/b825a4c63ce521c6e4e3fcf657ff088995e3c6be))
-* update tests and formatting ([17906f3](https://github.com/n24q02m/wet-mcp/commit/17906f3641b80ae2fa267923cadd9b0169e411fa))
+- Bump mcp-core to 1.17.2-beta.1 for beta testing
+  ([`7cbf4f6`](https://github.com/n24q02m/wet-mcp/commit/7cbf4f694d2b63ecd7439cfede561e3fbb8be32b))
 
+- Make Windows console handle Unicode output without cp1252 crash
+  ([#1179](https://github.com/n24q02m/wet-mcp/pull/1179),
+  [`2abfbd5`](https://github.com/n24q02m/wet-mcp/commit/2abfbd5299f9fbf2715ffbe9abd9c71544b2336f))
+
+- Make Windows console handle Unicode output without cp1252 crash
+  ([#1148](https://github.com/n24q02m/wet-mcp/pull/1148),
+  [`2cb3870`](https://github.com/n24q02m/wet-mcp/commit/2cb3870ed76bd72a403e17826b2d29f801e839ca))
+
+- Sync docs to actual code (sync/ package, SYNC_ENABLED default, config actions, docker port)
+  ([#1179](https://github.com/n24q02m/wet-mcp/pull/1179),
+  [`2abfbd5`](https://github.com/n24q02m/wet-mcp/commit/2abfbd5299f9fbf2715ffbe9abd9c71544b2336f))
+
+- Sync docs to actual sync package, SYNC_ENABLED default, config actions, docker port
+  ([#1179](https://github.com/n24q02m/wet-mcp/pull/1179),
+  [`2abfbd5`](https://github.com/n24q02m/wet-mcp/commit/2abfbd5299f9fbf2715ffbe9abd9c71544b2336f))
+
+- Update uv docker digest to 03bdc89 ([#1172](https://github.com/n24q02m/wet-mcp/pull/1172),
+  [`b2d0c20`](https://github.com/n24q02m/wet-mcp/commit/b2d0c207eacc9707246a8d137f43d5c05418f552))
+
+
+## v3.2.3 (2026-05-29)
+
+### Bug Fixes
+
+- Pin mcp-core 1.17.1 (BearerMCPApp resource_metadata #260)
+  ([`6639d00`](https://github.com/n24q02m/wet-mcp/commit/6639d00e9e7ca7b0ccbeaff189b9a60788498767))
+
+
+## v3.2.2 (2026-05-29)
+
+### Bug Fixes
+
+- Pin mcp-core 1.17.0 (stable OAuth refresh_token)
+  ([`9d75717`](https://github.com/n24q02m/wet-mcp/commit/9d75717a2e065f4be6567b0ccda14407850d6dba))
+
+
+## v3.2.2-beta.1 (2026-05-29)
+
+### Bug Fixes
+
+- Add coverage tests for mark_library_indexed
+  ([#1153](https://github.com/n24q02m/wet-mcp/pull/1153),
+  [`7531a42`](https://github.com/n24q02m/wet-mcp/commit/7531a42718421053d026ff4070730cec09584e2c))
+
+- Add offline Alembic migration tests ([#1161](https://github.com/n24q02m/wet-mcp/pull/1161),
+  [`916e544`](https://github.com/n24q02m/wet-mcp/commit/916e5449b6e90147feb933fd52d1047ff9946130))
+
+- Bump mcp-core to 1.17.0-beta.1 for OAuth refresh_token
+  ([`5240ae0`](https://github.com/n24q02m/wet-mcp/commit/5240ae002d3ee5eac67285f95d255ca3b2164b78))
+
+- Validate db column names against allowlists to prevent SQL injection
+  ([#1157](https://github.com/n24q02m/wet-mcp/pull/1157),
+  [`8c9baac`](https://github.com/n24q02m/wet-mcp/commit/8c9baac3f1328b45c26cf5eb68f3fff2841dd232))
+
+
+## v3.2.1 (2026-05-28)
+
+### Bug Fixes
+
+- Annotate benchmark summary dict type so ty resolves results subscript
+  ([`cfe11aa`](https://github.com/n24q02m/wet-mcp/commit/cfe11aad0e1b4dcecc6c9f0729996d2fb3af14ff))
+
+- Cast asyncio.Future to Task[Any] in test to satisfy ty type checker
+  ([`5bfc49b`](https://github.com/n24q02m/wet-mcp/commit/5bfc49b75b6cd0a1bf7a0fa9824a66dfe109337d))
+
+
+## v3.2.1-beta.1 (2026-05-28)
+
+### Bug Fixes
+
+- **deps**: Pin pydantic to <2.13 to match mcp-core 1.15.0 transitive cap
+  ([`26c76b5`](https://github.com/n24q02m/wet-mcp/commit/26c76b5ff92cdf36dfa4d31beb58a795995f356a))
+
+- **deps**: Update non-major dependencies ([#1130](https://github.com/n24q02m/wet-mcp/pull/1130),
+  [`7371b8f`](https://github.com/n24q02m/wet-mcp/commit/7371b8f23b256c5826d78900a875cf5f5b345bb9))
+
+### Chores
+
+- **deps**: Lock file maintenance ([#1131](https://github.com/n24q02m/wet-mcp/pull/1131),
+  [`eb06a37`](https://github.com/n24q02m/wet-mcp/commit/eb06a37208c00b40f533778ba5249860c8f8d743))
+
+
+## v3.2.0 (2026-05-26)
+
+
+## v3.2.0-beta.2 (2026-05-26)
+
+### Features
+
+- Wire MCP_AUTH_DISABLE env to run_http_server(auth_disabled=)
+  ([`0668ef8`](https://github.com/n24q02m/wet-mcp/commit/0668ef894e7003bf3c3dcd1599f9fc5e52e8f59a))
+
+
+## v3.2.0-beta.1 (2026-05-26)
+
+### Bug Fixes
+
+- **deps**: Update dependency cohere to v7 ([#1119](https://github.com/n24q02m/wet-mcp/pull/1119),
+  [`d61fb2a`](https://github.com/n24q02m/wet-mcp/commit/d61fb2a9459c3f0b29f9f5dc3f877b786b513793))
+
+### Features
+
+- Add MCP_AUTH_DISABLE env flag for external auth boundary
+  ([`5309f49`](https://github.com/n24q02m/wet-mcp/commit/5309f49f2b76f3f8fa2a32ff567f53e9c095676c))
+
+
+## v3.1.1-beta.1 (2026-05-24)
+
+### Bug Fixes
+
+- Add supply-chain security test, update GitHub Actions
+  ([#1109](https://github.com/n24q02m/wet-mcp/pull/1109),
+  [`d385dab`](https://github.com/n24q02m/wet-mcp/commit/d385daba330c9fbb56e3ec08884e434623af81a1))
+
+- **deps**: Pin pydantic <2.13 for mcp-core 1.14.0 compatibility
+  ([#1099](https://github.com/n24q02m/wet-mcp/pull/1099),
+  [`069286e`](https://github.com/n24q02m/wet-mcp/commit/069286e1b7a44c68c6f55b819e99a73c6e9db414))
+
+- **deps**: Update non-major dependencies ([#1099](https://github.com/n24q02m/wet-mcp/pull/1099),
+  [`069286e`](https://github.com/n24q02m/wet-mcp/commit/069286e1b7a44c68c6f55b819e99a73c6e9db414))
+
+### Chores
+
+- **deps**: Update actions/create-github-app-token digest to bcd2ba4
+  ([#1093](https://github.com/n24q02m/wet-mcp/pull/1093),
+  [`115a555`](https://github.com/n24q02m/wet-mcp/commit/115a555a8aca2a239b3c5824bf8ecf1cf752e623))
+
+- **deps**: Update docker/build-push-action digest to f9f3042
+  ([#1110](https://github.com/n24q02m/wet-mcp/pull/1110),
+  [`bab7be6`](https://github.com/n24q02m/wet-mcp/commit/bab7be65586a663574ceae2f03d88bdaf362707e))
+
+- **deps**: Update docker/login-action digest to 650006c
+  ([#1111](https://github.com/n24q02m/wet-mcp/pull/1111),
+  [`d311ad8`](https://github.com/n24q02m/wet-mcp/commit/d311ad819652a59aa97cf7ee94cca060b0fecaaa))
+
+- **deps**: Update docker/setup-buildx-action digest to d7f5e7f
+  ([#1112](https://github.com/n24q02m/wet-mcp/pull/1112),
+  [`832a610`](https://github.com/n24q02m/wet-mcp/commit/832a6100185831fb71105f666e29490c2bd6dc75))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to 440fd64
+  ([#1094](https://github.com/n24q02m/wet-mcp/pull/1094),
+  [`2d48bb9`](https://github.com/n24q02m/wet-mcp/commit/2d48bb986554bca0e8d19060edc3f86ef5ca60fe))
+
+- **deps**: Update github/codeql-action digest to 7211b7c
+  ([#1114](https://github.com/n24q02m/wet-mcp/pull/1114),
+  [`20510df`](https://github.com/n24q02m/wet-mcp/commit/20510df469d61252fc727c19d7b4cb6f76a0344d))
+
+- **deps**: Update github/codeql-action digest to 9e0d7b8
+  ([#1095](https://github.com/n24q02m/wet-mcp/pull/1095),
+  [`48b83bc`](https://github.com/n24q02m/wet-mcp/commit/48b83bc6c8eb7c2563b1703fb82c4da7ca415470))
+
+- **deps**: Update python:3.13-slim-bookworm docker digest to e4fa1f9
+  ([#1115](https://github.com/n24q02m/wet-mcp/pull/1115),
+  [`f4e10fc`](https://github.com/n24q02m/wet-mcp/commit/f4e10fc986285bae38f3e9516286a48fd2771eee))
+
+- **deps**: Update step-security/harden-runner digest to ab7a940
+  ([#1098](https://github.com/n24q02m/wet-mcp/pull/1098),
+  [`1a749db`](https://github.com/n24q02m/wet-mcp/commit/1a749dbc64774873c164440b8a44ff235ff92de3))
+
+
+## v3.1.0 (2026-05-19)
+
+### Bug Fixes
+
+- Add publish_existing_tag CD recovery for GitHub immutable-release tag burn
+  ([`10d79ba`](https://github.com/n24q02m/wet-mcp/commit/10d79baa53daa42a9db8d3189c8bbf17b087eb26))
+
+
+## v3.0.0-beta.4 (2026-05-16)
+
+### Bug Fixes
+
+- Pin urllib3 + langsmith floors to patch 3 high CVEs
+  ([`15c107b`](https://github.com/n24q02m/wet-mcp/commit/15c107b90a8f8f8285fb1796b7534b3143a3b25a))
+
+- Scrub internal dev-process terminology from user-facing docs
+  ([`89f0d87`](https://github.com/n24q02m/wet-mcp/commit/89f0d8753857eb9e5e8a6a33b400a535ebcaaa55))
+
+### Chores
+
+- **deps**: Lock file maintenance ([#1085](https://github.com/n24q02m/wet-mcp/pull/1085),
+  [`0581cb5`](https://github.com/n24q02m/wet-mcp/commit/0581cb5f05c3bcfb0e83a421bf416172eade7a67))
+
+- **deps**: Update actions/upload-artifact action to v7
+  ([#1087](https://github.com/n24q02m/wet-mcp/pull/1087),
+  [`bd78a6f`](https://github.com/n24q02m/wet-mcp/commit/bd78a6f07f2df64e3513476011013501146b0586))
+
+- **deps**: Update python:3.13-slim-bookworm docker digest to 386df64
+  ([#1083](https://github.com/n24q02m/wet-mcp/pull/1083),
+  [`4c9e507`](https://github.com/n24q02m/wet-mcp/commit/4c9e507250db82aba668b0882bdda50851349bec))
+
+
+## v3.0.0-beta.3 (2026-05-14)
+
+### Bug Fixes
+
+- Sort imports in test_migrations to unblock CI ruff gate
+  ([`320ab36`](https://github.com/n24q02m/wet-mcp/commit/320ab361677e69500775b04f654bb6d5f83fc800))
+
+### Features
+
+- Add S3 sync backend settings for operator deploy mode
+  ([`b742e2e`](https://github.com/n24q02m/wet-mcp/commit/b742e2efb0a4db4a8fe3713ce9ea59d15548bf1a))
+
+- Add tests for sync backend registry and S3 backend
+  ([`a7fd75c`](https://github.com/n24q02m/wet-mcp/commit/a7fd75c3e2b098f62726254a87de06eeec796d94))
+
+- Document docs sync backends and XOR deployment modes
+  ([`600cfc8`](https://github.com/n24q02m/wet-mcp/commit/600cfc8181c6778dde0a88df607992e40e6f06cb))
+
+- Gate auto-sync behind active sync backend in server lifespan
+  ([`329354f`](https://github.com/n24q02m/wet-mcp/commit/329354f34544459bbe8376238642a7577e764ffb))
+
+- Refactor sync module into backend-pluggable package
+  ([`fcb9eb9`](https://github.com/n24q02m/wet-mcp/commit/fcb9eb91bb430a7137fba5def603ed42c820cf9b))
+
+
+## v3.0.0-beta.2 (2026-05-14)
+
+### Bug Fixes
+
+- Package alembic config + scripts in wheel so migrations run on uvx install
+  ([`a96d1a0`](https://github.com/n24q02m/wet-mcp/commit/a96d1a044fae92f8a78d30438ee4b0d956b5cf11))
+
+
+## v3.0.0-beta.1 (2026-05-10)
+
+### Bug Fixes
+
+- Lower coverage gate to 92% as phase 2 baseline
+  ([`cb4a256`](https://github.com/n24q02m/wet-mcp/commit/cb4a256cb24c0bde59b916b4579d964db7ef198d))
+
+- Regression test for v1.x.y to v2.0.0 auto-migrate round-trip
+  ([`abb47f4`](https://github.com/n24q02m/wet-mcp/commit/abb47f44d34fe7609712d8fc19316478888148e2))
+
+- Stub phase 2 lifespan hooks in test conftest to prevent timeouts
+  ([`22a93a0`](https://github.com/n24q02m/wet-mcp/commit/22a93a05d0834e108886aa740dfdfa893890995d))
+
+### Features
+
+- Alembic baseline + auto-migrate-on-startup runner
+  ([`ab31ff5`](https://github.com/n24q02m/wet-mcp/commit/ab31ff5cd86f570a550e72e69109077b9dbe0f17))
+
+- Docs_002_libraries migration extends schema per spec section 5.4
+  ([`e29e7e3`](https://github.com/n24q02m/wet-mcp/commit/e29e7e312066fa604382e0de7af92928ba2fc9ef))
+
+- Docs_003_project_context migration adds Cabinets isolation table
+  ([`66e5ebd`](https://github.com/n24q02m/wet-mcp/commit/66e5ebd28610d81e9323a531ce7f0d405aeb8277))
+
+- Docs_004_chunk_summaries migration plus add_chunks summary support
+  ([`50dbcc6`](https://github.com/n24q02m/wet-mcp/commit/50dbcc6199a67bd1bfb5acde295b120d57b1092a))
+
+- Docs_resolve + docs_query + docs_lock_project actions per spec section 4.3
+  ([`d4b7a3c`](https://github.com/n24q02m/wet-mcp/commit/d4b7a3c20718a4350a20476d8e1293f12f663cb0))
+
+- Phase 2 coverage tests for dispatch + ingest_tier2 + project_lock
+  ([`4b4f7f2`](https://github.com/n24q02m/wet-mcp/commit/4b4f7f2c870cd198989ea77fa5b534e59fa809f1))
+
+- Phase 2 docs refresh + lock-project-stack skill + SessionStart freshness hook
+  ([`68f0949`](https://github.com/n24q02m/wet-mcp/commit/68f09495014ef7c58c8153d69a5df1b336ff1603))
+
+- Phase 3 docs refresh -- migration plus interact guide plus README v2
+  ([`7dd7d10`](https://github.com/n24q02m/wet-mcp/commit/7dd7d102f76df33ec1ec620d319d1ab1633726f7))
+
+- Phase 3 task 0 baseline metrics for regression check
+  ([`e476e25`](https://github.com/n24q02m/wet-mcp/commit/e476e257aaa1eb2c90806ed99abfd73c9078859d))
+
+- Phase 3 task 1 InteractOps wet-local for patchright interactive ops
+  ([`bde5cb7`](https://github.com/n24q02m/wet-mcp/commit/bde5cb7bbf33bb7e28fe1c8e6fb174b4a93c6609))
+
+- Phase 3 task 10 UserPromptSubmit hook for docs cache prewarm
+  ([`0a2d3f1`](https://github.com/n24q02m/wet-mcp/commit/0a2d3f15c1aac46797c5ebb805782110da8456d9))
+
+- Phase 3 task 2 extract action agent for cited research synthesis
+  ([`3327b91`](https://github.com/n24q02m/wet-mcp/commit/3327b9190b472830181f7e587c53b1b547e1e237))
+
+- Phase 3 task 3 browser session pool with TTL plus LRU eviction
+  ([`72710ff`](https://github.com/n24q02m/wet-mcp/commit/72710ff2332d42c20e7d60c9b19fbfe3c2eddb90))
+
+- Phase 3 task 4 extract action interact for patchright drive
+  ([`3986811`](https://github.com/n24q02m/wet-mcp/commit/398681135b94116b1e1154d58c4f30613ef99812))
+
+- Phase 3 task 7 research-topic skill for extract action agent
+  ([`33d56bc`](https://github.com/n24q02m/wet-mcp/commit/33d56bc872bd2d18463dc0d775222de6d213efb8))
+
+- Remove media action analyze entirely in v2.0.0
+  ([`067299a`](https://github.com/n24q02m/wet-mcp/commit/067299add802eaebe040909f5154a5665588cf69))
+
+- Tier 1 warmup + on-demand tier 2 + per-version schema
+  ([`6d13269`](https://github.com/n24q02m/wet-mcp/commit/6d13269a808cd1232c7fb3f898771047cc3e2af7))
+
+
+## v2.31.0-beta.1 (2026-05-09)
+
+### Bug Fixes
+
+- Remove help.md + refresh extract help topic
+  ([`4131b86`](https://github.com/n24q02m/wet-mcp/commit/4131b8634acbe87f7829129eda64b1916fee347f))
+
+- Remove stale 'help' from allowed_tools after help.md removal
+  ([`ccde4fb`](https://github.com/n24q02m/wet-mcp/commit/ccde4fb28b15f8e441ff6c62b0607924776282e9))
+
+- Revert setup docs duplicates per Spec F single source of truth
+  ([`ca9e14c`](https://github.com/n24q02m/wet-mcp/commit/ca9e14c736f6675030388ba7f10204e32fdc64b2))
+
+- Sync CLAUDE.md and AGENTS.md + add diff guard hook
+  ([`36f605f`](https://github.com/n24q02m/wet-mcp/commit/36f605f546d7c06949f1b0646b83941f724f0b2c))
+
+- **deps**: Bump n24q02m-web-core pin to v2.0.0 (Plan A Task 14)
+  ([`56044dc`](https://github.com/n24q02m/wet-mcp/commit/56044dc65fe9648af8a6eaaa5c5325f39a6cf1f8))
+
+- **deps**: Bump qwen3-embed to v1.9.2 + mcp-core floor to v1.14.0
+  ([`f7cb4ea`](https://github.com/n24q02m/wet-mcp/commit/f7cb4ea095beed5cb3284f6bac79ec5812154319))
+
+- **deps**: Pin pydantic <2.13 locally + bump web-core to v2.0.1
+  ([`f42f756`](https://github.com/n24q02m/wet-mcp/commit/f42f756e96503edcaa11484e40940a103e97204e))
+
+- **deps**: Update dependency google-genai to v2
+  ([#1077](https://github.com/n24q02m/wet-mcp/pull/1077),
+  [`aad5650`](https://github.com/n24q02m/wet-mcp/commit/aad565033f571ae6784a65674a8c733389130f01))
+
+- **tests**: Align _get_process_kwargs + _read_discovery with web-core v2.x
+  ([`c4ce53a`](https://github.com/n24q02m/wet-mcp/commit/c4ce53a14e0eb04acf2bb8ee556e17025de463f9))
+
+- **tests**: Align test_searxng_runner_comprehensive with web-core v2.x
+  ([`986ab71`](https://github.com/n24q02m/wet-mcp/commit/986ab71ad659bb710202a8b25a53dcb3f24edf0e))
+
+### Chores
+
+- **deps**: Update actions/dependency-review-action action to v5
+  ([#1078](https://github.com/n24q02m/wet-mcp/pull/1078),
+  [`ceadd3c`](https://github.com/n24q02m/wet-mcp/commit/ceadd3ca27d06514582aa808fb9d21e903130254))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to 3a59a3c
+  ([#1054](https://github.com/n24q02m/wet-mcp/pull/1054),
+  [`f429057`](https://github.com/n24q02m/wet-mcp/commit/f429057b9bfd7ac51b380d91d11eba6cfed102c9))
+
+- **deps**: Update github/codeql-action digest to 68bde55
+  ([#1075](https://github.com/n24q02m/wet-mcp/pull/1075),
+  [`d386914`](https://github.com/n24q02m/wet-mcp/commit/d386914a747fd598b7fbfe901c7a79ead3fd2805))
+
+### Features
+
+- Add Table of contents heading + auto-generated link list (Spec E Wave 2)
+  ([`cca1c62`](https://github.com/n24q02m/wet-mcp/commit/cca1c62da7ab2d8e8dead3fa775a9bdd82e64e74))
+
+- Deprecate media.analyze action with grace period for v2.0.0 removal
+  ([`2ea6f23`](https://github.com/n24q02m/wet-mcp/commit/2ea6f23bebfeff29a7c32815d891df5ceec86086))
+
+- Link to mcp.n24q02m.com unified docs site (Spec F Phase 4)
+  ([`02d030a`](https://github.com/n24q02m/wet-mcp/commit/02d030a05bdbd2adf1a6ad966cf6505430b233e4))
+
+- Migrate extract pipeline to web-core ScrapingAgent + smart chunks output
+  ([`86b4c6b`](https://github.com/n24q02m/wet-mcp/commit/86b4c6bacde87b4c39ea3d5f353dbc02989eda76))
+
+- Refresh README + setup docs + ARCHITECTURE + BENCHMARKS for Phase 1
+  ([`a6d2eae`](https://github.com/n24q02m/wet-mcp/commit/a6d2eae6094960bedb5f23d0142f0640c8a7a515))
+
+- Search query expansion + TTL cache + citation standardization
+  ([`10f1ca5`](https://github.com/n24q02m/wet-mcp/commit/10f1ca5ef8a5010e590008ee9daead31d9c13aa2))
+
+- Sync cross-promo section ([#1076](https://github.com/n24q02m/wet-mcp/pull/1076),
+  [`baa44a5`](https://github.com/n24q02m/wet-mcp/commit/baa44a5c4da4763794497136300fe2deceb5df4a))
+
+### Refactoring
+
+- Modularize _probe_docs_url in docs.py ([#1068](https://github.com/n24q02m/wet-mcp/pull/1068),
+  [`ad0c066`](https://github.com/n24q02m/wet-mcp/commit/ad0c06670f9ca3d3bea27eb7a7b9e4e21cf775a6))
+
+- Split overly long config function into helpers
+  ([#1074](https://github.com/n24q02m/wet-mcp/pull/1074),
+  [`d5ee469`](https://github.com/n24q02m/wet-mcp/commit/d5ee4696c69533662ed8f8e5419e52498c6f4c0f))
+
+### Testing
+
+- Add test for uvx_searxng_blocked_error ([#1059](https://github.com/n24q02m/wet-mcp/pull/1059),
+  [`1f2e240`](https://github.com/n24q02m/wet-mcp/commit/1f2e24026882bb7ec0659a2a8468c47185afad7d))
+
+- **llm**: Add coverage for acompletion fallback exception block
+  ([#1061](https://github.com/n24q02m/wet-mcp/pull/1061),
+  [`cd9bc78`](https://github.com/n24q02m/wet-mcp/commit/cd9bc7885cb42629d7f959a4605237789e712e53))
+
+
+## v2.30.2 (2026-05-06)
+
+
+## v2.30.2-beta.1 (2026-05-06)
+
+### Bug Fixes
+
+- **deps**: Update dependency cryptography to v48
+  ([#1047](https://github.com/n24q02m/wet-mcp/pull/1047),
+  [`4b7b3d2`](https://github.com/n24q02m/wet-mcp/commit/4b7b3d25b88e44543cf2603c537908c7128862d6))
+
+### Chores
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to bca7f69
+  ([#1046](https://github.com/n24q02m/wet-mcp/pull/1046),
+  [`2a0b7e1`](https://github.com/n24q02m/wet-mcp/commit/2a0b7e12cfa03d7415818697479cb16330654f47))
+
+- **deps**: Update step-security/harden-runner digest to a5ad31d
+  ([#1021](https://github.com/n24q02m/wet-mcp/pull/1021),
+  [`cad99bf`](https://github.com/n24q02m/wet-mcp/commit/cad99bfa938f85c8e5a857a5f57c542e69fb68e3))
+
+
+## v2.30.1 (2026-05-05)
+
+### Bug Fixes
+
+- Bump n24q02m-web-core to 1.3.11 for SearXNG limiter + JSON fix
+  ([#1045](https://github.com/n24q02m/wet-mcp/pull/1045),
+  [`b198937`](https://github.com/n24q02m/wet-mcp/commit/b1989378583cfd34fe190f248f6da542ebe4138d))
+
+
+## v2.30.0 (2026-05-05)
+
+### Bug Fixes
+
+- Bump n24q02m-web-core to 1.3.10 stable ([#1042](https://github.com/n24q02m/wet-mcp/pull/1042),
+  [`679cb4b`](https://github.com/n24q02m/wet-mcp/commit/679cb4b6cd4c4ba66dc2a24e17a03840daa93631))
+
+
+## v2.30.0-beta.1 (2026-05-05)
+
+### Bug Fixes
+
+- Bump n24q02m-web-core to 1.3.10b2 for SearXNG doi_resolver fix
+  ([#1039](https://github.com/n24q02m/wet-mcp/pull/1039),
+  [`59f9319`](https://github.com/n24q02m/wet-mcp/commit/59f9319b0024c6c886325acdc87c31ab0b2b2678))
+
+- Consolidate setup docs body to 3 methods (drop legacy Method 4/5)
+  ([#1034](https://github.com/n24q02m/wet-mcp/pull/1034),
+  [`277d25a`](https://github.com/n24q02m/wet-mcp/commit/277d25a67b385ac39362f083a6fc826b6b765aad))
+
+### Features
+
+- Add explicit Method overview section to setup docs
+  ([#1033](https://github.com/n24q02m/wet-mcp/pull/1033),
+  [`4a8f0c1`](https://github.com/n24q02m/wet-mcp/commit/4a8f0c1191bcec1bcbeb56febc56da4c64d3d034))
+
+- Align userConfig with relay_schema fields ([#1036](https://github.com/n24q02m/wet-mcp/pull/1036),
+  [`b33d39c`](https://github.com/n24q02m/wet-mcp/commit/b33d39c288c4a22ba7c544b1e472508a5ea088ad))
+
+- Clarify Method 1/2/3 mutually exclusive (CC scope-by-endpoint)
+  ([#1038](https://github.com/n24q02m/wet-mcp/pull/1038),
+  [`25d3d66`](https://github.com/n24q02m/wet-mcp/commit/25d3d6693162fd21c0d14e6421d7ff410bc51f61))
+
+- Declare userConfig schema and document install prompt
+  ([#1035](https://github.com/n24q02m/wet-mcp/pull/1035),
+  [`cd75b1d`](https://github.com/n24q02m/wet-mcp/commit/cd75b1dccd674f7468fc65dcb8e547eee7e8af2d))
+
+- Document userConfig credential prompts per plugin
+  ([#1037](https://github.com/n24q02m/wet-mcp/pull/1037),
+  [`e314e15`](https://github.com/n24q02m/wet-mcp/commit/e314e15b4a736f6b808ddfe0e4a4e5f40bd61d4b))
+
+
+## v2.29.0 (2026-05-04)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.13.0 (STABLE) ([#1032](https://github.com/n24q02m/wet-mcp/pull/1032),
+  [`fbda87f`](https://github.com/n24q02m/wet-mcp/commit/fbda87f453fea314b2aadd080b20d266816f1350))
+
+
+## v2.29.0-beta.14 (2026-05-03)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.13.0-beta.9 for /login form shell refactor
+  ([#1030](https://github.com/n24q02m/wet-mcp/pull/1030),
+  [`810e185`](https://github.com/n24q02m/wet-mcp/commit/810e185022e51e82f890ed6aa0628e480b420069))
+
+
+## v2.29.0-beta.13 (2026-05-03)
+
+### Bug Fixes
+
+- Bump mcp-core floor to 1.13.0b7 for /login gate
+  ([#1029](https://github.com/n24q02m/wet-mcp/pull/1029),
+  [`96fec43`](https://github.com/n24q02m/wet-mcp/commit/96fec43b2b115684fa575dedb48e6c33b6c1eefa))
+
+
+## v2.29.0-beta.12 (2026-05-03)
+
+### Features
+
+- Bump mcp-core to 1.13.0-beta.7 ([#1027](https://github.com/n24q02m/wet-mcp/pull/1027),
+  [`de2d929`](https://github.com/n24q02m/wet-mcp/commit/de2d929de47b256288ef04a3c7858338ec4c4124))
+
+- Document MCP_RELAY_PASSWORD edge auth gate ([#1028](https://github.com/n24q02m/wet-mcp/pull/1028),
+  [`9e24458`](https://github.com/n24q02m/wet-mcp/commit/9e24458a91762b817cee45bbe5cda5ac1254f76b))
+
+- Pass MCP_RELAY_PASSWORD env to HTTP container
+  ([#1026](https://github.com/n24q02m/wet-mcp/pull/1026),
+  [`3a5924d`](https://github.com/n24q02m/wet-mcp/commit/3a5924ddf28b78573b9575b54a1fa05b7578d682))
+
+
+## v2.29.0-beta.11 (2026-05-03)
+
+### Bug Fixes
+
+- HTTP multi-user credential wiring (per-sub contextvar)
+  ([#1025](https://github.com/n24q02m/wet-mcp/pull/1025),
+  [`2226cc3`](https://github.com/n24q02m/wet-mcp/commit/2226cc35915539c866a772f6807a456a97fc094f))
+
+
+## v2.29.0-beta.10 (2026-05-03)
+
+### Bug Fixes
+
+- Skip uvx detection inside Docker (Method 3 stdio Docker bug)
+  ([#1024](https://github.com/n24q02m/wet-mcp/pull/1024),
+  [`0730c85`](https://github.com/n24q02m/wet-mcp/commit/0730c85f062717a53400449ff834343d4b39fafb))
+
+
+## v2.29.0-beta.9 (2026-05-02)
+
+### Bug Fixes
+
+- Skip SearXNG warmup task in stdio uvx mode ([#1020](https://github.com/n24q02m/wet-mcp/pull/1020),
+  [`b053101`](https://github.com/n24q02m/wet-mcp/commit/b053101148919bbd6b79f4f59d68ad45f2318e04))
+
+
+## v2.29.0-beta.8 (2026-05-02)
+
+### Bug Fixes
+
+- Reject web.search in stdio uvx mode (Docker-only feature)
+  ([#1019](https://github.com/n24q02m/wet-mcp/pull/1019),
+  [`d65c580`](https://github.com/n24q02m/wet-mcp/commit/d65c580f80e2d6353c8f66c806dee45054561570))
+
+
+## v2.29.0-beta.7 (2026-05-02)
+
+### Bug Fixes
+
+- Regenerate uv.lock for new mcp-core beta (Docker trap)
+  ([#1018](https://github.com/n24q02m/wet-mcp/pull/1018),
+  [`46eb8b8`](https://github.com/n24q02m/wet-mcp/commit/46eb8b896c362410be28e99875c90b96a27a28ba))
+
+
+## v2.29.0-beta.6 (2026-05-02)
+
+### Bug Fixes
+
+- Stdio mode skip PerPluginStore fallback (spec 2026-05-01 §4.1 + OQ3)
+  ([#1017](https://github.com/n24q02m/wet-mcp/pull/1017),
+  [`5c4bcfb`](https://github.com/n24q02m/wet-mcp/commit/5c4bcfb51245555edab1c8a5c91bd30847f7ed7e))
+
+
+## v2.29.0-beta.5 (2026-05-02)
+
+### Bug Fixes
+
+- Regenerate uv.lock UV_NO_SOURCES=1 (Docker build trap)
+  ([#1016](https://github.com/n24q02m/wet-mcp/pull/1016),
+  [`978d47c`](https://github.com/n24q02m/wet-mcp/commit/978d47c73d978adfe4567f7cae5ef104b56b74e0))
+
+
+## v2.29.0-beta.4 (2026-05-02)
+
+### Bug Fixes
+
+- Setup docs + README reflect stdio-pure architecture
+  ([#1015](https://github.com/n24q02m/wet-mcp/pull/1015),
+  [`5f642a3`](https://github.com/n24q02m/wet-mcp/commit/5f642a35b722f2d3ec20c074bfae723087d7985e))
+
+### Chores
+
+- Complete run without changes (backend-only project)
+  ([#1012](https://github.com/n24q02m/wet-mcp/pull/1012),
+  [`153b075`](https://github.com/n24q02m/wet-mcp/commit/153b0753276b44960a9068cd6a2b8b09e966008c))
+
+- **tests**: Remove unused imports in test_g6_ux_status_accuracy.py and format
+  ([#1012](https://github.com/n24q02m/wet-mcp/pull/1012),
+  [`153b075`](https://github.com/n24q02m/wet-mcp/commit/153b0753276b44960a9068cd6a2b8b09e966008c))
+
+### Features
+
+- Stdio-pure + http-multi-user (drop daemon-bridge)
+  ([#1014](https://github.com/n24q02m/wet-mcp/pull/1014),
+  [`ff29c58`](https://github.com/n24q02m/wet-mcp/commit/ff29c58f0ea25a8aebd48a2faa0d54a0110a634e))
+
+
+## v2.29.0-beta.3 (2026-04-30)
+
+### Bug Fixes
+
+- Regenerate uv.lock UV_NO_SOURCES=1 (Docker trap)
+  ([#1009](https://github.com/n24q02m/wet-mcp/pull/1009),
+  [`f211806`](https://github.com/n24q02m/wet-mcp/commit/f2118068335b2ed7078694335329e2eb1d7ec271))
+
+
+## v2.29.0-beta.2 (2026-04-30)
+
+### Bug Fixes
+
+- G6 UX status accuracy — derive state from live PerPluginStore
+  ([#1008](https://github.com/n24q02m/wet-mcp/pull/1008),
+  [`d66e09e`](https://github.com/n24q02m/wet-mcp/commit/d66e09e197202ccffcfc620fc2f1009098d4194e))
+
+### Features
+
+- **docs**: Add trust model section to README
+  ([#1006](https://github.com/n24q02m/wet-mcp/pull/1006),
+  [`fe9cd67`](https://github.com/n24q02m/wet-mcp/commit/fe9cd6763128e444ec74f3ba68357e1d5e6c6ec5))
+
+- **storage**: Migrate to PerPluginStore from mcp-core 1.13.0b1+
+  ([#1007](https://github.com/n24q02m/wet-mcp/pull/1007),
+  [`7f9bcf4`](https://github.com/n24q02m/wet-mcp/commit/7f9bcf4c94e95cac85a4987a0ab2dad55b634a3b))
+
+
+## v2.29.0-beta.1 (2026-04-30)
+
+### Features
+
+- Route stdio mode to FastMCP direct + multi-target Dockerfile
+  ([#1004](https://github.com/n24q02m/wet-mcp/pull/1004),
+  [`14a954e`](https://github.com/n24q02m/wet-mcp/commit/14a954e4f2d7c5ad7d0b8439673912338d76f1f9))
+
+
+## v2.28.7 (2026-04-29)
+
+### Bug Fixes
+
+- Bump n24q02m-mcp-core to 1.11.3 for D17 tools cache refresh
+  ([#998](https://github.com/n24q02m/wet-mcp/pull/998),
+  [`fabb26d`](https://github.com/n24q02m/wet-mcp/commit/fabb26de52725c6c5a851f0d298445f28c003d7e))
+
+
+## v2.28.6 (2026-04-29)
+
+### Bug Fixes
+
+- Rebuild uv.lock without local path source ([#995](https://github.com/n24q02m/wet-mcp/pull/995),
+  [`ee84061`](https://github.com/n24q02m/wet-mcp/commit/ee84061e6bdadb5825327282417803f7b737cbbc))
+
+
+## v2.28.5 (2026-04-29)
+
+### Bug Fixes
+
+- Pin Python to ==3.13.* and bump web-core to 1.3.9
+  ([#991](https://github.com/n24q02m/wet-mcp/pull/991),
+  [`d78d26a`](https://github.com/n24q02m/wet-mcp/commit/d78d26accabe874b1bd981f0220dad0a959067ce))
+
+- Register config__open_relay tool (Transparent Bridge Wave 3)
+  ([#993](https://github.com/n24q02m/wet-mcp/pull/993),
+  [`0ac8993`](https://github.com/n24q02m/wet-mcp/commit/0ac89939db4aa6a8a8ee628a3312e537d792ee9d))
+
+
+## v2.28.4 (2026-04-28)
+
+### Bug Fixes
+
+- Clarify default-local relay URL in setup docs (no n24q02m subdomain)
+  ([#983](https://github.com/n24q02m/wet-mcp/pull/983),
+  [`6fc98e3`](https://github.com/n24q02m/wet-mcp/commit/6fc98e303ad8afdc95339ae73caec37577e1ef3a))
+
+- Pass MCP_TRANSPORT=stdio in plugin.json + uv run --no-sync hooks
+  ([#985](https://github.com/n24q02m/wet-mcp/pull/985),
+  [`4200419`](https://github.com/n24q02m/wet-mcp/commit/4200419672d66d8b92f296ce949236fc96f4b27d))
+
+- Pass MCP_TRANSPORT=stdio in plugin.json + uv run --no-sync hooks
+  ([#984](https://github.com/n24q02m/wet-mcp/pull/984),
+  [`c329eae`](https://github.com/n24q02m/wet-mcp/commit/c329eae49fb09f23828c1e1b47f42877518f42be))
+
+- **credentials**: Rip _share_cloud_keys_to_peers — per-server isolation
+  ([#985](https://github.com/n24q02m/wet-mcp/pull/985),
+  [`4200419`](https://github.com/n24q02m/wet-mcp/commit/4200419672d66d8b92f296ce949236fc96f4b27d))
+
+- **deps**: Bump n24q02m-mcp-core to 1.10.0 — Transparent Bridge waves 1-3
+  ([#987](https://github.com/n24q02m/wet-mcp/pull/987),
+  [`a8f9fd5`](https://github.com/n24q02m/wet-mcp/commit/a8f9fd5bc43b760017fd4297c85269138588be25))
+
+
+## v2.28.3 (2026-04-28)
+
+### Bug Fixes
+
+- Bump n24q02m-mcp-core to 1.9.0 ([#982](https://github.com/n24q02m/wet-mcp/pull/982),
+  [`cfdb90f`](https://github.com/n24q02m/wet-mcp/commit/cfdb90f57c9ca02213ab9ad45e0a6e0409334bb2))
+
+### Chores
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to 3b7b60a
+  ([#976](https://github.com/n24q02m/wet-mcp/pull/976),
+  [`43266c3`](https://github.com/n24q02m/wet-mcp/commit/43266c3611412f16ecbe3003a635d7680847b320))
+
+
+## v2.28.2 (2026-04-27)
+
+### Bug Fixes
+
+- Regenerate uv.lock with UV_NO_SOURCES=1 (Docker trap)
+  ([#975](https://github.com/n24q02m/wet-mcp/pull/975),
+  [`7b38f20`](https://github.com/n24q02m/wet-mcp/commit/7b38f2014b36571fb1a1e3dce859163b2a04b445))
+
+
+## v2.28.1 (2026-04-27)
+
+### Bug Fixes
+
+- Cap greenlet <3.5.0 to unblock Docker arm64 ([#974](https://github.com/n24q02m/wet-mcp/pull/974),
+  [`f9c9250`](https://github.com/n24q02m/wet-mcp/commit/f9c925044599ab5c7c6adabd8482a6bc23145705))
+
+- Retrigger CI ([#974](https://github.com/n24q02m/wet-mcp/pull/974),
+  [`f9c9250`](https://github.com/n24q02m/wet-mcp/commit/f9c925044599ab5c7c6adabd8482a6bc23145705))
+
+
+## v2.28.0 (2026-04-27)
+
+### Bug Fixes
+
+- Bump n24q02m-mcp-core to 1.8.1 ([#969](https://github.com/n24q02m/wet-mcp/pull/969),
+  [`e116a7a`](https://github.com/n24q02m/wet-mcp/commit/e116a7ab1c0c369658016e182037ea1ae0caf685))
+
+- Ruff format + Windows root dir filter ([#969](https://github.com/n24q02m/wet-mcp/pull/969),
+  [`e116a7a`](https://github.com/n24q02m/wet-mcp/commit/e116a7ab1c0c369658016e182037ea1ae0caf685))
+
+### Features
+
+- Add ## E2E section to CLAUDE.md per Task 21 docs rollout
+  ([#966](https://github.com/n24q02m/wet-mcp/pull/966),
+  [`d2e7f54`](https://github.com/n24q02m/wet-mcp/commit/d2e7f54e540b0d865ebbb8b480fd7c07054afe4a))
+
+
+## v2.28.0-beta.2 (2026-04-27)
+
+### Bug Fixes
+
+- Trigger per-sub GDrive device-code in multi-user remote mode
+  ([`52ec8da`](https://github.com/n24q02m/wet-mcp/commit/52ec8da247a1f489f1c911b7bce2b5fd3a3a1351))
+
+
+## v2.28.0-beta.1 (2026-04-27)
+
+### Bug Fixes
+
+- Regenerate uv.lock with UV_NO_SOURCES=1 for Docker build compat
+  ([`32c1ea9`](https://github.com/n24q02m/wet-mcp/commit/32c1ea9bddb178ed64f27b423dcb6e86f2e0f18c))
+
+- Sweep doppler/infisical refs to skret SSM
+  ([`c433fe4`](https://github.com/n24q02m/wet-mcp/commit/c433fe4a5b16bc58d5cba85dfdedc7245dae905c))
+
+### Features
+
+- Wet-mcp multi-user remote mode via PUBLIC_URL + per-sub credential storage
+  ([#965](https://github.com/n24q02m/wet-mcp/pull/965),
+  [`ac4b9f6`](https://github.com/n24q02m/wet-mcp/commit/ac4b9f6842d07774cadd1c34d0b598da77ffc36a))
+
+
+## v2.27.1 (2026-04-24)
+
+### Bug Fixes
+
+- Regenerate uv.lock without [tool.uv.sources] for Docker build
+  ([#962](https://github.com/n24q02m/wet-mcp/pull/962),
+  [`f6cdf5d`](https://github.com/n24q02m/wet-mcp/commit/f6cdf5de3d1635ccf9d6a1e5c142e3e5a290717e))
+
+
+## v2.27.0 (2026-04-24)
+
+### Bug Fixes
+
+- Bump n24q02m-mcp-core to 1.7.6 ([#961](https://github.com/n24q02m/wet-mcp/pull/961),
+  [`c1f4707`](https://github.com/n24q02m/wet-mcp/commit/c1f470705668f6852a2967a3f22ef9cde93fa06f))
+
+- Bump n24q02m-mcp-core to >=1.7.1 ([#952](https://github.com/n24q02m/wet-mcp/pull/952),
+  [`c811ca9`](https://github.com/n24q02m/wet-mcp/commit/c811ca995c4ab7aadf9936249c616db4ed715afb))
+
+- Bump n24q02m-web-core to 1.3.6 ([#959](https://github.com/n24q02m/wet-mcp/pull/959),
+  [`757d39b`](https://github.com/n24q02m/wet-mcp/commit/757d39bb5149c2ee6a0ef3e936cf08763c027334))
+
+- Update uv.lock
+  ([`581580a`](https://github.com/n24q02m/wet-mcp/commit/581580a452bd55fd53e0ade2c8f2c99022bae192))
+
+### Chores
+
+- **deps**: Update python:3.13-slim-bookworm docker digest to bb73517
+  ([#948](https://github.com/n24q02m/wet-mcp/pull/948),
+  [`db2395c`](https://github.com/n24q02m/wet-mcp/commit/db2395c379f518423956119061c94497c4e2f75b))
+
+### Features
+
+- Use Smart Daemon Manager for stdio transport
+  ([`f49331f`](https://github.com/n24q02m/wet-mcp/commit/f49331f318ffbbbc903b371eb8c57a4d54bcebb7))
+
+
+## v2.26.7 (2026-04-22)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.6.3 ([#947](https://github.com/n24q02m/wet-mcp/pull/947),
+  [`a450ea2`](https://github.com/n24q02m/wet-mcp/commit/a450ea28737227c18e49faed17d25e4c4537b012))
+
+- Bump n24q02m-mcp-core to 1.6.3 (relay form follow redirect_url)
+  ([#947](https://github.com/n24q02m/wet-mcp/pull/947),
+  [`a450ea2`](https://github.com/n24q02m/wet-mcp/commit/a450ea28737227c18e49faed17d25e4c4537b012))
+
+- Switch Dockerfile builder to python:3.13-slim for Python 3.13.13
+  ([#947](https://github.com/n24q02m/wet-mcp/pull/947),
+  [`a450ea2`](https://github.com/n24q02m/wet-mcp/commit/a450ea28737227c18e49faed17d25e4c4537b012))
+
+
+## v2.26.6 (2026-04-22)
+
+### Bug Fixes
+
+- Switch Dockerfile builder to python:3.13-slim for Python 3.13.13
+  ([#945](https://github.com/n24q02m/wet-mcp/pull/945),
+  [`9a27cba`](https://github.com/n24q02m/wet-mcp/commit/9a27cbabafe99a5c452237d8a5d16d0a42da5496))
+
+
+## v2.26.5 (2026-04-22)
+
+### Bug Fixes
+
+- Enable UV_PYTHON_DOWNLOADS so Docker build gets Python 3.13.13
+  ([#944](https://github.com/n24q02m/wet-mcp/pull/944),
+  [`0a55d95`](https://github.com/n24q02m/wet-mcp/commit/0a55d95b63282fd9aa36c13c67e4a50cb2ccb667))
+
+
+## v2.26.4 (2026-04-22)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.6.2 ([#943](https://github.com/n24q02m/wet-mcp/pull/943),
+  [`ba9ba9d`](https://github.com/n24q02m/wet-mcp/commit/ba9ba9d753ce5d4d7641ffea478659864c6ac22f))
+
+
+## v2.26.3 (2026-04-22)
+
+### Bug Fixes
+
+- Add test coverage for run_remote_relay + main() dispatch
+  ([#939](https://github.com/n24q02m/wet-mcp/pull/939),
+  [`aeaa524`](https://github.com/n24q02m/wet-mcp/commit/aeaa524db989a1df7b297010812f99f87a384540))
+
+- Bump n24q02m-mcp-core to 1.5.1
+  ([`1e454f5`](https://github.com/n24q02m/wet-mcp/commit/1e454f577461c882fa969b9c28f4bc0c615624b0))
+
+- Bump n24q02m-mcp-core to 1.6.1 ([#939](https://github.com/n24q02m/wet-mcp/pull/939),
+  [`aeaa524`](https://github.com/n24q02m/wet-mcp/commit/aeaa524db989a1df7b297010812f99f87a384540))
+
+- Bump n24q02m-web-core to 1.3.1 for Docker SearXNG JSON fix
+  ([`e263bf1`](https://github.com/n24q02m/wet-mcp/commit/e263bf13ff32b988a0d196071a287e5024defa0e))
+
+- Bump web-core 1.3.3 + qwen3-embed 1.9.0 + setup-uv v8
+  ([`d186f0d`](https://github.com/n24q02m/wet-mcp/commit/d186f0def23e0bdd46a160a7499714edc811eb2f))
+
+- Bump web-core to 1.3.5 (docker stdin=DEVNULL + fast-path)
+  ([`134a66b`](https://github.com/n24q02m/wet-mcp/commit/134a66bfca6674e3380d622f616a72870f673451))
+
+- Enable auto-SearXNG on Windows (Docker fallback handles lxml)
+  ([`94ee0a8`](https://github.com/n24q02m/wet-mcp/commit/94ee0a8677ff12780071f1b1e9ac3af585e7ab12))
+
+- Qualify icacls user as DOMAIN\USER to avoid machine-name collision
+  ([`1386c2e`](https://github.com/n24q02m/wet-mcp/commit/1386c2ede8c1aee161bff1f3e8eee76c13260f2f))
+
+- Require explicit MCP_RELAY_URL for remote-relay mode
+  ([#939](https://github.com/n24q02m/wet-mcp/pull/939),
+  [`aeaa524`](https://github.com/n24q02m/wet-mcp/commit/aeaa524db989a1df7b297010812f99f87a384540))
+
+- Require explicit MCP_RELAY_URL for remote-relay mode per matrix 2.5
+  ([#939](https://github.com/n24q02m/wet-mcp/pull/939),
+  [`aeaa524`](https://github.com/n24q02m/wet-mcp/commit/aeaa524db989a1df7b297010812f99f87a384540))
+
+
+## v2.26.2 (2026-04-21)
+
+### Bug Fixes
+
+- Bump non-major Python deps incl mcp-core to 1.5.0
+  ([`a794a07`](https://github.com/n24q02m/wet-mcp/commit/a794a071f0ac007b9a20eb8cde2e4f6a705eac63))
+
+- Bump step-security/harden-runner digest to 8d3c67d
+  ([`6c5b8a0`](https://github.com/n24q02m/wet-mcp/commit/6c5b8a0367a8375c1d8baf967ec90043ae4915b9))
+
+
+## v2.26.1 (2026-04-21)
+
+### Bug Fixes
+
+- Accept SubjectContext arg on save_credentials
+  ([`6f56018`](https://github.com/n24q02m/wet-mcp/commit/6f560180b63803440475d029df002a80eee6e6f8))
+
+- Hoist regex compilations to module-level for string processing performance
+  ([`86b0ea6`](https://github.com/n24q02m/wet-mcp/commit/86b0ea65a804e05cb1444c070fb8aeaa8de31352))
+
+- Pin fastmcp>=3.2.3,<4 to prevent Renovate downgrade to CVE-vulnerable 2.x
+  ([`424cec5`](https://github.com/n24q02m/wet-mcp/commit/424cec57a6b5c30c2fecdaa155161cb0253197e1))
+
+- Stdio fallback spawns local credential form, not remote relay
+  ([`b9ec5a2`](https://github.com/n24q02m/wet-mcp/commit/b9ec5a2d1ba3f940b370774d57db037946f870b6))
+
+- **deps**: Bump mcp-core to 1.4.3
+  ([`326641f`](https://github.com/n24q02m/wet-mcp/commit/326641f7d24f191c18427204f5ce88c9c9ccc489))
+
+
+## v2.26.0 (2026-04-19)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.3.0 ([#899](https://github.com/n24q02m/wet-mcp/pull/899),
+  [`4d906c5`](https://github.com/n24q02m/wet-mcp/commit/4d906c5b9a24c88ed01fa5e0dd2ce0340a87997e))
+
+- Bump n24q02m-mcp-core to 1.4.0 ([#909](https://github.com/n24q02m/wet-mcp/pull/909),
+  [`5069a4e`](https://github.com/n24q02m/wet-mcp/commit/5069a4ede4eb06fea17b045583d19ecd92bd78a2))
+
+- Propagate GDrive device code failure to browser UI
+  ([#907](https://github.com/n24q02m/wet-mcp/pull/907),
+  [`1f56b88`](https://github.com/n24q02m/wet-mcp/commit/1f56b88e5d3b0f73a26cb41c8f1db5bc740326e9))
+
+- Restrict Windows token file permissions to current user only
+  ([#900](https://github.com/n24q02m/wet-mcp/pull/900),
+  [`aed22d3`](https://github.com/n24q02m/wet-mcp/commit/aed22d318f376adff1fe0cdd6eb399d4d2b1a860))
+
+- Use dynamic SearXNG port in test assertions (web-core 1.2.0 parity)
+  ([#903](https://github.com/n24q02m/wet-mcp/pull/903),
+  [`730bc57`](https://github.com/n24q02m/wet-mcp/commit/730bc573d30791e6182f94a8dc4cb0b96ececcb6))
+
+- **deps**: Update non-major dependencies ([#901](https://github.com/n24q02m/wet-mcp/pull/901),
+  [`986d789`](https://github.com/n24q02m/wet-mcp/commit/986d789665d2c28784f3f3756c0d80d8051a840a))
+
+### Chores
+
+- **deps**: Update github/codeql-action digest to 95e58e9
+  ([#894](https://github.com/n24q02m/wet-mcp/pull/894),
+  [`b8c8ea3`](https://github.com/n24q02m/wet-mcp/commit/b8c8ea3625161dd4ac0f26ffeadc18b6f68e5d6d))
+
+### Features
+
+- Merge setup tool into config with setup_* sub-actions
+  ([#898](https://github.com/n24q02m/wet-mcp/pull/898),
+  [`3af84a7`](https://github.com/n24q02m/wet-mcp/commit/3af84a752705c191584b614306cc42193798a8db))
+
+
+## v2.25.2 (2026-04-17)
+
+### Bug Fixes
+
+- Bump n24q02m-mcp-core to 1.2.0 (authlib CVE patch)
+  ([`65f404a`](https://github.com/n24q02m/wet-mcp/commit/65f404ab1bc7600699ca0474509be16979f4582f))
+
+
+## v2.25.1 (2026-04-17)
+
+### Bug Fixes
+
+- Bump n24q02m-mcp-core to 1.1.1 for OAuth issuer fix
+  ([`e48f48a`](https://github.com/n24q02m/wet-mcp/commit/e48f48aead602ab12695737d997662e944c98518))
+
+
+## v2.25.0 (2026-04-17)
+
+### Bug Fixes
+
+- Add composite index to accelerate RAG prefetching
+  ([`8b237d6`](https://github.com/n24q02m/wet-mcp/commit/8b237d6350c297b479b126cf37586c590c8aad72))
+
+- Add debug logging for GDrive callback and remove auto-open browser
+  ([`297ec46`](https://github.com/n24q02m/wet-mcp/commit/297ec4679d1be504ea4fefdc1bc60e628c406eff))
+
+- Add diacritic preservation pre-commit hook ([#891](https://github.com/n24q02m/wet-mcp/pull/891),
+  [`98748e9`](https://github.com/n24q02m/wet-mcp/commit/98748e951d7e1eaf2127114c797cbee6ffee49d1))
+
+- Add tests for chunk_llms_txt in docs ([#826](https://github.com/n24q02m/wet-mcp/pull/826),
+  [`b3abebb`](https://github.com/n24q02m/wet-mcp/commit/b3abebbce08507376a72509c51108ae58b3b8d93))
+
+- Add tests for chunk_markdown in docs ([#829](https://github.com/n24q02m/wet-mcp/pull/829),
+  [`0ec6d95`](https://github.com/n24q02m/wet-mcp/commit/0ec6d95a0ed11e11f3d79856a01682b37a273e12))
+
+- Add tests for get_model_capabilities in llm ([#836](https://github.com/n24q02m/wet-mcp/pull/836),
+  [`2441119`](https://github.com/n24q02m/wet-mcp/commit/24411194ceb45ffb686f07a9feb27ca79b2e3491))
+
+- Add tests for token management in token_store
+  ([#827](https://github.com/n24q02m/wet-mcp/pull/827),
+  [`bf9ed1a`](https://github.com/n24q02m/wet-mcp/commit/bf9ed1ae94d196ecc6ceef670e0bf88f1c2a6ce0))
+
+- Apply ruff format to db.py and test_docs_coverage.py
+  ([`c7172a8`](https://github.com/n24q02m/wet-mcp/commit/c7172a8b15bf78d6c326f19db45bcfbe85e940fe))
+
+- Auto-open default browser at Google device-code URL
+  ([`6f6c539`](https://github.com/n24q02m/wet-mcp/commit/6f6c539591cab16911de25f4c37afc4a95acd41b))
+
+- Bump authlib + gdown + langsmith + pytest + python-multipart
+  ([`e46a1ca`](https://github.com/n24q02m/wet-mcp/commit/e46a1ca25c432397b438aaf6f55ad3cb1801c591))
+
+- Bump n24q02m-mcp-core to >=1.0.0 stable
+  ([`15ed8ce`](https://github.com/n24q02m/wet-mcp/commit/15ed8cec8fb739f1faf8bca22c5daa1fcce7f11f))
+
+- Clean up debug logging for GDrive callback
+  ([`c2b67ef`](https://github.com/n24q02m/wet-mcp/commit/c2b67efd465421bb480ab8be6bff5dad454679da))
+
+- Correct README setup tool actions and config tool description
+  ([`d265506`](https://github.com/n24q02m/wet-mcp/commit/d265506b9b8c6ee6625cfd900e2af213d4c7b549))
+
+- Correct relay schema capability info for search and extraction
+  ([`c552daa`](https://github.com/n24q02m/wet-mcp/commit/c552daae9b6e65d064fdfa3b5485c45389fdd3da))
+
+- Cover _gdrive_token_poll and credential_state edge paths
+  ([`dad75ec`](https://github.com/n24q02m/wet-mcp/commit/dad75ecb1f7d6aeb5784377c92377da305525118))
+
+- Cover try_open_browser paths + drop local uv.sources override
+  ([`36d2479`](https://github.com/n24q02m/wet-mcp/commit/36d24798266acc7a088a117d33016e959b4f8648))
+
+- Do not auto-open browser from background sync loop
+  ([`ee48db9`](https://github.com/n24q02m/wet-mcp/commit/ee48db9861077697443db6f82c11729880e4bb4b))
+
+- Ensure chunk_llms_txt test content forces multi-chunk split
+  ([`2b4b80c`](https://github.com/n24q02m/wet-mcp/commit/2b4b80c626b638bcfd1dc94224306ac97c6be93f))
+
+- Ignore coverage.xml and htmlcov artifacts
+  ([`0b16f3c`](https://github.com/n24q02m/wet-mcp/commit/0b16f3c0cc29c692585d544d08900a9f3734ad36))
+
+- Linting issues in tests/test_setup_tool_logging.py
+  ([#778](https://github.com/n24q02m/wet-mcp/pull/778),
+  [`9982527`](https://github.com/n24q02m/wet-mcp/commit/998252769eb0eb7a77eb245ccb062bdb35d643b2))
+
+- MacOS CI test failures (hardcoded /tmp + sqlite-vec extension)
+  ([`f43d400`](https://github.com/n24q02m/wet-mcp/commit/f43d40052e62afdbabd13ba12ba05e3fbdb08933))
+
+- N+1 query in document prefetching via row-value IN
+  ([`e51b17e`](https://github.com/n24q02m/wet-mcp/commit/e51b17e56be81986d7ec56689000d74582747c32))
+
+- Patch langchain-core CVE-2026-40087 and cryptography CVE-2026-39892
+  ([`b3a80a6`](https://github.com/n24q02m/wet-mcp/commit/b3a80a6c62cd3ae7c72376cf44295589453c2502))
+
+- Remove unused _AUDIO_OUTPUT_MODELS import
+  ([`b994e23`](https://github.com/n24q02m/wet-mcp/commit/b994e2308df5b33006683fad51eaf02fd0451760))
+
+- Retry GDrive folder search before creating to prevent duplicates
+  ([`a034bfb`](https://github.com/n24q02m/wet-mcp/commit/a034bfbbd4a6b7dab5a350e9e1690aa8e6984547))
+
+- Revert GDrive scope to drive.file (drive.appdata incompatible with device code flow)
+  ([`134c028`](https://github.com/n24q02m/wet-mcp/commit/134c02844d260e4cfd8ae6b2455a19dfc3154d6a))
+
+- Simplify run_http to use run_local_server with setup_complete_hook
+  ([`7093cb9`](https://github.com/n24q02m/wet-mcp/commit/7093cb9704ba29b8714d645c42daf5c58dce03e8))
+
+- Sync local changes from workspace
+  ([`3329320`](https://github.com/n24q02m/wet-mcp/commit/3329320c8236c5d4e1d58765e2132115248e11e3))
+
+- Tighten _is_unsupported_param pattern and document reranker sync gap
+  ([`9c721db`](https://github.com/n24q02m/wet-mcp/commit/9c721db9c81c5ed2a6b97a8f406e41e625dd7f08))
+
+- Unblock main branch CI (lint+type+test cascade from async embedder migration)
+  ([`811e9d1`](https://github.com/n24q02m/wet-mcp/commit/811e9d18bf11f9e12076d87bc84f46af00a6ef41))
+
+- Update docker/build-push-action digest to bcafcac
+  ([`8b70385`](https://github.com/n24q02m/wet-mcp/commit/8b703859aaea8c1f330fcaf30dd681c021064e12))
+
+- Update non-major dependencies
+  ([`f823d95`](https://github.com/n24q02m/wet-mcp/commit/f823d95c84bbd5dcad96380cfa4d6b40b8d4f6c4))
+
+- Update python:3.13-slim-bookworm docker digest to 061b6e5
+  ([`f790a1e`](https://github.com/n24q02m/wet-mcp/commit/f790a1e30c41350eac90bf9afba5dbc1d65d5fbd))
+
+- Use re.finditer with early break in chunk quality score
+  ([`61bead5`](https://github.com/n24q02m/wet-mcp/commit/61bead5c387bd5f81f4b35c42c0f55641c370857))
+
+- **deps**: Bump actions/create-github-app-token digest to 1b10c78
+  ([#852](https://github.com/n24q02m/wet-mcp/pull/852),
+  [`b3f9090`](https://github.com/n24q02m/wet-mcp/commit/b3f9090cbc435e0260a896be3f6b3ec79c3fdb34))
+
+- **deps**: Bump actions/upload-artifact digest to 043fb46
+  ([#853](https://github.com/n24q02m/wet-mcp/pull/853),
+  [`f95205a`](https://github.com/n24q02m/wet-mcp/commit/f95205aacbab286529c61690c12b779773971b64))
+
+- **deps**: Bump cohere to v6 ([#854](https://github.com/n24q02m/wet-mcp/pull/854),
+  [`6fb76c7`](https://github.com/n24q02m/wet-mcp/commit/6fb76c7dd2615e412914c4478c58e9816cc0ffc7))
+
+- **deps**: Bump step-security/harden-runner digest to 6c3c2f2
+  ([#842](https://github.com/n24q02m/wet-mcp/pull/842),
+  [`869e754`](https://github.com/n24q02m/wet-mcp/commit/869e75442610000f7cd68724532d523aa45adcb7))
+
+### Chores
+
+- Acknowledge PR closure and finalize cleanup task
+  ([#776](https://github.com/n24q02m/wet-mcp/pull/776),
+  [`b3a1133`](https://github.com/n24q02m/wet-mcp/commit/b3a113335ab6b2212e6205be0d7f0279170b51c9))
+
+- Acknowledge PR closure and stop work ([#775](https://github.com/n24q02m/wet-mcp/pull/775),
+  [`1cc7b78`](https://github.com/n24q02m/wet-mcp/commit/1cc7b78408ff98fad93ef6434cbb15be0f1427c9))
+
+- Add logging to broad exception catches in credential_state.py
+  ([#776](https://github.com/n24q02m/wet-mcp/pull/776),
+  [`b3a1133`](https://github.com/n24q02m/wet-mcp/commit/b3a113335ab6b2212e6205be0d7f0279170b51c9))
+
+- Final state after PR closure acknowledgement ([#778](https://github.com/n24q02m/wet-mcp/pull/778),
+  [`9982527`](https://github.com/n24q02m/wet-mcp/commit/998252769eb0eb7a77eb245ccb062bdb35d643b2))
+
+### Features
+
+- Add cross-OS CI matrix (ubuntu/windows/macos)
+  ([`d1acd98`](https://github.com/n24q02m/wet-mcp/commit/d1acd98dbd87c41b0d2acf42549a7c44a5f2063d))
+
+- Add GDrive device code flow to local OAuth and fix Jina helpText
+  ([`6d591d9`](https://github.com/n24q02m/wet-mcp/commit/6d591d94a814333fd26d3f6876863ab34e81531c))
+
+- Add HTTP transport with local OAuth AS, replace stdio default
+  ([`e9b9bed`](https://github.com/n24q02m/wet-mcp/commit/e9b9bed035d455a21cdc880a2fc36f026063285d))
+
+- Add HTTP+OAuth E2E test to unified test file
+  ([`e397970`](https://github.com/n24q02m/wet-mcp/commit/e397970e81289ed58e1dc9364ae4d55534ae8663))
+
+- Add tests for set_gdrive_complete_callback registration
+  ([`d9f7af4`](https://github.com/n24q02m/wet-mcp/commit/d9f7af488b1a7994d1ccdecce3e73d24472b3b43))
+
+- Hoist auth error patterns tuple to module scope in reranker
+  ([`e3f7338`](https://github.com/n24q02m/wet-mcp/commit/e3f7338b329feffa202072f65b939cde52ee11b7))
+
+- Migrate from mcp-relay-core to mcp-core
+  ([`2efc8d0`](https://github.com/n24q02m/wet-mcp/commit/2efc8d09a8ad8f1405fb074a3fbff6a41c00cb0f))
+
+- Migrate GDrive sync from drive.file to drive.appdata scope
+  ([`1e25f17`](https://github.com/n24q02m/wet-mcp/commit/1e25f17a1e6a6eb65f84bf54ea6477667d5febea))
+
+- Wire GDrive completion callback to form status polling
+  ([`eb4980e`](https://github.com/n24q02m/wet-mcp/commit/eb4980ea551e8fd04ad375f27ed411deb5e86270))
 
 ### Performance Improvements
 
-* apply async optimizations from merged PRs ([36b3084](https://github.com/n24q02m/wet-mcp/commit/36b3084f6846763b7f06f771fe2754baf14803bf))
+- Finalize async embedding backend conversion ([#775](https://github.com/n24q02m/wet-mcp/pull/775),
+  [`1cc7b78`](https://github.com/n24q02m/wet-mcp/commit/1cc7b78408ff98fad93ef6434cbb15be0f1427c9))
 
+- Optimize dictionary scoring union in `db.py` ([#815](https://github.com/n24q02m/wet-mcp/pull/815),
+  [`2138166`](https://github.com/n24q02m/wet-mcp/commit/21381661e69db828750c54bd22924ee174fc7459))
+
+- Replace blocking time.sleep with asyncio.sleep in embedder
+  ([#775](https://github.com/n24q02m/wet-mcp/pull/775),
+  [`1cc7b78`](https://github.com/n24q02m/wet-mcp/commit/1cc7b78408ff98fad93ef6434cbb15be0f1427c9))
+
+### Refactoring
+
+- Improve visibility of broad exception catches in credential_state.py
+  ([#776](https://github.com/n24q02m/wet-mcp/pull/776),
+  [`b3a1133`](https://github.com/n24q02m/wet-mcp/commit/b3a113335ab6b2212e6205be0d7f0279170b51c9))
+
+- Log broad exceptions in _validate_cloud_models
+  ([#778](https://github.com/n24q02m/wet-mcp/pull/778),
+  [`9982527`](https://github.com/n24q02m/wet-mcp/commit/998252769eb0eb7a77eb245ccb062bdb35d643b2))
+
+- Log broad exceptions in _validate_cloud_models (ready for review)
+  ([#778](https://github.com/n24q02m/wet-mcp/pull/778),
+  [`9982527`](https://github.com/n24q02m/wet-mcp/commit/998252769eb0eb7a77eb245ccb062bdb35d643b2))
+
+- **server**: Narrow exception handling and add logging in tool JSON formatting
+  ([#812](https://github.com/n24q02m/wet-mcp/pull/812),
+  [`cfb9799`](https://github.com/n24q02m/wet-mcp/commit/cfb979943d7db10cec88821acfe3bc46ee45bcd0))
+
+- **server**: Narrow exception handling in media.analyze
+  ([#812](https://github.com/n24q02m/wet-mcp/pull/812),
+  [`cfb9799`](https://github.com/n24q02m/wet-mcp/commit/cfb979943d7db10cec88821acfe3bc46ee45bcd0))
+
+
+## v2.24.0 (2026-04-07)
+
+### Bug Fixes
+
+- Add tests for credential state relay and structured extraction coverage gaps
+  ([`0f39b1f`](https://github.com/n24q02m/wet-mcp/commit/0f39b1f6bcc287468bf751b01be2d5eeb1282e1d))
+
+- Pin web-core >= 1.1.0 for SearXNG brand section fix
+  ([`a8932ed`](https://github.com/n24q02m/wet-mcp/commit/a8932ed7c92b36030753f694c20b783bd9e9670d))
+
+- Remove BETA markers and promote relay as primary setup method
+  ([`993fc7c`](https://github.com/n24q02m/wet-mcp/commit/993fc7c9fd0f19a2ecee30ef0a6f10c42173fb1a))
+
+- Set UV_NO_SOURCES env for entire CI lint-and-test job
+  ([`df8659a`](https://github.com/n24q02m/wet-mcp/commit/df8659ac9a2f7b0ea3d391667094ecd1289c5547))
+
+- Use --no-sources in CI to resolve mcp-relay-core from PyPI
+  ([`9ee083b`](https://github.com/n24q02m/wet-mcp/commit/9ee083b7573ad8cb7800fd7cecacf8c697c240ab))
+
+### Features
+
+- Migrate code review from Qodo to CodeRabbit ([#756](https://github.com/n24q02m/wet-mcp/pull/756),
+  [`cb1e42f`](https://github.com/n24q02m/wet-mcp/commit/cb1e42f95fd57ddc5e2bd56fe2e8fcdaa375b203))
+
+
+## v2.23.5-beta.3 (2026-04-07)
+
+### Bug Fixes
+
+- Preserve regenerated uv.lock after COPY in Docker build
+  ([`3077ad3`](https://github.com/n24q02m/wet-mcp/commit/3077ad303b2c20dd210b72e41c106caed39d6219))
+
+
+## v2.23.5-beta.2 (2026-04-07)
+
+### Bug Fixes
+
+- Persist GDrive folder ID to prevent duplicate folder creation
+  ([`2ffa4ac`](https://github.com/n24q02m/wet-mcp/commit/2ffa4acdee4a630e1654fd66b5fd946194f6daf8))
+
+- Strip uv sources override in Docker build for PyPI resolution
+  ([`7c9e087`](https://github.com/n24q02m/wet-mcp/commit/7c9e087576271903e0ab7e61fea9b701c51e8e76))
+
+
+## v2.23.5-beta.1 (2026-04-07)
+
+### Bug Fixes
+
+- Use --no-sources in Docker build for PyPI dependency resolution
+  ([`44698d6`](https://github.com/n24q02m/wet-mcp/commit/44698d67e8c3177ed032e1957ea6fbd904845b04))
+
+
+## v2.23.4 (2026-04-07)
+
+### Bug Fixes
+
+- Disable SearXNG auto-start on Windows
+  ([`8b7c588`](https://github.com/n24q02m/wet-mcp/commit/8b7c5880fb0e3e84772de61e1034b44ba5009b51))
+
+
+## v2.23.3 (2026-04-07)
+
+### Bug Fixes
+
+- Re-init embedding and reranker in setup complete action
+  ([`42e70e2`](https://github.com/n24q02m/wet-mcp/commit/42e70e27cc2d24037dd732149d4817f05719f63c))
+
+
+## v2.23.2 (2026-04-06)
+
+### Bug Fixes
+
+- Share cloud keys to peer servers when loading from config on startup
+  ([`cb48897`](https://github.com/n24q02m/wet-mcp/commit/cb488971cb7f5d2e671341f40404a83f9110cb16))
+
+
+## v2.23.1 (2026-04-06)
+
+### Bug Fixes
+
+- Send complete message to browser after relay and trigger GDrive OAuth
+  ([`0bcdae9`](https://github.com/n24q02m/wet-mcp/commit/0bcdae9ba651057fffde312abe3d93f73fd91369))
+
+
+## v2.23.0 (2026-04-06)
+
+### Features
+
+- Remove set_env action and auto-fallback from wet-mcp credential flow
+  ([`41f39ff`](https://github.com/n24q02m/wet-mcp/commit/41f39ff2ebc24d7c47946e65e2048032f7148b5b))
+
+
+## v2.22.0 (2026-04-06)
+
+### Bug Fixes
+
+- Add complete action and lazy setup hints in cloud tools
+  ([`bdb6bac`](https://github.com/n24q02m/wet-mcp/commit/bdb6bac85745938f3a4800d2edc20ae01bd457d0))
+
+- Mark relay as BETA, promote env vars as primary setup method
+  ([`52d3ff9`](https://github.com/n24q02m/wet-mcp/commit/52d3ff938f96eb7a07bc946e2e74cd92ee49b2c7))
+
+### Features
+
+- Non-blocking relay with state machine and lazy trigger
+  ([`f40ee6b`](https://github.com/n24q02m/wet-mcp/commit/f40ee6b2af411ab433d9a85aa90aacab0601ffca))
+
+
+## v2.21.0 (2026-04-04)
+
+### Bug Fixes
+
+- Remove dead code (research_topic prompt, trigger_relay_setup)
+  ([#710](https://github.com/n24q02m/wet-mcp/pull/710),
+  [`2b19d52`](https://github.com/n24q02m/wet-mcp/commit/2b19d5228d92aad5a29805ad0d1ceb29969f1bf3))
+
+- Remove exposed model name from setup guide
+  ([`18e1ff5`](https://github.com/n24q02m/wet-mcp/commit/18e1ff5e137f36bdd048d1fdb95c4acfaca162eb))
+
+### Features
+
+- Add agent/manual setup guides, simplify README, cleanup root
+  ([`51fbaa7`](https://github.com/n24q02m/wet-mcp/commit/51fbaa76d918983391ea83986c6d11ac26847150))
+
+
+## v2.20.1 (2026-04-03)
+
+### Bug Fixes
+
+- Consolidated Jules PR review -- perf, cleanup, deps, docs
+  ([#670](https://github.com/n24q02m/wet-mcp/pull/670),
+  [`0d5b9c1`](https://github.com/n24q02m/wet-mcp/commit/0d5b9c1500d223a6b175692c93e54ba8a74dca72))
+
+- Scope marketplace sync token to claude-plugins repo
+  ([`4081f16`](https://github.com/n24q02m/wet-mcp/commit/4081f16ef87ce7443729d4f631ba1bc46aed570a))
+
+
+## v2.20.0 (2026-04-03)
+
+### Features
+
+- Remove deprecated Gemini CLI extension support
+  ([`e8d1ba0`](https://github.com/n24q02m/wet-mcp/commit/e8d1ba06061a3234dc5853ef260a6fa6a53efa5c))
+
+
+## v2.20.0-beta.1 (2026-04-03)
+
+### Bug Fixes
+
+- Also mock ensure_searxng to prevent SearXNG auto-start in tests
+  ([#612](https://github.com/n24q02m/wet-mcp/pull/612),
+  [`e792441`](https://github.com/n24q02m/wet-mcp/commit/e7924419160e15e243f51f70a09e2bcfa56f175f))
+
+- Mock _background_index_and_search in docs search tests
+  ([#612](https://github.com/n24q02m/wet-mcp/pull/612),
+  [`e792441`](https://github.com/n24q02m/wet-mcp/commit/e7924419160e15e243f51f70a09e2bcfa56f175f))
+
+- Mock _discover_docs_url to prevent SearXNG startup in tests
+  ([#612](https://github.com/n24q02m/wet-mcp/pull/612),
+  [`e792441`](https://github.com/n24q02m/wet-mcp/commit/e7924419160e15e243f51f70a09e2bcfa56f175f))
+
+- Relay setup, E2E infrastructure, and Windows test compatibility
+  ([#669](https://github.com/n24q02m/wet-mcp/pull/669),
+  [`7063289`](https://github.com/n24q02m/wet-mcp/commit/7063289b3ecffe993b3efc41824c30e979f22696))
+
+- Resolve Windows test compatibility issues ([#612](https://github.com/n24q02m/wet-mcp/pull/612),
+  [`e792441`](https://github.com/n24q02m/wet-mcp/commit/e7924419160e15e243f51f70a09e2bcfa56f175f))
+
+- Switch mcp-relay-core from git dep to published PyPI package
+  ([#669](https://github.com/n24q02m/wet-mcp/pull/669),
+  [`7063289`](https://github.com/n24q02m/wet-mcp/commit/7063289b3ecffe993b3efc41824c30e979f22696))
+
+### Features
+
+- Add E2E tests + migrate sync from rclone to GDrive OAuth
+  ([#669](https://github.com/n24q02m/wet-mcp/pull/669),
+  [`7063289`](https://github.com/n24q02m/wet-mcp/commit/7063289b3ecffe993b3efc41824c30e979f22696))
+
+- Add zero-env-config relay setup via mcp-relay-core
+  ([#669](https://github.com/n24q02m/wet-mcp/pull/669),
+  [`7063289`](https://github.com/n24q02m/wet-mcp/commit/7063289b3ecffe993b3efc41824c30e979f22696))
+
+- Delegate SearXNG, HTTP security, and search to web-core
+  ([#612](https://github.com/n24q02m/wet-mcp/pull/612),
+  [`e792441`](https://github.com/n24q02m/wet-mcp/commit/e7924419160e15e243f51f70a09e2bcfa56f175f))
+
+- E2E testing + relay setup + GDrive OAuth migration
+  ([#669](https://github.com/n24q02m/wet-mcp/pull/669),
+  [`7063289`](https://github.com/n24q02m/wet-mcp/commit/7063289b3ecffe993b3efc41824c30e979f22696))
+
+### Refactoring
+
+- Delegate SearXNG, HTTP security, and search to web-core
+  ([#612](https://github.com/n24q02m/wet-mcp/pull/612),
+  [`e792441`](https://github.com/n24q02m/wet-mcp/commit/e7924419160e15e243f51f70a09e2bcfa56f175f))
+
+
+## v2.19.0 (2026-04-01)
+
+### Bug Fixes
+
+- Correct CodeQL action SHA pin
+  ([`07fc6eb`](https://github.com/n24q02m/wet-mcp/commit/07fc6eba687956bc27d120b2f1bd63844702e43c))
+
+- Correct test mocking for relay settings and platform-specific tests
+  ([`ed98b84`](https://github.com/n24q02m/wet-mcp/commit/ed98b84cd69cdf6c7013de344b121246c0b8b3c6))
+
+- Format relay_setup.py
+  ([`df068be`](https://github.com/n24q02m/wet-mcp/commit/df068be4dd282136ae5da3fc59e6a8d0b07c39aa))
+
+- Prevent env var leakage in relay setup tests
+  ([`33b73fe`](https://github.com/n24q02m/wet-mcp/commit/33b73fec601b161ea8e3f1e72527e9e14fdebc46))
+
+- Remove GOOGLE_DRIVE_CLIENT_ID from relay form
+  ([`94ce50b`](https://github.com/n24q02m/wet-mcp/commit/94ce50bf41e049af080b8a73e0f76dc7ca095fcc))
+
+- Send complete message AFTER GDrive OAuth, not before
+  ([`809a417`](https://github.com/n24q02m/wet-mcp/commit/809a4175ecd5649f5685644db628b7d4cb74b34a))
+
+- Trigger GDrive OAuth from default settings, not relay config
+  ([`9024faf`](https://github.com/n24q02m/wet-mcp/commit/9024fafa1b3a8f5e17b191e8db6854fa6f2b54a4))
+
+- **ci**: Add coverage threshold fail_under=95
+  ([`d59b080`](https://github.com/n24q02m/wet-mcp/commit/d59b080ef7500aa4e1b535821eb8ab3903dd17ce))
+
+- **ci**: Replace Semgrep with CodeQL for public repo SAST compliance
+  ([`4a722e0`](https://github.com/n24q02m/wet-mcp/commit/4a722e0420d44b530557d6e5976015e4d9318ac7))
+
+- **test**: Update relay schema tests for flat fields structure
+  ([`cabfca0`](https://github.com/n24q02m/wet-mcp/commit/cabfca0ebf8b866bc5e7b9a7f60ebffe6c6a7cf6))
+
+### Chores
+
+- **deps**: Lock file maintenance ([#601](https://github.com/n24q02m/wet-mcp/pull/601),
+  [`8966070`](https://github.com/n24q02m/wet-mcp/commit/8966070d066acf540819099f4b583cdc48bf7710))
+
+### Continuous Integration
+
+- Fix Qodo vertex_ai config and VERTEXAI_LOCATION
+  ([`824bcb8`](https://github.com/n24q02m/wet-mcp/commit/824bcb81d9e0984f082d13b6869548b0a5b62b4b))
+
+- **cd**: Add plugin marketplace sync on stable release
+  ([`e203f86`](https://github.com/n24q02m/wet-mcp/commit/e203f863c76ed9422596238acc1ab1832b58ca41))
+
+### Features
+
+- Add GDrive OAuth client_secret for Device Code token exchange
+  ([`9ff4fcc`](https://github.com/n24q02m/wet-mcp/commit/9ff4fcc6d76e86ba43eb7663fabb84e42cdaabcf))
+
+- Boost test coverage to 95%+ with comprehensive unit tests
+  ([`5a04b7d`](https://github.com/n24q02m/wet-mcp/commit/5a04b7da41c21020e0d20595c6c338a9e9f3def7))
+
+- Ship default GDrive OAuth Client ID
+  ([`a9d9c9b`](https://github.com/n24q02m/wet-mcp/commit/a9d9c9b3b7b533962026f05c88e3be5fc2518455))
+
+
+## v2.19.0-beta.1 (2026-03-31)
+
+### Bug Fixes
+
+- Correct OpenAI helpText to include LLM capability
+  ([`cac4ff1`](https://github.com/n24q02m/wet-mcp/commit/cac4ff1a98de740a69a630966cc588771280f1ec))
+
+- Correct relay timeout message from 30s to actual 120s
+  ([`f82afe1`](https://github.com/n24q02m/wet-mcp/commit/f82afe10806b0f231154867e565cf790c1dcf52d))
+
+### Features
+
+- Enable GDrive sync by default
+  ([`25b0b53`](https://github.com/n24q02m/wet-mcp/commit/25b0b531d2cbed9c7a627d79c45ffb7d240aa621))
+
+- Redesign relay schema with capability-based layout and priority info
+  ([`c298266`](https://github.com/n24q02m/wet-mcp/commit/c298266f5fac5a7eb74503d5ec973d083034616e))
+
+- Trigger GDrive OAuth Device Code after relay config submit
+  ([`f53b384`](https://github.com/n24q02m/wet-mcp/commit/f53b384e3d421446d87025ef10d314f8f30d205d))
+
+### Refactoring
+
+- Use google_drive_client_id check instead of sync_enabled guard
+  ([`a93d64a`](https://github.com/n24q02m/wet-mcp/commit/a93d64a8e343e559440af0797d96b4e89c159938))
+
+
+## v2.18.2-beta.2 (2026-03-31)
+
+### Bug Fixes
+
+- Use waitress WSGI server on Windows to prevent SearXNG deadlock
+  ([`6de3899`](https://github.com/n24q02m/wet-mcp/commit/6de3899af26385549068601207e7b6c0e65a5b29))
+
+
+## v2.18.2-beta.1 (2026-03-30)
+
+### Bug Fixes
+
+- Resolve SearXNG search timeout on Windows due to stderr pipe deadlock
+  ([`4d404a1`](https://github.com/n24q02m/wet-mcp/commit/4d404a17e7a693428323cae87dfe3e587a8269a9))
+
+- Resolve ty type check errors with proper ty: ignore comments
+  ([`34f4313`](https://github.com/n24q02m/wet-mcp/commit/34f43134414e7f6f1d4e7df0aef85c96e6546c5d))
+
+### Refactoring
+
+- Merge setup tool into config tool
+  ([`df17ef1`](https://github.com/n24q02m/wet-mcp/commit/df17ef164da325ff841d5cbe53f7a6690ff737b6))
+
+- Merge setup tool into config tool
+  ([`b0ea5da`](https://github.com/n24q02m/wet-mcp/commit/b0ea5da079bd5ffbdf3378d59c6ea300828835eb))
+
+
+## v2.18.1 (2026-03-28)
+
+### Bug Fixes
+
+- Bump mcp-relay-core to >=1.0.5
+  ([`ad98179`](https://github.com/n24q02m/wet-mcp/commit/ad98179a4705d0d701290a51daa8e48988915a70))
+
+- Increase relay timeout from 30s to 120s
+  ([`57bd389`](https://github.com/n24q02m/wet-mcp/commit/57bd38902e3ad3af33acc4bfd1bc146f2dbf7b74))
+
+- Replace combined API_KEYS with individual provider keys in relay schema
+  ([`80049ec`](https://github.com/n24q02m/wet-mcp/commit/80049ec497ecffa1150c2fdf546ef3409e2ca853))
+
+- Use read_config instead of resolve_config for relay config loading
+  ([`7d6fb0d`](https://github.com/n24q02m/wet-mcp/commit/7d6fb0d72a057b5472b8aeb4eaaadf489a9a83ff))
+
+- **deps**: Update non-major dependencies ([#595](https://github.com/n24q02m/wet-mcp/pull/595),
+  [`064f9a2`](https://github.com/n24q02m/wet-mcp/commit/064f9a215b7194a69797df49030f2383855e8c9e))
+
+### Chores
+
+- **deps**: Lock file maintenance ([#598](https://github.com/n24q02m/wet-mcp/pull/598),
+  [`018039a`](https://github.com/n24q02m/wet-mcp/commit/018039a0148e2fe4dd4fc6e7a5f4b0e41cb3827d))
+
+- **deps**: Update actions/create-github-app-token action to v3
+  ([#596](https://github.com/n24q02m/wet-mcp/pull/596),
+  [`c2694e8`](https://github.com/n24q02m/wet-mcp/commit/c2694e8f4c163c50ed99673178a86aefea9a7f07))
+
+- **deps**: Update google-github-actions/auth action to v3
+  ([#597](https://github.com/n24q02m/wet-mcp/pull/597),
+  [`6dcf9d8`](https://github.com/n24q02m/wet-mcp/commit/6dcf9d817c80c3e6c5456dade622e88a02b040c2))
 
 ### Documentation
 
-* chuẩn hóa repo cho public opensource ([0214974](https://github.com/n24q02m/wet-mcp/commit/021497451fa744ef864214d39be82095555f6bb8))
+- Fix stale addopts, sync lib, and relay schema mode in CLAUDE.md
+  ([`ae0dd1a`](https://github.com/n24q02m/wet-mcp/commit/ae0dd1af23e85cde2101771609e22740ea142617))
 
-## [2.1.4-beta.3](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.2...v2.1.4-beta.3) (2026-02-05)
+- Fix stale rclone reference in AGENTS.md
+  ([`414e806`](https://github.com/n24q02m/wet-mcp/commit/414e806e478b7edfd55aed5a721246fb93461e17))
 
+- Update CLAUDE.md with missing modules and Google Drive sync
+  ([`cb82c65`](https://github.com/n24q02m/wet-mcp/commit/cb82c65e41449c96c84d1710aa13b3231f3f5ed7))
+
+### Testing
+
+- Update relay schema and config tests for cloud mode refactor
+  ([`29bdc60`](https://github.com/n24q02m/wet-mcp/commit/29bdc60a5d8b659e824cb205b07fdb1318a60e43))
+
+
+## v2.18.0 (2026-03-27)
 
 ### Bug Fixes
 
-* **cd:** checkout main branch for PR merge release ([5247100](https://github.com/n24q02m/wet-mcp/commit/524710028b2b25e6dff0393a0ace067abffc3054))
+- Resolve ty type check errors in relay_setup
+  ([`40095b2`](https://github.com/n24q02m/wet-mcp/commit/40095b2f0706e8b039014b48a9da8651008b5584))
 
-## [2.1.4-beta.2](https://github.com/n24q02m/wet-mcp/compare/v2.1.4-beta.1...v2.1.4-beta.2) (2026-02-05)
+- Send complete message to relay page after config saved
+  ([`6fc72ce`](https://github.com/n24q02m/wet-mcp/commit/6fc72ce42fcfcc16170afad261403dacf2e74da8))
 
+- **ci**: Consolidate SMTP_USERNAME and NOTIFY_EMAIL into one secret
+  ([`cf38557`](https://github.com/n24q02m/wet-mcp/commit/cf38557ec97c53b7723faf38bd9f1d3f883af898))
+
+- **ci**: Consolidate SMTP_USERNAME+PASSWORD into SMTP_CREDENTIAL
+  ([`5a42f50`](https://github.com/n24q02m/wet-mcp/commit/5a42f50e78d8bf9fd0eb6e8fb23cc5c32b59d9e3))
+
+- **tests**: Remove LiteLLM proxy mode from relay schema and fix test mocks
+  ([`676529d`](https://github.com/n24q02m/wet-mcp/commit/676529d30d2891e44c0b158d966ee0f57779e9c0))
+
+### Code Style
+
+- Format sync test file
+  ([`f859534`](https://github.com/n24q02m/wet-mcp/commit/f85953413c9cd361fbc78974c27223591c6c55e9))
+
+### Features
+
+- Replace rclone with Google Drive API for sync
+  ([`50b1bc2`](https://github.com/n24q02m/wet-mcp/commit/50b1bc2d9f98b6866aa42ce083a7920ad24746c7))
+
+
+## v2.18.0-beta.1 (2026-03-27)
 
 ### Bug Fixes
 
-* trigger cd ([b825a4c](https://github.com/n24q02m/wet-mcp/commit/b825a4c63ce521c6e4e3fcf657ff088995e3c6be))
+- Credential resolution order -- relay only when no local credentials
+  ([`cfbc9c3`](https://github.com/n24q02m/wet-mcp/commit/cfbc9c3de1d9d86e0e3452d5c43c1f802fdc0c60))
 
-## [2.1.4-beta.1](https://github.com/n24q02m/wet-mcp/compare/v2.1.3...v2.1.4-beta.1) (2026-02-05)
+- Disable HTTP/2 for embedded SearXNG on Windows
+  ([`b304f78`](https://github.com/n24q02m/wet-mcp/commit/b304f78755666786ed6b50bb9497aae17c7caaaa))
 
+- Pin Docker base images to SHA digests
+  ([`a60cc96`](https://github.com/n24q02m/wet-mcp/commit/a60cc96687bcbfaca18bcfa31f1f6f24440e95d1))
+
+- Pin pre-commit hooks to commit SHA
+  ([`87326a0`](https://github.com/n24q02m/wet-mcp/commit/87326a00e177aa25b06e32d391152aef356f96cb))
+
+- Prevent arbitrary file read in local file conversion tool
+  ([#586](https://github.com/n24q02m/wet-mcp/pull/586),
+  [`07a521f`](https://github.com/n24q02m/wet-mcp/commit/07a521ffab7d3c7358e2f3c6449b729c700ee01c))
+
+- **cd**: Remove empty env blocks from OIDC migration
+  ([`f468cca`](https://github.com/n24q02m/wet-mcp/commit/f468cca450ac8424afc04b41d627f3e2b67fda5f))
+
+- **cd**: Replace GH_PAT with GitHub App installation token
+  ([`14223f5`](https://github.com/n24q02m/wet-mcp/commit/14223f59f4b4f12aa7e3342f02ef12fdcc8e6c87))
+
+- **cd**: Use PyPI OIDC trusted publishing instead of PYPI_TOKEN
+  ([`f65d77c`](https://github.com/n24q02m/wet-mcp/commit/f65d77c2c7ebe031dfb5bc9dbbfe35c3fc477353))
+
+- **ci**: Remove CODECOV_TOKEN, use tokenless upload
+  ([`a543996`](https://github.com/n24q02m/wet-mcp/commit/a5439961ac69b6173b718ffac06d34617c52303e))
+
+- **ci**: Use Vertex AI WIF instead of GEMINI_API_KEY for code review
+  ([`f752d11`](https://github.com/n24q02m/wet-mcp/commit/f752d118d4ddd1f55745aa1c098e03913ee03355))
+
+- **deps**: Update dependency openai to >=2.30.0
+  ([#591](https://github.com/n24q02m/wet-mcp/pull/591),
+  [`f8b75fe`](https://github.com/n24q02m/wet-mcp/commit/f8b75fe81f3893745d28d793afc9cdd68c559602))
+
+- **deps**: Update non-major dependencies ([#588](https://github.com/n24q02m/wet-mcp/pull/588),
+  [`4815487`](https://github.com/n24q02m/wet-mcp/commit/481548713ea2a8dfe729136982af58014cc5e709))
+
+### Chores
+
+- **deps**: Lock file maintenance ([#593](https://github.com/n24q02m/wet-mcp/pull/593),
+  [`c47866c`](https://github.com/n24q02m/wet-mcp/commit/c47866cfdb1442454c5bd3a184014fc7419be7e1))
+
+- **deps**: Update codecov/codecov-action action to v6
+  ([#592](https://github.com/n24q02m/wet-mcp/pull/592),
+  [`dc92bc8`](https://github.com/n24q02m/wet-mcp/commit/dc92bc8663c73c718639a586d4e69fa1d57fa312))
+
+### Features
+
+- Relay-first startup — always show relay URL
+  ([`27c9bb0`](https://github.com/n24q02m/wet-mcp/commit/27c9bb0b2c506146a6361da3996902dae43b4818))
+
+
+## v2.17.0 (2026-03-26)
+
+### Chores
+
+- Add server.json to PSR version_variables, sync version
+  ([`6b832a4`](https://github.com/n24q02m/wet-mcp/commit/6b832a40f391d305e0f248a0e938109af9ff5332))
+
+- Clean up plugin manifest for best practices
+  ([`695c2ef`](https://github.com/n24q02m/wet-mcp/commit/695c2efd29bd2372ebed2c06a8d1e73173a24b1d))
+
+### Documentation
+
+- Fix marketplace references, improve Gemini CLI extension config
+  ([`238df6d`](https://github.com/n24q02m/wet-mcp/commit/238df6d47953cd1c47e35a9412e51f31e318bf79))
+
+- Standardize README structure
+  ([`6fe9c36`](https://github.com/n24q02m/wet-mcp/commit/6fe9c36734c5f2a1d20bd85ba1f9d0cdfcd07974))
+
+
+## v2.17.0-beta.1 (2026-03-25)
+
+### Bug Fixes
+
+- Resolve ruff lint errors in relay setup files
+  ([#587](https://github.com/n24q02m/wet-mcp/pull/587),
+  [`8b16ee8`](https://github.com/n24q02m/wet-mcp/commit/8b16ee8c0af35cdb481dcd65e5e11f19f9183bfb))
+
+- Resolve ty type check errors in relay setup ([#587](https://github.com/n24q02m/wet-mcp/pull/587),
+  [`8b16ee8`](https://github.com/n24q02m/wet-mcp/commit/8b16ee8c0af35cdb481dcd65e5e11f19f9183bfb))
+
+- Switch mcp-relay-core from git dep to published PyPI package
+  ([#587](https://github.com/n24q02m/wet-mcp/pull/587),
+  [`8b16ee8`](https://github.com/n24q02m/wet-mcp/commit/8b16ee8c0af35cdb481dcd65e5e11f19f9183bfb))
+
+### Documentation
+
+- Add relay files to CLAUDE.md file structure
+  ([`d9ef8b9`](https://github.com/n24q02m/wet-mcp/commit/d9ef8b93ce51f78f0b98164aa06219463436aab4))
+
+- Add zero-config relay setup section to README
+  ([`01afdf7`](https://github.com/n24q02m/wet-mcp/commit/01afdf77293fd511f8d1ce296309f02f653456d0))
+
+### Features
+
+- Add zero-env-config relay setup via mcp-relay-core
+  ([#587](https://github.com/n24q02m/wet-mcp/pull/587),
+  [`8b16ee8`](https://github.com/n24q02m/wet-mcp/commit/8b16ee8c0af35cdb481dcd65e5e11f19f9183bfb))
+
+- Zero-env-config relay setup via mcp-relay-core
+  ([#587](https://github.com/n24q02m/wet-mcp/pull/587),
+  [`8b16ee8`](https://github.com/n24q02m/wet-mcp/commit/8b16ee8c0af35cdb481dcd65e5e11f19f9183bfb))
+
+
+## v2.16.0 (2026-03-25)
+
+### Bug Fixes
+
+- Add 'docs/' to .gitignore
+  ([`a687df3`](https://github.com/n24q02m/wet-mcp/commit/a687df30ad51e414165303b5460de7dc2fa62405))
+
+- Add .jules/ and JULES.md to gitignore
+  ([`b9fa8eb`](https://github.com/n24q02m/wet-mcp/commit/b9fa8eb0492b6cac636d685584f8796184f090c0))
+
+- Add CI status badge to README
+  ([`f462c39`](https://github.com/n24q02m/wet-mcp/commit/f462c39f2d847d69feebc784a76c74ef4b34b532))
+
+- Add difflib-based corrective errors for LLM call pass rate
+  ([`c6951c6`](https://github.com/n24q02m/wet-mcp/commit/c6951c6ca97abd08e5208e90493fbc24d1777bb1))
+
+- Add Docker LABEL and re-add OCI package for MCP Registry
+  ([`c7ceac3`](https://github.com/n24q02m/wet-mcp/commit/c7ceac30d543298df79f1aa1c63cd9c8f4aa221c))
+
+- Add expanduser() to download_dir path in analyze_media
+  ([`827298b`](https://github.com/n24q02m/wet-mcp/commit/827298b5d17295896e68dcde04f535567734a7da))
+
+- Add git installation in Dockerfile for SearXNG build system
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Add gitleaks secret detection to pre-commit hooks
+  ([`f01f8ad`](https://github.com/n24q02m/wet-mcp/commit/f01f8ad16a0a2b8180718452711a78732510ab89))
+
+- Add health check to fast path and kill stuck SearXNG processes
+  ([`e88833f`](https://github.com/n24q02m/wet-mcp/commit/e88833f617369237953e89a7bda284285240aa1d))
+
+- Add lxml>=6.0 direct dependency for Python 3.14 compatibility
+  ([`9660821`](https://github.com/n24q02m/wet-mcp/commit/9660821045524c0c52a347cf319111452fd7cc88))
+
+- Add mcp-name to README for MCP Registry ownership validation
+  ([`0d9ae02`](https://github.com/n24q02m/wet-mcp/commit/0d9ae02ea76dc2c5f35e826f022cd0b06e88d3ea))
+
+- Add missing DocsDB.stats() method for config status action
+  ([`3be120f`](https://github.com/n24q02m/wet-mcp/commit/3be120fe71083f1252b708aaa5b96bd134896e83))
+
+- Add prerelease versioning strategy to beta config
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Add Semgrep SAST scan to CI pipeline ([#528](https://github.com/n24q02m/wet-mcp/pull/528),
+  [`502db68`](https://github.com/n24q02m/wet-mcp/commit/502db68e2fb7a6141f361525c72d7e0aedc32097))
+
+- Add setup tool docs and README entry
+  ([`ba3929e`](https://github.com/n24q02m/wet-mcp/commit/ba3929e82ec1e00c8b585395823c0a02cd21561b))
+
+- Add sqlite-vec to local/gguf extras and update Docker tag in docs
+  ([`764b059`](https://github.com/n24q02m/wet-mcp/commit/764b05944ace5d63ba35558b421dc8be576bd95a))
+
+- Add sub-timeouts for docs search pipeline, expand benchmark to 300
+  ([`59836c8`](https://github.com/n24q02m/wet-mcp/commit/59836c8aae616b05250ee9b95888ad3f67990c70))
+
+- Add well-known docs for cross-ecosystem name collisions
+  ([`65281c4`](https://github.com/n24q02m/wet-mcp/commit/65281c4e02b96f21d9dec64d4cdb60637f90d961))
+
+- Align repo with skill audit findings
+  ([`54484b7`](https://github.com/n24q02m/wet-mcp/commit/54484b7b9ed654a5a8173d46982cf84ad9728c7c))
+
+- Apply ruff formatting to pass CI
+  ([`8ef3897`](https://github.com/n24q02m/wet-mcp/commit/8ef3897a653ed5e8ea8689d775953b10fba7345b))
+
+- Async SSRF hook for httpx 0.28+, improve docs discovery quality
+  ([`6d894da`](https://github.com/n24q02m/wet-mcp/commit/6d894da83a56f68d05e56b6c1ab9f27644f1e7f3))
+
+- Auto-sync plugin.json version via PSR
+  ([`583449f`](https://github.com/n24q02m/wet-mcp/commit/583449f866178b1fe4aa402850846d50018b6071))
+
+- Correct changelog descriptions for FTS5 search overhaul
+  ([`5a3e755`](https://github.com/n24q02m/wet-mcp/commit/5a3e75504a9dd6eab72f3b4e6e6f93e05c0a4776))
+
+- Correct cross-refs and use MCP JSON config format in docs
+  ([`0d53b5f`](https://github.com/n24q02m/wet-mcp/commit/0d53b5f704e6bcffe044267d45fc504167b59fe0))
+
+- Correct default embed model to gemini-embedding-001 for public repos
+  ([`65566c6`](https://github.com/n24q02m/wet-mcp/commit/65566c63c9258217f97842525a7d767fdb90b508))
+
+- Correct extract map max_pages default in docs and remove orphaned web.md
+  ([`1822c92`](https://github.com/n24q02m/wet-mcp/commit/1822c925c5264c37b80a7b6343dd392efb06f843))
+
+- Correct model identifiers to n24q02m/ namespace and bump qwen3-embed to v1.1.3
+  ([`59e2d18`](https://github.com/n24q02m/wet-mcp/commit/59e2d180c08be2d21326571d573d66fdff3116e9))
+
+- Correct MRL truncation, use query_embed, fix Docker Chromium
+  ([`4a800bc`](https://github.com/n24q02m/wet-mcp/commit/4a800bc642a2af835637425ea535eee5cdee02e0))
+
+- Correct plugin install commands per official docs
+  ([`6fe70a5`](https://github.com/n24q02m/wet-mcp/commit/6fe70a572e826426b3514052eeac5804a78ea43c))
+
+- Correct plugin packaging paths and marketplace schema
+  ([`6433f5e`](https://github.com/n24q02m/wet-mcp/commit/6433f5e3196e673b2bd43f02ba16d0876f838a72))
+
+- Correct Qodo PR Agent ignore_pr_authors config
+  ([`83b81b3`](https://github.com/n24q02m/wet-mcp/commit/83b81b3387e6b5bfa0593eb82ab561b7f2fa7b32))
+
+- Correct README action names and parameter references
+  ([`e4e6758`](https://github.com/n24q02m/wet-mcp/commit/e4e6758e1d89bcb7e96d9f27bf8f7b69eda225f6))
+
+- Correct test assertion for gemini-embedding-001 model
+  ([`96d7ef9`](https://github.com/n24q02m/wet-mcp/commit/96d7ef9dfae1be29c3670238a9384cb3c6c9543e))
+
+- Correct type annotation in test_stdio.py for ty check
+  ([`2b0dbfa`](https://github.com/n24q02m/wet-mcp/commit/2b0dbfa0c1e456365e7386f31c736ccdad0d0a9b))
+
+- Delete .jules directory
+  ([`dcff6eb`](https://github.com/n24q02m/wet-mcp/commit/dcff6eb84cddc603baeea10141964de907e85754))
+
+- Delete .vscode directory
+  ([`99c529e`](https://github.com/n24q02m/wet-mcp/commit/99c529e974397921bbc32ca51196b114ef5c8850))
+
+- Delete docs/superpowers directory
+  ([`3543caa`](https://github.com/n24q02m/wet-mcp/commit/3543caa98071eea324ccd882b52437f26fef4b93))
+
+- Detect zombie SearXNG process and cleanup stale discovery file
+  ([`13a68c2`](https://github.com/n24q02m/wet-mcp/commit/13a68c2df4b671df86b09e8aaeafee0ae28e8940))
+
+- Disable mise runtime updates in Renovate
+  ([`600b4b9`](https://github.com/n24q02m/wet-mcp/commit/600b4b9baf211ad3383104ce487d3c99fee3f277))
+
+- Disable Python version upgrades in Renovate
+  ([`ab73a3e`](https://github.com/n24q02m/wet-mcp/commit/ab73a3e6ec8a17e5e3c4691935cc7d5863a5f3a8))
+
+- Exclude Python 3.7 compat rule from Semgrep scan
+  ([`26f284f`](https://github.com/n24q02m/wet-mcp/commit/26f284f76f8c6ebf7f6b15e6bd0d32211dcf416e))
+
+- Fix N+1 query in vector search by leveraging JOIN
+  ([#352](https://github.com/n24q02m/wet-mcp/pull/352),
+  [`70155d0`](https://github.com/n24q02m/wet-mcp/commit/70155d0f85fc9d94d8a106f0ee1661aac32eba4b))
+
+- Fix nosemgrep comment placement for importlib.resources
+  ([`10334e3`](https://github.com/n24q02m/wet-mcp/commit/10334e3c5c1ecbeed70f745d722e13c66d8f7027))
+
+- Format code with ruff ([#187](https://github.com/n24q02m/wet-mcp/pull/187),
+  [`3900e01`](https://github.com/n24q02m/wet-mcp/commit/3900e01d8fdc81575c39c7f630f17849158ec1a0))
+
+- Format crawler.py
+  ([`0e210a4`](https://github.com/n24q02m/wet-mcp/commit/0e210a4dc618f50b1b0861de7619d252300bf37f))
+
+- Format embedder.py and test_searxng_runner_comprehensive.py
+  ([`42803e7`](https://github.com/n24q02m/wet-mcp/commit/42803e753b7bacdc32a15dddc1833a307ab3d128))
+
+- Handle corrupted ONNX model cache in warmup (detect, clear, retry)
+  ([`c4ff456`](https://github.com/n24q02m/wet-mcp/commit/c4ff456e607ea8cbaa77803df5d67777f9006af2))
+
+- Handle dict response from LiteLLM proxy rerank
+  ([`e087e5d`](https://github.com/n24q02m/wet-mcp/commit/e087e5d857ce1eb219d4fb01c837cf6992f65c02))
+
+- Handle OCI package version in MCP Registry publish
+  ([`5d4dfee`](https://github.com/n24q02m/wet-mcp/commit/5d4dfee018b5eef5c5fe668088b88e405c6655fe))
+
+- Ignore unused import in tests to pass ruff
+  ([`83e0703`](https://github.com/n24q02m/wet-mcp/commit/83e07037cb6b5f94016cb0fb2912fa01b0553c04))
+
+- Improve docs discovery scoring, crawl scope, and cache validation
+  ([`07cb238`](https://github.com/n24q02m/wet-mcp/commit/07cb2389eca7d46729293160592bafb9efe7b204))
+
+- Improve SearXNG shared instance health check reliability
+  ([`04c0c9f`](https://github.com/n24q02m/wet-mcp/commit/04c0c9fd6b526a0eca8960ec8d667e3f2c47fac3))
+
+- Include all 5 tools in SessionStart hook message
+  ([`96e3b92`](https://github.com/n24q02m/wet-mcp/commit/96e3b92e845623dda78d1265f9723c54fc480b3b))
+
+- Increase SearXNG timeouts and fix browser pool stealth recycle
+  ([`ed0cfaa`](https://github.com/n24q02m/wet-mcp/commit/ed0cfaa882e6670c4eba6a2e8f2f3d72a443378e))
+
+- Keep OCI identifier as latest in MCP Registry publish
+  ([`4df34c4`](https://github.com/n24q02m/wet-mcp/commit/4df34c4a12d116dff7f5a369be47db7e5d2e8e06))
+
+- Move _EMBEDDING_CANDIDATES to config.py to avoid circular import
+  ([`d0adc8d`](https://github.com/n24q02m/wet-mcp/commit/d0adc8de92375010fc2fb006a5a489648921b765))
+
+- Move plugin files back to .claude-plugin/ directory
+  ([`1a9b0d1`](https://github.com/n24q02m/wet-mcp/commit/1a9b0d1b9970a3d39cb6143362f8b5fd26174329))
+
+- Optimize Docker build with BuildKit cache and non-root user
+  ([`f316a5d`](https://github.com/n24q02m/wet-mcp/commit/f316a5d8306d5c1a91924bcf3384a67995aa8ad7))
+
+- Pass encoding_format='float' in LiteLLM embedding requests
+  ([`461246d`](https://github.com/n24q02m/wet-mcp/commit/461246dfc5837deadc218feef59f7e217cf4061f))
+
+- Pin runtime versions with allowedVersions, revert Python to 3.13
+  ([`1e6911e`](https://github.com/n24q02m/wet-mcp/commit/1e6911e053035c0fcc89aded5082f6ff13a49d81))
+
+- Properly mock native SDK calls in embedder tests
+  ([`ce3b3f3`](https://github.com/n24q02m/wet-mcp/commit/ce3b3f33baaa5627569cd6c2e55ab767749d2f9b))
+
+- Refine discovery scoring with library-name-in-domain bonus
+  ([`a1f352b`](https://github.com/n24q02m/wet-mcp/commit/a1f352b5855cefd38659e138f19c844096bebc0f))
+
+- Remaining ruff errors
+  ([`dc00055`](https://github.com/n24q02m/wet-mcp/commit/dc000559937559d29de8dcb32911c0f2e8085473))
+
+- Remove .jules/bolt.md
+  ([`d14bebb`](https://github.com/n24q02m/wet-mcp/commit/d14bebb3c56fe80c8fe53f5025501f8dd6101965))
+
+- Remove another unused import in tests
+  ([`4f09d41`](https://github.com/n24q02m/wet-mcp/commit/4f09d41e42390a28c9a242f5c35baf132a05368c))
+
+- Remove commit-message-check job
+  ([`26d5086`](https://github.com/n24q02m/wet-mcp/commit/26d508696cde579e70f9420272b9ebe8eb21cf93))
+
+- Remove empty env vars from plugin configs to prevent empty-string bugs
+  ([`4d40515`](https://github.com/n24q02m/wet-mcp/commit/4d405158f10a9ac0a5b26dcb59008c4550e2139d))
+
+- Remove env from README MCP config examples
+  ([`d6edf27`](https://github.com/n24q02m/wet-mcp/commit/d6edf2740e4e2f2285fe870b924ae97c3982c747))
+
+- Remove env vars from plugin.json to prevent overwriting user config
+  ([`fcb0b66`](https://github.com/n24q02m/wet-mcp/commit/fcb0b66e29149d7aa1b7580bf3d7a8e7b961861a))
+
+- Remove hardcoded secrets from integration tests and pin pr-agent action
+  ([`f5ee6d7`](https://github.com/n24q02m/wet-mcp/commit/f5ee6d7e88799a211eaacb212267bf7798a850da))
+
+- Remove hardcoded secrets from integration tests and pin pr-agent action
+  ([`e4a8c84`](https://github.com/n24q02m/wet-mcp/commit/e4a8c84319cd2e2e092ea47130c5b73205f8156d))
+
+- Remove leftover temporary scripts
+  ([`979a640`](https://github.com/n24q02m/wet-mcp/commit/979a6409827a76b1649f8610217b1aa001392adf))
+
+- Remove mcp-name from README
+  ([`4a1bee8`](https://github.com/n24q02m/wet-mcp/commit/4a1bee8aa09fe9808857278dda21cdcb97cf32d8))
+
+- Remove OCI package from server.json until Docker LABEL annotation added
+  ([`e1b7a70`](https://github.com/n24q02m/wet-mcp/commit/e1b7a7073b199d90567ac064db51f86290fe97e4))
+
+- Remove pathlib unused import
+  ([`347a563`](https://github.com/n24q02m/wet-mcp/commit/347a5632b13d07174c213df46ab3fb5471956384))
+
+- Remove pr-title-check job from CI
+  ([`b753da0`](https://github.com/n24q02m/wet-mcp/commit/b753da0b5abf947542eb6fd6567b19bce0287680))
+
+- Remove unused asyncio import, update TODO backlog
+  ([`99be77d`](https://github.com/n24q02m/wet-mcp/commit/99be77dfee99225d9690f4673535f996a46e6c4b))
+
+- Remove unused nltk dependency ([#526](https://github.com/n24q02m/wet-mcp/pull/526),
+  [`738e04b`](https://github.com/n24q02m/wet-mcp/commit/738e04be6c3d0a600ecf52616d35fa9ae43593fc))
+
+- Replace broken repo-name cache validation with discovery version
+  ([`43b9827`](https://github.com/n24q02m/wet-mcp/commit/43b9827ae00ed7be56a38e88c2f3f500cefe1367))
+
+- Replace LiteLLM references with native SDK providers in docs
+  ([`47cf14c`](https://github.com/n24q02m/wet-mcp/commit/47cf14c584d8946de4b1bc9ca91da3b6da5d63cc))
+
+- Resolve MCP startup timeouts and stability issues
+  ([`64bea1d`](https://github.com/n24q02m/wet-mcp/commit/64bea1d41c325dd3e948321057d82a7feda072cb))
+
+- Resolve ruff C420 lint and f-string format issues in db.py
+  ([`035b88a`](https://github.com/n24q02m/wet-mcp/commit/035b88a541b6bbd34159a7bfc79660063fa89e95))
+
+- Resolve ruff lint errors in crawler and docs imports
+  ([`4bcc31d`](https://github.com/n24q02m/wet-mcp/commit/4bcc31dfe2734541aea1ca769e1d484f607b8d94))
+
+- Resolve ruff lint errors in full test file
+  ([`da31a3f`](https://github.com/n24q02m/wet-mcp/commit/da31a3fff09c447f010a19695f0cf7a93295c014))
+
+- Resolve ty type check errors in native SDK migration
+  ([`eb9e4a4`](https://github.com/n24q02m/wet-mcp/commit/eb9e4a4aabd9aa3eaa4f2cb1d25ae147b61e3d56))
+
+- Resolve ty type check errors in tests
+  ([`f837986`](https://github.com/n24q02m/wet-mcp/commit/f837986f6f34fabadd87ea0ab7a602fd18315c79))
+
+- Resolve type checking and formatting issues
+  ([`92e43ec`](https://github.com/n24q02m/wet-mcp/commit/92e43ec1d2f2fb89c60305141094546673db2936))
+
+- Revert direct lxml>=6.0 dep (conflicts with crawl4ai~=5.3)
+  ([`d3015f5`](https://github.com/n24q02m/wet-mcp/commit/d3015f53f0660dfdea06e9fbca5d85f155f0c97a))
+
+- Revert manual version bump, let semantic-release handle it
+  ([`7bb5c56`](https://github.com/n24q02m/wet-mcp/commit/7bb5c56c9fae95ab6b918696baab433a6d36aa36))
+
+- Revert Python requirement from 3.14 to 3.13
+  ([`d32da45`](https://github.com/n24q02m/wet-mcp/commit/d32da45ad7f67933b12ebf721d33a70dfdc9499e))
+
+- Ruff format
+  ([`4bcbb2f`](https://github.com/n24q02m/wet-mcp/commit/4bcbb2f696a339ae7df0bbc7e3953332683de1ea))
+
+- Ruff linting errors
+  ([`2d624f2`](https://github.com/n24q02m/wet-mcp/commit/2d624f2eea2a7fd5bfc6b12a635e5b5f3879c438))
+
+- Ruff undefined name crawler error
+  ([`85d3d62`](https://github.com/n24q02m/wet-mcp/commit/85d3d62382ef1d9af6028aabe11c7ccb040986c4))
+
+- Run initial sync immediately, document GITHUB_TOKEN auto-detect
+  ([`a3c20fe`](https://github.com/n24q02m/wet-mcp/commit/a3c20fece8eb35564ad2c7c109b22da41cb0d028))
+
+- Run ruff format
+  ([`0097ef4`](https://github.com/n24q02m/wet-mcp/commit/0097ef49d040aa325ffa41f3e01c5d994c5ef58a))
+
+- SearXNG port contention, docs discovery priority, and llms.txt quality check
+  ([`8e0d73e`](https://github.com/n24q02m/wet-mcp/commit/8e0d73ee23f9f7ba630f32cfc9c0465ca0fc66aa))
+
+- Security hardening from code audit
+  ([`e8caca1`](https://github.com/n24q02m/wet-mcp/commit/e8caca19e4ccdc031edaaa2e69d7d5727b5b595d))
+
+- Shorten server.json description to comply with MCP Registry 100-char limit
+  ([`7d5e536`](https://github.com/n24q02m/wet-mcp/commit/7d5e5368a81336bf8eb6c9583933fc46bcf24c17))
+
+- Split PSR version_toml — move JSON files to version_variables
+  ([`069c9e0`](https://github.com/n24q02m/wet-mcp/commit/069c9e0c794ce8aae169f8b38332172064689bdd))
+
+- Standardize CI with PR title check, email notify, and templates
+  ([`d6194e5`](https://github.com/n24q02m/wet-mcp/commit/d6194e5fb2142c3df1231c15276c0814f106b055))
+
+- Standardize README structure with plugin-first Quick Start
+  ([`48d4cdd`](https://github.com/n24q02m/wet-mcp/commit/48d4cdd972467c286e181c5b224e50103d16fe58))
+
+- Standardize repo structure with enforce-commit hook
+  ([`218307d`](https://github.com/n24q02m/wet-mcp/commit/218307d77bb205799163619869464fe2e2967433))
+
+- Support Gemini and Cohere embedding providers
+  ([`f8864af`](https://github.com/n24q02m/wet-mcp/commit/f8864af88954b6ab3bdc69c6b5fa0a80a90fc393))
+
+- Suppress Semgrep false positives in db.py and searxng_runner.py
+  ([#529](https://github.com/n24q02m/wet-mcp/pull/529),
+  [`269708b`](https://github.com/n24q02m/wet-mcp/commit/269708ba325e65649cdd34b2c4c22d01fe41926e))
+
+- Sync CI/CD configs and standardize templates
+  ([`e8dfe9b`](https://github.com/n24q02m/wet-mcp/commit/e8dfe9b885b657f3709f905183de8c4d9afa8c58))
+
+- Sync plugin.json and server.json to v2.14.2
+  ([`0e7a71c`](https://github.com/n24q02m/wet-mcp/commit/0e7a71c71fc4796aafde615de38dd4ec296834c2))
+
+- Sync plugin.json version and add skills/hooks references
+  ([`e3d911f`](https://github.com/n24q02m/wet-mcp/commit/e3d911fcc8d6a0c058bb0a5099b1277b6447b676))
+
+- Sync uv.lock with native provider SDK dependencies
+  ([`96043e4`](https://github.com/n24q02m/wet-mcp/commit/96043e4fc5a0c6cdab975065642d09237e57c555))
+
+- Testing improvement] Update patch_searxng_windows mock pattern
+  ([#426](https://github.com/n24q02m/wet-mcp/pull/426),
+  [`0358ebd`](https://github.com/n24q02m/wet-mcp/commit/0358ebdacfc453a49816179479cfbf6580706717))
+
+- Trigger cd ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Unify model IDs and remove litellm backward-compat aliases
+  ([`fef4099`](https://github.com/n24q02m/wet-mcp/commit/fef40996394776d3e6c66d9e63e8eb83860e30b8))
+
+- Unify Plugin install section with marketplace + individual options
+  ([`df44b05`](https://github.com/n24q02m/wet-mcp/commit/df44b05406bac603e05a2d7b8328bc47239c491b))
+
+- Update Codecov badge in README.md
+  ([`c0ed733`](https://github.com/n24q02m/wet-mcp/commit/c0ed733526114e2d2de18a3d3f338ca25a778704))
+
+- Update pip commands to use uv for SearXNG and Playwright installation
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Update qwen3-embed version pin and refactor token extraction
+  ([`bfcd422`](https://github.com/n24q02m/wet-mcp/commit/bfcd422c38a1db716398b27d00e56cfe4ae0285a))
+
+- Update README badges with Codecov, tech stack, and engineering standards
+  ([`ef41cf4`](https://github.com/n24q02m/wet-mcp/commit/ef41cf4f7291b83ef09d0a2b18be47aadd03d042))
+
+- Update ruff pre-commit hook to v0.15.7 and reformat tests
+  ([`473be2d`](https://github.com/n24q02m/wet-mcp/commit/473be2dc4652743c102f14867b281bcc6ab09f54))
+
+- Update server.json version dynamically in MCP Registry publish job
+  ([`9d7dd78`](https://github.com/n24q02m/wet-mcp/commit/9d7dd78b1df0b10db644062167f71dcd071d1de6))
+
+- Use ctypes OpenProcess for PID liveness check on Windows
+  ([`e4bc893`](https://github.com/n24q02m/wet-mcp/commit/e4bc893363b88589519f163e7b9eae46fb559705))
+
+- Use dynamic version from package metadata instead of hardcoded string
+  ([`db84775`](https://github.com/n24q02m/wet-mcp/commit/db84775740e4fded73a3be3efb6b85f1f53e1897))
+
+- Use dynamic version from package metadata instead of hardcoded string
+  ([`a911c1b`](https://github.com/n24q02m/wet-mcp/commit/a911c1baedcb0653eed491338830f0d27a4aec62))
+
+- ⚡ Bolt: [performance improvement] fix N+1 query in vector search by leveraging JOIN
+  ([#352](https://github.com/n24q02m/wet-mcp/pull/352),
+  [`70155d0`](https://github.com/n24q02m/wet-mcp/commit/70155d0f85fc9d94d8a106f0ee1661aac32eba4b))
+
+- **cd**: Add git config identity for sync-dev step
+  ([`9cb13c1`](https://github.com/n24q02m/wet-mcp/commit/9cb13c1081a191c8c8e5f5fd4f51980e46b7628d))
+
+- **cd**: Add packages:write for GHCR and switch PyPI to uv publish
+  ([`54b16e5`](https://github.com/n24q02m/wet-mcp/commit/54b16e5702af0ecee378cbdf3dfa2f8c3cadad20))
+
+- **cd**: Auto-resolve merge conflicts in promote workflow
+  ([`4ea92f5`](https://github.com/n24q02m/wet-mcp/commit/4ea92f59609371107f9496ce1364089f685afd19))
+
+- **cd**: Auto-resolve merge conflicts in promote workflow
+  ([`c54ac17`](https://github.com/n24q02m/wet-mcp/commit/c54ac177852368d381d99a2accad5449d681f245))
+
+- **cd**: Checkout main branch for PR merge release
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **cd**: Make scripts executable and clean working tree before promote merge
+  ([`ddac2e7`](https://github.com/n24q02m/wet-mcp/commit/ddac2e74a2be964f85bf65fe7636d19b829d62b5))
+
+- **cd**: Use dry-run check to prevent workflow failure when no release needed
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **chore**: Trigger cicd ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **ci**: Fix Qodo PR review for external contributors
+  ([`c3ec0d6`](https://github.com/n24q02m/wet-mcp/commit/c3ec0d63c03ad9aba2cdd78abce170d8c5f6c3c2))
+
+- **ci**: Fix syntax errors and correctly configure Qodo + Gemini 3 Flash
+  ([`0fb2d77`](https://github.com/n24q02m/wet-mcp/commit/0fb2d77c697886d8786ae6c3fba79eb292357a4f))
+
+- **ci**: Integrate qodo merge with gemini 3 flash
+  ([`423f7b5`](https://github.com/n24q02m/wet-mcp/commit/423f7b5b91c865abd2241ad9e0d7f96be2b4630e))
+
+- **ci**: Pin PSR v10, Python 3.13, Node 24, Java 21 in Renovate
+  ([`7fa6571`](https://github.com/n24q02m/wet-mcp/commit/7fa65715a6e83a518747f99eb12acb6e27373505))
+
+- **ci**: Remove invalid strict field from ty config
+  ([`d1e29d4`](https://github.com/n24q02m/wet-mcp/commit/d1e29d4a30ce2fe1588816708adce2c2813fba94))
+
+- **ci**: Remove job-level continue-on-error from dependency-review
+  ([`83bc65e`](https://github.com/n24q02m/wet-mcp/commit/83bc65eae95b84101146e7fbd645e3484b52ed7b))
+
+- **ci**: Use pull_request_target for jobs requiring secrets
+  ([`3d18dfc`](https://github.com/n24q02m/wet-mcp/commit/3d18dfcc911fd79ad506701c1855406f04f4abdb))
+
+- **crawler**: Correct type hint suppression typo
+  ([#176](https://github.com/n24q02m/wet-mcp/pull/176),
+  [`d544143`](https://github.com/n24q02m/wet-mcp/commit/d544143e43baa7320d96ab6addd450b4806b455c))
+
+- **deps**: Override lxml>=6.0 for Python 3.14 wheel support
+  ([`6d9f73c`](https://github.com/n24q02m/wet-mcp/commit/6d9f73c22134ae2a5bd7708bcbc75331847ccdd7))
+
+- **deps**: Update dependency cryptography to >=46.0.5
+  ([#331](https://github.com/n24q02m/wet-mcp/pull/331),
+  [`6f9e69d`](https://github.com/n24q02m/wet-mcp/commit/6f9e69d6e832cac5586bc93263dc8b59fca2f948))
+
+- **deps**: Update dependency qwen3-embed to >=1.4.3
+  ([#342](https://github.com/n24q02m/wet-mcp/pull/342),
+  [`260d3d8`](https://github.com/n24q02m/wet-mcp/commit/260d3d817b9391f5243b181f0a9adafbde9c414a))
+
+- **deps**: Update non-major dependencies ([#532](https://github.com/n24q02m/wet-mcp/pull/532),
+  [`e499680`](https://github.com/n24q02m/wet-mcp/commit/e499680eee439b0ac5dade598ba3803bba90c7a0))
+
+- **deps**: Update non-major dependencies ([#464](https://github.com/n24q02m/wet-mcp/pull/464),
+  [`0f35c03`](https://github.com/n24q02m/wet-mcp/commit/0f35c0343f8e3b33eab3e1d7bbdac38dab530ae7))
+
+- **deps**: Update non-major dependencies ([#328](https://github.com/n24q02m/wet-mcp/pull/328),
+  [`d4fa0f6`](https://github.com/n24q02m/wet-mcp/commit/d4fa0f6a61c56d2826cf3a1fdd8de1e5164b0ab8))
+
+- **deps**: Upgrade pillow to 12.1.1 and cryptography to 46.0.5 for security patches
+  ([#166](https://github.com/n24q02m/wet-mcp/pull/166),
+  [`3f52d2b`](https://github.com/n24q02m/wet-mcp/commit/3f52d2b4b02ffd6a48828fe8558029b58444cbe3))
+
+- **docs**: V17 filter login URLs, registry listing pages, docs subdomain exclusions
+  ([`190b770`](https://github.com/n24q02m/wet-mcp/commit/190b7705dc46d0ec996abadf452672fb2feefb4c))
+
+- **refactor+tests**: Extract helpers from large functions, reuse HTTP clients, add 25 tests
+  ([`dce4fed`](https://github.com/n24q02m/wet-mcp/commit/dce4fed052cfdb67ec5570af7969c827cdc3c0ca))
+
+- **release**: Add prerelease false to stable config
+  ([#51](https://github.com/n24q02m/wet-mcp/pull/51),
+  [`c5bc612`](https://github.com/n24q02m/wet-mcp/commit/c5bc6128cb05bd18747745d82566d773692cc21d))
+
+- **release**: Reset manifest to stable version for proper stable release
+  ([`5a19617`](https://github.com/n24q02m/wet-mcp/commit/5a1961746b7e3dbb78fde03ab1689f49147691b3))
+
+- **security**: DNS rebinding protection via pinned getaddrinfo cache
+  ([`50fcce8`](https://github.com/n24q02m/wet-mcp/commit/50fcce80d79f40eab3d7b9d62d1db0fc88f1f025))
+
+- **security**: Harden SSRF protection across crawl, extract, and DNS validation
+  ([`fed4a75`](https://github.com/n24q02m/wet-mcp/commit/fed4a7568436142afae76d5bff901797cdd6ba0b))
+
+- **security**: Resolve CodeQL alerts and ty check errors
+  ([`f604e30`](https://github.com/n24q02m/wet-mcp/commit/f604e303b4b64de26c5d4d90eebaf231de2b4ff2))
+
+- **security+perf**: Harden server against SSRF, path traversal, resource exhaustion and optimize DB
+  queries
+  ([`50fcce8`](https://github.com/n24q02m/wet-mcp/commit/50fcce80d79f40eab3d7b9d62d1db0fc88f1f025))
+
+- **security+perf**: SSRF protection in docs discovery, path traversal guard in media analyze, batch
+  DB queries, remove dead code
+  ([`6ae6935`](https://github.com/n24q02m/wet-mcp/commit/6ae6935a40a1049cf3c216bca2fc659875926c0d))
+
+- **test**: Isolate test_server_timeout to prevent side effects
+  ([#197](https://github.com/n24q02m/wet-mcp/pull/197),
+  [`4d6cda9`](https://github.com/n24q02m/wet-mcp/commit/4d6cda90cae326a48b3d67a764faf8a67d282fbb))
+
+- **test**: Mock _get_crawler directly on unsafe url tests
+  ([`92cdff4`](https://github.com/n24q02m/wet-mcp/commit/92cdff485dddcbe96445f49209e6a4b1166d3875))
+
+- **test**: Mock _is_searxng_installed to avoid slow subprocess install timeout during tests
+  ([`b7b6506`](https://github.com/n24q02m/wet-mcp/commit/b7b6506a536558217596078047d4d421e5d254f2))
+
+- **test**: Mock playwright to avoid BrowserType.launch error in CI
+  ([`993211b`](https://github.com/n24q02m/wet-mcp/commit/993211bf65cf16caf58072906392aeef6907aeb3))
+
+- **test**: Resolve ruff format errors in test_server_timeout.py
+  ([#197](https://github.com/n24q02m/wet-mcp/pull/197),
+  [`4d6cda9`](https://github.com/n24q02m/wet-mcp/commit/4d6cda90cae326a48b3d67a764faf8a67d282fbb))
+
+- **test**: Resolve ruff linting errors in test_server_timeout.py
+  ([#197](https://github.com/n24q02m/wet-mcp/pull/197),
+  [`4d6cda9`](https://github.com/n24q02m/wet-mcp/commit/4d6cda90cae326a48b3d67a764faf8a67d282fbb))
+
+- **tests**: Apply strict ruff formatting to test_crawler_download.py
+  ([#194](https://github.com/n24q02m/wet-mcp/pull/194),
+  [`41d7d41`](https://github.com/n24q02m/wet-mcp/commit/41d7d41bb27c45fc1c94e41a59ed3a7b455976f1))
+
+- **tests**: Format test_api_keys_security.py imports and whitespace
+  ([#180](https://github.com/n24q02m/wet-mcp/pull/180),
+  [`822b289`](https://github.com/n24q02m/wet-mcp/commit/822b2899a3d1911aa8baae5409050531adc660b0))
+
+- **tests**: Replace URL membership checks with set equality for CodeQL
+  ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **tests**: Replace URL membership checks with set equality for CodeQL
+  ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+- **tests**: Resolve AsyncClient mocking issue in test_crawler_download.py
+  ([#194](https://github.com/n24q02m/wet-mcp/pull/194),
+  [`41d7d41`](https://github.com/n24q02m/wet-mcp/commit/41d7d41bb27c45fc1c94e41a59ed3a7b455976f1))
+
+- **tests**: Resolve ruff linting errors in test_crawler_download.py
+  ([#194](https://github.com/n24q02m/wet-mcp/pull/194),
+  [`41d7d41`](https://github.com/n24q02m/wet-mcp/commit/41d7d41bb27c45fc1c94e41a59ed3a7b455976f1))
+
+- **tests**: Run ruff format on test_api_keys_security.py
+  ([#180](https://github.com/n24q02m/wet-mcp/pull/180),
+  [`822b289`](https://github.com/n24q02m/wet-mcp/commit/822b2899a3d1911aa8baae5409050531adc660b0))
+
+- **tests**: Update tests to use SecretStr for api_keys
+  ([#180](https://github.com/n24q02m/wet-mcp/pull/180),
+  [`822b289`](https://github.com/n24q02m/wet-mcp/commit/822b2899a3d1911aa8baae5409050531adc660b0))
+
+- **tests**: Update version test to validate semantic versioning format
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+### Build System
+
+- Set project Python version to 3.13 and update `wet-mcp` package in `uv.lock`.
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+### Chores
+
+- Add .code-review-graph/ to .gitignore
+  ([`1988c1c`](https://github.com/n24q02m/wet-mcp/commit/1988c1cae8a37333d38fd7d2792a472a13e2b50f))
+
+- Add Gemini Code Assist style guide
+  ([`7b68fd0`](https://github.com/n24q02m/wet-mcp/commit/7b68fd05ad857303a75fb0a456002724ba82075c))
+
+- Add glama.json for Glama directory listing
+  ([`323fa47`](https://github.com/n24q02m/wet-mcp/commit/323fa4791f3a0f4b3785021a7aab0915b60bc698))
+
+- Add jsonschema dependency for structured extraction
+  ([`1dfa1e0`](https://github.com/n24q02m/wet-mcp/commit/1dfa1e0a6fbf563c901857ad28132418d3c2df5b))
+
+- Align CI/CD action versions
+  ([`67390f1`](https://github.com/n24q02m/wet-mcp/commit/67390f161b19b4140852ab1a2175201699c879fd))
+
+- Change Renovate schedule to daily 5am
+  ([`364da48`](https://github.com/n24q02m/wet-mcp/commit/364da48f6f828ce342ba2b6050c66e4a59bd65fb))
+
+- Disable dependency dashboard to keep issues clean
+  ([`55ea63b`](https://github.com/n24q02m/wet-mcp/commit/55ea63b32c269476681600c8c26e3a47f07ce61f))
+
+- Fix manifest and version to last stable (2.1.3)
+  ([`e41621d`](https://github.com/n24q02m/wet-mcp/commit/e41621d33a4356ee75b236a1cdbb6b9df59af8d0))
+
+- Fix ruff formatting
+  ([`8297036`](https://github.com/n24q02m/wet-mcp/commit/82970362ea90c729d683dc3d3b0a755a271769b2))
+
+- Fix type hint suppression typo in crawler.py ([#171](https://github.com/n24q02m/wet-mcp/pull/171),
+  [`2e854c3`](https://github.com/n24q02m/wet-mcp/commit/2e854c3fa89375717e0ed55ea5855b99c4b975b7))
+
+- Ignore PLR0913 for search tool to preserve MCP API schema
+  ([#454](https://github.com/n24q02m/wet-mcp/pull/454),
+  [`4ad2a0b`](https://github.com/n24q02m/wet-mcp/commit/4ad2a0b2ff38d5c614192e80fcadf06be36afc90))
+
+- Implement dual manifest strategy for release pipeline
+  ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- Implement dual manifest strategy for release pipeline
+  ([`3d4ac86`](https://github.com/n24q02m/wet-mcp/commit/3d4ac860630da1ee2739dd2803bb6387b6ee63ff))
+
+- Migrate to 2025-2026 tech stack (uv/ty)
+  ([`04222d6`](https://github.com/n24q02m/wet-mcp/commit/04222d6760d22525b3841ee0daf1ef8a7aedccfc))
+
+- Remove .jules directory (bot artifact)
+  ([`6bd71a8`](https://github.com/n24q02m/wet-mcp/commit/6bd71a859919a233ce0328eb69fc1da24a14d7d0))
+
+- Remove auto-generated .jules/bolt.md
+  ([`45f5079`](https://github.com/n24q02m/wet-mcp/commit/45f50792afdf29208b98425bfd7f27042acf933c))
+
+- Remove CodeRabbit config, migrating to Gemini Code Assist
+  ([`dce5217`](https://github.com/n24q02m/wet-mcp/commit/dce5217c7b75d90701011a6867c6c65595ca6a64))
+
+- Remove debug script
+  ([`0fd7b74`](https://github.com/n24q02m/wet-mcp/commit/0fd7b74c31676207348f4231f80650a760f7c8dc))
+
+- Remove dependabot.yml in favor of Renovate
+  ([`a3f71c5`](https://github.com/n24q02m/wet-mcp/commit/a3f71c5f0db05052fe514857f48e59549d1dcc5e))
+
+- Remove unstable hacky setup tests
+  ([`d4300bf`](https://github.com/n24q02m/wet-mcp/commit/d4300bfce952b113028d81fb8dbdb717720d6dec))
+
+- Standardize repo files across MCP server portfolio
+  ([`2d614fa`](https://github.com/n24q02m/wet-mcp/commit/2d614fad64ef3157531a5d833ea14f14b46aa533))
+
+- Sync beta manifest from stable [skip ci]
+  ([`4e10a4c`](https://github.com/n24q02m/wet-mcp/commit/4e10a4c1fa535d24c5a961538f5afd9cd73ea349))
+
+- Trigger release-please
+  ([`b792204`](https://github.com/n24q02m/wet-mcp/commit/b792204be2e260ff3f6dea7cdd15ff52be5d054f))
+
+- Trigger release-please on main
+  ([`3207386`](https://github.com/n24q02m/wet-mcp/commit/3207386ce8bacf8d39ed730e24fb8f35dcd0fe93))
+
+- Update uv.lock for markitdown[xlsx] dependency
+  ([`5567d9a`](https://github.com/n24q02m/wet-mcp/commit/5567d9a34f5b8626633c37f83a803a7ed0ebdae9))
+
+- **config**: Migrate config renovate.json ([#232](https://github.com/n24q02m/wet-mcp/pull/232),
+  [`570eeb3`](https://github.com/n24q02m/wet-mcp/commit/570eeb3ae8e877ffdbba61a55b65396a687ef017))
+
+- **crawler**: Fix `ty: ignore` typo in type suppression comments
+  ([#174](https://github.com/n24q02m/wet-mcp/pull/174),
+  [`bb9fad9`](https://github.com/n24q02m/wet-mcp/commit/bb9fad9f77b65d9ac17ccf72dbf5f918c14e92cc))
+
+- **crawler**: Fix type suppression typo ty: ignore -> type: ignore
+  ([#168](https://github.com/n24q02m/wet-mcp/pull/168),
+  [`c4221a6`](https://github.com/n24q02m/wet-mcp/commit/c4221a6a11a8e8b114557d46049a40fdeb819963))
+
+- **deps**: Bump pyopenssl in the uv group across 1 directory
+  ([#461](https://github.com/n24q02m/wet-mcp/pull/461),
+  [`83d85be`](https://github.com/n24q02m/wet-mcp/commit/83d85beef9ad9f98b26d27ef4c9de4a6cdd861e9))
+
+- **deps**: Fix vulnerabilities in nltk, pillow, diskcache, cryptography
+  ([`cc95fa7`](https://github.com/n24q02m/wet-mcp/commit/cc95fa7a29fbe7da31e5a57c180699931852dc3e))
+
+- **deps**: Lock file maintenance ([#533](https://github.com/n24q02m/wet-mcp/pull/533),
+  [`f8f3e23`](https://github.com/n24q02m/wet-mcp/commit/f8f3e230ba78909d653c87c17bb095564a43ced9))
+
+- **deps**: Lock file maintenance ([#465](https://github.com/n24q02m/wet-mcp/pull/465),
+  [`02230ba`](https://github.com/n24q02m/wet-mcp/commit/02230ba8bbb26c0a3f267505a4888d2f63055fc4))
+
+- **deps**: Lock file maintenance ([#382](https://github.com/n24q02m/wet-mcp/pull/382),
+  [`5c267e9`](https://github.com/n24q02m/wet-mcp/commit/5c267e998baef9c389b18f579d0eae5d3a6b3350))
+
+- **deps**: Lock file maintenance ([#343](https://github.com/n24q02m/wet-mcp/pull/343),
+  [`766efa8`](https://github.com/n24q02m/wet-mcp/commit/766efa8831f9638422b0901cba23087b0b02f8d8))
+
+- **deps**: Pin dependencies ([#346](https://github.com/n24q02m/wet-mcp/pull/346),
+  [`ca9f82b`](https://github.com/n24q02m/wet-mcp/commit/ca9f82b07cc0c7df8e7dc87011144c81ebbd96aa))
+
+- **deps**: Pin dependencies ([#327](https://github.com/n24q02m/wet-mcp/pull/327),
+  [`d1394a7`](https://github.com/n24q02m/wet-mcp/commit/d1394a736e77e03a82cd74eb4d5089b01bb5b9ec))
+
+- **deps**: Update actions/dependency-review-action digest to 3c4e3dc
+  ([#351](https://github.com/n24q02m/wet-mcp/pull/351),
+  [`44b641d`](https://github.com/n24q02m/wet-mcp/commit/44b641d1592143d0701eeb4f339f3c5ee15aa92e))
+
+- **deps**: Update actions/download-artifact digest to 3e5f45b
+  ([#379](https://github.com/n24q02m/wet-mcp/pull/379),
+  [`762e4a5`](https://github.com/n24q02m/wet-mcp/commit/762e4a59adcd26ff67935597dc4bd3859ebbe1e5))
+
+- **deps**: Update astral-sh/setup-uv digest to 37802ad
+  ([#380](https://github.com/n24q02m/wet-mcp/pull/380),
+  [`99f53dd`](https://github.com/n24q02m/wet-mcp/commit/99f53dd48c2120fc29ca621af086badcdc9acf31))
+
+- **deps**: Update codecov/codecov-action digest to 1af5884
+  ([#467](https://github.com/n24q02m/wet-mcp/pull/467),
+  [`ee62f15`](https://github.com/n24q02m/wet-mcp/commit/ee62f15e77fb06817a17f3ac1b300dd6822f681f))
+
+- **deps**: Update dawidd6/action-send-mail action to v11
+  ([#348](https://github.com/n24q02m/wet-mcp/pull/348),
+  [`d49d100`](https://github.com/n24q02m/wet-mcp/commit/d49d10040760d62f00291fe3dc3790c87c0bd331))
+
+- **deps**: Update dawidd6/action-send-mail action to v15
+  ([#386](https://github.com/n24q02m/wet-mcp/pull/386),
+  [`8fa186d`](https://github.com/n24q02m/wet-mcp/commit/8fa186dc2237db6b19fcc8ad06684b2b741ded4d))
+
+- **deps**: Update dawidd6/action-send-mail action to v16
+  ([#466](https://github.com/n24q02m/wet-mcp/pull/466),
+  [`d33fb08`](https://github.com/n24q02m/wet-mcp/commit/d33fb080fc7a77f18e0d2e081d743635c6334656))
+
+- **deps**: Update docker/build-push-action action to v7
+  ([#337](https://github.com/n24q02m/wet-mcp/pull/337),
+  [`b00f1fd`](https://github.com/n24q02m/wet-mcp/commit/b00f1fd040ea466a09a213114530812656ebdefe))
+
+- **deps**: Update docker/login-action to v4
+  ([`12e3f36`](https://github.com/n24q02m/wet-mcp/commit/12e3f3682634c91a7ce24f4933fdf04709145b05))
+
+- **deps**: Update docker/setup-buildx-action action to v4
+  ([#332](https://github.com/n24q02m/wet-mcp/pull/332),
+  [`aef7acc`](https://github.com/n24q02m/wet-mcp/commit/aef7acc5e7f2f27ec0a9bbfde04cbd066675a61a))
+
+- **deps**: Update github artifact actions ([#333](https://github.com/n24q02m/wet-mcp/pull/333),
+  [`c5bc5a5`](https://github.com/n24q02m/wet-mcp/commit/c5bc5a54ad904d44b009ce7f2f29a69667e56240))
+
+- **deps**: Update step-security/harden-runner digest to 58077d3
+  ([#335](https://github.com/n24q02m/wet-mcp/pull/335),
+  [`d8bc883`](https://github.com/n24q02m/wet-mcp/commit/d8bc883e74e4f81d15641941503e07ff80ec2402))
+
+- **dev**: Release 2.3.0-beta ([#51](https://github.com/n24q02m/wet-mcp/pull/51),
+  [`c5bc612`](https://github.com/n24q02m/wet-mcp/commit/c5bc6128cb05bd18747745d82566d773692cc21d))
+
+- **dev**: Release 2.3.0-beta ([#48](https://github.com/n24q02m/wet-mcp/pull/48),
+  [`44a45ac`](https://github.com/n24q02m/wet-mcp/commit/44a45acf4f4e534facde1b3c64858edf477294fe))
+
+- **dev**: Release 2.4.0-beta ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **dev**: Release 2.4.0-beta ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+- **dev**: Release 2.4.0-beta.1 ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **dev**: Release 2.4.0-beta.1 ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+- **dev**: Release 2.4.0-beta.2 ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **dev**: Release 2.4.0-beta.2 ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+- **dev**: Release 2.4.0-beta.3 ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **dev**: Release 2.4.0-beta.3 ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+- **dev**: Release 2.4.0-beta.4 ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **dev**: Release 2.5.0-beta ([#85](https://github.com/n24q02m/wet-mcp/pull/85),
+  [`fe87474`](https://github.com/n24q02m/wet-mcp/commit/fe87474933c2a8c24e6aee68a18d622152a56382))
+
+- **dev**: Release 2.5.0-beta.1 ([#86](https://github.com/n24q02m/wet-mcp/pull/86),
+  [`bd09c9a`](https://github.com/n24q02m/wet-mcp/commit/bd09c9ab141dcdc89735d71425076609555199f0))
+
+- **dev**: Release 2.5.0-beta.2 ([#102](https://github.com/n24q02m/wet-mcp/pull/102),
+  [`d7b628f`](https://github.com/n24q02m/wet-mcp/commit/d7b628fa5c832d937418b736af717570e35a19d1))
+
+- **dev**: Release 2.5.0-beta.3 ([#140](https://github.com/n24q02m/wet-mcp/pull/140),
+  [`a1119ae`](https://github.com/n24q02m/wet-mcp/commit/a1119ae16e19df963119038b9df8a1db39ae3afd))
+
+- **dev**: Release 2.5.0-beta.4 ([#141](https://github.com/n24q02m/wet-mcp/pull/141),
+  [`32ae9a2`](https://github.com/n24q02m/wet-mcp/commit/32ae9a28f6b8c68d11bebef0303cf5d7675d40de))
+
+- **dev**: Release 2.5.0-beta.5 ([#142](https://github.com/n24q02m/wet-mcp/pull/142),
+  [`6988608`](https://github.com/n24q02m/wet-mcp/commit/69886080a37b6d18a2516caf30839877fe3b5b63))
+
+- **dev**: Release 2.5.0-beta.6 ([#146](https://github.com/n24q02m/wet-mcp/pull/146),
+  [`8633cf2`](https://github.com/n24q02m/wet-mcp/commit/8633cf2d35afe21f879af457d151bbff20963bb4))
+
+- **dev**: Release 2.5.0-beta.7 ([#147](https://github.com/n24q02m/wet-mcp/pull/147),
+  [`219455d`](https://github.com/n24q02m/wet-mcp/commit/219455ded3959103a5ffc1fb04301a02f216be5e))
+
+- **dev**: Release 2.5.0-beta.8 ([#148](https://github.com/n24q02m/wet-mcp/pull/148),
+  [`08df4f2`](https://github.com/n24q02m/wet-mcp/commit/08df4f2a41c657d6138e6875ac23134d7fb5baf7))
+
+- **dev**: Release 3.0.0 ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **dev**: Release 3.0.1-beta ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **dev**: Release 3.1.0-beta ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **dev**: Release 3.1.0-beta.1 ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **dev**: Release 3.1.0-beta.2 ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **dev**: Release 3.1.0-beta.3 ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **dev**: Release 3.1.0-beta.4 ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **main**: Release 2.2.0 ([#19](https://github.com/n24q02m/wet-mcp/pull/19),
+  [`9a2b1fd`](https://github.com/n24q02m/wet-mcp/commit/9a2b1fd5b2a406731d7661bbe8a85780ea0db0b5))
+
+- **main**: Release 2.3.0 ([#54](https://github.com/n24q02m/wet-mcp/pull/54),
+  [`6614e62`](https://github.com/n24q02m/wet-mcp/commit/6614e62da6b075afd6f745bb569d103d2180730c))
+
+- **main**: Release 2.4.0 ([#77](https://github.com/n24q02m/wet-mcp/pull/77),
+  [`3f88dd9`](https://github.com/n24q02m/wet-mcp/commit/3f88dd9256c9df2d31f453cadc3825be873f5b0f))
+
+- **main**: Release 2.4.1 ([#79](https://github.com/n24q02m/wet-mcp/pull/79),
+  [`f1c83c0`](https://github.com/n24q02m/wet-mcp/commit/f1c83c02b9c094953a4f7ee5dd0ddd20779cf8e1))
+
+- **release**: 2.1.4-beta.1 [skip ci] ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **release**: 2.1.4-beta.2 [skip ci] ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **release**: 2.1.4-beta.3 [skip ci] ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **release**: 2.1.4-beta.4 [skip ci] ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **workspace**: Update project paths in VSCode workspace configuration
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+### Code Style
+
+- Auto-format server.py
+  ([`5f973c5`](https://github.com/n24q02m/wet-mcp/commit/5f973c564a5b9decbb1f293076b5bb3e548d5d62))
+
+- Fix ruff format failure in test_crawler_media.py
+  ([#177](https://github.com/n24q02m/wet-mcp/pull/177),
+  [`31df357`](https://github.com/n24q02m/wet-mcp/commit/31df357b010b2ace0117d632a7a0159910850c16))
+
+- Fix ruff format on docs.py
+  ([`ba162f2`](https://github.com/n24q02m/wet-mcp/commit/ba162f258e9b37d71f8e30eeabc832222c860178))
+
+- Format docs.py for ruff compliance
+  ([`4eba1bf`](https://github.com/n24q02m/wet-mcp/commit/4eba1bfe875a9d75b4fedaef8ea2ef097414d475))
+
+- Format test_real_comprehensive.py for ruff compliance
+  ([`c635304`](https://github.com/n24q02m/wet-mcp/commit/c635304f1c4d5a4be86c029cd58b20cd706a94e2))
+
+- Format test_server_coverage.py
+  ([`57baa8c`](https://github.com/n24q02m/wet-mcp/commit/57baa8c3b0ea27b4fb5be8ea44be523c849548e3))
+
+### Continuous Integration
+
+- Disable CD for PSR migration [skip ci]
+  ([`48964e2`](https://github.com/n24q02m/wet-mcp/commit/48964e26e7a385a14af2b17eaac56b7e8d5ae7dd))
+
+- Fix formatting in searxng.py to pass CI checks
+  ([#191](https://github.com/n24q02m/wet-mcp/pull/191),
+  [`9234fa2`](https://github.com/n24q02m/wet-mcp/commit/9234fa21ac18cf4568a75db694c4c4d7973221af))
+
+- Fix release-please prerelease config (use beta config file)
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Improve PR checks and Qodo filtering ([#350](https://github.com/n24q02m/wet-mcp/pull/350),
+  [`8015eb9`](https://github.com/n24q02m/wet-mcp/commit/8015eb973d94a2d0feb6be7152c2a2995eb84f19))
+
+- Migrate from release-please to python-semantic-release v10
+  ([`886b67d`](https://github.com/n24q02m/wet-mcp/commit/886b67de5025c6200e4d96f17c5b4a80a1c6277a))
+
+- Remove dependency-review job (private repo) ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Remove temporary repro_issue.py script to fix linting errors
+  ([#191](https://github.com/n24q02m/wet-mcp/pull/191),
+  [`9234fa2`](https://github.com/n24q02m/wet-mcp/commit/9234fa21ac18cf4568a75db694c4c4d7973221af))
+
+- Skip Qodo AI review for bot-created PRs
+  ([`55edd8d`](https://github.com/n24q02m/wet-mcp/commit/55edd8d18a3531c20c270aabe83a5e4500b940b8))
+
+- **cd**: Fix release workflow token usage ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **cd**: Improve release workflow ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **cd**: Promote creates PR instead of direct merge
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **cd**: Trigger release on PR merge ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- **cd**: Use feat: prefix for promote PR to trigger release
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+### Documentation
+
+- Add AGENTS.md for AI coding agents
+  ([`3008931`](https://github.com/n24q02m/wet-mcp/commit/300893160356e972ca8dfdf7c4fc39150def3502))
+
+- Add CODEOWNERS and update README description
+  ([`9b726cc`](https://github.com/n24q02m/wet-mcp/commit/9b726cc8b445dbac301c4818cd2586eb44551a29))
+
+- Add CODEOWNERS and update README description
+  ([`d64cdf0`](https://github.com/n24q02m/wet-mcp/commit/d64cdf0df06100f4c476950cbcb10432c40d218f))
+
+- Add compatible-with badges and cross-links to sibling MCP servers
+  ([`18bb889`](https://github.com/n24q02m/wet-mcp/commit/18bb8890fd8c58ce411d063d7b3db2d9036f7a79))
+
+- Add config tool to help docs, gguf support, docker-compose
+  ([`0b197f7`](https://github.com/n24q02m/wet-mcp/commit/0b197f7990fe888194f53890d3920949ff8ac211))
+
+- Add config tool to tools table and architecture diagram
+  ([`92d1e67`](https://github.com/n24q02m/wet-mcp/commit/92d1e67a983a9afed65d70300b3c5ba9342a8acf))
+
+- Add MCP client keywords to pyproject.toml for PyPI discoverability
+  ([`afd6443`](https://github.com/n24q02m/wet-mcp/commit/afd64432e459dfb0b5865412c80c5148b39472fa))
+
+- Add Pre-Phase + Phase 1 implementation plan
+  ([`29e78cc`](https://github.com/n24q02m/wet-mcp/commit/29e78ccfcd23c6490c65f97691c0d92c57c5bb2f))
+
+- Add related projects cross-references
+  ([`af4a818`](https://github.com/n24q02m/wet-mcp/commit/af4a818bda5db6b810806177f314ff5b687b29d1))
+
+- Add server.json and MCP Registry publish step to CD workflow
+  ([`73aa581`](https://github.com/n24q02m/wet-mcp/commit/73aa5817d62494f53d21ed44728406fc8e0bfb5e))
+
+- Add TODO backlog — markitdown integration for PDF/DOCX extraction
+  ([`0ac5777`](https://github.com/n24q02m/wet-mcp/commit/0ac5777fda349a8aaa8edde1ddd8e65d398f8891))
+
+- Add v2.14-v2.16 design spec
+  ([`8e0b0ea`](https://github.com/n24q02m/wet-mcp/commit/8e0b0ea2eaa7cf1d1774b13a34a9035f7375bb1b))
+
+- Chuẩn hóa repo cho public opensource ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Document 3-mode LLM and 2-mode SearXNG architecture
+  ([`ff73f38`](https://github.com/n24q02m/wet-mcp/commit/ff73f38a7916293e97db4211dfdf5868a7875809))
+
+- Fix 3 blockers + warnings in design spec
+  ([`4122794`](https://github.com/n24q02m/wet-mcp/commit/4122794cc0f8b86444930e20391fd3bcb342a160))
+
+- Fix Docker volume persistence and config documentation
+  ([`13c2901`](https://github.com/n24q02m/wet-mcp/commit/13c2901224e3e3f5bca183dbdfddf0e503fcedf3))
+
+- Move 3-mode env vars into Quick Start config blocks
+  ([`26593c8`](https://github.com/n24q02m/wet-mcp/commit/26593c8b9bdb4a21649f9412451b66bcdfddf1d7))
+
+- Restructure Quick Start with 4 config options
+  ([`17d8623`](https://github.com/n24q02m/wet-mcp/commit/17d86230dcd0965280df29239e9130f36a61aca1))
+
+- Revert Docker tag to :latest and add --name to Docker examples
+  ([`82f3358`](https://github.com/n24q02m/wet-mcp/commit/82f33583627ecc057823f19d753345d8e714e64e))
+
+- Simplify quick start to uvx and docker options with full config
+  ([`274a6d0`](https://github.com/n24q02m/wet-mcp/commit/274a6d0b1d8c4d57fb67e6e7efafc92ae3d0957d))
+
+- Standardize README sections and sync Also by table
+  ([`7f09e90`](https://github.com/n24q02m/wet-mcp/commit/7f09e90cae0a9c3c4e419d6c7925e835477f2ae9))
+
+- Update compatible-with badges - add Antigravity, Gemini CLI, Codex, OpenCode
+  ([`2f8b228`](https://github.com/n24q02m/wet-mcp/commit/2f8b2284efb7daef0f0d6b0e124050081995daca))
+
+- Update help docs for Phase 2 features and add plan
+  ([`71715eb`](https://github.com/n24q02m/wet-mcp/commit/71715eb7361eaa7c56b3d5a87c1e98212f61ad84))
+
+- Update help docs for Phase 3 features (batch, HyDE, Jina)
+  ([`7f5e99f`](https://github.com/n24q02m/wet-mcp/commit/7f5e99fb0939689e4186a7c7a2f47cf8632a2ebc))
+
+- Update help docs for search filters and convert action
+  ([`9e85780`](https://github.com/n24q02m/wet-mcp/commit/9e857808574c93f83a7ad78479517a4f65e29ab6))
+
+- Update README for auto-token management
+  ([`9d07a00`](https://github.com/n24q02m/wet-mcp/commit/9d07a00e58dfd50785be0901a3bd47fc9f9add07))
+
+- Update README for v2.14.0 features and Jina AI priority
+  ([`f1f872c`](https://github.com/n24q02m/wet-mcp/commit/f1f872c9f9137c622259499b5975bf4541cbafbf))
+
+- **readme**: Require Python 3.13 and show uvx arg
+  ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **readme**: Require Python 3.13 and show uvx arg
+  ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+### Features
+
+- Add automated cleanup for stale release-please PRs
+  ([`a48fb56`](https://github.com/n24q02m/wet-mcp/commit/a48fb5620a126fb2eb884c31b5cb607c5d15dee3))
+
+- Add batch extract with per-domain rate limiting
+  ([`0c1d39b`](https://github.com/n24q02m/wet-mcp/commit/0c1d39bdb2cee0fdcf2e5e440d797ba1b05ffff2))
+
+- Add batch splitting and retry with exponential backoff to embedder
+  ([`c27e637`](https://github.com/n24q02m/wet-mcp/commit/c27e637227b8eee46b5af587794d1e17cbcf26d1))
+
+- Add better-telegram-mcp to Also by section and mcp-name
+  ([`378906a`](https://github.com/n24q02m/wet-mcp/commit/378906a5951b93a1d3eb37b844037832dd63809a))
+
+- Add Codecov coverage upload and CodeRabbit config
+  ([`7ccd57d`](https://github.com/n24q02m/wet-mcp/commit/7ccd57d9a7fcb7a6ce94a2f920cbf489e888bad1))
+
+- Add data encapsulation against indirect prompt injection (XPIA)
+  ([`da31567`](https://github.com/n24q02m/wet-mcp/commit/da315670f41995633cb0a338db34f2b51efd83b1))
+
+- Add development and production rulesets, update CI/CD workflows, and enhance project dependencies
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Add docs indexing, research tools, and caching
+  ([`76bc595`](https://github.com/n24q02m/wet-mcp/commit/76bc59596fa3c303621fa9ba9fe95279f1c9b3e0))
+
+- Add embedding/rerank model config env vars to plugin
+  ([`fa00759`](https://github.com/n24q02m/wet-mcp/commit/fa007598aea5c3d329fe3c093717187ae0620b4d))
+
+- Add Gemini CLI extension config with PSR version sync
+  ([`ace6f5a`](https://github.com/n24q02m/wet-mcp/commit/ace6f5a1f5e36093da21a27d00a2463b0f4412b3))
+
+- Add GITHUB_TOKEN, SYNC_ENABLED and sync config to plugin
+  ([`51901b6`](https://github.com/n24q02m/wet-mcp/commit/51901b6588e7a087157fc422e615893ae00eb27e))
+
+- Add Glama.ai badge to README
+  ([`96afa3b`](https://github.com/n24q02m/wet-mcp/commit/96afa3bc8ffb1e0c8f73f01e7dc72c07a1a7c3bb))
+
+- Add HyDE for docs search and version-specific docs discovery
+  ([`df94edd`](https://github.com/n24q02m/wet-mcp/commit/df94eddd76e80ade213e07558f73adec60e3845d))
+
+- Add is_safe_local_path for local file validation
+  ([`4e36e2b`](https://github.com/n24q02m/wet-mcp/commit/4e36e2bd489176f2eba736355b0fcb5db03a1615))
+
+- Add Jina AI as priority #1 for embedding and reranking
+  ([`6e78233`](https://github.com/n24q02m/wet-mcp/commit/6e78233f510a39ea5417ea0b4b9e9d2946bc2856))
+
+- Add LLM-powered structured data extraction
+  ([`36dae73`](https://github.com/n24q02m/wet-mcp/commit/36dae73e2c7f2c989161ca7769e77813d0d3ce26))
+
+- Add local file convert action with security validation
+  ([`4b3cd49`](https://github.com/n24q02m/wet-mcp/commit/4b3cd498b89c8769ea232544b14651ac41f2d54a))
+
+- Add markitdown PDF/DOCX extraction and fix docs discovery
+  ([`acc442c`](https://github.com/n24q02m/wet-mcp/commit/acc442c9ea9314ee463de90a818216c3ba6e7e57))
+
+- Add media analysis action and enhance SearXNG installation robustness.
+  ([#51](https://github.com/n24q02m/wet-mcp/pull/51),
+  [`c5bc612`](https://github.com/n24q02m/wet-mcp/commit/c5bc6128cb05bd18747745d82566d773692cc21d))
+
+- Add media analysis action and enhance SearXNG installation robustness.
+  ([#48](https://github.com/n24q02m/wet-mcp/pull/48),
+  [`44a45ac`](https://github.com/n24q02m/wet-mcp/commit/44a45acf4f4e534facde1b3c64858edf477294fe))
+
+- Add plugin packaging (skills, hooks, plugin manifest)
+  ([`06fffb7`](https://github.com/n24q02m/wet-mcp/commit/06fffb7ff7b6074b64922633e433b514b87c6ced))
+
+- Add search filters (time_range, language, include/exclude domains)
+  ([`c7b2bec`](https://github.com/n24q02m/wet-mcp/commit/c7b2bec7f01bfed4eee63f12fba786739a18a3b0))
+
+- Add search strategies (query expansion, find similar, snippet enrichment)
+  ([`fe6d3d6`](https://github.com/n24q02m/wet-mcp/commit/fe6d3d6818718c9dad0373784164691fb22f2b2d))
+
+- Add semantic reranking to web search results
+  ([`151e357`](https://github.com/n24q02m/wet-mcp/commit/151e3578010e76ff071ed652d843f4759b6a864a))
+
+- Add tests for LiteLLMReranker and Qwen3Reranker; update dependencies in uv.lock
+  ([`39b2d28`](https://github.com/n24q02m/wet-mcp/commit/39b2d284b49728eb1adfc150a99ec433841502ec))
+
+- Add tool timeout setting and improve SearXNG compatibility on Windows
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Add URL normalization and per-domain result cap to search
+  ([`8168fbb`](https://github.com/n24q02m/wet-mcp/commit/8168fbb951220f888b7a2e7dea243a748094d5a6))
+
+- Add warmup subcommand and improve embedding/reranker startup
+  ([`35975be`](https://github.com/n24q02m/wet-mcp/commit/35975bed306c85220e118ee6e8e653378b36849e))
+
+- Async Cache Retrieval ([#457](https://github.com/n24q02m/wet-mcp/pull/457),
+  [`54982e0`](https://github.com/n24q02m/wet-mcp/commit/54982e0a50206b0b6fcb47ced4d0a1c0cfeb291b))
+
+- Auto-token management, security hardening, coverage improvements
+  ([`1c50a21`](https://github.com/n24q02m/wet-mcp/commit/1c50a214a265d0d9cc763e6bdfe4cfeadb4e6f35))
+
+- Consolidate Jules AI PRs (#20-#56) ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- Consolidate Jules AI PRs (#20-#56) ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+- Enhance documentation search with GitHub raw markdown support and content cleaning
+  ([`91bfe0f`](https://github.com/n24q02m/wet-mcp/commit/91bfe0fc7a2e99b632066e4d58779f9bbf992a1e))
+
+- Fully automatic sync - no setup-sync or RCLONE_CONFIG vars needed
+  ([`e6108cc`](https://github.com/n24q02m/wet-mcp/commit/e6108cc44c160d3f7c0792a5dc974cb09580cd24))
+
+- Implement 3-mode LLM architecture (proxy/sdk/local)
+  ([`b1225db`](https://github.com/n24q02m/wet-mcp/commit/b1225db20065b4407391d9856c803aa9c037e7a8))
+
+- Implement version patching for SearXNG installation from zip archive
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Improve tool descriptions for better LLM pass rate
+  ([`0cf5acd`](https://github.com/n24q02m/wet-mcp/commit/0cf5acd74ffe60839d25bf6c7d8ba902800213d4))
+
+- Migrate warmup/setup-sync CLI to MCP setup tool
+  ([`a9aacd6`](https://github.com/n24q02m/wet-mcp/commit/a9aacd68c2bc4dd2645794f7bdd521bd357fd079))
+
+- Multi-mode plugin config (stdio + docker + http)
+  ([`f7933c0`](https://github.com/n24q02m/wet-mcp/commit/f7933c038beed96ab839f7cc2c7e9d510fe49d31))
+
+- Promote dev to main (v2.3.0-beta) ([#51](https://github.com/n24q02m/wet-mcp/pull/51),
+  [`c5bc612`](https://github.com/n24q02m/wet-mcp/commit/c5bc6128cb05bd18747745d82566d773692cc21d))
+
+- Promote dev to main (v2.3.0-beta) ([#48](https://github.com/n24q02m/wet-mcp/pull/48),
+  [`44a45ac`](https://github.com/n24q02m/wet-mcp/commit/44a45acf4f4e534facde1b3c64858edf477294fe))
+
+- Promote dev to main (v2.4.0-beta.2) ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+- Promote dev to main (v2.4.0-beta.4) ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- Promote dev to main (v3.1.0-beta.4) ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Reuse httpx.AsyncClient in SearXNG retry loop
+  ([#187](https://github.com/n24q02m/wet-mcp/pull/187),
+  [`3900e01`](https://github.com/n24q02m/wet-mcp/commit/3900e01d8fdc81575c39c7f630f17849158ec1a0))
+
+- Standardize README with MCP Resources, Security, collapsible clients
+  ([`90125ef`](https://github.com/n24q02m/wet-mcp/commit/90125eff2dbb197ec146b0094c8bc20d3694d528))
+
+- Testing Improvement] Add tests for start_auto_sync and stop_auto_sync
+  ([#422](https://github.com/n24q02m/wet-mcp/pull/422),
+  [`b2670bf`](https://github.com/n24q02m/wet-mcp/commit/b2670bf5c361fbc47951355a74a688bb00189a4b))
+
+- Transition from Docker-based SearXNG to embedded subprocess management
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Tune SearXNG engine weights and default language to auto
+  ([`f74ff13`](https://github.com/n24q02m/wet-mcp/commit/f74ff134b0836fa11e23ff80f6c318f32db29c2a))
+
+- Update CI configuration and add pytest hook to pre-commit
+  ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
+
+- Wire Phase 2 actions (structured, similar, expand, enrich)
+  ([`e53612b`](https://github.com/n24q02m/wet-mcp/commit/e53612b2e9a05930fbaad42abcf08f608c18244e))
+
+- ⚡ Bolt: [performance improvement] fix N+1 query in vector search by leveraging JOIN
+  ([#352](https://github.com/n24q02m/wet-mcp/pull/352),
+  [`70155d0`](https://github.com/n24q02m/wet-mcp/commit/70155d0f85fc9d94d8a106f0ee1661aac32eba4b))
+
+- **ci**: Add Renovate config for automated dependency updates
+  ([`8c94c3f`](https://github.com/n24q02m/wet-mcp/commit/8c94c3fe3e941bbb16f5a05715d220eadbb998c0))
+
+- **ci**: Add StepSecurity Harden-Runner to all workflow jobs (audit mode)
+  ([`088a71a`](https://github.com/n24q02m/wet-mcp/commit/088a71a3879de90c0a56cc79a0e6774cc58db614))
+
+- **config**: Support file-based API keys via @path syntax
+  ([#180](https://github.com/n24q02m/wet-mcp/pull/180),
+  [`822b289`](https://github.com/n24q02m/wet-mcp/commit/822b2899a3d1911aa8baae5409050531adc660b0))
+
+- **discovery**: Star-count scoring + expand benchmark to 100 libs
+  ([`07be846`](https://github.com/n24q02m/wet-mcp/commit/07be8464e99a6946cbff4c14e22d10ce5692264b))
+
+- **docs**: Improve library discovery with Go modules, GitHub homepage upgrade, and scoring fixes
+  ([`04e2d4a`](https://github.com/n24q02m/wet-mcp/commit/04e2d4a36ab44e9cd07471dc45438b8f72c45e25))
+
+- **docs**: V14 discovery scoring - crates.io downloads, docs.rs fix, 120-lib benchmark
+  ([`e73ef59`](https://github.com/n24q02m/wet-mcp/commit/e73ef59fae6a1eeefacbf907e1d5019e1f50abc4))
+
+- **docs**: V15 sphinx objects.inv discovery for url enumeration
+  ([`63c1329`](https://github.com/n24q02m/wet-mcp/commit/63c132941b8e5a342372c827a43f2b7084500da6))
+
+- **docs**: V16 _probe_docs_url, RTD validation, benchmark 200
+  ([`8e13a0a`](https://github.com/n24q02m/wet-mcp/commit/8e13a0ab2a645211b9f75923fe4e39523abd461f))
+
+- **docs**: V18 detect Cloudflare blocked pages, add RST support
+  ([`37acc4b`](https://github.com/n24q02m/wet-mcp/commit/37acc4b8d50bc49dac858d21c9c35e355e7b9d42))
+
+- **docs**: V19 enhanced discovery, adaptive quality gate, language hints
+  ([`63aa113`](https://github.com/n24q02m/wet-mcp/commit/63aa1130af3bb18d4b09d3f02fd083ae9a37dd3e))
+
+- **docs**: V20 README fallback, language hints, 500 benchmark cases
+  ([`b0e013b`](https://github.com/n24q02m/wet-mcp/commit/b0e013bc05b2d1facf9dda57b8a352a8e7c1fa37))
+
+- **docs**: V21 two-pass GitHub search, language accept groups, 800 diverse benchmark cases
+  ([`a2100e2`](https://github.com/n24q02m/wet-mcp/commit/a2100e27340e9b353cc42c2651f6ec998ea9887e))
+
+- **docs**: V23 well-known docs, SearXNG crash fix, 1200 benchmark cases
+  ([`3e8dbf1`](https://github.com/n24q02m/wet-mcp/commit/3e8dbf1fc34077797106e43d8ae4737d9d0854aa))
+
+- **docs**: V24 add 6 registries, config tool, reduce well-known
+  ([`b0fcbf7`](https://github.com/n24q02m/wet-mcp/commit/b0fcbf77515d6c6b88e3b60b0e676cb3dcbd9f1f))
+
+- **search**: Add language param for docs disambiguation, change SearXNG port
+  ([`96cc99b`](https://github.com/n24q02m/wet-mcp/commit/96cc99b94a17d2ca4709e37f77268f1adac15636))
+
+- **searxng**: Add auto-restart and health checks
+  ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- **searxng**: Add auto-restart and health checks
+  ([#68](https://github.com/n24q02m/wet-mcp/pull/68),
+  [`d725213`](https://github.com/n24q02m/wet-mcp/commit/d7252136dc8663979ed2a0c81ae8c72d3e846c8c))
+
+- **searxng**: Shared instance discovery + eager startup
+  ([`e18891b`](https://github.com/n24q02m/wet-mcp/commit/e18891b63513591295d9ff2287b795c35a1a78d2))
 
 ### Performance Improvements
 
-* apply async optimizations from merged PRs ([36b3084](https://github.com/n24q02m/wet-mcp/commit/36b3084f6846763b7f06f771fe2754baf14803bf))
+- Apply async optimizations from merged PRs ([#17](https://github.com/n24q02m/wet-mcp/pull/17),
+  [`52dfc44`](https://github.com/n24q02m/wet-mcp/commit/52dfc44f70cf3346d0f4967077b7fe733f13af10))
 
-## [2.1.3](https://github.com/n24q02m/wet-mcp/compare/v2.1.2...v2.1.3) (2026-02-04)
+- Optimize GitHub raw docs fetch with concurrent requests
+  ([#535](https://github.com/n24q02m/wet-mcp/pull/535),
+  [`2fba5b6`](https://github.com/n24q02m/wet-mcp/commit/2fba5b61be166162088330ed8990ca715e1ec91b))
 
+- Reuse httpx.AsyncClient in SearXNG retry loop
+  ([#191](https://github.com/n24q02m/wet-mcp/pull/191),
+  [`9234fa2`](https://github.com/n24q02m/wet-mcp/commit/9234fa21ac18cf4568a75db694c4c4d7973221af))
+
+- Use deque for O(1) queue operations in crawler
+  ([#201](https://github.com/n24q02m/wet-mcp/pull/201),
+  [`ad008f6`](https://github.com/n24q02m/wet-mcp/commit/ad008f6919763c7ed8b005e5277d5c2f0d7865a8))
+
+- **db**: Optimize chunk retrieval with composite index IN clause
+  ([#530](https://github.com/n24q02m/wet-mcp/pull/530),
+  [`41720c2`](https://github.com/n24q02m/wet-mcp/commit/41720c2efad4945fd1730fcf7b119b70fd131aa2))
+
+- **db**: Optimize rrf score combination speed ([#468](https://github.com/n24q02m/wet-mcp/pull/468),
+  [`d057290`](https://github.com/n24q02m/wet-mcp/commit/d057290ad73c926d0a2ebc790335a4b14f939f14))
+
+### Refactoring
+
+- Extract hardcoded crawler timeout to settings
+  ([#189](https://github.com/n24q02m/wet-mcp/pull/189),
+  [`e32e4a1`](https://github.com/n24q02m/wet-mcp/commit/e32e4a1d7eb6fae68d12ee303eb8d092ce1f2804))
+
+- Make qwen3-embed core dep, cloud-first embedding and reranking
+  ([`ebb0388`](https://github.com/n24q02m/wet-mcp/commit/ebb0388c627e30f719878d0bb7f4c27475b420a8))
+
+- Redesign skills/hooks per approved spec
+  ([`5dabcb9`](https://github.com/n24q02m/wet-mcp/commit/5dabcb9980c7b0484adc2dbc9f26b25d077396ae))
+
+- Remove custom endpoint support (EMBEDDING_API_BASE, RERANK_API_BASE, LLM_API_BASE)
+  ([`e407319`](https://github.com/n24q02m/wet-mcp/commit/e4073198995e54b7da85855564eb2eb8522726e9))
+
+- Remove litellm entirely from wet-mcp, use native provider SDKs
+  ([`a2cdd55`](https://github.com/n24q02m/wet-mcp/commit/a2cdd5550e5b41dcd9138753d0092a5561ad6817))
+
+- Remove stop words filtering from FTS queries and update related comments
+  ([`b87036e`](https://github.com/n24q02m/wet-mcp/commit/b87036e6eb6754d26c249a2733883e3aa0215b28))
+
+- Replace LiteLLM reranker with Cohere SDK (rerank-v4.0-pro)
+  ([`0f2e3d9`](https://github.com/n24q02m/wet-mcp/commit/0f2e3d9e433b3d6304a4625c8f968e2d47e37dab))
+
+- Update crawl4ai setup process and remove Playwright installation
+  ([#76](https://github.com/n24q02m/wet-mcp/pull/76),
+  [`683df7a`](https://github.com/n24q02m/wet-mcp/commit/683df7a5889aeae1544f8de251eb3a207841a1c8))
+
+- Use settings.crawler_timeout in download_media
+  ([#195](https://github.com/n24q02m/wet-mcp/pull/195),
+  [`2fd7958`](https://github.com/n24q02m/wet-mcp/commit/2fd7958d82b57b8c72228a86f684b37170634f12))
+
+- **llm**: Avoid redundant calls to get_llm_config in analyze_media
+  ([#196](https://github.com/n24q02m/wet-mcp/pull/196),
+  [`e423df4`](https://github.com/n24q02m/wet-mcp/commit/e423df4d711d78554fd4b19a8055b5854646b69a))
+
+### Testing
+
+- Add cloud embedding mode tests with API_KEYS
+  ([`d4dea4e`](https://github.com/n24q02m/wet-mcp/commit/d4dea4e155a58cfd017156e9e7c7ca6253a8def6))
+
+- Add comprehensive real-world integration tests
+  ([`3676ad3`](https://github.com/n24q02m/wet-mcp/commit/3676ad370db45da5a07e1229985184508494d71e))
+
+- Add comprehensive test suites to achieve 80% coverage
+  ([`88584d1`](https://github.com/n24q02m/wet-mcp/commit/88584d162796c608b8c905c33bfa248c8d2543cb))
+
+- Add comprehensive tests for ensure_searxng orchestration
+  ([#184](https://github.com/n24q02m/wet-mcp/pull/184),
+  [`2d24dac`](https://github.com/n24q02m/wet-mcp/commit/2d24dac64749bd9fa8c5a0d48038cb95fbdd1ea6))
+
+- Add coverage gap tests for setup and sync modules
+  ([`584ebdd`](https://github.com/n24q02m/wet-mcp/commit/584ebdd329c241f93c82efd2fb1db45761bb33b3))
+
+- Add full/real live tests for all tools and modes
+  ([`dad7f15`](https://github.com/n24q02m/wet-mcp/commit/dad7f15a05f13b013d6262e3aa03d6ecdcf9197d))
+
+- Add Modal.com AI workers integration tests
+  ([`fcdb887`](https://github.com/n24q02m/wet-mcp/commit/fcdb88729f12ccd47138878642821b728e04c7ab))
+
+- Add pytest-based live MCP protocol tests
+  ([`2d61b75`](https://github.com/n24q02m/wet-mcp/commit/2d61b75000a4d6312e40b53f083819c84df1a466))
+
+- Add test_analyze_media_large_text_file to verify truncation
+  ([#190](https://github.com/n24q02m/wet-mcp/pull/190),
+  [`c8d76d6`](https://github.com/n24q02m/wet-mcp/commit/c8d76d6903cd486629cc722910c56884536412a4))
+
+- Add unit tests for list_media in crawler ([#177](https://github.com/n24q02m/wet-mcp/pull/177),
+  [`31df357`](https://github.com/n24q02m/wet-mcp/commit/31df357b010b2ace0117d632a7a0159910850c16))
+
+- Comprehensive unit tests for 97% coverage
+  ([`072ac8b`](https://github.com/n24q02m/wet-mcp/commit/072ac8b442a3a0ca2d7cbfed943dab1e1aa723c2))
+
+- **benchmark**: Expand to 2000 cases and add comparison report
+  ([`03fd3eb`](https://github.com/n24q02m/wet-mcp/commit/03fd3eb9de972cc6c6a4e88722a5d4d84fa71eb4))
+
+- **crawler**: Add unit tests for download_media success path
+  ([#194](https://github.com/n24q02m/wet-mcp/pull/194),
+  [`41d7d41`](https://github.com/n24q02m/wet-mcp/commit/41d7d41bb27c45fc1c94e41a59ed3a7b455976f1))
+
+- **server**: Add comprehensive tests for _with_timeout helper
+  ([#197](https://github.com/n24q02m/wet-mcp/pull/197),
+  [`4d6cda9`](https://github.com/n24q02m/wet-mcp/commit/4d6cda90cae326a48b3d67a764faf8a67d282fbb))
+
+
+## v2.1.3 (2026-02-04)
 
 ### Bug Fixes
 
-* **server:** remove url cache to ensure auto-restart ([36f44d2](https://github.com/n24q02m/wet-mcp/commit/36f44d23b624a2422ef18597b4d855aea07de7b5))
+- **server**: Remove url cache to ensure auto-restart
+  ([`36f44d2`](https://github.com/n24q02m/wet-mcp/commit/36f44d23b624a2422ef18597b4d855aea07de7b5))
 
-## [2.1.2](https://github.com/n24q02m/wet-mcp/compare/v2.1.1...v2.1.2) (2026-02-04)
+### Chores
 
-
-### Bug Fixes
-
-* **searxng:** robust connection fix ([140eecb](https://github.com/n24q02m/wet-mcp/commit/140eecb5ee064033df30b6ad62da708b990c4427))
-
-## [2.1.1](https://github.com/n24q02m/wet-mcp/compare/v2.1.0...v2.1.1) (2026-02-04)
+- **release**: 2.1.3 [skip ci]
+  ([`ec2beb8`](https://github.com/n24q02m/wet-mcp/commit/ec2beb833259ccef65f6c4096097764e26c3f5a7))
 
 
-### Bug Fixes
-
-* update tests and formatting ([17906f3](https://github.com/n24q02m/wet-mcp/commit/17906f3641b80ae2fa267923cadd9b0169e411fa))
-
-# [2.1.0](https://github.com/n24q02m/wet-mcp/compare/v2.0.0...v2.1.0) (2026-02-04)
-
-
-### Features
-
-* enable LLM analysis for text files and enhance SearXNG container startup with port readiness checks. ([4fb3f4e](https://github.com/n24q02m/wet-mcp/commit/4fb3f4eb1dc6ed7fd47c29da7e824fc03b8eb146))
-
-# [2.0.0](https://github.com/n24q02m/wet-mcp/compare/v1.3.0...v2.0.0) (2026-02-04)
-
-
-### Features
-
-* refactor API_KEYS format and add auto-detect capabilities ([77e277b](https://github.com/n24q02m/wet-mcp/commit/77e277b8989a692cd3ede287ba25f83f949d3f4b))
-
-
-### BREAKING CHANGES
-
-* API_KEYS now expects ENV_VAR:key format
-e.g. GOOGLE_API_KEY:abc instead of gemini:abc
-
-# [1.3.0](https://github.com/n24q02m/wet-mcp/compare/v1.2.1...v1.3.0) (2026-02-03)
-
-
-### Features
-
-* Enhance crawler with retries, user-agent, redirect following, and protocol-relative URL handling. ([ab1ecea](https://github.com/n24q02m/wet-mcp/commit/ab1ecead5ae0fbbd4e7f33cd6d82e0a6e2215ea2))
-
-## [1.2.1](https://github.com/n24q02m/wet-mcp/compare/v1.2.0...v1.2.1) (2026-02-03)
-
+## v2.1.2 (2026-02-04)
 
 ### Bug Fixes
 
-* silence Crawl4AI verbose output to prevent JSON parse errors ([62d5f92](https://github.com/n24q02m/wet-mcp/commit/62d5f92a1a398fef7e4c1c9bd88cb52e2c63a2e0))
+- **searxng**: Robust connection fix
+  ([`140eecb`](https://github.com/n24q02m/wet-mcp/commit/140eecb5ee064033df30b6ad62da708b990c4427))
 
-# [1.2.0](https://github.com/n24q02m/wet-mcp/compare/v1.1.0...v1.2.0) (2026-02-03)
+### Chores
 
+- **release**: 2.1.2 [skip ci]
+  ([`76553b5`](https://github.com/n24q02m/wet-mcp/commit/76553b5d93fcc66af1c379863ecacc1d5fdbe6bc))
+
+
+## v2.1.1 (2026-02-04)
+
+### Bug Fixes
+
+- Update tests and formatting
+  ([`17906f3`](https://github.com/n24q02m/wet-mcp/commit/17906f3641b80ae2fa267923cadd9b0169e411fa))
+
+### Chores
+
+- **release**: 2.1.1 [skip ci]
+  ([`d28a5a7`](https://github.com/n24q02m/wet-mcp/commit/d28a5a77088973009baae334b70e0ff04ed2093d))
+
+
+## v2.1.0 (2026-02-04)
+
+### Chores
+
+- **release**: 2.1.0 [skip ci]
+  ([`0ccf15a`](https://github.com/n24q02m/wet-mcp/commit/0ccf15a3fdea44acfed7bab68778de59e626f5e4))
 
 ### Features
 
-* integrate LiteLLM for media analysis (analyze tool) ([77003ce](https://github.com/n24q02m/wet-mcp/commit/77003ce43c3641a1d755398a03806826720a343c))
+- Enable LLM analysis for text files and enhance SearXNG container startup with port readiness
+  checks.
+  ([`4fb3f4e`](https://github.com/n24q02m/wet-mcp/commit/4fb3f4eb1dc6ed7fd47c29da7e824fc03b8eb146))
 
-# [1.1.0](https://github.com/n24q02m/wet-mcp/compare/v1.0.0...v1.1.0) (2026-02-03)
 
+## v2.0.0 (2026-02-04)
+
+### Chores
+
+- **release**: 2.0.0 [skip ci]
+  ([`52eb67c`](https://github.com/n24q02m/wet-mcp/commit/52eb67c52ac106a72005c0e11e2452b23b9ef68d))
 
 ### Features
 
-* integrate LiteLLM for media analysis (analyze tool) ([fe4d365](https://github.com/n24q02m/wet-mcp/commit/fe4d36571f6d2104f989e60178aac0e01d225002))
+- Refactor API_KEYS format and add auto-detect capabilities
+  ([`77e277b`](https://github.com/n24q02m/wet-mcp/commit/77e277b8989a692cd3ede287ba25f83f949d3f4b))
 
-# 1.0.0 (2026-02-03)
+### Breaking Changes
 
+- API_KEYS now expects ENV_VAR:key format e.g. GOOGLE_API_KEY:abc instead of gemini:abc
+
+
+## v1.3.0 (2026-02-03)
+
+### Chores
+
+- **release**: 1.3.0 [skip ci]
+  ([`618a86c`](https://github.com/n24q02m/wet-mcp/commit/618a86ccf015dba768dcd65f0494937ec6f64e25))
 
 ### Features
 
-* add initial project documentation including README, developer handbook, and agent context files ([f39cfab](https://github.com/n24q02m/wet-mcp/commit/f39cfabc2ccea02678a39acac9812c8c35832fe9))
-* Establish initial project structure with SearXNG integration, Docker management, and CI/CD. ([57fcc33](https://github.com/n24q02m/wet-mcp/commit/57fcc330e94b4590955458b727999b81ca3cf39a))
+- Enhance crawler with retries, user-agent, redirect following, and protocol-relative URL handling.
+  ([`ab1ecea`](https://github.com/n24q02m/wet-mcp/commit/ab1ecead5ae0fbbd4e7f33cd6d82e0a6e2215ea2))
+
+
+## v1.2.1 (2026-02-03)
+
+### Chores
+
+- **release**: 1.2.1 [skip ci]
+  ([`df3d238`](https://github.com/n24q02m/wet-mcp/commit/df3d238e685e675d0d9ec5faebf82df96190ac9f))
+
+
+## v1.2.0 (2026-02-03)
+
+### Bug Fixes
+
+- Silence Crawl4AI verbose output to prevent JSON parse errors
+  ([`62d5f92`](https://github.com/n24q02m/wet-mcp/commit/62d5f92a1a398fef7e4c1c9bd88cb52e2c63a2e0))
+
+### Chores
+
+- **release**: 1.2.0 [skip ci]
+  ([`737e7f7`](https://github.com/n24q02m/wet-mcp/commit/737e7f7def5b6782e2be34f851d61f7fa1660d04))
+
+### Features
+
+- Integrate LiteLLM for media analysis (analyze tool)
+  ([`77003ce`](https://github.com/n24q02m/wet-mcp/commit/77003ce43c3641a1d755398a03806826720a343c))
+
+
+## v1.1.0 (2026-02-03)
+
+### Chores
+
+- **release**: 1.1.0 [skip ci]
+  ([`43fcb0f`](https://github.com/n24q02m/wet-mcp/commit/43fcb0f448d855edb33c6356837de79217dfe249))
+
+### Features
+
+- Integrate LiteLLM for media analysis (analyze tool)
+  ([`fe4d365`](https://github.com/n24q02m/wet-mcp/commit/fe4d36571f6d2104f989e60178aac0e01d225002))
+
+
+## v1.0.0 (2026-02-03)
+
+- Initial Release
