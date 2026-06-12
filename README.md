@@ -2,7 +2,7 @@
 
 mcp-name: io.github.n24q02m/wet-mcp
 
-**5-strategy web search + extract + media MCP server, web-core ScrapingAgent backend.**
+**Web search, content extraction, and library docs for AI agents -- 5-strategy scraping, runs without API keys.**
 
 | Phase | Status | Scope |
 |---|---|---|
