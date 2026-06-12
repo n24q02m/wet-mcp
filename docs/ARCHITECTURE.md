@@ -128,19 +128,22 @@ Docs-search schema additions (libraries, versions, project_context)
 land via Alembic revisions `docs_002_libraries`,
 `docs_003_project_context`.
 
-## LLM provider dispatch (no hardcoded default)
+## LLM provider dispatch (per-task model chains)
 
-wet-mcp does not pin a default LLM model. Provider selection at runtime
-walks env vars in priority order:
+wet-mcp selects models via per-task model chains, not a pinned model or a
+key-priority router. Each chain is a CSV of `provider/model` entries
+(order = litellm fallback); the provider is inferred from the model prefix:
 
 ```text
-GEMINI_API_KEY / GOOGLE_API_KEY  -> gemini/* (litellm passthrough)
-OPENAI_API_KEY                   -> openai/* (litellm passthrough)
-XAI_API_KEY                      -> xai/* (litellm passthrough)
-LLM_MODELS env                   -> explicit comma-separated fallback chain
-LLM_API_BASE env                 -> custom OpenAI-compatible endpoint
+LLM_MODELS        -> LLM chain (e.g. extract agent). Empty -> LLM features off.
+EMBEDDING_MODELS  -> embedding chain. Empty -> local ONNX (qwen3-embed).
+RERANK_MODELS     -> rerank chain. Empty -> local ONNX cross-encoder.
+LLM_API_BASE      -> custom OpenAI-compatible endpoint (SSRF-guarded)
 ```
 
+The default chains list curated models but are filtered to providers whose
+`<PROVIDER>_API_KEY` is configured; if none has a key, the chain resolves
+empty and wet falls back to local (no keyless cloud call, no priority router).
 All calls dispatch through `mcp_core.llm` (litellm passthrough via the
 `mcp-core[llm]` extra); any litellm `provider/model` string works.
 
@@ -231,9 +234,9 @@ LRU eviction tracking.
 ```text
 extract(action="agent", query=...)
   |
-  +-- detect_llm_provider() (GEMINI_API_KEY > OPENAI_API_KEY > XAI_API_KEY)
+  +-- resolve LLM_MODELS chain (provider inferred from prefix; key-gated)
   |     |
-  |     +-- not configured -> return "Error: no LLM provider detected"
+  |     +-- no provider key configured -> return "Error: no LLM provider detected"
   |     |                     (does not crash the SDK)
   |     +-- configured     -> proceed
   |
