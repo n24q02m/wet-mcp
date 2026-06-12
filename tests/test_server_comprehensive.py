@@ -1092,6 +1092,7 @@ async def test_init_embedding_backend_local_fail():
         ms.resolve_embedding_model.return_value = None
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
+        ms.local_embedding_model = ""
 
         mock_init.side_effect = Exception("local init failed")
 
@@ -1109,6 +1110,7 @@ async def test_init_embedding_backend_local_not_available():
         ms.resolve_embedding_model.return_value = None
         ms.resolve_embedding_dims.return_value = 768
         ms.resolve_local_embedding_model.return_value = "local-model"
+        ms.local_embedding_model = ""
 
         mock_backend = MagicMock()
         mock_backend.check_available = AsyncMock(return_value=0)

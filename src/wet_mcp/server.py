@@ -376,6 +376,49 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
     stop_searxng()
 
 
+def _maybe_register_custom_embed(local_model: str) -> None:
+    """Register a BYO local embedding model with qwen3-embed if needed.
+
+    Only fires when the user opted in via LOCAL_EMBEDDING_MODEL. Built-in
+    ``n24q02m/Qwen3-*`` ids are already known to qwen3-embed and are left
+    untouched. A custom id is registered via ``qwen3_embed.CustomModelSpec``
+    using the companion env vars so the local backend can load it. Requires
+    LOCAL_EMBEDDING_DIM (>0).
+    """
+    if not settings.local_embedding_model:
+        return
+    if local_model.startswith("n24q02m/Qwen3-"):
+        return
+    if settings.local_embedding_dim <= 0:
+        logger.error(
+            "Custom local embedding model {!r} requires LOCAL_EMBEDDING_DIM > 0; "
+            "skipping registration.",
+            local_model,
+        )
+        return
+
+    from qwen3_embed import CustomModelSpec
+
+    try:
+        CustomModelSpec(
+            model_id=local_model,
+            hf=local_model,
+            model_file=settings.local_embedding_model_file,
+            dim=settings.local_embedding_dim,
+            pooling=settings.local_embedding_pooling,
+            normalization=settings.local_embedding_normalize,
+        ).register()
+        logger.info(
+            "Registered custom local embedding model {!r} (dim={}, pooling={})",
+            local_model,
+            settings.local_embedding_dim,
+            settings.local_embedding_pooling,
+        )
+    except ValueError as e:
+        # Already registered (re-init) or invalid spec — non-fatal.
+        logger.debug("Custom embedding registration skipped: {}", e)
+
+
 async def _init_embedding_backend(mode: str) -> None:
     """Initialize the embedding backend based on credential state and config.
 
@@ -397,6 +440,7 @@ async def _init_embedding_backend(mode: str) -> None:
 
     if cred_state == CredentialState.LOCAL or backend_type == "local":
         local_model = settings.resolve_local_embedding_model()
+        _maybe_register_custom_embed(local_model)
         try:
             backend = await asyncio.to_thread(init_backend, "local", local_model)
             native_dims = await backend.check_available()

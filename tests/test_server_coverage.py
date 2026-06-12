@@ -37,6 +37,7 @@ def _mock_settings():
         mock.rerank_chain.return_value = ["cohere/rerank-v3.5"]
         mock.resolve_local_embedding_model.return_value = "local-model"
         mock.resolve_local_rerank_model.return_value = "local-rerank"
+        mock.local_embedding_model = ""
         mock.wet_auto_searxng = False
         mock.setup_providers.return_value = "sdk"
         mock.download_dir = "/tmp/downloads"
@@ -330,6 +331,7 @@ async def test_init_embedding_local_zero_dims():
             ms.resolve_embedding_backend.return_value = "local"
             ms.resolve_local_embedding_model.return_value = "test"
             ms.resolve_embedding_dims.return_value = 768
+            ms.local_embedding_model = ""
 
             await server._init_embedding_backend("sdk")
 

@@ -452,6 +452,23 @@ def test_resolve_local_rerank_model():
 
 
 # -----------------------------------------------------------------------
+# BYO local model override (LOCAL_EMBEDDING_MODEL / LOCAL_RERANK_MODEL)
+# -----------------------------------------------------------------------
+
+
+def test_local_embedding_model_override(monkeypatch):
+    monkeypatch.setenv("LOCAL_EMBEDDING_MODEL", "Org/custom-embed")
+    s = Settings()
+    assert s.resolve_local_embedding_model() == "Org/custom-embed"
+
+
+def test_local_rerank_model_override(monkeypatch):
+    monkeypatch.setenv("LOCAL_RERANK_MODEL", "Org/custom-rerank")
+    s = Settings()
+    assert s.resolve_local_rerank_model() == "Org/custom-rerank"
+
+
+# -----------------------------------------------------------------------
 # Per-task model chains (model-chain migration, 2026-06-11)
 # -----------------------------------------------------------------------
 

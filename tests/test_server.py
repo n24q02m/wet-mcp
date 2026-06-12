@@ -5,7 +5,92 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from wet_mcp.server import extract, search
+from wet_mcp.server import _maybe_register_custom_embed, extract, search
+
+
+def test_maybe_register_custom_embed_no_optin_noop(monkeypatch):
+    """No registration when LOCAL_EMBEDDING_MODEL is unset (default local)."""
+    import qwen3_embed
+
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(settings, "local_embedding_model", "")
+    called = []
+    monkeypatch.setattr(
+        qwen3_embed.TextEmbedding,
+        "add_custom_model",
+        classmethod(lambda cls, desc, **kw: called.append((desc, kw))),
+    )
+    _maybe_register_custom_embed("local-model")
+    assert called == []
+
+
+def test_maybe_register_custom_embed_builtin_noop(monkeypatch):
+    """Built-in Qwen3 ids are left untouched (no registration call)."""
+    import qwen3_embed
+
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(
+        settings, "local_embedding_model", "n24q02m/Qwen3-Embedding-0.6B-ONNX"
+    )
+    called = []
+    monkeypatch.setattr(
+        qwen3_embed.TextEmbedding,
+        "add_custom_model",
+        classmethod(lambda cls, desc, **kw: called.append((desc, kw))),
+    )
+    _maybe_register_custom_embed("n24q02m/Qwen3-Embedding-0.6B-ONNX")
+    assert called == []
+
+
+def test_maybe_register_custom_embed_calls_add_custom_model(monkeypatch):
+    """A BYO id with dim/pooling registers via TextEmbedding.add_custom_model."""
+    import qwen3_embed
+    from qwen3_embed.common.model_description import PoolingType
+
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(settings, "local_embedding_model", "Org/custom-embed")
+    monkeypatch.setattr(settings, "local_embedding_dim", 768)
+    monkeypatch.setattr(settings, "local_embedding_pooling", "CLS")
+
+    captured = {}
+
+    def _fake(cls, desc, *, pooling, normalization):
+        captured["model"] = desc.model
+        captured["pooling"] = pooling
+        captured["normalization"] = normalization
+
+    monkeypatch.setattr(
+        qwen3_embed.TextEmbedding,
+        "add_custom_model",
+        classmethod(_fake),
+    )
+
+    _maybe_register_custom_embed("Org/custom-embed")
+
+    assert captured["model"] == "Org/custom-embed"
+    assert captured["pooling"] == PoolingType.CLS
+    assert captured["normalization"] is True
+
+
+def test_maybe_register_custom_embed_missing_dim(monkeypatch):
+    """A BYO id without LOCAL_EMBEDDING_DIM skips registration (no call)."""
+    import qwen3_embed
+
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(settings, "local_embedding_model", "Org/custom-embed")
+    monkeypatch.setattr(settings, "local_embedding_dim", 0)
+    called = []
+    monkeypatch.setattr(
+        qwen3_embed.TextEmbedding,
+        "add_custom_model",
+        classmethod(lambda cls, desc, **kw: called.append(desc)),
+    )
+    _maybe_register_custom_embed("Org/custom-embed")
+    assert called == []
 
 
 @pytest.mark.asyncio
