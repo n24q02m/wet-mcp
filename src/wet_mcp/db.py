@@ -23,6 +23,17 @@ from loguru import logger
 from wet_mcp.sources.docs import DISCOVERY_VERSION
 
 
+class EmbeddingModelMismatch(RuntimeError):
+    """Raised when the docs vector store was built with a different model.
+
+    The vector table stores embeddings produced by a specific embedding
+    model at a specific dimensionality. Switching models silently mixes
+    incompatible vector spaces (corruption / nonsense search). DocsDB
+    stamps the active model identity on first init and refuses to open a
+    store stamped with a different identity unless a rebuild is opted in.
+    """
+
+
 def _serialize_f32(vec: list[float]) -> bytes:
     """Serialize float vector for sqlite-vec."""
     return struct.pack(f"{len(vec)}f", *vec)
@@ -189,7 +200,13 @@ def _chunk_quality_score(content: str) -> float:
 class DocsDB:
     """SQLite-backed docs storage with FTS5 hybrid search."""
 
-    def __init__(self, db_path: Path, embedding_dims: int = 0):
+    def __init__(
+        self,
+        db_path: Path,
+        embedding_dims: int = 0,
+        model_identity: str = "",
+        reindex_on_model_change: bool = False,
+    ):
         self._db_path = db_path
         if (
             type(embedding_dims) is not int
@@ -200,6 +217,8 @@ class DocsDB:
                 f"embedding_dims must be an integer 0-65536, got {embedding_dims!r}"
             )
         self._embedding_dims = embedding_dims
+        self._model_identity = model_identity
+        self._reindex_on_model_change = reindex_on_model_change
         self._vec_enabled = False
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -229,6 +248,7 @@ class DocsDB:
                 logger.debug(f"sqlite-vec not available, FTS-only mode: {e}")
 
         self._create_tables()
+        self._guard_embedding_identity()
         logger.debug(f"DocsDB initialized at {db_path} (vec={self._vec_enabled})")
 
     def _create_tables(self) -> None:
@@ -238,6 +258,116 @@ class DocsDB:
         self._create_fts_table()
         self._create_vector_table()
         self._create_project_context_table()
+        self._create_store_meta_table()
+        self._conn.commit()
+
+    def _create_store_meta_table(self) -> None:
+        # Key/value metadata for store-level invariants (B2: embedding-model
+        # identity guard). Stamped on first init; compared on every open.
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS store_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        """)
+
+    def _guard_embedding_identity(self) -> None:
+        """Guard the vector store against silent embedding-model swaps.
+
+        Compares the CURRENT ``(embedding_model, embedding_dims)`` to the
+        stamped values:
+
+        * fresh (no stamp) -> stamp + proceed.
+        * match -> proceed.
+        * mismatch -> raise ``EmbeddingModelMismatch`` touching NO data,
+          UNLESS ``reindex_on_model_change`` is set, in which case the
+          vector table is dropped + cleared and the identity re-stamped
+          (the docs-embed pipeline rebuilds on the next pass).
+
+        ``embedding_dims`` is the primary guard (a dims mismatch is the
+        most dangerous case — incompatible vector spaces); ``embedding_model``
+        is also compared when an identity string is available.
+        """
+        stored = {
+            r["key"]: r["value"]
+            for r in self._conn.execute(
+                "SELECT key, value FROM store_meta "
+                "WHERE key IN ('embedding_model', 'embedding_dims')"
+            ).fetchall()
+        }
+
+        current_dims = str(int(self._embedding_dims))
+        # Fresh store: stamp identity and proceed.
+        if "embedding_dims" not in stored and "embedding_model" not in stored:
+            self._stamp_embedding_identity()
+            return
+
+        stored_dims = stored.get("embedding_dims")
+        stored_model = stored.get("embedding_model", "")
+
+        dims_mismatch = stored_dims is not None and stored_dims != current_dims
+        # Only compare the model id when both sides carry one (dims-only guard
+        # otherwise — stamping dims alone still catches the dangerous case).
+        model_mismatch = bool(
+            stored_model
+            and self._model_identity
+            and stored_model != self._model_identity
+        )
+
+        if not dims_mismatch and not model_mismatch:
+            return
+
+        if self._reindex_on_model_change:
+            logger.warning(
+                "Embedding-model change detected (stored model={!r} dims={!r}, "
+                "requested model={!r} dims={!r}); REINDEX_ON_MODEL_CHANGE is set "
+                "-- dropping the vector store and re-stamping. The docs-embed "
+                "pipeline will rebuild embeddings on the next pass.",
+                stored_model,
+                stored_dims,
+                self._model_identity,
+                current_dims,
+            )
+            self._reindex_vector_store()
+            self._stamp_embedding_identity()
+            return
+
+        raise EmbeddingModelMismatch(
+            "Docs vector store was built with embedding model "
+            f"{stored_model or '<unknown>'!r} (dims={stored_dims}) but the "
+            f"server is now configured for {self._model_identity or '<unknown>'!r} "
+            f"(dims={current_dims}). Mixing these vector spaces would corrupt "
+            "search. Set REINDEX_ON_MODEL_CHANGE=true to rebuild, or restore "
+            "the previous model."
+        )
+
+    def _stamp_embedding_identity(self) -> None:
+        """Record the active embedding identity in store_meta."""
+        self._conn.execute(
+            "INSERT OR REPLACE INTO store_meta (key, value) VALUES (?, ?)",
+            ("embedding_dims", str(int(self._embedding_dims))),
+        )
+        if self._model_identity:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO store_meta (key, value) VALUES (?, ?)",
+                ("embedding_model", self._model_identity),
+            )
+        self._conn.commit()
+
+    def _reindex_vector_store(self) -> None:
+        """Drop the vector table + clear stored vectors (opt-in reindex path).
+
+        Does NOT re-run embeddings inline; the existing docs-embed pipeline
+        rebuilds on the next pass.
+        """
+        try:
+            self._conn.execute("DROP TABLE IF EXISTS doc_chunks_vec")
+            self._conn.commit()
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Failed to drop vector table during reindex: {e}")
+        # Recreate the empty vector table at the current dims so the embed
+        # pipeline has a target to write into.
+        self._create_vector_table()
         self._conn.commit()
 
     def _create_project_context_table(self) -> None:

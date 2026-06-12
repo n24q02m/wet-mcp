@@ -61,6 +61,7 @@ else:
     _db_mod = sys.modules["wet_mcp.db"]
 
 DocsDB = _db_mod.DocsDB
+EmbeddingModelMismatch = _db_mod.EmbeddingModelMismatch
 _build_fts_queries = _db_mod._build_fts_queries
 _chunk_quality_score = _db_mod._chunk_quality_score
 _serialize_f32 = _db_mod._serialize_f32
@@ -1716,3 +1717,126 @@ class TestVecSearchChunkLoading:
             assert any("different topic" in c for c in all_contents)
         finally:
             db.close()
+
+
+# -----------------------------------------------------------------------
+# Embedding-model identity guard (store_meta table)
+# -----------------------------------------------------------------------
+class TestEmbeddingModelIdentityGuard:
+    """Guard the docs vector store against silent embedding-model swaps.
+
+    The vector table stores embeddings with no record of which model/dims
+    produced them. Switching models silently mixes incompatible vector
+    spaces. DocsDB stamps ``(embedding_model, embedding_dims)`` in a
+    ``store_meta`` table on first init and raises ``EmbeddingModelMismatch``
+    on reopen with a different identity unless reindex is opted in.
+    """
+
+    def test_fresh_store_stamps_identity(self, tmp_path):
+        """A fresh store records the current model id + dims in store_meta."""
+        db = DocsDB(
+            tmp_path / "stamp.db",
+            embedding_dims=4,
+            model_identity="provider/model-a",
+        )
+        try:
+            rows = {
+                r["key"]: r["value"]
+                for r in db._conn.execute(
+                    "SELECT key, value FROM store_meta"
+                ).fetchall()
+            }
+            assert rows["embedding_model"] == "provider/model-a"
+            assert rows["embedding_dims"] == "4"
+        finally:
+            db.close()
+
+    def test_reopen_same_identity_proceeds(self, tmp_path):
+        """Reopening with the same (model, dims) does not raise."""
+        db_path = tmp_path / "same.db"
+        db1 = DocsDB(db_path, embedding_dims=4, model_identity="provider/model-a")
+        db1.close()
+        db2 = DocsDB(db_path, embedding_dims=4, model_identity="provider/model-a")
+        try:
+            assert db2._embedding_dims == 4
+        finally:
+            db2.close()
+
+    def test_reopen_different_identity_raises(self, tmp_path):
+        """Reopening with a different model id raises EmbeddingModelMismatch."""
+        db_path = tmp_path / "diff.db"
+        db1 = DocsDB(db_path, embedding_dims=4, model_identity="provider/model-a")
+        db1.close()
+        with pytest.raises(EmbeddingModelMismatch) as exc:
+            DocsDB(db_path, embedding_dims=4, model_identity="provider/model-b")
+        msg = str(exc.value)
+        assert "provider/model-a" in msg
+        assert "provider/model-b" in msg
+        assert "REINDEX_ON_MODEL_CHANGE" in msg
+
+    def test_reopen_different_dims_raises(self, tmp_path):
+        """A dims change alone (the most dangerous case) raises."""
+        db_path = tmp_path / "dims.db"
+        db1 = DocsDB(db_path, embedding_dims=4, model_identity="provider/model-a")
+        db1.close()
+        with pytest.raises(EmbeddingModelMismatch):
+            DocsDB(db_path, embedding_dims=8, model_identity="provider/model-a")
+
+    def test_mismatch_touches_no_data(self, tmp_path):
+        """Default mismatch path raises WITHOUT destroying stamped identity."""
+        db_path = tmp_path / "safe.db"
+        db1 = DocsDB(db_path, embedding_dims=4, model_identity="provider/model-a")
+        db1.close()
+        with pytest.raises(EmbeddingModelMismatch):
+            DocsDB(db_path, embedding_dims=4, model_identity="provider/model-b")
+        # Stored identity must be intact (untouched) after the raise.
+        db3 = DocsDB(db_path, embedding_dims=4, model_identity="provider/model-a")
+        try:
+            row = db3._conn.execute(
+                "SELECT value FROM store_meta WHERE key = 'embedding_model'"
+            ).fetchone()
+            assert row["value"] == "provider/model-a"
+        finally:
+            db3.close()
+
+    @_requires_sqlite_vec
+    def test_reindex_on_model_change_drops_and_restamps(self, tmp_path):
+        """With reindex opted in, a mismatch drops vectors + re-stamps, no raise."""
+        db_path = tmp_path / "reindex.db"
+        db1 = DocsDB(db_path, embedding_dims=4, model_identity="provider/model-a")
+        try:
+            lib_id = db1.upsert_library("reidxlib")
+            ver_id = db1.upsert_version(lib_id, "1.0")
+            db1.add_chunks(
+                ver_id,
+                lib_id,
+                [{"content": "alpha", "url": "u", "chunk_index": 0}],
+                embeddings=[[0.1, 0.2, 0.3, 0.4]],
+            )
+            vec_count = db1._conn.execute(
+                "SELECT COUNT(*) FROM doc_chunks_vec"
+            ).fetchone()[0]
+            assert vec_count == 1
+        finally:
+            db1.close()
+
+        # Reopen with a new model id + reindex enabled -> no raise, drop vectors.
+        db2 = DocsDB(
+            db_path,
+            embedding_dims=4,
+            model_identity="provider/model-b",
+            reindex_on_model_change=True,
+        )
+        try:
+            # Identity re-stamped to the new model.
+            row = db2._conn.execute(
+                "SELECT value FROM store_meta WHERE key = 'embedding_model'"
+            ).fetchone()
+            assert row["value"] == "provider/model-b"
+            # Vector table cleared (rebuild deferred to the docs-embed pipeline).
+            vec_count = db2._conn.execute(
+                "SELECT COUNT(*) FROM doc_chunks_vec"
+            ).fetchone()[0]
+            assert vec_count == 0
+        finally:
+            db2.close()
