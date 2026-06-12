@@ -2,6 +2,35 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.6 (2026-06-12)
+
+### Bug Fixes
+
+- Decouple wet from web-core private SSRF internals, bump web-core to 2.2.x
+  ([#1325](https://github.com/n24q02m/wet-mcp/pull/1325),
+  [`61d671d`](https://github.com/n24q02m/wet-mcp/commit/61d671db2d4c92c5ef015ba39516a43d95309ee6))
+
+- Remove orphaned Qodo pr-agent config ([#1326](https://github.com/n24q02m/wet-mcp/pull/1326),
+  [`99b8970`](https://github.com/n24q02m/wet-mcp/commit/99b897094f94a58788497675c219877dd8e38b0f))
+
+- Restore PSR changelog generation and backfill version history
+  ([#1328](https://github.com/n24q02m/wet-mcp/pull/1328),
+  [`8a96c2e`](https://github.com/n24q02m/wet-mcp/commit/8a96c2e23bc7cadcb061ce88bb338903b5d750b1))
+
+- Retrigger CI for web-core decouple ([#1325](https://github.com/n24q02m/wet-mcp/pull/1325),
+  [`61d671d`](https://github.com/n24q02m/wet-mcp/commit/61d671db2d4c92c5ef015ba39516a43d95309ee6))
+
+- Sweep priority-router language from docs and plugin manifest
+  ([#1329](https://github.com/n24q02m/wet-mcp/pull/1329),
+  [`c5887e6`](https://github.com/n24q02m/wet-mcp/commit/c5887e673dc17d28c7d5be42b398ccc1652c7955))
+
+### Features
+
+- Allow overriding the local embed/rerank model via env
+  ([#1330](https://github.com/n24q02m/wet-mcp/pull/1330),
+  [`5135390`](https://github.com/n24q02m/wet-mcp/commit/5135390e1c3e2188080852bc1aa9021427b26d1f))
+
+
 ## v3.3.0-beta.5 (2026-06-11)
 
 ### Bug Fixes
