@@ -5,7 +5,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from wet_mcp.server import _maybe_register_custom_embed, extract, search
+from wet_mcp.server import (
+    _maybe_register_custom_embed,
+    _maybe_register_custom_rerank,
+    extract,
+    search,
+)
 
 
 def test_maybe_register_custom_embed_no_optin_noop(monkeypatch):
@@ -91,6 +96,73 @@ def test_maybe_register_custom_embed_missing_dim(monkeypatch):
     )
     _maybe_register_custom_embed("Org/custom-embed")
     assert called == []
+
+
+def test_maybe_register_custom_rerank_no_optin_noop(monkeypatch):
+    """No registration when LOCAL_RERANK_MODEL is unset (default local)."""
+    import qwen3_embed
+
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(settings, "local_rerank_model", "")
+    called = []
+    monkeypatch.setattr(
+        qwen3_embed.TextCrossEncoder,
+        "add_custom_model",
+        classmethod(lambda cls, desc, **kw: called.append(desc)),
+    )
+    _maybe_register_custom_rerank("local-reranker")
+    assert called == []
+
+
+def test_maybe_register_custom_rerank_builtin_noop(monkeypatch):
+    """Built-in Qwen3 reranker ids are left untouched (no registration call)."""
+    import qwen3_embed
+
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(
+        settings, "local_rerank_model", "n24q02m/Qwen3-Reranker-0.6B-ONNX-YesNo"
+    )
+    called = []
+    monkeypatch.setattr(
+        qwen3_embed.TextCrossEncoder,
+        "add_custom_model",
+        classmethod(lambda cls, desc, **kw: called.append(desc)),
+    )
+    _maybe_register_custom_rerank("n24q02m/Qwen3-Reranker-0.6B-ONNX-YesNo")
+    assert called == []
+
+
+def test_maybe_register_custom_rerank_calls_add_custom_model(monkeypatch):
+    """A BYO reranker id registers via TextCrossEncoder.add_custom_model."""
+    import qwen3_embed
+
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(settings, "local_rerank_model", "Org/custom-reranker")
+    monkeypatch.setattr(
+        settings, "local_rerank_model_file", "onnx/model_quantized.onnx"
+    )
+
+    captured = {}
+
+    def _fake(cls, desc):
+        captured["model"] = desc.model
+        captured["model_file"] = desc.model_file
+        captured["hf"] = desc.sources.hf
+
+    monkeypatch.setattr(
+        qwen3_embed.TextCrossEncoder,
+        "add_custom_model",
+        classmethod(_fake),
+    )
+
+    _maybe_register_custom_rerank("Org/custom-reranker")
+
+    assert captured["model"] == "Org/custom-reranker"
+    assert captured["model_file"] == "onnx/model_quantized.onnx"
+    assert captured["hf"] == "Org/custom-reranker"
 
 
 @pytest.mark.asyncio

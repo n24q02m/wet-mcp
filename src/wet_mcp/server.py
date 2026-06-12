@@ -432,6 +432,34 @@ def _maybe_register_custom_embed(local_model: str) -> None:
         logger.debug("Custom embedding registration skipped: {}", e)
 
 
+def _maybe_register_custom_rerank(local_model: str) -> None:
+    """Register a BYO local reranker with qwen3-embed if needed.
+
+    Only fires when the user opted in via LOCAL_RERANK_MODEL. Built-in
+    ``n24q02m/Qwen3-Reranker-*`` ids are already known to qwen3-embed and are
+    left untouched. A custom id is registered via ``qwen3_embed.CustomRerankerSpec``
+    using LOCAL_RERANK_MODEL_FILE so the local cross-encoder can load it. A
+    cross-encoder needs no dim/pooling.
+    """
+    if not settings.local_rerank_model:
+        return
+    if local_model.startswith("n24q02m/Qwen3-Reranker-"):
+        return
+
+    from qwen3_embed import CustomRerankerSpec
+
+    try:
+        CustomRerankerSpec(
+            model_id=local_model,
+            hf=local_model,
+            model_file=settings.local_rerank_model_file,
+        ).register()
+        logger.info("Registered custom local reranker {!r}", local_model)
+    except ValueError as e:
+        # Already registered (re-init) or invalid spec — non-fatal.
+        logger.debug("Custom reranker registration skipped: {}", e)
+
+
 async def _init_embedding_backend(mode: str) -> None:
     """Initialize the embedding backend based on credential state and config.
 
@@ -515,6 +543,7 @@ async def _init_reranker_backend(mode: str) -> None:
 
     if cred_state == CredentialState.LOCAL or rerank_backend_type == "local":
         local_model = settings.resolve_local_rerank_model()
+        _maybe_register_custom_rerank(local_model)
         try:
             reranker = await asyncio.to_thread(init_reranker, "local", local_model)
             available = await asyncio.to_thread(reranker.check_available)

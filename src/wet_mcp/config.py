@@ -130,7 +130,7 @@ class Settings(BaseSettings):
     # BYO local model override. When set, the LOCAL embedding/rerank backend
     # loads this model id instead of the bundled Qwen3 default. A non-built-in
     # id is registered with qwen3-embed at startup using the companion vars
-    # below (embedding only; rerank custom registration is a follow-up).
+    # below.
     local_embedding_model: str = ""  # env LOCAL_EMBEDDING_MODEL
     local_rerank_model: str = ""  # env LOCAL_RERANK_MODEL
     # Companion vars for registering a custom LOCAL embedding model (BYO ONNX).
@@ -139,6 +139,10 @@ class Settings(BaseSettings):
     local_embedding_dim: int = 0  # required (>0) for a custom embedding model
     local_embedding_normalize: bool = True
     local_embedding_model_file: str = "onnx/model.onnx"
+    # Companion var for registering a custom LOCAL reranker (BYO ONNX cross-
+    # encoder). Used only when LOCAL_RERANK_MODEL is a non-built-in id. A cross-
+    # encoder needs no dim/pooling -- just the ONNX file path within the repo.
+    local_rerank_model_file: str = "onnx/model.onnx"  # env LOCAL_RERANK_MODEL_FILE
 
     # Reranking
     rerank_enabled: bool = (
