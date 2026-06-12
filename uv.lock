@@ -2711,7 +2711,7 @@ wheels = [
 
 [[package]]
 name = "qwen3-embed"
-version = "1.12.0b1"
+version = "1.12.0b2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -2722,9 +2722,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/80/fbbd7adf445a547fd4119e58b2c352b8c921df2028727453aba81c57bd0b/qwen3_embed-1.12.0b1.tar.gz", hash = "sha256:b3949f6df0e634eba5c343b04a120699122eb0b1e840a78e9117c1f6804d8580", size = 203461, upload-time = "2026-06-12T11:19:37.424Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7e/b1/20c225672a262c9facb1301dc9166e6be6dbb07a15990d2e205408afd0dd/qwen3_embed-1.12.0b2.tar.gz", hash = "sha256:ec39c0b9c270646b4ec4285df0d0ff9bec0ce916bd71967c73111d6a3a72553c", size = 204642, upload-time = "2026-06-12T12:41:00.208Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/52/b3/42c80b5789441061acb449eb743ae5762b7154e9c19f259ef851707fb231/qwen3_embed-1.12.0b1-py3-none-any.whl", hash = "sha256:c00fc1ef8070f1615e803926bbda4a3050bbfdcf9282c974b192591d554e6444", size = 64546, upload-time = "2026-06-12T11:19:36.324Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/f8/95bbbdbfe1b7fff17d72c6264de3920b944607d2c334357039aa15370b17/qwen3_embed-1.12.0b2-py3-none-any.whl", hash = "sha256:1b0a6971047dccf6e5e29fd724b247cfccbcdad4df4c68c93082f920391915c6", size = 65310, upload-time = "2026-06-12T12:41:01.357Z" },
 ]
 
 [[package]]
@@ -3497,7 +3497,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "3.3.0b5"
+version = "3.3.0b7"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3563,7 +3563,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pydantic", specifier = ">=2.13.4,<2.14" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", specifier = ">=1.12.0b1" },
+    { name = "qwen3-embed", specifier = ">=1.12.0b2" },
     { name = "sqlite-vec" },
     { name = "urllib3", specifier = ">=2.7.0" },
     { name = "waitress", marker = "sys_platform == 'win32'", specifier = ">=3.0.2" },
