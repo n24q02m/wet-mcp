@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.8 (2026-06-12)
+
+### Bug Fixes
+
+- Sync README tagline to current capability description
+  ([#1333](https://github.com/n24q02m/wet-mcp/pull/1333),
+  [`3090464`](https://github.com/n24q02m/wet-mcp/commit/3090464a94c390769ba9999d960d58b931a0b428))
+
+### Features
+
+- Register a BYO local reranker via CustomRerankerSpec
+  ([#1335](https://github.com/n24q02m/wet-mcp/pull/1335),
+  [`7084531`](https://github.com/n24q02m/wet-mcp/commit/708453118e30b9990a3d93c9f859507790f9c33a))
+
+- Sync cross-promo section ([#1334](https://github.com/n24q02m/wet-mcp/pull/1334),
+  [`a04cca8`](https://github.com/n24q02m/wet-mcp/commit/a04cca8d2081b2521353f558556cdbfa1d4866c9))
+
+
 ## v3.3.0-beta.7 (2026-06-12)
 
 ### Features
