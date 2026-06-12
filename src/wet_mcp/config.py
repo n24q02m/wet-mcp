@@ -120,6 +120,13 @@ class Settings(BaseSettings):
     embedding_dims: int = 0  # 0 = use server default (768)
     embedding_backend: str = ""  # DEPRECATED: inferred from EMBEDDING_MODELS
 
+    # B2: docs vector-store embedding-model identity guard. When the active
+    # embedding model/dims differ from what the store was built with, DocsDB
+    # raises EmbeddingModelMismatch by default (safe). Set this to rebuild:
+    # the vector table is dropped + re-stamped and the docs-embed pipeline
+    # repopulates it on the next pass.
+    reindex_on_model_change: bool = False  # env REINDEX_ON_MODEL_CHANGE
+
     # BYO local model override. When set, the LOCAL embedding/rerank backend
     # loads this model id instead of the bundled Qwen3 default. A non-built-in
     # id is registered with qwen3-embed at startup using the companion vars

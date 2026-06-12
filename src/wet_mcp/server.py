@@ -47,9 +47,10 @@ from wet_mcp.transport_check import is_uvx_tool_venv, uvx_searxng_blocked_error
 logger.remove()
 logger.add(sys.stderr, level=settings.log_level)
 
-# Fixed embedding dimensions for sqlite-vec.
-# All embeddings are truncated to this size so switching models never
-# breaks the vector table. Override via EMBEDDING_DIMS env var.
+# Default embedding dimensions for sqlite-vec when EMBEDDING_DIMS is unset.
+# Embeddings are truncated to this size, but a same-dim model swap still
+# yields an incompatible vector space -- DocsDB's embedding-model identity
+# guard (B2) catches that. Override via EMBEDDING_DIMS env var.
 _DEFAULT_EMBEDDING_DIMS = 768
 
 # Reranking: retrieve more candidates than final limit, then rerank.
@@ -290,7 +291,19 @@ async def _lifespan_startup() -> asyncio.Task | None:
     #    Alembic stamps the baseline + applies any forward migrations.
     docs_path = settings.get_db_path()
     docs_path.parent.mkdir(parents=True, exist_ok=True)
-    _docs_db = DocsDB(docs_path, embedding_dims=_embedding_dims)
+    # B2: embedding-model identity guard. Stamp the active model id so a
+    # later model swap cannot silently mix incompatible vector spaces.
+    # LOCAL backend -> resolved local model id; CLOUD -> head of the chain.
+    if settings.resolve_embedding_backend() == "cloud":
+        _model_identity = settings.embedding_primary() or ""
+    else:
+        _model_identity = settings.resolve_local_embedding_model()
+    _docs_db = DocsDB(
+        docs_path,
+        embedding_dims=_embedding_dims,
+        model_identity=_model_identity,
+        reindex_on_model_change=settings.reindex_on_model_change,
+    )
     try:
         from wet_mcp.migrations import run_migrations_on_startup
 
