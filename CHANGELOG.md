@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.7 (2026-06-12)
+
+### Features
+
+- Guard docs vector store against embedding-model mismatch with opt-in reindex
+  ([#1332](https://github.com/n24q02m/wet-mcp/pull/1332),
+  [`049ffb1`](https://github.com/n24q02m/wet-mcp/commit/049ffb138a173420769992724e9de406b382b6c0))
+
+
 ## v3.3.0-beta.6 (2026-06-12)
 
 ### Bug Fixes
