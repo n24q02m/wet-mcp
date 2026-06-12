@@ -120,6 +120,19 @@ class Settings(BaseSettings):
     embedding_dims: int = 0  # 0 = use server default (768)
     embedding_backend: str = ""  # DEPRECATED: inferred from EMBEDDING_MODELS
 
+    # BYO local model override. When set, the LOCAL embedding/rerank backend
+    # loads this model id instead of the bundled Qwen3 default. A non-built-in
+    # id is registered with qwen3-embed at startup using the companion vars
+    # below (embedding only; rerank custom registration is a follow-up).
+    local_embedding_model: str = ""  # env LOCAL_EMBEDDING_MODEL
+    local_rerank_model: str = ""  # env LOCAL_RERANK_MODEL
+    # Companion vars for registering a custom LOCAL embedding model (BYO ONNX).
+    # Required only when LOCAL_EMBEDDING_MODEL is a non-built-in id.
+    local_embedding_pooling: str = "MEAN"  # MEAN | CLS | LAST_TOKEN | DISABLED
+    local_embedding_dim: int = 0  # required (>0) for a custom embedding model
+    local_embedding_normalize: bool = True
+    local_embedding_model_file: str = "onnx/model.onnx"
+
     # Reranking
     rerank_enabled: bool = (
         True  # Enable reranking (always available via local fallback)
@@ -315,7 +328,12 @@ class Settings(BaseSettings):
         return self.embedding_dims
 
     def resolve_local_embedding_model(self) -> str:
-        """Resolve local embedding model: GGUF if GPU + llama-cpp, else ONNX."""
+        """Resolve local embedding model: GGUF if GPU + llama-cpp, else ONNX.
+
+        LOCAL_EMBEDDING_MODEL overrides the bundled default (BYO model).
+        """
+        if self.local_embedding_model:
+            return self.local_embedding_model
         return _resolve_local_model(
             "n24q02m/Qwen3-Embedding-0.6B-ONNX",
             "n24q02m/Qwen3-Embedding-0.6B-GGUF",
@@ -348,7 +366,11 @@ class Settings(BaseSettings):
         The ONNX default is the YesNo variant (~598 MB at inference vs ~12 GB
         for the full-vocab build); it is mathematically equivalent and, since
         qwen3-embed 1.11.2b3, produces batch-invariant scores (issue #725).
+
+        LOCAL_RERANK_MODEL overrides the bundled default (BYO model).
         """
+        if self.local_rerank_model:
+            return self.local_rerank_model
         return _resolve_local_model(
             "n24q02m/Qwen3-Reranker-0.6B-ONNX-YesNo",
             "n24q02m/Qwen3-Reranker-0.6B-GGUF",
