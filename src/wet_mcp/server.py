@@ -2084,6 +2084,34 @@ async def _background_index_and_search(
         docs_url = _normalize_docs_url(docs_url)
         logger.info(f"Background indexing started for '{library}' from {docs_url}...")
 
+        # Start SearXNG fallback search in background (speculative optimization)
+        fallback_query = (
+            f"{library} {language} documentation"
+            if language
+            else f"{library} documentation"
+        )
+
+        async def _run_fallback():
+            try:
+                s_url = await asyncio.wait_for(
+                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
+                )
+                res = await asyncio.wait_for(
+                    searxng_search(
+                        searxng_url=s_url,
+                        query=fallback_query,
+                        categories="general",
+                        max_results=3,
+                    ),
+                    timeout=15,
+                )
+                return res
+            except Exception as e:
+                logger.debug(f"SearXNG fallback background task failed: {e}")
+                return None
+
+        fallback_task = asyncio.create_task(_run_fallback())
+
         try:
             all_chunks, page_count = await asyncio.wait_for(
                 _fetch_and_chunk_docs(
@@ -2100,60 +2128,48 @@ async def _background_index_and_search(
             )
             all_chunks, page_count = [], 0
 
-        # Fallback SearXNG
+        # Evaluate fallback if primary fetch was poor
         if page_count <= 2 and len(all_chunks) < 100:
-            fallback_query = (
-                f"{library} {language} documentation"
-                if language
-                else f"{library} documentation"
-            )
             try:
-                searxng_url = await asyncio.wait_for(
-                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                )
-                fallback_result = await asyncio.wait_for(
-                    searxng_search(
-                        searxng_url=searxng_url,
-                        query=fallback_query,
-                        categories="general",
-                        max_results=3,
-                    ),
-                    timeout=15,
-                )
-                import json
+                fallback_result = await fallback_task
+                if fallback_result:
+                    import json
 
-                fallback_data = json.loads(fallback_result)
-                tasks = []
-                alt_urls = []
-                for fr in fallback_data.get("results", []):
-                    alt_url = fr.get("url", "")
-                    if not alt_url or not alt_url.startswith("http"):
-                        continue
-                    alt_parsed = urlparse(alt_url)
-                    orig_parsed = urlparse(docs_url)
-                    if alt_parsed.netloc == orig_parsed.netloc:
-                        continue
-                    alt_urls.append(alt_url)
-                    tasks.append(
-                        asyncio.wait_for(
-                            _fetch_and_chunk_docs(alt_url, "", query),
-                            timeout=_FALLBACK_TIMEOUT,
-                        )
-                    )
+                    fallback_data = json.loads(fallback_result)
+                    alt_urls = []
+                    for fr in fallback_data.get("results", []):
+                        u = fr.get("url", "")
+                        if u and u.startswith("http"):
+                            alt_parsed = urlparse(u)
+                            orig_parsed = urlparse(docs_url)
+                            if alt_parsed.netloc != orig_parsed.netloc:
+                                alt_urls.append(u)
 
-                if tasks:
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    for i, res in enumerate(results):
-                        if isinstance(res, BaseException):
-                            continue
-                        alt_chunks, alt_pages = res
-                        if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
-                            docs_url = alt_urls[i]
-                            all_chunks = alt_chunks
-                            page_count = alt_pages
-                            break
+                    if alt_urls:
+                        tasks = [
+                            asyncio.wait_for(
+                                _fetch_and_chunk_docs(u, "", query),
+                                timeout=_FALLBACK_TIMEOUT,
+                            )
+                            for u in alt_urls
+                        ]
+                        results = await asyncio.gather(*tasks, return_exceptions=True)
+                        for i, res in enumerate(results):
+                            if isinstance(res, BaseException):
+                                continue
+                            alt_chunks, alt_pages = res
+                            if alt_pages > page_count and len(alt_chunks) > len(
+                                all_chunks
+                            ):
+                                docs_url = alt_urls[i]
+                                all_chunks = alt_chunks
+                                page_count = alt_pages
+                                break
             except Exception as e:
-                logger.debug(f"SearXNG fallback failed: {e}")
+                logger.debug(f"Fallback processing failed: {e}")
+        else:
+            # Cancel the speculative fallback search if not needed
+            fallback_task.cancel()
 
         if not all_chunks:
             logger.error(
