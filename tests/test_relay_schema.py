@@ -1,4 +1,7 @@
-from wet_mcp.relay_schema import RELAY_SCHEMA
+import pytest
+from pydantic import ValidationError
+
+from wet_mcp.relay_schema import RELAY_SCHEMA, ConfigData
 
 
 def test_has_model_chain_tasks():
@@ -33,3 +36,17 @@ def test_suggested_models_carry_provider_prefix():
         if f.get("type") == "model-chain":
             for m in f["suggestedModels"]:
                 assert "/" in m, f"suggested model {m!r} lacks a provider prefix"
+
+
+def test_config_data_validation():
+    # Valid data
+    config = ConfigData(token="test-token")
+    assert config.token == "test-token"
+
+    # Missing required field
+    with pytest.raises(ValidationError):
+        ConfigData()  # type: ignore
+
+    # Wrong type (Pydantic v2 in this env is strict about string types for this model)
+    with pytest.raises(ValidationError):
+        ConfigData(token=123)  # type: ignore

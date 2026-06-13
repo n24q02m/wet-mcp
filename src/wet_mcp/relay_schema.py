@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic import BaseModel, Field
+
 _EMBEDDING_SUGGESTED = [
     "jina_ai/jina-embeddings-v5-text-small",
     "gemini/gemini-embedding-001",
@@ -141,3 +143,7 @@ RELAY_SCHEMA: dict[str, Any] = {
         },
     ],
 }
+
+
+class ConfigData(BaseModel):
+    token: str = Field(..., description="The API token")
