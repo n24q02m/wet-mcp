@@ -7,8 +7,8 @@ from unittest.mock import patch
 import pytest
 
 from wet_mcp.token_store import (
-    _get_token_dir,
-    _get_token_dir_for_sub,
+    get_token_dir,
+    get_token_dir_for_sub,
     get_token_path,
     get_token_path_for_sub,
     load_token,
@@ -36,9 +36,9 @@ def token_dir(tmp_path):
         yield d
 
 
-def test_get_token_dir(token_dir):
-    """Test _get_token_dir helper."""
-    assert _get_token_dir() == token_dir
+def testget_token_dir(token_dir):
+    """Test get_token_dir helper."""
+    assert get_token_dir() == token_dir
 
 
 def test_get_token_path(token_dir):
@@ -205,9 +205,9 @@ def test_save_token_unix_permissions(token_dir):
         assert mock_chmod.call_count == 2
 
 
-def test_get_token_dir_for_sub(token_dir, tmp_path):
-    """Test _get_token_dir_for_sub helper."""
-    assert _get_token_dir_for_sub("user1") == tmp_path / "subs" / "user1" / "tokens"
+def testget_token_dir_for_sub(token_dir, tmp_path):
+    """Test get_token_dir_for_sub helper."""
+    assert get_token_dir_for_sub("user1") == tmp_path / "subs" / "user1" / "tokens"
 
 
 def test_get_token_path_for_sub(token_dir, tmp_path):
@@ -278,7 +278,7 @@ def test_get_token_path_for_sub_simple_assertion(token_dir, tmp_path):
 
 def test_get_token_path_standard(token_dir):
     """Test get_token_path with standard provider strings."""
-    for provider in ["google", "github", "slack"]:
+    for provider in ["google", "github", "slack", "microsoft", "apple"]:
         assert get_token_path(provider) == token_dir / f"{provider}.json"
 
 

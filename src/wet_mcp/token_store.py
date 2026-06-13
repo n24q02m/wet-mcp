@@ -33,11 +33,11 @@ def _validate_safe_name(name: str) -> None:
         raise ValueError(f"Invalid path component: {name}")
 
 
-def _get_token_dir() -> Path:
+def get_token_dir() -> Path:
     """Get directory for token storage (~/.wet-mcp/tokens/).
 
     Single-user (default) layout. Multi-user remote mode uses
-    :func:`_get_token_dir_for_sub` instead so concurrent JWT subjects
+    :func:`get_token_dir_for_sub` instead so concurrent JWT subjects
     do not share GDrive tokens.
     """
     return settings.get_data_dir() / "tokens"
@@ -46,10 +46,10 @@ def _get_token_dir() -> Path:
 def get_token_path(provider: str) -> Path:
     """Return the secure file path for a provider token."""
     _validate_safe_name(provider)
-    return _get_token_dir() / f"{provider}.json"
+    return get_token_dir() / f"{provider}.json"
 
 
-def _get_token_dir_for_sub(sub: str) -> Path:
+def get_token_dir_for_sub(sub: str) -> Path:
     """Per-sub token directory (``~/.wet-mcp/subs/<sub>/tokens``).
 
     Multi-user remote mode (``PUBLIC_URL`` set) keys every artifact by
@@ -64,7 +64,7 @@ def get_token_path_for_sub(sub: str, provider: str) -> Path:
     """Get path for a provider's token file scoped to a specific JWT sub."""
     _validate_safe_name(sub)
     _validate_safe_name(provider)
-    return _get_token_dir_for_sub(sub) / f"{provider}.json"
+    return get_token_dir_for_sub(sub) / f"{provider}.json"
 
 
 def _set_secure_permissions(path: Path) -> None:
@@ -144,7 +144,7 @@ def save_token(provider: str, token: dict) -> None:
     File permissions: 0600 (owner read/write only)
     Directory permissions: 0700 (owner read/write/execute only)
     """
-    token_dir = _get_token_dir()
+    token_dir = get_token_dir()
     token_dir.mkdir(parents=True, exist_ok=True)
     _set_secure_permissions(token_dir)
 
@@ -162,7 +162,7 @@ def save_token_for_sub(sub: str, provider: str, token: dict) -> None:
     single GDrive refresh-token. Same 0600 / 0700 hardening as the
     single-user path.
     """
-    token_dir = _get_token_dir_for_sub(sub)
+    token_dir = get_token_dir_for_sub(sub)
     token_dir.mkdir(parents=True, exist_ok=True)
     _set_secure_permissions(token_dir)
 
