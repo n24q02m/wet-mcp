@@ -785,3 +785,40 @@ class TestQwen3GetModelWarning:
         mock_model.embed.return_value = iter([np.array([0.1, 0.2, 0.3])])
         with patch.object(backend, "_get_model", return_value=mock_model):
             assert await backend.check_available() == 3
+
+
+class TestCloudEmbeddingParallel:
+    """Verify that CloudEmbeddingBackend.embed_texts parallelizes requests."""
+
+    async def test_embed_texts_parallel_execution(self):
+        """Total time should be less than sequential execution time."""
+        import time
+        from unittest.mock import patch
+
+        from wet_mcp.embedder import CloudEmbeddingBackend
+
+        backend = CloudEmbeddingBackend("text-embedding-3-small")
+        # Ensure we have at least 2 batches
+        n_texts = backend.MAX_BATCH_SIZE + 1
+        texts = ["test"] * n_texts
+
+        delay = 0.5
+
+        async def mock_embed_batch_inner(batch, dimensions=None):
+            await __import__("asyncio").sleep(delay)
+            return [[0.1]] * len(batch)
+
+        with patch.object(
+            backend, "_embed_batch_inner", side_effect=mock_embed_batch_inner
+        ):
+            start_time = time.perf_counter()
+            await backend.embed_texts(texts)
+            end_time = time.perf_counter()
+
+        elapsed = end_time - start_time
+        # Sequential would be ~1.0s, parallel should be ~0.5s (plus overhead)
+        # We check it is significantly less than 2 * delay
+        assert elapsed < delay * 1.5
+        print(
+            f"Parallel execution took {elapsed:.4f}s vs expected sequential {delay * 2}s"
+        )

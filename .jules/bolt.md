@@ -19,3 +19,7 @@
 ## 2024-10-30 - Sliding Window Optimizations
 **Learning:** In string processing tasks like passage extraction that use a sliding window approach with multiple query terms, repeatedly checking for terms that don't even exist in the document wastes significant CPU cycles.
 **Action:** When extracting passages, pre-filter query terms by first checking their existence in the overall text (`[term for term in query_terms if term in content]`). Additionally, record the `max_possible_score` so the algorithm can terminate early when the best possible window is found. This simple technique avoids redundant checking and provides an effective speedup.
+
+## 2026-06-13 - Parallel Async API Calls
+**Learning:** Sequential `await` loops for I/O-bound operations (like batch embedding requests) create an artificial bottleneck, where total latency scales linearly with the number of batches ((N \times D)$). Using `asyncio.gather` allows the event loop to execute these tasks concurrently, reducing total wall-clock time to approximately the duration of the slowest task ((D)$).
+**Action:** Collect independent coroutines into a list and execute them using `asyncio.gather(*tasks)`. Ensure result aggregation preserves the expected order and that retry logic is handled within the individual coroutines to maintain robustness.
