@@ -47,7 +47,7 @@ dependencies = [
     "qwen3-embed>=1.12.0b2",
     "pillow>=12.2.0",
     "diskcache>=5.6.3",
-    "cryptography>=48.0.0",
+    "cryptography>=48.0.1",
     # Document conversion (PDF, DOCX, PPTX → Markdown)
     "markitdown[pdf,docx,pptx,xlsx]",
     # Schema validation for structured extraction
@@ -65,9 +65,9 @@ dependencies = [
     "fastmcp>=3.4.2,<4",
     # Google Drive sync
     "google-api-python-client>=2.197.0",
-    "google-auth>=2.53.0",
+    "google-auth>=2.54.0",
     # S3-compatible sync (AWS S3, Cloudflare R2, Backblaze B2, MinIO)
-    "boto3>=1.43.24",
+    "boto3>=1.43.29",
     # Production WSGI server for embedded SearXNG on Windows
     # (Werkzeug dev server deadlocks under concurrent engine requests)
     "waitress>=3.0.2; sys_platform == 'win32'",
@@ -87,7 +87,7 @@ dependencies = [
     # langchain-core -> langsmith (used for tracing, not prompt pull, so
     # the vulnerable Client.pull_prompt path is not exercised by wet-mcp
     # — pinned as defense-in-depth). First patched in langsmith 0.8.0.
-    "langsmith>=0.8.9",
+    "langsmith>=0.8.15",
 ]
 
 [dependency-groups]
@@ -100,7 +100,7 @@ dev = [
     "pre-commit",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
-    "syrupy>=5.3.1",
+    "syrupy>=5.3.2",
     "moto[s3]>=5.2.2",
 ]
 
