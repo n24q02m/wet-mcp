@@ -1,4 +1,5 @@
 import sqlite3
+from typing import Any, cast
 
 from wet_mcp.db import DocsDB
 
@@ -15,7 +16,8 @@ class TestAddChunksSerialization:
 
         chunks = [{"content": "valid_chunk"}, {"content": "error_chunk"}]
         # First embedding is valid (list of 2 floats), second is invalid (string)
-        embeddings = [[1.0, 2.0], "invalid_embedding"]
+        # Use cast(Any, ...) to satisfy ty check while passing invalid data
+        embeddings = cast(Any, [[1.0, 2.0], "invalid_embedding"])
 
         # Should NOT raise an exception and should return total chunk count
         count = db.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
@@ -47,11 +49,10 @@ class TestAddChunksSerialization:
         db._vec_enabled = True
 
         # Invalid query embedding (not a list of floats)
-        query_embedding = "invalid"
+        # Use cast(Any, ...) to satisfy ty check while passing invalid data
+        query_embedding = cast(Any, "invalid")
 
         # Should NOT raise an exception and return empty results (or at least handle error)
-        # Note: search handles serialization in the try-except block of the search method itself?
-        # Let's check the search code again.
         results = db.search("query", query_embedding=query_embedding)
         assert results == []
         db.close()
