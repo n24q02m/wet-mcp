@@ -1532,7 +1532,10 @@ class DocsDB:
             return None
         result = dict(row)
         try:
-            result["locked_libraries"] = json.loads(result["locked_libraries"])
+            libs = json.loads(result["locked_libraries"])
+            if not isinstance(libs, list):
+                libs = []
+            result["locked_libraries"] = libs
         except (TypeError, json.JSONDecodeError):
             result["locked_libraries"] = []
         return result

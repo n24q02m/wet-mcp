@@ -728,7 +728,7 @@ class TestProjectContext:
         assert "last_used_at" in result
 
     def test_get_project_context_invalid_json(self, db):
-        """get_project_context returns empty list on JSON decode error (line 1406)."""
+        """get_project_context returns empty list on JSON decode error (line 1536)."""
         project_path = "/path/to/bad_json"
         # Manually insert invalid JSON
         db._conn.execute(
@@ -742,12 +742,27 @@ class TestProjectContext:
         assert result is not None
         assert result["locked_libraries"] == []
 
+    def test_get_project_context_type_error(self, db):
+        """get_project_context returns empty list on TypeError (line 1536)."""
+        project_path = "/path/to/type_error"
+        # Manually insert an integer to trigger TypeError in json.loads
+        db._conn.execute(
+            "INSERT INTO project_context (project_path, locked_libraries, created_at, last_used_at) "
+            "VALUES (?, ?, ?, ?)",
+            (project_path, 123, 1000.0, 1000.0),
+        )
+        db._conn.commit()
+
+        result = db.get_project_context(project_path)
+        assert result is not None
+        assert result["locked_libraries"] == []
+
     def test_get_project_context_none(self, db):
         """get_project_context returns None for missing project."""
         assert db.get_project_context("/non/existent") is None
 
     def test_get_project_context_no_table(self, db):
-        """get_project_context returns None if table is missing (line 1395)."""
+        """get_project_context returns None if table is missing (line 1524)."""
         db._conn.execute("DROP TABLE project_context")
         db._conn.commit()
         assert db.get_project_context("/any/path") is None
