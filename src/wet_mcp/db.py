@@ -828,20 +828,27 @@ class DocsDB:
         self._conn.commit()
 
     def get_best_version(
-        self, library_id: str, target: str | None = None
+        self, library_id: str, preferred_version: str | None = None
     ) -> dict | None:
-        """Get best matching version for library."""
-        if target:
-            # Try exact match first
+        """Find best matching version, handling 'stable' vs 'latest' semantics."""
+        candidates = []
+        if preferred_version:
+            candidates.append(preferred_version)
+
+        # Always consider these as high-priority fallbacks if not already requested.
+        for tag in ("latest", "stable"):
+            if tag not in candidates:
+                candidates.append(tag)
+
+        for v in candidates:
             row = self._conn.execute(
-                """SELECT * FROM versions
-                   WHERE library_id = ? AND version = ? AND status = 'indexed'""",
-                (library_id, target),
+                "SELECT * FROM versions WHERE library_id = ? AND version = ? AND status = 'indexed'",
+                (library_id, v),
             ).fetchone()
             if row:
                 return dict(row)
 
-        # Fallback to latest indexed
+        # Final fallback to whatever was indexed most recently.
         row = self._conn.execute(
             """SELECT * FROM versions
                WHERE library_id = ? AND status = 'indexed'
