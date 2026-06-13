@@ -120,7 +120,7 @@ mise run dev       # uv run wet-mcp
 - Graceful fallback chains: Cloud -> Local, Tier 0 -> 1 -> 2 -> 3
 - `match action:` cho tool action dispatch
 - `asyncio.to_thread()` cho wrapping sync operations
-- Embedding luu tai 768 dims (default). Doi provider KHONG lam hu vector table
+- Embedding luu tai 768 dims (default). Doi embedding MODEL = doi vector space -> B2 identity guard CHAN boot (set REINDEX_ON_MODEL_CHANGE=true de re-embed). 768-dim chung chi giu table khong vo schema; KHONG cho mix vector tu 2 model khac nhau (cung dims van rac search).
 - Renovate: Python upgrades DISABLED
 
 ## Known bugs / gotchas (phat hien 2026-04-18 E2E)
