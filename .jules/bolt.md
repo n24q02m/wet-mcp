@@ -19,3 +19,6 @@
 ## 2024-10-30 - Sliding Window Optimizations
 **Learning:** In string processing tasks like passage extraction that use a sliding window approach with multiple query terms, repeatedly checking for terms that don't even exist in the document wastes significant CPU cycles.
 **Action:** When extracting passages, pre-filter query terms by first checking their existence in the overall text (`[term for term in query_terms if term in content]`). Additionally, record the `max_possible_score` so the algorithm can terminate early when the best possible window is found. This simple technique avoids redundant checking and provides an effective speedup.
+## 2025-05-15 - [Security] SQL Injection in DDL Fix
+**Learning:** SQLite ALTER TABLE statements cannot be parameterized using standard bind variables. Using f-strings or string concatenation for DDL is a common pattern that triggers security alerts.
+**Action:** Implement a whitelist-based validation layer for DDL statements. Use a centralized helper method with explicit security suppressions (# nosemgrep, # nosec) only after strict input validation against the whitelist.

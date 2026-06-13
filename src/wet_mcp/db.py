@@ -93,6 +93,30 @@ _DOC_CHUNKS_COLUMNS = {
     "summary_provider",
 }
 
+# Security: Allowlist for idempotent schema migrations (legacy DB support)
+_ALLOWED_ALTER_COLUMNS = {
+    "libraries": {
+        "discovery_version INTEGER DEFAULT 0",
+        "canonical_name TEXT",
+        "homepage TEXT",
+        "github_url TEXT",
+        "package_managers TEXT",
+        "tier INTEGER NOT NULL DEFAULT 2",
+        "last_indexed_at REAL",
+        "total_versions INTEGER NOT NULL DEFAULT 0",
+    },
+    "versions": {
+        "release_date REAL",
+        "source_url TEXT",
+    },
+    "doc_chunks": {
+        "section TEXT",
+        "topic TEXT",
+        "content_hash TEXT",
+        "token_count INTEGER",
+    },
+}
+
 # Directive-heavy content (mkdocs leftover, rst directives)
 _DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
 
@@ -385,6 +409,23 @@ class DocsDB:
             ON project_context(last_used_at)
         """)
 
+    def _add_column_idempotent(self, table: str, col_ddl: str) -> None:
+        """Add a column to a table if it does not exist, with security validation."""
+        if table not in _ALLOWED_ALTER_COLUMNS:
+            raise ValueError(f"Unauthorized table for ALTER: {table}")
+        if col_ddl not in _ALLOWED_ALTER_COLUMNS[table]:
+            raise ValueError(f"Unauthorized DDL for ALTER {table}: {col_ddl}")
+
+        try:
+            # Security: Inputs are validated against _ALLOWED_ALTER_COLUMNS whitelist.
+            # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query
+            self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_ddl}")  # nosec
+            self._conn.commit()
+            col_name = col_ddl.split()[0]
+            logger.debug(f"Migrated {table} table: added {col_name}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
     def _create_libraries_table(self) -> None:
         # Libraries metadata (Phase 2 schema; pre-Alembic legacy databases
         # are upgraded to this shape by alembic/versions/docs_002_libraries.py).
@@ -413,8 +454,6 @@ class DocsDB:
         """)
 
         # Idempotent column adds for legacy DBs that pre-date Alembic.
-        # Each ALTER is wrapped in a try/except so re-running on a fresh
-        # head-shape table does not raise.
         for col_ddl in (
             "discovery_version INTEGER DEFAULT 0",
             "canonical_name TEXT",
@@ -425,13 +464,7 @@ class DocsDB:
             "last_indexed_at REAL",
             "total_versions INTEGER NOT NULL DEFAULT 0",
         ):
-            try:
-                self._conn.execute(f"ALTER TABLE libraries ADD COLUMN {col_ddl}")
-                self._conn.commit()
-                col_name = col_ddl.split()[0]
-                logger.debug(f"Migrated libraries table: added {col_name}")
-            except sqlite3.OperationalError:
-                pass  # Column already exists
+            self._add_column_idempotent("libraries", col_ddl)
 
     def _create_versions_table(self) -> None:
         # Versions (Phase 2 schema with release_date + source_url).
@@ -453,11 +486,7 @@ class DocsDB:
         """)
         # Idempotent column adds for legacy DBs.
         for col_ddl in ("release_date REAL", "source_url TEXT"):
-            try:
-                self._conn.execute(f"ALTER TABLE versions ADD COLUMN {col_ddl}")
-                self._conn.commit()
-            except sqlite3.OperationalError:
-                pass
+            self._add_column_idempotent("versions", col_ddl)
 
     def _create_doc_chunks_table(self) -> None:
         # Document chunks (Phase 2 schema with section/topic/content_hash/token_count).
@@ -487,11 +516,7 @@ class DocsDB:
             "content_hash TEXT",
             "token_count INTEGER",
         ):
-            try:
-                self._conn.execute(f"ALTER TABLE doc_chunks ADD COLUMN {col_ddl}")
-                self._conn.commit()
-            except sqlite3.OperationalError:
-                pass
+            self._add_column_idempotent("doc_chunks", col_ddl)
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_version
             ON doc_chunks(version_id)
