@@ -231,16 +231,26 @@ def _extract_passage(content: str, query_terms: list[str], max_chars: int = 500)
     """Extract most relevant passage from content around query terms."""
     content_lower = content.lower()
 
+    # Performance optimization: pre-filter terms that actually exist in the document.
+    # This prevents redundant membership checks in the sliding window loop for terms
+    # that are not present anywhere in the content, and allows early termination.
+    present_terms = [term for term in query_terms if term in content_lower]
+    max_possible_score = len(present_terms)
+
     # Find best position (most query terms nearby)
     best_pos = 0
     best_score = 0
 
-    for i in range(0, len(content_lower) - 100, 50):
-        window = content_lower[i : i + max_chars]
-        score = sum(1 for term in query_terms if term in window)
-        if score > best_score:
-            best_score = score
-            best_pos = i
+    if max_possible_score > 0:
+        for i in range(0, len(content_lower) - 100, 50):
+            window = content_lower[i : i + max_chars]
+            score = sum(1 for term in present_terms if term in window)
+            if score > best_score:
+                best_score = score
+                best_pos = i
+                # Early termination if we hit the maximum possible score
+                if best_score == max_possible_score:
+                    break
 
     if best_score == 0:
         # No query terms found, return beginning

@@ -16,3 +16,6 @@
 ## 2024-05-18 - String uniform validation
 **Learning:** For uniform string validation (where `len(set(text)) == 1`), replacing an O(N) generator check like `all(c in ALLOWED for c in text)` with a simple O(1) index check `text[0] in ALLOWED` significantly improves iteration overhead.
 **Action:** Always prefer array indexing to generator comprehensions when validating a uniformly matching string, and ensure that the stripped result is cached to avoid redundant allocations.
+## 2024-10-30 - Sliding Window Optimizations
+**Learning:** In string processing tasks like passage extraction that use a sliding window approach with multiple query terms, repeatedly checking for terms that don't even exist in the document wastes significant CPU cycles.
+**Action:** When extracting passages, pre-filter query terms by first checking their existence in the overall text (`[term for term in query_terms if term in content]`). Additionally, record the `max_possible_score` so the algorithm can terminate early when the best possible window is found. This simple technique avoids redundant checking and provides an effective speedup.
