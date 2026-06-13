@@ -11,7 +11,7 @@
 # build with uv 0.9.30 + Python 3.13.11, which does not satisfy
 # requires-python = ">=3.13.13" from web-core 1.3.5.
 # Copy the uv binary from the standalone uv image (always latest).
-FROM python:3.13-slim-bookworm@sha256:e4fa1f978c539608a10cdf74700ac32a3f719dfc6e8b6b6001da82deb36302a2 AS builder
+FROM python:3.13-slim-bookworm@sha256:05b95397cac02b060ff1251afaa78087d92d7034369afbc8eb765631cada8257 AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest@sha256:eaa5f1a3305307aaf9e67fe2bbba1d85ebbb2d8a63bce23af21797bfafbe0f8b /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -64,7 +64,7 @@ RUN uv run python -m playwright install chromium
 # section D6. Build stdio: `docker buildx build --target stdio -t <repo>:stdio .`
 # Build http:  `docker buildx build --target http  -t <repo>:http .`
 # Build latest (= http): `docker buildx build --target http -t <repo>:latest .`
-FROM python:3.13-slim-bookworm@sha256:e4fa1f978c539608a10cdf74700ac32a3f719dfc6e8b6b6001da82deb36302a2 AS runtime
+FROM python:3.13-slim-bookworm@sha256:05b95397cac02b060ff1251afaa78087d92d7034369afbc8eb765631cada8257 AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/n24q02m/wet-mcp"
 LABEL io.modelcontextprotocol.server.name="io.github.n24q02m/wet-mcp"
