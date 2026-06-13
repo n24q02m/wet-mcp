@@ -251,6 +251,11 @@ class DocsDB:
         self._guard_embedding_identity()
         logger.debug(f"DocsDB initialized at {db_path} (vec={self._vec_enabled})")
 
+    @property
+    def db_path(self) -> Path:
+        """Return the path to the database file."""
+        return self._db_path
+
     def _create_tables(self) -> None:
         self._create_libraries_table()
         self._create_versions_table()
@@ -578,14 +583,28 @@ class DocsDB:
     # -----------------------------------------------------------------------
 
     def stats(self) -> dict:
-        """Return database statistics."""
+        """Get database statistics."""
         lib_count = self._conn.execute("SELECT COUNT(*) FROM libraries").fetchone()[0]
+        version_count = self._conn.execute("SELECT COUNT(*) FROM versions").fetchone()[
+            0
+        ]
         chunk_count = self._conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()[
             0
         ]
+        # In WAL mode, much of the data may be in the -wal file.
+        # We sum them to get the real on-disk footprint.
+        p = Path(self.db_path)
+        db_size_bytes = p.stat().st_size
+        wal_p = p.with_name(p.name + "-wal")
+        if wal_p.exists():
+            db_size_bytes += wal_p.stat().st_size
+
+        db_size_mb = round(db_size_bytes / 1024 / 1024, 2)
         return {
             "libraries": lib_count,
+            "versions": version_count,
             "chunks": chunk_count,
+            "db_size_mb": db_size_mb,
             "vec_enabled": self._vec_enabled,
         }
 

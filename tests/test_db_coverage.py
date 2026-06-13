@@ -619,7 +619,9 @@ class TestStats:
         db, _, _ = populated_db
         s = db.stats()
         assert s["libraries"] >= 1
+        assert s["versions"] >= 1
         assert s["chunks"] >= 4
+        assert s["db_size_mb"] > 0
         assert s["vec_enabled"] is False
 
 

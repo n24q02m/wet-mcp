@@ -1444,7 +1444,9 @@ class TestStats:
         """Stats on empty DB returns zeros."""
         stats = db.stats()
         assert stats["libraries"] == 0
+        assert stats["versions"] == 0
         assert stats["chunks"] == 0
+        assert stats["db_size_mb"] >= 0
         assert stats["vec_enabled"] is False
 
     def test_stats_with_data(self, db_with_data):
@@ -1452,7 +1454,9 @@ class TestStats:
         db = db_with_data[0]
         stats = db.stats()
         assert stats["libraries"] == 1
+        assert stats["versions"] == 1
         assert stats["chunks"] == 4
+        assert stats["db_size_mb"] > 0
         assert stats["vec_enabled"] is False
 
     @_requires_sqlite_vec
