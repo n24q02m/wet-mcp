@@ -21,7 +21,7 @@ def test_embedding_dims_validation(tmp_path):
 
     # Invalid type - string
     with pytest.raises(ValueError, match="embedding_dims must be an integer 0-65536"):
-        DocsDB(db_path, embedding_dims="128")
+        DocsDB(db_path, embedding_dims="128")  # type: ignore
 
 
 def test_embedding_dims_casting_in_sql(tmp_path):
