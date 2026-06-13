@@ -563,11 +563,10 @@ class DocsDB:
             if not row:
                 # Security: Dimensions are validated as 0-65536 integer in __init__.
                 # Schema construction (CREATE VIRTUAL TABLE) does not support parameters.
-                dims_str = str(int(self._embedding_dims))
                 sql = (
                     "CREATE VIRTUAL TABLE doc_chunks_vec USING vec0("
                     "id TEXT PRIMARY KEY, "
-                    "embedding float[" + dims_str + "]"
+                    f"embedding float[{int(self._embedding_dims)}]"
                     ")"
                 )
                 # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
