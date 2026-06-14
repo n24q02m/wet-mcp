@@ -20,14 +20,23 @@ from wet_mcp.token_store import (
 
 
 @pytest.fixture
-def token_dir(tmp_path):
+def token_dir(tmp_path, monkeypatch):
     """Provide a temp token directory and patch settings.
 
-    Also patches subprocess.run so the real Windows icacls call cannot
+    ``get_token_path`` / ``_get_token_dir`` (path-shape helpers) read
+    ``settings.get_data_dir()``, so keep patching settings for the helper
+    tests. The encrypted store routes through ``PerPluginStore`` +
+    ``LocalFsBackend``, which key off ``Path.home()`` -- redirect that to a
+    temp dir too so ``save_token`` / ``load_token`` round-trips stay isolated
+    and never touch the real ``~/.wet-mcp``.
+
+    Also patches subprocess.run so any residual Windows icacls call cannot
     lock down pytest tmp paths during test runs (would break cleanup).
     """
     d = tmp_path / "tokens"
     d.mkdir()
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
     with (
         patch("wet_mcp.token_store.settings") as mock_settings,
         patch("wet_mcp.token_store.subprocess.run"),
@@ -69,140 +78,75 @@ def test_load_missing_token(token_dir):
     assert load_token("drive") is None
 
 
-def test_save_and_load_token(token_dir):
-    """Test standard save and load flow."""
+def test_save_and_load_token(token_dir, tmp_path):
+    """Test standard save and load flow (encrypted blob via LocalFsBackend)."""
     token = {"access_token": "abc123", "token_type": "Bearer"}
     save_token("drive", token)
 
     loaded = load_token("drive")
     assert loaded == token
 
-    # Verify file exists
-    path = get_token_path("drive")
-    assert path.exists()
+    # Verify the encrypted token file landed under the LocalFs layout.
+    assert (tmp_path / ".wet-mcp" / "tokens" / "drive.json").exists()
 
 
-def test_load_invalid_json(token_dir):
-    """load_token returns None for malformed JSON."""
-    path = get_token_path("drive")
-    path.write_text("not json", encoding="utf-8")
+def test_load_corrupt_blob_returns_none(token_dir, tmp_path):
+    """load_token returns None when the on-disk blob is not decryptable.
+
+    Tokens are AES-GCM ciphertext now, so arbitrary garbage bytes fail to
+    decrypt -> treated as absent (re-auth lifecycle preserved).
+    """
+    path = tmp_path / ".wet-mcp" / "tokens" / "drive.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"not a valid aes-gcm blob")
     assert load_token("drive") is None
 
 
-def test_load_non_dict_json(token_dir):
-    """load_token returns None if JSON is not a dictionary."""
-    path = get_token_path("drive")
-    path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
-    assert load_token("drive") is None
+def test_load_non_dict_payload(token_dir):
+    """load_token returns None if the decrypted payload is not a dictionary."""
+    from mcp_core.storage.backends import InMemoryBackend
+    from mcp_core.storage.per_plugin_store import PerPluginStore
+
+    mem = InMemoryBackend()
+    # Encrypt a non-dict payload through the store, then read via load_token.
+    store = PerPluginStore("wet", None, backend=mem, sub_key="tokens/drive")
+    non_dict_payload: object = [1, 2, 3]
+    store.save(non_dict_payload)  # type: ignore
+    assert load_token("drive", backend=mem) is None
 
 
 def test_load_no_access_token(token_dir):
     """load_token returns None if access_token key is missing."""
-    path = get_token_path("drive")
-    path.write_text(json.dumps({"refresh_token": "xyz"}), encoding="utf-8")
-    assert load_token("drive") is None
+    from mcp_core.storage.backends import InMemoryBackend
+    from mcp_core.storage.per_plugin_store import PerPluginStore
+
+    mem = InMemoryBackend()
+    PerPluginStore("wet", None, backend=mem, sub_key="tokens/drive").save(
+        {"refresh_token": "xyz"}
+    )
+    assert load_token("drive", backend=mem) is None
 
 
-def test_load_oserror(token_dir):
-    """load_token handles OSError during read."""
-    with patch.object(Path, "exists", side_effect=OSError("disk error")):
-        assert load_token("drive") is None
+def test_load_backend_error_returns_none(token_dir):
+    """load_token swallows backend errors and returns None (re-auth, not crash)."""
+
+    class _BoomBackend:
+        def get(self, key):
+            raise OSError("disk error")
+
+        def put(self, key, blob):
+            raise OSError("disk error")
+
+        def delete(self, key):
+            raise OSError("disk error")
+
+    assert load_token("drive", backend=_BoomBackend()) is None
 
 
-def test_save_token_creates_dir(tmp_path):
-    """save_token creates token dir if it doesn't exist."""
-    with (
-        patch("wet_mcp.token_store.settings") as mock_settings,
-        patch("wet_mcp.token_store.subprocess.run"),
-    ):
-        mock_settings.get_data_dir.return_value = tmp_path
-        save_token("s3", {"access_token": "abc"})
-        assert (tmp_path / "tokens" / "s3.json").exists()
-
-
-def test_save_token_chmod_oserror(token_dir):
-    """save_token ignores OSError from chmod (Unix branch)."""
-    with (
-        patch("wet_mcp.token_store.os.name", "posix"),
-        patch.object(Path, "chmod", side_effect=OSError("perm error")),
-    ):
-        # Should not raise exception
-        save_token("drive", {"access_token": "test"})
-        assert (token_dir / "drive.json").exists()
-
-
-def test_save_token_windows_permissions(token_dir, monkeypatch):
-    """On Windows, invoke icacls (not chmod) to lock down inheritance + grant.
-
-    Principal is DOMAIN\\user (fully qualified) so icacls does not collide with
-    the machine account when username matches hostname.
-    """
-    monkeypatch.setenv("USERDOMAIN", "TESTDOM")
-    with (
-        patch("wet_mcp.token_store.os.name", "nt"),
-        patch("wet_mcp.token_store.subprocess.run") as mock_run,
-        patch("wet_mcp.token_store.getpass.getuser", return_value="tester"),
-        patch.object(Path, "chmod") as mock_chmod,
-    ):
-        mock_run.return_value.returncode = 0
-        save_token("drive", {"access_token": "test"})
-        mock_chmod.assert_not_called()
-        # One call for the directory + one for the file
-        assert mock_run.call_count == 2
-        for call_args in mock_run.call_args_list:
-            cmd = call_args[0][0]
-            assert cmd[0] == "icacls"
-            assert "/inheritance:r" in cmd
-            assert "/grant:r" in cmd
-            assert "TESTDOM\\tester:F" in cmd
-        assert load_token("drive") == {"access_token": "test"}
-
-
-def test_save_token_windows_icacls_failure_rollback(token_dir, monkeypatch):
-    """When icacls /grant fails, rollback inheritance so dir stays accessible."""
-    monkeypatch.setenv("USERDOMAIN", "TESTDOM")
-    with (
-        patch("wet_mcp.token_store.os.name", "nt"),
-        patch("wet_mcp.token_store.subprocess.run") as mock_run,
-        patch("wet_mcp.token_store.getpass.getuser", return_value="tester"),
-        patch.object(Path, "chmod"),
-    ):
-        # Simulate grant failure -> returncode=5
-        mock_run.return_value.returncode = 5
-        mock_run.return_value.stderr = b"No mapping"
-        save_token("drive", {"access_token": "test"})
-        # Expect: dir grant fail -> dir rollback; file grant fail -> file rollback = 4 calls
-        assert mock_run.call_count == 4
-        rollback_cmds = [
-            c for c in mock_run.call_args_list if "/inheritance:e" in c[0][0]
-        ]
-        assert len(rollback_cmds) == 2, "Expected 2 rollback calls (/inheritance:e)"
-
-
-def test_save_token_windows_icacls_failure_non_fatal(token_dir):
-    """icacls failure must not break save_token flow."""
-    with (
-        patch("wet_mcp.token_store.os.name", "nt"),
-        patch(
-            "wet_mcp.token_store.subprocess.run",
-            side_effect=OSError("icacls missing"),
-        ),
-        patch("wet_mcp.token_store.getpass.getuser", return_value="tester"),
-    ):
-        # Should not raise
-        save_token("drive", {"access_token": "test"})
-        assert load_token("drive") == {"access_token": "test"}
-
-
-def test_save_token_unix_permissions(token_dir):
-    """On Unix, set 0700 for dir and 0600 for file."""
-    with (
-        patch("wet_mcp.token_store.os.name", "posix"),
-        patch.object(Path, "chmod") as mock_chmod,
-    ):
-        save_token("drive", {"access_token": "test"})
-        # Verify chmod was called (once for dir, once for file)
-        assert mock_chmod.call_count == 2
+def test_save_token_creates_dir(token_dir, tmp_path):
+    """save_token creates the LocalFs token dir if it doesn't exist."""
+    save_token("s3", {"access_token": "abc"})
+    assert (tmp_path / ".wet-mcp" / "tokens" / "s3.json").exists()
 
 
 def test_get_token_dir_for_sub(token_dir, tmp_path):
@@ -286,15 +230,3 @@ def test_path_traversal_validation_empty_sub(token_dir):
     """Test that empty sub is blocked in get_token_path_for_sub."""
     with pytest.raises(ValueError, match="Name cannot be empty"):
         get_token_path_for_sub("", "drive")
-
-
-def test_save_token_windows_no_user(token_dir):
-    """Test Windows permission logic when username cannot be determined."""
-    with (
-        patch("wet_mcp.token_store.os.name", "nt"),
-        patch("wet_mcp.token_store.getpass.getuser", return_value=""),
-        patch("wet_mcp.token_store.subprocess.run") as mock_run,
-    ):
-        # Should log warning and exit without calling icacls
-        save_token("drive", {"access_token": "test"})
-        mock_run.assert_not_called()

@@ -19,10 +19,27 @@ import os
 import stat
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
+if TYPE_CHECKING:
+    from mcp_core.storage.per_plugin_store import PerPluginStore
+
 from wet_mcp.config import settings
+from wet_mcp.credential_state import PLUGIN_NAME  # "wet"
+
+
+def _token_store(provider: str, sub: str | None, backend) -> PerPluginStore:
+    from mcp_core.storage.backends import backend_from_env
+    from mcp_core.storage.per_plugin_store import PerPluginStore
+
+    return PerPluginStore(
+        PLUGIN_NAME,
+        sub,
+        backend=backend or backend_from_env(),
+        sub_key=f"tokens/{provider}",
+    )
 
 
 def _validate_safe_name(name: str) -> None:
@@ -119,40 +136,24 @@ def _set_secure_permissions(path: Path) -> None:
         logger.debug(f"icacls failed for {path}: {e}")
 
 
-def load_token(provider: str) -> dict | None:
-    """Load stored OAuth token for a provider.
-
-    Returns the token dict, or None if not found/invalid.
-    """
-    path = get_token_path(provider)
+def load_token(provider: str, backend=None) -> dict | None:
+    """Load stored OAuth token for a provider (decrypted via PerPluginStore)."""
+    _validate_safe_name(provider)
     try:
-        if not path.exists():
-            return None
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, dict) and "access_token" in data:
-            return data
-        logger.warning(f"Invalid token format in {path}")
+        data = _token_store(provider, None, backend).load()
+    except Exception as e:  # corrupt blob / wrong key -> absent (triggers re-auth)
+        logger.warning(f"Failed to load token for {provider}: {e}")
         return None
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning(f"Failed to load token from {path}: {e}")
-        return None
+    if isinstance(data, dict) and "access_token" in data:
+        return data
+    return None
 
 
-def save_token(provider: str, token: dict) -> None:
-    """Save OAuth token to local storage with secure permissions.
-
-    File permissions: 0600 (owner read/write only)
-    Directory permissions: 0700 (owner read/write/execute only)
-    """
-    token_dir = _get_token_dir()
-    token_dir.mkdir(parents=True, exist_ok=True)
-    _set_secure_permissions(token_dir)
-
-    path = get_token_path(provider)
-    path.write_text(json.dumps(token, indent=2), encoding="utf-8")
-    _set_secure_permissions(path)
-
-    logger.info(f"Token saved: {path}")
+def save_token(provider: str, token: dict, backend=None) -> None:
+    """Save OAuth token, encrypted via PerPluginStore + selected backend."""
+    _validate_safe_name(provider)
+    _token_store(provider, None, backend).save(token)
+    logger.info(f"Token saved (encrypted): wet/tokens/{provider}")
 
 
 def save_token_for_sub(sub: str, provider: str, token: dict) -> None:
