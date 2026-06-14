@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     searxng_url: str = "http://localhost:41592"
     searxng_timeout: int = 30
 
+    # Pluggable web search backend selector. "searxng" (default, local) or
+    # "tavily" (cloud adapter for CF where embedded SearXNG cannot run).
+    search_backend: str = "searxng"  # env SEARCH_BACKEND: searxng | tavily
+    tavily_api_key: str = ""  # env TAVILY_API_KEY
+
     # Crawler
     crawler_headless: bool = True
     crawler_timeout: int = 60
