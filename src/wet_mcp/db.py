@@ -624,7 +624,9 @@ class DocsDB:
         # presence once per call so we don't crash on older schemas.
         existing_cols = {
             r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
+            for r in self._conn.execute(
+                "SELECT name FROM pragma_table_info(?)", ("libraries",)
+            ).fetchall()
         }
         pkg_json = (
             json.dumps(package_managers, ensure_ascii=False)
@@ -747,7 +749,9 @@ class DocsDB:
         """
         existing_cols = {
             r["name"]
-            for r in self._conn.execute("PRAGMA table_info(libraries)").fetchall()
+            for r in self._conn.execute(
+                "SELECT name FROM pragma_table_info(?)", ("libraries",)
+            ).fetchall()
         }
         sets: list[str] = []
         params: list = []
@@ -880,7 +884,9 @@ class DocsDB:
         # Detect optional columns once so we can branch on a single INSERT.
         existing_cols = {
             r["name"]
-            for r in self._conn.execute("PRAGMA table_info(doc_chunks)").fetchall()
+            for r in self._conn.execute(
+                "SELECT name FROM pragma_table_info(?)", ("doc_chunks",)
+            ).fetchall()
         }
         phase2_cols = [
             c

@@ -705,7 +705,7 @@ class TestMarkLibraryIndexed:
             # The first call should be PRAGMA table_info
             # If it didn't return early, there would be a second call with UPDATE
             assert mock_conn.execute.call_count == 1
-            assert "PRAGMA table_info" in mock_conn.execute.call_args[0][0]
+            assert "pragma_table_info" in mock_conn.execute.call_args[0][0]
 
 
 # ---------------------------------------------------------------------------
