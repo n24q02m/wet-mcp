@@ -19,3 +19,7 @@
 ## 2024-10-30 - Sliding Window Optimizations
 **Learning:** In string processing tasks like passage extraction that use a sliding window approach with multiple query terms, repeatedly checking for terms that don't even exist in the document wastes significant CPU cycles.
 **Action:** When extracting passages, pre-filter query terms by first checking their existence in the overall text (`[term for term in query_terms if term in content]`). Additionally, record the `max_possible_score` so the algorithm can terminate early when the best possible window is found. This simple technique avoids redundant checking and provides an effective speedup.
+
+## 2026-06-14 - Rate-Limited Concurrency with asyncio.Semaphore
+**Learning:** When parallelizing API requests using `asyncio.gather`, throwing all tasks into it simultaneously can lead to unbounded concurrency, which quickly triggers API rate limits (e.g., HTTP 429) or resource exhaustion.
+**Action:** Always wrap parallel network calls in a concurrency limiter, such as `asyncio.Semaphore(10)`, to safely throttle requests while still benefiting from significant latency reductions.

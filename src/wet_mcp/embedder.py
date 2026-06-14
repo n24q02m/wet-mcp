@@ -285,13 +285,28 @@ class CloudEmbeddingBackend:
             f"(max {self.MAX_BATCH_SIZE}/batch)"
         )
 
+        # ⚡ Bolt Optimization: Parallelize batch embedding requests
+        # Using asyncio.gather allows concurrent execution of independent API calls,
+        # dramatically reducing overall latency for large documents compared to
+        # sequential iteration. Order is preserved by gather().
+        # We use a Semaphore to avoid unbounded concurrency and rate limits.
+        sem = asyncio.Semaphore(10)
+
+        async def _embed_with_sem(batch: list[str]) -> list[list[float]]:
+            async with sem:
+                return await self._embed_batch_inner(batch, dimensions)
+
+        tasks = []
         for i in range(0, len(texts), self.MAX_BATCH_SIZE):
             batch = texts[i : i + self.MAX_BATCH_SIZE]
             batch_num = i // self.MAX_BATCH_SIZE + 1
             logger.debug(
-                f"Embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
+                f"Queuing embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
             )
-            batch_result = await self._embed_batch_inner(batch, dimensions)
+            tasks.append(_embed_with_sem(batch))
+
+        results = await asyncio.gather(*tasks)
+        for batch_result in results:
             all_embeddings.extend(batch_result)
 
         return all_embeddings
