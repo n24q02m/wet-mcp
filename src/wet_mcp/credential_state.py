@@ -27,6 +27,7 @@ from enum import Enum
 from typing import Any
 
 from loguru import logger
+from mcp_core.storage.backends import backend_from_env
 from mcp_core.storage.per_plugin_store import PerPluginStore
 
 SERVER_NAME = "wet-mcp"
@@ -198,7 +199,7 @@ def resolve_credential_state() -> CredentialState:
     )
     if is_http:
         try:
-            saved = PerPluginStore(PLUGIN_NAME).load()
+            saved = PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).load()
             if saved and any(saved.get(k) for k in CLOUD_KEYS):
                 # Apply to env vars
                 for key, value in saved.items():
@@ -275,7 +276,7 @@ def store_for_sub(sub: str, config: dict[str, str]) -> None:
     ~/.wet-mcp/subs/<sub>/config.json with AES-GCM encryption keyed
     from CREDENTIAL_SECRET env var.
     """
-    PerPluginStore(PLUGIN_NAME, sub).save(config)
+    PerPluginStore(PLUGIN_NAME, sub, backend=backend_from_env()).save(config)
 
 
 def read_for_sub(sub: str) -> dict[str, str]:
@@ -284,7 +285,7 @@ def read_for_sub(sub: str) -> dict[str, str]:
     Returns an empty dict when no credentials have been saved for the
     subject yet (first /authorize for a brand-new user).
     """
-    return PerPluginStore(PLUGIN_NAME, sub).load() or {}
+    return PerPluginStore(PLUGIN_NAME, sub, backend=backend_from_env()).load() or {}
 
 
 def set_current_sub(sub: str | None) -> None:
@@ -408,7 +409,7 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
     from wet_mcp.relay_setup import apply_config
 
     # Persist to per-plugin store (~/.wet-mcp/config.json)
-    PerPluginStore(PLUGIN_NAME).save(config)
+    PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).save(config)
 
     # Apply to environment for immediate use
     apply_config(config)
@@ -620,7 +621,7 @@ def reset_state() -> None:
         from mcp_core import clear_mode
 
         clear_mode(SERVER_NAME)
-        PerPluginStore(PLUGIN_NAME).clear()
+        PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).clear()
     except Exception:
         logger.opt(exception=True).warning("Reset state failed")
 

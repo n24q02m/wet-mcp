@@ -16,6 +16,7 @@ import os
 import sys
 
 from loguru import logger
+from mcp_core.storage.backends import backend_from_env
 from mcp_core.storage.per_plugin_store import PerPluginStore
 
 SERVER_NAME = "wet-mcp"
@@ -40,7 +41,7 @@ def load_config_from_file() -> dict[str, str] | None:
     shared config.enc to ~/.wet-mcp/config.json via PerPluginStore.
     """
     try:
-        saved = PerPluginStore(PLUGIN_NAME).load()
+        saved = PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).load()
         if saved and any(saved.get(k) for k in CLOUD_KEYS):
             logger.info("Config loaded from per-plugin store (~/.wet-mcp/config.json)")
             return saved
@@ -117,7 +118,7 @@ async def ensure_config(
         config = await poll_for_result(relay_url, session, timeout_s=timeout)  # ty: ignore[invalid-argument-type]
 
         # Save to per-plugin store for future use (~/.wet-mcp/config.json)
-        PerPluginStore(PLUGIN_NAME).save(config)
+        PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).save(config)
         logger.info("Config saved successfully")
 
         apply_config(config)
