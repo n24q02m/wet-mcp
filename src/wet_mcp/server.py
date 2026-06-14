@@ -27,6 +27,7 @@ from wet_mcp.config import settings
 from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 from wet_mcp.security import wrap_external_content
+from wet_mcp.sources import search_backends
 from wet_mcp.sources.crawler import (
     crawl as _crawl,
 )
@@ -890,14 +891,7 @@ async def search(  # noqa: PLR0913
                     except json.JSONDecodeError:
                         pass
                     return cached_content
-            try:
-                searxng_url = await asyncio.wait_for(
-                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                )
-            except TimeoutError:
-                return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
-            except (SystemExit, Exception) as exc:
-                return f"Error: SearXNG startup failed: {exc}"
+            backend = search_backends.search_backend_from_env()
             # Optional query expansion (LLM-driven, opt-in)
             search_query = normalized_query or query
             if expand:
@@ -907,9 +901,20 @@ async def search(  # noqa: PLR0913
                 if len(expanded) > 1:
                     search_query = " OR ".join(expanded)
 
+            # Only the local SearXNG backend needs the embedded instance started;
+            # point it at the live URL (auto-start may pick a dynamic port).
+            if isinstance(backend, search_backends.SearxngBackend):
+                try:
+                    backend.url = await asyncio.wait_for(
+                        ensure_searxng(), timeout=_SEARXNG_TIMEOUT
+                    )
+                except TimeoutError:
+                    return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
+                except (SystemExit, Exception) as exc:
+                    return f"Error: SearXNG startup failed: {exc}"
+
             result = await _with_timeout(
-                searxng_search(
-                    searxng_url=searxng_url,
+                backend.search(
                     query=search_query,
                     categories=categories,
                     max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
