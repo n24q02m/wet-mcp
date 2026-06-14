@@ -2,7 +2,7 @@
 
 import json
 
-from mcp_core.storage.backends import InMemoryBackend
+from mcp_core.storage.backends import CfKvBackend, InMemoryBackend
 
 from wet_mcp.token_store import (
     load_token,
@@ -92,3 +92,21 @@ def test_multi_user_token_isolation(monkeypatch):
     )
     assert load_token_for_sub("user1", "google_drive", backend=mem) == t1
     assert load_token_for_sub("user2", "google_drive", backend=mem) == t2
+
+
+def test_cfkv_token_roundtrip_via_http(monkeypatch, fake_kv_http):
+    monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
+    backend = CfKvBackend(base_url="http://kv.internal", http=fake_kv_http)
+    token = {"access_token": "abc"}
+    save_token("google_drive", token, backend=backend)
+    # the encrypted blob landed in the fake KV under the URL-encoded token key
+    assert any("tokens/google_drive" in k for k in fake_kv_http.store)
+    assert load_token("google_drive", backend=backend) == token
+
+
+def test_default_backend_is_localfs(monkeypatch, tmp_path, local_default_env):
+    monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    save_token("google_drive", {"access_token": "abc"})  # no backend -> LocalFs
+    assert (tmp_path / ".wet-mcp" / "tokens" / "google_drive.json").exists()
+    assert load_token("google_drive") == {"access_token": "abc"}
