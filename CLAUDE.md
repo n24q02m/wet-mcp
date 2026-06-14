@@ -99,6 +99,23 @@ mise run dev       # uv run wet-mcp
 }
 ```
 
+## Cloudflare serverless mode
+
+Forcing cloud embed/rerank (so the container never downloads local ONNX models):
+
+| env var | value |
+|---|---|
+| `EMBEDDING_MODELS` | `jina_ai/jina-embeddings-v5-text-small` |
+| `RERANK_MODELS` | `jina_ai/jina-reranker-v3` |
+| `JINA_AI_API_KEY` | from jina.ai/api-key |
+
+A non-empty `*_MODELS` chain whose provider key is set -> cloud backend (inferred,
+not via the deprecated `*_BACKEND`). Empty chain -> local ONNX. With cloud forced,
+`qwen3-embed` is never instantiated, keeping the container slim. Storage: set
+`MCP_STORAGE_BACKEND=cf-kv` + `MCP_KV_BASE_URL=http://kv.internal`,
+`DOCS_DB_BACKEND=cf-d1` + `MCP_D1_BASE_URL`/`MCP_VECTORIZE_BASE_URL`/`MCP_VECTORIZE_IDX`,
+`SEARCH_BACKEND=tavily` + `TAVILY_API_KEY`, and `CREDENTIAL_SECRET`.
+
 ## Release & Deploy
 
 - Conventional Commits. Tag format: `v{version}`

@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     - EMBEDDING_MODELS: Embedding model chain "provider/model,..." (order =
         litellm fallback). Empty -> curated default filtered to configured
         keys; no usable key -> local ONNX. Backend inferred from this chain.
+        Cloudflare serverless: set EMBEDDING_MODELS and RERANK_MODELS to
+        cloud-only chains (e.g. `jina_ai/jina-embeddings-v5-text-small`,
+        `jina_ai/jina-reranker-v3`) with JINA_AI_API_KEY so no local ONNX
+        model is downloaded.
     - RERANK_MODELS: Rerank model chain (same semantics as EMBEDDING_MODELS).
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
     - RERANK_ENABLED: Enable reranking (default: true)
