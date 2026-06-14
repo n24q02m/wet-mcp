@@ -1,9 +1,10 @@
-"""End-to-end CF verification against deterministic fakes. JWT/multi-user items
-are skipped until feat/oauth-signing-key-stability ships (see plan Subsystem F)."""
+"""End-to-end CF verification against deterministic fakes. Covers the credential
+KV roundtrip, encrypted token storage, D1+Vectorize hybrid search, Tavily search,
+outbound latency, and JWT-sub persistence across container recreate (the
+deterministic signing key shipped in mcp-core 1.18.0b5, pinned here)."""
 
 from pathlib import Path
 
-import pytest
 from conftest_cf import FakeD1Http, FakeVectorizeHttp
 from mcp_core.storage.backends import CfKvBackend
 
@@ -135,14 +136,15 @@ def test_outbound_latency_under_budget():
     assert (time.monotonic() - start) < 0.5
 
 
-@pytest.mark.skip(reason="JWT-GATED: feat/oauth-signing-key-stability not yet released")
-def test_jwt_sub_persists_across_container_recreate(monkeypatch):
-    monkeypatch.setenv("CREDENTIAL_SECRET", "stable-secret")
-    from mcp_core.relay.oauth import (
-        JWTIssuer,  # actual import path verified when un-skipping
-    )
+def test_jwt_sub_persists_across_container_recreate():
+    # Deterministic-signing-key fix shipped in mcp-core 1.18.0b4+ (pinned here at
+    # 1.18.0b5). With credential_secret set, JWTIssuer derives an Ed25519 key from
+    # CREDENTIAL_SECRET via HKDF with NO disk I/O, so a recreated container (same
+    # secret, no shared volume) converges on the same key and prior tokens stay valid.
+    from mcp_core.oauth.jwt_issuer import JWTIssuer
 
-    issuer1 = JWTIssuer(server_name="wet-mcp")
-    token = issuer1.create_token(subject="user@example.com")
-    issuer2 = JWTIssuer(server_name="wet-mcp")
-    assert issuer2.verify_token(token)["sub"] == "user@example.com"
+    secret = "stable-secret"
+    issuer1 = JWTIssuer(server_name="wet-mcp", credential_secret=secret)
+    token = issuer1.issue_access_token("user@example.com")
+    issuer2 = JWTIssuer(server_name="wet-mcp", credential_secret=secret)
+    assert issuer2.verify_access_token(token)["sub"] == "user@example.com"
