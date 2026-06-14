@@ -99,8 +99,10 @@ class TavilyBackend:
                     ensure_ascii=False,
                     indent=2,
                 )
-        except Exception as e:  # tool contract: error string, never raise
-            return json.dumps({"error": str(e)})
+        except httpx.HTTPError as e:  # network/transport — never echo the message (may carry the request body/key)
+            return json.dumps({"error": f"Tavily request failed: {type(e).__name__}"})
+        except Exception as e:  # tool contract: error string, never raise; type name only (no key leak)
+            return json.dumps({"error": f"Tavily search failed: {type(e).__name__}"})
 
 
 def search_backend_from_env() -> SearchBackend:

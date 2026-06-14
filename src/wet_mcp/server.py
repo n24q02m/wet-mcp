@@ -891,7 +891,10 @@ async def search(  # noqa: PLR0913
                     except json.JSONDecodeError:
                         pass
                     return cached_content
-            backend = search_backends.search_backend_from_env()
+            try:
+                backend = search_backends.search_backend_from_env()
+            except ValueError as exc:
+                return f"Error: {exc}"
             # Optional query expansion (LLM-driven, opt-in)
             search_query = normalized_query or query
             if expand:
