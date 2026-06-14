@@ -1,0 +1,15 @@
+# docker-compose.yml
+# Base compose file - stdio mode (default). For HTTP mode, layer the overlay:
+#   docker compose -f docker-compose.yml -f docker-compose.http.yml up
+# For Cloudflare local-dev emulation:
+#   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up
+services:
+  wet-mcp:
+    image: n24q02m/wet-mcp:latest
+    environment:
+      - CACHE_DIR=/data
+      - DOWNLOAD_DIR=/data/downloads
+    volumes:
+      - wet-data:/data
+volumes:
+  wet-data:

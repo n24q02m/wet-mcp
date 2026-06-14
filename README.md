@@ -65,6 +65,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 - [Comparison](#comparison)
 - [Security](#security)
 - [Build from Source](#build-from-source)
+- [Deploy to Cloudflare](#deploy-to-cloudflare)
 - [Trust Model](#trust-model)
 - [License](#license)
 
@@ -196,6 +197,36 @@ cd wet-mcp
 uv sync
 uv run wet-mcp
 ```
+
+## Deploy to Cloudflare
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/n24q02m/wet-mcp)
+
+Run your own single-user wet instance serverless on Cloudflare (Containers + D1 + Vectorize + KV).
+
+**Prerequisites:** a Cloudflare account on the Workers Paid plan and the `wrangler` CLI.
+
+1. `git clone https://github.com/n24q02m/wet-mcp && cd wet-mcp`
+2. `wrangler login`
+3. Provision resources and apply the D1 schema:
+   ```
+   wrangler d1 create wet-docs
+   wrangler d1 execute wet-docs --file migrations/0001_init_wet.sql --remote
+   wrangler vectorize create wet-docs-vectors --dimensions 768 --metric cosine
+   wrangler kv namespace create wet-kv
+   ```
+   Paste the returned IDs into `wrangler.jsonc`.
+4. Set secrets:
+   ```
+   wrangler secret put CREDENTIAL_SECRET
+   wrangler secret put JINA_AI_API_KEY
+   wrangler secret put TAVILY_API_KEY
+   ```
+5. `wrangler deploy` and complete setup in the browser relay form at your Worker domain.
+
+Storage maps to Cloudflare via `MCP_STORAGE_BACKEND=cf-kv` (credentials/tokens, encrypted),
+`DOCS_DB_BACKEND=cf-d1` (docs + BM25 full-text), and Vectorize (embeddings). Web search uses
+Tavily (`SEARCH_BACKEND=tavily`); embed/rerank are forced cloud via `EMBEDDING_MODELS`/`RERANK_MODELS`.
 
 ## Trust Model
 
