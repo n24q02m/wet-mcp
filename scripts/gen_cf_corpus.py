@@ -17,12 +17,16 @@ QUERIES = [
 def build_corpus() -> list[dict]:
     docs = []
     libs = ["alpha", "beta", "gamma", "delta", "epsilon"]
+    # The unique discriminator {n} is front-loaded so the first 40 chars of
+    # each doc are unique. The golden top-k identity is content[:40] (see main),
+    # so a non-unique prefix would collapse distinct docs and make the rank
+    # parity gate undiscriminating.
     templates = [
-        "Define an async function {n} to handle requests with await and error handling.",
-        "Install the package {n} via pip; configure the rate limit and retry policy.",
-        "Vector search uses cosine similarity over embeddings of dimension 768 in {n}.",
-        "Error handling: wrap calls in try/except and log the failure mode for {n}.",
-        "Rate limit the batch loop to N requests per second to avoid 429 in {n}.",
+        "{n}: define an async function to handle requests with await and error handling.",
+        "{n}: install the package via pip; configure the rate limit and retry policy.",
+        "{n}: vector search uses cosine similarity over embeddings of dimension 768.",
+        "{n}: error handling wraps calls in try/except and logs the failure mode.",
+        "{n}: rate limit the batch loop to N requests per second to avoid 429.",
     ]
     cid = 0
     for li, lib in enumerate(libs):

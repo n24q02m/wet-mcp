@@ -68,3 +68,29 @@ def test_hybrid_search_applies_rrf_and_url_diversity():
     # URL diversity caps same-url chunks at 2 (db.py max_per_url = 2)
     same_url = [r for r in results if r["url"] == "https://a/same"]
     assert len(same_url) <= 2
+
+
+QUERIES = [
+    "async function",
+    "install the package",
+    "error handling",
+    "rate limit",
+    "vector search",
+]
+
+
+def test_cf_search_matches_sqlite_golden(cf_corpus, cf_golden_topk):
+    db = _backend()
+    for d in cf_corpus:
+        db.upsert_library(d["library"], docs_url=d["url"])
+        lib = db.get_library(d["library"])
+        db.upsert_version(lib["id"], d["version"])
+        ver = db.get_best_version(lib["id"], d["version"])
+        db.add_chunks(ver["id"], lib["id"], [d], embeddings=None)  # FTS-only parity
+    for q in QUERIES:
+        cf_top = [r["content"][:40] for r in db.search(q, limit=10)]
+        golden = cf_golden_topk[q]
+        overlap = len(set(cf_top[:3]) & set(golden[:3]))
+        assert overlap >= 2, (
+            f"top-3 rank parity failed for {q!r}: {cf_top[:3]} vs {golden[:3]}"
+        )
