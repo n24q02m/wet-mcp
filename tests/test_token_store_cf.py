@@ -4,7 +4,12 @@ import json
 
 from mcp_core.storage.backends import InMemoryBackend
 
-from wet_mcp.token_store import load_token, save_token
+from wet_mcp.token_store import (
+    load_token,
+    load_token_for_sub,
+    save_token,
+    save_token_for_sub,
+)
 
 
 def test_save_token_encrypts_via_backend(monkeypatch):
@@ -70,3 +75,20 @@ def test_token_file_posix_mode_is_0600(monkeypatch, tmp_path):
     path = tmp_path / ".wet-mcp" / "tokens" / "google_drive.json"
     mode = stat.S_IMODE(path.stat().st_mode)
     assert mode == 0o600
+
+
+def test_multi_user_token_isolation(monkeypatch):
+    monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
+    mem = InMemoryBackend()
+    t1 = {"access_token": "u1-token"}
+    t2 = {"access_token": "u2-token"}
+    save_token_for_sub("user1", "google_drive", t1, backend=mem)
+    save_token_for_sub("user2", "google_drive", t2, backend=mem)
+
+    assert mem.get("wet/subs/user1/tokens/google_drive") is not None
+    assert mem.get("wet/subs/user2/tokens/google_drive") is not None
+    assert mem.get("wet/subs/user1/tokens/google_drive") != mem.get(
+        "wet/subs/user2/tokens/google_drive"
+    )
+    assert load_token_for_sub("user1", "google_drive", backend=mem) == t1
+    assert load_token_for_sub("user2", "google_drive", backend=mem) == t2

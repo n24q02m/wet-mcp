@@ -1,7 +1,5 @@
 """Tests for wet_mcp.token_store module."""
 
-import json
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -29,18 +27,12 @@ def token_dir(tmp_path, monkeypatch):
     ``LocalFsBackend``, which key off ``Path.home()`` -- redirect that to a
     temp dir too so ``save_token`` / ``load_token`` round-trips stay isolated
     and never touch the real ``~/.wet-mcp``.
-
-    Also patches subprocess.run so any residual Windows icacls call cannot
-    lock down pytest tmp paths during test runs (would break cleanup).
     """
     d = tmp_path / "tokens"
     d.mkdir()
     monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
     monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
-    with (
-        patch("wet_mcp.token_store.settings") as mock_settings,
-        patch("wet_mcp.token_store.subprocess.run"),
-    ):
+    with patch("wet_mcp.token_store.settings") as mock_settings:
         mock_settings.get_data_dir.return_value = tmp_path
         yield d
 
@@ -160,8 +152,8 @@ def test_get_token_path_for_sub(token_dir, tmp_path):
     assert get_token_path_for_sub("user1", "drive") == expected
 
 
-def test_save_and_load_token_for_sub(token_dir):
-    """Test standard save and load flow for per-sub tokens."""
+def test_save_and_load_token_for_sub(token_dir, tmp_path):
+    """Test standard save and load flow for per-sub tokens (encrypted blob)."""
     sub = "user123"
     token = {"access_token": "sub-token-456", "token_type": "Bearer"}
 
@@ -169,6 +161,8 @@ def test_save_and_load_token_for_sub(token_dir):
     loaded = load_token_for_sub(sub, "drive")
 
     assert loaded == token
+    # Encrypted token landed under the per-sub LocalFs layout.
+    assert (tmp_path / ".wet-mcp" / "subs" / sub / "tokens" / "drive.json").exists()
 
 
 def test_load_token_for_sub_missing(token_dir):
@@ -177,17 +171,11 @@ def test_load_token_for_sub_missing(token_dir):
 
 
 def test_load_token_for_sub_invalid_format(token_dir, tmp_path):
-    """load_token_for_sub returns None for malformed JSON or invalid format."""
+    """load_token_for_sub returns None when the stored blob is undecryptable."""
     sub = "user1"
-    path = get_token_path_for_sub(sub, "drive")
+    path = tmp_path / ".wet-mcp" / "subs" / sub / "tokens" / "drive.json"
     path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Malformed JSON
-    path.write_text("not json", encoding="utf-8")
-    assert load_token_for_sub(sub, "drive") is None
-
-    # Missing access_token
-    path.write_text(json.dumps({"foo": "bar"}), encoding="utf-8")
+    path.write_bytes(b"not a valid aes-gcm blob")
     assert load_token_for_sub(sub, "drive") is None
 
 
@@ -196,19 +184,32 @@ def test_read_token_for_sub_alias():
     assert read_token_for_sub is load_token_for_sub
 
 
-def test_load_token_for_sub_non_dict(token_dir, tmp_path):
-    """load_token_for_sub returns None if JSON is not a dictionary."""
-    sub = "user1"
-    path = get_token_path_for_sub(sub, "drive")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
-    assert load_token_for_sub(sub, "drive") is None
+def test_load_token_for_sub_non_dict(token_dir):
+    """load_token_for_sub returns None if the decrypted payload is not a dict."""
+    from mcp_core.storage.backends import InMemoryBackend
+    from mcp_core.storage.per_plugin_store import PerPluginStore
+
+    mem = InMemoryBackend()
+    store = PerPluginStore("wet", "user1", backend=mem, sub_key="tokens/drive")
+    non_dict_payload: object = [1, 2, 3]
+    store.save(non_dict_payload)  # type: ignore
+    assert load_token_for_sub("user1", "drive", backend=mem) is None
 
 
-def test_load_token_for_sub_oserror(token_dir):
-    """load_token_for_sub handles OSError during read."""
-    with patch.object(Path, "exists", side_effect=OSError("disk error")):
-        assert load_token_for_sub("user1", "drive") is None
+def test_load_token_for_sub_backend_error_returns_none(token_dir):
+    """load_token_for_sub swallows backend errors and returns None."""
+
+    class _BoomBackend:
+        def get(self, key):
+            raise OSError("disk error")
+
+        def put(self, key, blob):
+            raise OSError("disk error")
+
+        def delete(self, key):
+            raise OSError("disk error")
+
+    assert load_token_for_sub("user1", "drive", backend=_BoomBackend()) is None
 
 
 def test_get_token_path_for_sub_simple_assertion(token_dir, tmp_path):
