@@ -1,0 +1,16 @@
+{
+  "name": "wet-mcp-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:worker": "vitest run tests/worker.test.ts",
+    "cf:dryrun": "wrangler deploy --dry-run --outdir .wrangler-dryrun"
+  },
+  "devDependencies": {
+    "@cloudflare/containers": "^0.3.7",
+    "@cloudflare/workers-types": "^4.20250614.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.0.0"
+  }
+}

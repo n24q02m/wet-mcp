@@ -1,0 +1,33 @@
+// wrangler.jsonc - wet-mcp Cloudflare Worker + Container + D1 + Vectorize + KV.
+// Resource IDs are placeholders created out-of-band (wrangler d1 create / kv:namespace
+// create / vectorize create) and filled in at deploy time, not committed as live IDs.
+{
+  "name": "wet-mcp-worker",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-06-14",
+  "containers": [
+    {
+      "name": "wet-mcp-worker",
+      "class_name": "WetContainer",
+      "image": "ghcr.io/n24q02m/wet-mcp:http",
+      "instance_type": "standard-1",
+      "max_instances": 100
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "WET", "class_name": "WetContainer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["WetContainer"] }],
+  "kv_namespaces": [{ "binding": "KV", "id": "<wet-kv-namespace-id>" }],
+  "d1_databases": [
+    { "binding": "D1", "database_name": "wet-docs", "database_id": "<wet-d1-database-id>", "migrations_dir": "migrations" }
+  ],
+  "vectorize": [{ "binding": "VECTORIZE", "index_name": "wet-docs-vectors" }],
+  "vars": { "PUBLIC_URL": "https://wet.n24q02m.com" },
+  "env": {
+    "production": {
+      "routes": [{ "pattern": "wet.n24q02m.com", "custom_domain": true }]
+    }
+  },
+  "observability": { "enabled": true }
+}

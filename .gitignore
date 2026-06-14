@@ -54,6 +54,10 @@ node_modules/
 temp/
 tests/benchmark_results.jsonl
 
+# Cloudflare Worker
+.wrangler/
+.wrangler-dryrun/
+
 # AI Agent
 .jules/
 JULES.md
