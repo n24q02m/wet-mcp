@@ -106,6 +106,11 @@ class Settings(BaseSettings):
 
     # Docs storage
     docs_db_path: str = ""  # Default: ~/.wet-mcp/docs.db
+    # Docs DB backend selector (orthogonal to MCP_STORAGE_BACKEND credential
+    # store). "" / "sqlite" -> local DocsDB; "cf-d1" -> DocsDBCfBackend
+    # (relational + FTS5 on Cloudflare D1, vectors on Vectorize). Formally
+    # owned by the CF config set; declared here so make_docs_db() can select.
+    docs_db_backend: str = ""  # env DOCS_DB_BACKEND
 
     # Per-task model chains "provider/model,provider/model" (order = litellm
     # fallback). Empty -> local ONNX. Replaces the priority-router auto-detect

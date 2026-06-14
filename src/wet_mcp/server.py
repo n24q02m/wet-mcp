@@ -62,6 +62,43 @@ _docs_db: DocsDB | None = None
 _embedding_dims: int = 0
 
 
+def make_docs_db():
+    """Select docs DB backend: sqlite (default) or cf-d1 (D1 + Vectorize).
+
+    DOCS_DB_BACKEND is orthogonal to MCP_STORAGE_BACKEND. The selector is read
+    from the environment (so a standalone caller honors the live env); the
+    sqlite path uses the module Settings singleton (patchable in tests) and
+    preserves the B2 embedding-model identity guard; the cf-d1 path routes
+    relational + FTS5 to D1 and vectors to Vectorize via env-configured clients.
+    """
+    import os
+
+    from wet_mcp.config import settings
+
+    dims = settings.resolve_embedding_dims() or _DEFAULT_EMBEDDING_DIMS
+    backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
+    if backend == "cf-d1":
+        from wet_mcp.backends.d1 import d1_backend_from_env
+        from wet_mcp.backends.vectorize import vectorize_backend_from_env
+        from wet_mcp.db_cf import DocsDBCfBackend
+
+        return DocsDBCfBackend(
+            d1_backend_from_env(),
+            vectorize_backend_from_env(),
+            embedding_dims=dims,
+        )
+    if settings.resolve_embedding_backend() == "cloud":
+        model_identity = settings.embedding_primary() or ""
+    else:
+        model_identity = settings.resolve_local_embedding_model()
+    return DocsDB(
+        settings.get_db_path(),
+        embedding_dims=dims,
+        model_identity=model_identity,
+        reindex_on_model_change=settings.reindex_on_model_change,
+    )
+
+
 def _require_credentials() -> str | None:
     """Check if credentials are configured. Returns error JSON if not, None if OK.
 
@@ -285,40 +322,33 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
     asyncio.create_task(_init_backends_task())
 
-    # 5. Initialize docs DB + run Alembic migrations (auto-migrate-on-startup
-    #    with backup-before-migrate per spec §8). DocsDB._create_tables is
-    #    still the bootstrap path for fresh DBs (CREATE TABLE IF NOT EXISTS);
-    #    Alembic stamps the baseline + applies any forward migrations.
-    docs_path = settings.get_db_path()
-    docs_path.parent.mkdir(parents=True, exist_ok=True)
-    # B2: embedding-model identity guard. Stamp the active model id so a
-    # later model swap cannot silently mix incompatible vector spaces.
-    # LOCAL backend -> resolved local model id; CLOUD -> head of the chain.
-    if settings.resolve_embedding_backend() == "cloud":
-        _model_identity = settings.embedding_primary() or ""
-    else:
-        _model_identity = settings.resolve_local_embedding_model()
-    _docs_db = DocsDB(
-        docs_path,
-        embedding_dims=_embedding_dims,
-        model_identity=_model_identity,
-        reindex_on_model_change=settings.reindex_on_model_change,
-    )
-    try:
-        from wet_mcp.migrations import run_migrations_on_startup
+    # 5. Initialize docs DB (sqlite or cf-d1) via the backend factory, then run
+    #    Alembic migrations (auto-migrate-on-startup with backup-before-migrate
+    #    per spec §8). DocsDB._create_tables is still the bootstrap path for
+    #    fresh local DBs (CREATE TABLE IF NOT EXISTS); Alembic stamps the
+    #    baseline + applies forward migrations. The cf-d1 backend has no local
+    #    file, so the sqlite-only Alembic + warmup steps are skipped for it.
+    _docs_db = make_docs_db()
+    # The cf-d1 backend has no local file; Alembic + tier-1 warmup are
+    # sqlite-only. Gate on the same selector make_docs_db() uses (not isinstance)
+    # so the existing lifespan tests that patch DocsDB with a mock keep working.
+    _docs_backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
+    if _docs_backend != "cf-d1":
+        try:
+            from wet_mcp.migrations import run_migrations_on_startup
 
-        run_migrations_on_startup(docs_path)
-    except Exception as e:  # pragma: no cover - never block startup
-        logger.warning(f"Migrations skipped: {e}")
+            run_migrations_on_startup(settings.get_db_path())
+        except Exception as e:  # pragma: no cover - never block startup
+            logger.warning(f"Migrations skipped: {e}")
 
-    # 5b. Tier 1 metadata warmup (Phase 2). Lazy chunk ingestion is
-    # triggered on first docs_query for an unseeded library.
-    try:
-        from wet_mcp.sources.tier1_warmup import maybe_warm
+        # 5b. Tier 1 metadata warmup (Phase 2). Lazy chunk ingestion is
+        # triggered on first docs_query for an unseeded library.
+        try:
+            from wet_mcp.sources.tier1_warmup import maybe_warm
 
-        await asyncio.to_thread(maybe_warm, _docs_db)
-    except Exception as e:  # pragma: no cover - never block startup
-        logger.warning(f"Tier 1 warmup skipped: {e}")
+            await asyncio.to_thread(maybe_warm, _docs_db)
+        except Exception as e:  # pragma: no cover - never block startup
+            logger.warning(f"Tier 1 warmup skipped: {e}")
 
     # Start auto-sync via the active backend (XOR semantics):
     # * SYNC_S3_BUCKET set -> S3 mode (operator deploy, Method 2/3 Docker).
