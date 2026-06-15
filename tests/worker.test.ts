@@ -51,4 +51,18 @@ describe('outbound handlers', () => {
     const body = (await res.json()) as { matches: unknown[] }
     expect(body.matches.length).toBe(1)
   })
+
+  it('KV readiness probe: GET __ready -> {ready:true}', async () => {
+    const env = fakeEnv()
+    const res = await worker.fetch(new Request('http://kv.internal/__ready'), env as never)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ready: true })
+  })
+
+  it('KV readiness probe does not shadow a real missing key', async () => {
+    const env = fakeEnv()
+    // a real key that happens to be absent still 404s (the probe is the reserved __ready only)
+    const res = await worker.fetch(new Request('http://kv.internal/wet%2Fsubs%2Fu1%2Fconfig'), env as never)
+    expect(res.status).toBe(404)
+  })
 })

@@ -88,6 +88,13 @@ function pickContainerEnv(env: Env): Record<string, string> {
 const kvOutbound: OutboundHandler<Env> = async (request, env) => {
   const url = new URL(request.url)
   const key = decodeURIComponent(url.pathname.replace(/^\//, ''))
+  // Readiness probe (E.1): once this handler answers, outbound interception is
+  // wired, so the container's first credential PUT is safe. Mirrors
+  // vectorizeOutbound's GET -> {ready:true}. Reserved key, checked before the
+  // normal key lookup so it never shadows a real KV key.
+  if (request.method === 'GET' && key === '__ready') {
+    return Response.json({ ready: true })
+  }
   if (request.method === 'GET') {
     // Credential blobs are binary (nonce + AES-GCM ciphertext); read/write as
     // ArrayBuffer so bytes round-trip without UTF-8 corruption.
