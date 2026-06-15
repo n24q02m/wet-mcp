@@ -1813,7 +1813,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.18.0b5"
+version = "1.18.0b6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1828,9 +1828,9 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7b/ee/982810a18e8ed8fb72bd93d0bc4cf4cea96ac3a705879ffe90739aeee767/n24q02m_mcp_core-1.18.0b5.tar.gz", hash = "sha256:05c68523b428bc5145d32d4cb6daeb2808550691956a194b399daa66b5675368", size = 274193, upload-time = "2026-06-14T04:00:56.416Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1b/8f/9ce65d1341ff74e1962556b3ede6041eeac676b8b061ddd7af69360559af/n24q02m_mcp_core-1.18.0b6.tar.gz", hash = "sha256:633cdb9a023aa31c20dee513e56bd2d4715ea98aee3912b4c7d52446e2b3c693", size = 275601, upload-time = "2026-06-15T13:04:15.295Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/6c/2b/dca7a6cfea2c356e0b9165a4940e6efb1cea1a099348dcb06061d7c92153/n24q02m_mcp_core-1.18.0b5-py3-none-any.whl", hash = "sha256:6640023ed5308d837b6d6e76d1431763efe9fab99a5908051971720f4bd9d9fc", size = 150469, upload-time = "2026-06-14T04:00:57.785Z" },
+    { url = "https://files.pythonhosted.org/packages/29/65/9a7e9510c944961e5c32d58bbf53ee7d96dd1db2219e8e9db25b4da49506/n24q02m_mcp_core-1.18.0b6-py3-none-any.whl", hash = "sha256:739fcdbac3cc4ab07fb21401f87143f50edf12d88f5a072d77bc5415e8da8d64", size = 151539, upload-time = "2026-06-15T13:04:16.536Z" },
 ]
 
 [package.optional-dependencies]
@@ -3495,7 +3495,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "3.3.0b8"
+version = "3.3.0b10"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3556,7 +3556,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.18.0b5,<2" },
+    { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.18.0b6,<2" },
     { name = "n24q02m-web-core", specifier = ">=2.2.1,<2.3" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pydantic", specifier = ">=2.13.4,<2.14" },
