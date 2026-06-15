@@ -1,11 +1,29 @@
 // src/worker.ts
-// Worker fronting the wet-mcp container Durable Object + outbound handlers for
-// KV / D1 / Vectorize. Container calls http://{kv,d1,vectorize}.internal/...
-// internally; production requests on the custom domain are forwarded to the DO.
-import { Container } from '@cloudflare/containers'
+// Worker fronting the wet-mcp container Durable Object.
+//
+// Two distinct request paths:
+//  - INBOUND: requests on the custom domain hit the default export `fetch`,
+//    which routes them to the per-user WetContainer Durable Object.
+//  - OUTBOUND: the container calls http://{kv,d1,vectorize}.internal/... which
+//    is intercepted by the `@cloudflare/containers` proxy and dispatched to the
+//    `WetContainer.outboundByHost` handlers below, serviced from the Worker's
+//    KV / D1 / Vectorize bindings. enableInternet=true lets every OTHER host
+//    (Jina, Vertex, SearXNG) reach the public internet.
+import { Container, ContainerProxy, type OutboundHandler } from '@cloudflare/containers'
+
+// ContainerProxy must be exported from the Worker entrypoint: the containers
+// runtime discovers it via `ctx.exports.ContainerProxy` to route the container's
+// intercepted outbound traffic (kv/d1/vectorize.internal) back into the Worker.
+// Without this re-export, applyOutboundInterception() throws at container start.
+export { ContainerProxy }
 
 export interface Env {
-  KV: { get(k: string): Promise<string | null>; put(k: string, v: string): Promise<void>; delete(k: string): Promise<void> }
+  KV: {
+    get(k: string, type: 'arrayBuffer'): Promise<ArrayBuffer | null>
+    get(k: string): Promise<string | null>
+    put(k: string, v: string | ArrayBuffer): Promise<void>
+    delete(k: string): Promise<void>
+  }
   D1: { prepare(sql: string): { bind(...p: unknown[]): { all(): Promise<{ results: unknown[] }> } } }
   VECTORIZE: {
     upsert(v: unknown[]): Promise<{ mutationId: string }>
@@ -59,47 +77,61 @@ function pickContainerEnv(env: Env): Record<string, string> {
   return out
 }
 
+// --- Outbound handlers (container -> Worker bindings) -----------------------
+// These run when the container makes an outbound HTTP request to one of the
+// internal hostnames. They are registered via `WetContainer.outboundByHost`
+// (assignment, NOT a class field) so the assignment hits the inherited setter
+// and populates the package's module-level handler registry. A `static
+// outboundByHost = {...}` field would use define-semantics, bypass the setter,
+// and silently fall through to the public internet (kv.internal -> NXDOMAIN).
+
+const kvOutbound: OutboundHandler<Env> = async (request, env) => {
+  const url = new URL(request.url)
+  const key = decodeURIComponent(url.pathname.replace(/^\//, ''))
+  if (request.method === 'GET') {
+    // Credential blobs are binary (nonce + AES-GCM ciphertext); read/write as
+    // ArrayBuffer so bytes round-trip without UTF-8 corruption.
+    const v = await env.KV.get(key, 'arrayBuffer')
+    return v === null ? new Response('', { status: 404 }) : new Response(v, { status: 200 })
+  }
+  if (request.method === 'PUT') {
+    await env.KV.put(key, await request.arrayBuffer())
+    return new Response('', { status: 200 })
+  }
+  if (request.method === 'DELETE') {
+    await env.KV.delete(key)
+    return new Response('', { status: 200 })
+  }
+  return new Response('method not allowed', { status: 405 })
+}
+
+const d1Outbound: OutboundHandler<Env> = async (request, env) => {
+  const url = new URL(request.url)
+  if (url.pathname === '/query' && request.method === 'POST') {
+    const { sql, params } = (await request.json()) as { sql: string; params: unknown[] }
+    const { results } = await env.D1.prepare(sql).bind(...(params ?? [])).all()
+    return Response.json({ results })
+  }
+  return new Response('not found', { status: 404 })
+}
+
+const vectorizeOutbound: OutboundHandler<Env> = async (request, env) => {
+  const url = new URL(request.url)
+  if (url.pathname === '/upsert' && request.method === 'POST') {
+    const vectors = (await request.text()).split('\n').filter(Boolean).map((l) => JSON.parse(l))
+    return Response.json(await env.VECTORIZE.upsert(vectors))
+  }
+  if (url.pathname === '/query' && request.method === 'POST') {
+    const { vector, topK, filter } = (await request.json()) as { vector: number[]; topK: number; filter?: unknown }
+    return Response.json(await env.VECTORIZE.query(vector, { topK, filter }))
+  }
+  if (request.method === 'GET') return Response.json({ ready: true })
+  return new Response('not found', { status: 404 })
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url)
-    const host = url.hostname
-
-    if (host === 'kv.internal') {
-      const key = decodeURIComponent(url.pathname.replace(/^\//, ''))
-      if (request.method === 'GET') {
-        const v = await env.KV.get(key)
-        return v === null ? new Response('', { status: 404 }) : new Response(v, { status: 200 })
-      }
-      if (request.method === 'PUT') {
-        await env.KV.put(key, await request.text())
-        return new Response('', { status: 200 })
-      }
-      if (request.method === 'DELETE') {
-        await env.KV.delete(key)
-        return new Response('', { status: 200 })
-      }
-      return new Response('method not allowed', { status: 405 })
-    }
-
-    if (host === 'd1.internal' && url.pathname === '/query' && request.method === 'POST') {
-      const { sql, params } = (await request.json()) as { sql: string; params: unknown[] }
-      const { results } = await env.D1.prepare(sql).bind(...(params ?? [])).all()
-      return Response.json({ results })
-    }
-
-    if (host === 'vectorize.internal') {
-      if (url.pathname === '/upsert' && request.method === 'POST') {
-        const vectors = (await request.text()).split('\n').filter(Boolean).map((l) => JSON.parse(l))
-        return Response.json(await env.VECTORIZE.upsert(vectors))
-      }
-      if (url.pathname === '/query' && request.method === 'POST') {
-        const { vector, topK, filter } = (await request.json()) as { vector: number[]; topK: number; filter?: unknown }
-        return Response.json(await env.VECTORIZE.query(vector, { topK, filter }))
-      }
-      if (request.method === 'GET') return Response.json({ ready: true })
-    }
-
-    // Production request -> route to the per-user container Durable Object.
+    // Inbound production request -> route to the per-user container DO.
     if (env.WET) {
       const userId = extractUserId(request)
       const stub = env.WET.get(env.WET.idFromName(userId))
@@ -131,10 +163,18 @@ export class WetContainer extends Container<Env> {
   defaultPort = 8080
   sleepAfter = '1h'
   // The container reaches cloud model/search APIs (Jina, Vertex, Tavily) over the
-  // public internet; kv/d1/vectorize.internal stay intercepted by the Worker.
+  // public internet; kv/d1/vectorize.internal stay intercepted (see outboundByHost).
   enableInternet = true
   // Forward Worker config (vars) + secrets into the container process. Without
   // this the Python server defaults to MCP_STORAGE_BACKEND=local / DOCS_DB_BACKEND=sqlite
   // on the ephemeral container FS and downloads local ONNX models.
   envVars = pickContainerEnv(this.env)
+}
+
+// Register outbound interception. MUST be an assignment (invokes the inherited
+// `static set outboundByHost`) — a class field would bypass the setter.
+WetContainer.outboundByHost = {
+  'kv.internal': kvOutbound as OutboundHandler,
+  'd1.internal': d1Outbound as OutboundHandler,
+  'vectorize.internal': vectorizeOutbound as OutboundHandler,
 }
