@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import worker from '../src/worker'
+import worker, { OUTBOUND_BY_HOST } from '../src/worker'
 
 function fakeEnv() {
   const kv = new Map<string, string>()
@@ -21,20 +21,27 @@ function fakeEnv() {
   }
 }
 
+// Invoke an outbound handler DIRECTLY (the production path is the container proxy
+// via WetContainer.outboundByHost; the handlers are NOT reachable through the
+// public `fetch` entrypoint, so tests exercise them through the exported registry).
+const kvH = OUTBOUND_BY_HOST['kv.internal']!
+const d1H = OUTBOUND_BY_HOST['d1.internal']!
+const vectorizeH = OUTBOUND_BY_HOST['vectorize.internal']!
+
 describe('outbound handlers', () => {
   it('KV get 404 then put then get 200', async () => {
     const env = fakeEnv()
-    let res = await worker.fetch(new Request('http://kv.internal/wet%2Fconfig'), env as never)
+    let res = await kvH(new Request('http://kv.internal/wet%2Fconfig'), env as never)
     expect(res.status).toBe(404)
-    res = await worker.fetch(new Request('http://kv.internal/wet%2Fconfig', { method: 'PUT', body: 'blob' }), env as never)
+    res = await kvH(new Request('http://kv.internal/wet%2Fconfig', { method: 'PUT', body: 'blob' }), env as never)
     expect(res.status).toBe(200)
-    res = await worker.fetch(new Request('http://kv.internal/wet%2Fconfig'), env as never)
+    res = await kvH(new Request('http://kv.internal/wet%2Fconfig'), env as never)
     expect(await res.text()).toBe('blob')
   })
 
   it('D1 query uses prepared statement', async () => {
     const env = fakeEnv()
-    const res = await worker.fetch(
+    const res = await d1H(
       new Request('http://d1.internal/query', { method: 'POST', body: JSON.stringify({ sql: 'SELECT 1', params: [] }) }),
       env as never,
     )
@@ -44,7 +51,7 @@ describe('outbound handlers', () => {
 
   it('Vectorize query returns matches', async () => {
     const env = fakeEnv()
-    const res = await worker.fetch(
+    const res = await vectorizeH(
       new Request('http://vectorize.internal/query', { method: 'POST', body: JSON.stringify({ vector: [0.1], topK: 1 }) }),
       env as never,
     )
@@ -54,7 +61,7 @@ describe('outbound handlers', () => {
 
   it('KV readiness probe: GET __ready -> {ready:true}', async () => {
     const env = fakeEnv()
-    const res = await worker.fetch(new Request('http://kv.internal/__ready'), env as never)
+    const res = await kvH(new Request('http://kv.internal/__ready'), env as never)
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ready: true })
   })
@@ -62,8 +69,19 @@ describe('outbound handlers', () => {
   it('KV readiness probe does not shadow a real missing key', async () => {
     const env = fakeEnv()
     // a real key that happens to be absent still 404s (the probe is the reserved __ready only)
-    const res = await worker.fetch(new Request('http://kv.internal/wet%2Fsubs%2Fu1%2Fconfig'), env as never)
+    const res = await kvH(new Request('http://kv.internal/wet%2Fsubs%2Fu1%2Fconfig'), env as never)
     expect(res.status).toBe(404)
+  })
+})
+
+describe('public fetch entrypoint does NOT expose outbound handlers (security)', () => {
+  it('a public request with an internal hostname is NOT serviced by a handler', async () => {
+    const env = fakeEnv() // no WET binding -> DO routing path returns 404
+    // Even if an external caller spoofs the hostname to kv.internal, the public
+    // fetch must NOT read/write the credential KV — it only routes to the DO.
+    const res = await worker.fetch(new Request('http://kv.internal/wet%2Fconfig'), env as never)
+    expect(res.status).toBe(404)
+    expect(await res.text()).toBe('not found')
   })
 })
 

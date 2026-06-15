@@ -136,10 +136,12 @@ const vectorizeOutbound: OutboundHandler<Env> = async (request, env) => {
   return new Response('not found', { status: 404 })
 }
 
-// Outbound handler registry, keyed by internal hostname. Both production (via
-// @cloudflare/containers -> WetContainer.outboundByHost) and the direct fetch
-// dispatch below share this single source of truth, so they can never drift.
-const OUTBOUND_BY_HOST: Record<string, OutboundHandler<Env>> = {
+// Outbound handler registry, keyed by internal hostname. Production container
+// outbound (kv/d1/vectorize.internal) reaches these via @cloudflare/containers'
+// ContainerProxy + the WetContainer.outboundByHost assignment below — NOT via the
+// public `fetch` export. Exported so unit tests can invoke a handler directly
+// instead of routing an internal-host request through the public entrypoint.
+export const OUTBOUND_BY_HOST: Record<string, OutboundHandler<Env>> = {
   'kv.internal': kvOutbound,
   'd1.internal': d1Outbound,
   'vectorize.internal': vectorizeOutbound,
@@ -147,15 +149,14 @@ const OUTBOUND_BY_HOST: Record<string, OutboundHandler<Env>> = {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    // Direct outbound entry: a request addressed to one of the internal hosts is
-    // serviced by its handler (the same registry the container proxy uses). This
-    // makes the handlers unit-testable and gives the kv.internal readiness probe
-    // a reachable endpoint.
-    const host = new URL(request.url).hostname
-    const handler = OUTBOUND_BY_HOST[host]
-    if (handler) return handler(request, env)
-
-    // Inbound production request -> route to the per-user container DO.
+    // Public entrypoint: ONLY routes inbound requests to the per-user container
+    // DO. The kv/d1/vectorize.internal outbound handlers are deliberately NOT
+    // dispatched here — exposing them on the public fetch surface would let an
+    // external caller (request hostname spoofed to kv.internal) read/write/delete
+    // the credential KV namespace unauthenticated. Production container outbound
+    // reaches them via @cloudflare/containers' ContainerProxy + the
+    // WetContainer.outboundByHost registry below; unit tests call the handlers
+    // directly via the OUTBOUND_BY_HOST export.
     if (env.WET) {
       const userId = extractUserId(request)
       const stub = env.WET.get(env.WET.idFromName(userId))
