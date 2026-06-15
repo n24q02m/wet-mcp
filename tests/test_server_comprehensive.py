@@ -225,7 +225,7 @@ async def test_rerank_results():
 async def test_search_tool_search():
     with (
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
-        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+        patch("wet_mcp.sources.searxng.search", new_callable=AsyncMock) as mock_search,
     ):
         mock_ensure.return_value = "http://searxng"
         mock_search.return_value = "search_result"

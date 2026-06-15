@@ -1,18 +1,10 @@
-"""Dual-backend embedding: Cloud (litellm passthrough) + qwen3-embed (local).
+"""Dual-backend embedding: Cloud (litellm passthrough via mcp_core.llm) + qwen3-embed (local ONNX).
 
-Supports two backends:
-- **cloud**: Cloud providers via mcp_core.llm (litellm passthrough — Jina,
-  Gemini, OpenAI, Cohere, or any litellm 'provider/model'). Requires API
-  keys. Auto-detects provider from API_KEYS config.
-- **local**: Local inference via qwen3-embed. GGUF if GPU + llama-cpp-python,
-  ONNX otherwise. No API keys needed, ~0.5GB model download on first use.
+Backend is inferred from the EMBEDDING_MODELS chain:
+- Non-empty chain (with a configured provider key) -> Cloud via mcp_core.llm.
+- Empty chain -> Local ONNX via qwen3-embed.
 
-Backend selection (always returns a valid backend):
-1. Explicit EMBEDDING_BACKEND env var
-2. 'cloud' if API keys are configured
-3. 'local' (default, always available)
-
-Embeddings are truncated to fixed dims in server._embed().
+Embeddings are truncated to the configured dims in server._embed().
 """
 
 from __future__ import annotations

@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     - EMBEDDING_MODELS: Embedding model chain "provider/model,..." (order =
         litellm fallback). Empty -> curated default filtered to configured
         keys; no usable key -> local ONNX. Backend inferred from this chain.
+        Cloudflare serverless: set EMBEDDING_MODELS and RERANK_MODELS to
+        cloud-only chains (e.g. `jina_ai/jina-embeddings-v5-text-small`,
+        `jina_ai/jina-reranker-v3`) with JINA_AI_API_KEY so no local ONNX
+        model is downloaded.
     - RERANK_MODELS: Rerank model chain (same semantics as EMBEDDING_MODELS).
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
     - RERANK_ENABLED: Enable reranking (default: true)
@@ -75,6 +79,11 @@ class Settings(BaseSettings):
     # SearXNG
     searxng_url: str = "http://localhost:41592"
     searxng_timeout: int = 30
+
+    # Pluggable web search backend selector. "searxng" (default, local) or
+    # "tavily" (cloud adapter for CF where embedded SearXNG cannot run).
+    search_backend: str = "searxng"  # env SEARCH_BACKEND: searxng | tavily
+    tavily_api_key: str = ""  # env TAVILY_API_KEY
 
     # Crawler
     crawler_headless: bool = True
@@ -106,6 +115,21 @@ class Settings(BaseSettings):
 
     # Docs storage
     docs_db_path: str = ""  # Default: ~/.wet-mcp/docs.db
+
+    # --- Cloudflare serverless deployment (Phase 2) ---
+    # docs_db_backend selects the relational + FTS5 store: "sqlite" (default,
+    # local DocsDB) or "cf-d1" (DocsDBCfBackend over Cloudflare D1 + Vectorize).
+    public_url: str = ""  # env PUBLIC_URL (Worker custom domain)
+    mcp_storage_backend: str = "local"  # env MCP_STORAGE_BACKEND: local | cf-kv
+    mcp_kv_base_url: str = ""  # env MCP_KV_BASE_URL (outbound handler)
+    mcp_kv_token: str = ""  # env MCP_KV_TOKEN (REST fallback only)
+    mcp_dcr_server_secret: str = ""  # env MCP_DCR_SERVER_SECRET (multi-user)
+    docs_db_backend: str = "sqlite"  # env DOCS_DB_BACKEND: sqlite | cf-d1
+    mcp_d1_base_url: str = ""  # env MCP_D1_BASE_URL
+    mcp_d1_token: str = ""  # env MCP_D1_TOKEN (REST fallback only)
+    mcp_vectorize_base_url: str = ""  # env MCP_VECTORIZE_BASE_URL
+    mcp_vectorize_idx: str = ""  # env MCP_VECTORIZE_IDX (required for cf-d1)
+    mcp_vectorize_token: str = ""  # env MCP_VECTORIZE_TOKEN (REST fallback only)
 
     # Per-task model chains "provider/model,provider/model" (order = litellm
     # fallback). Empty -> local ONNX. Replaces the priority-router auto-detect

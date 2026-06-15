@@ -54,9 +54,11 @@ dependencies = [
     "jsonschema>=4.26.0",
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
-    # Relay setup (zero-env-config) + LLM passthrough (litellm via [llm] extra).
-    # Beta pin until 1.18.0 stable.
-    "n24q02m-mcp-core[llm]>=1.18.0b2,<2",
+    # Relay setup (zero-env-config) + LLM passthrough (litellm via [llm] extra) +
+    # pluggable credential storage backends (CredentialBackend / CfKvBackend,
+    # shipped in 1.18.0b4) + PerPluginStore token sub-key (1.18.0b5). Beta pin
+    # until 1.18.0 stable.
+    "n24q02m-mcp-core[llm]>=1.18.0b5,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.4",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance

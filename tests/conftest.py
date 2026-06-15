@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-pytest_plugins = ["conftest_e2e"]
+pytest_plugins = ["conftest_e2e", "conftest_cf"]
 
 
 @pytest.fixture(autouse=True)

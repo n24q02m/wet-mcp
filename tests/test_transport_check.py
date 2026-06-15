@@ -194,7 +194,7 @@ async def test_search_action_proceeds_when_not_uvx(monkeypatch):
 
     with (
         patch.object(srv, "ensure_searxng", new_callable=AsyncMock) as mock_ensure,
-        patch.object(srv, "searxng_search", new_callable=AsyncMock) as mock_search,
+        patch("wet_mcp.sources.searxng.search", new_callable=AsyncMock) as mock_search,
     ):
         mock_ensure.return_value = "http://localhost:8080"
         mock_search.return_value = "Search Results"
