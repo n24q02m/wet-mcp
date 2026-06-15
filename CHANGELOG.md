@@ -2,6 +2,89 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.11 (2026-06-15)
+
+### Bug Fixes
+
+- Correct CF deploy template (managed-registry image push, top-level route, searxng secrets)
+  ([#1371](https://github.com/n24q02m/wet-mcp/pull/1371),
+  [`109aec0`](https://github.com/n24q02m/wet-mcp/commit/109aec071e7d1e6f11c7d090e484a3398e2f3f6a))
+
+- Correct CF deploy template (managed-registry image, top-level route, searxng secrets)
+  ([#1371](https://github.com/n24q02m/wet-mcp/pull/1371),
+  [`109aec0`](https://github.com/n24q02m/wet-mcp/commit/109aec071e7d1e6f11c7d090e484a3398e2f3f6a))
+
+- Dispatch worker outbound handlers by internal hostname
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+- Forward container env (storage backends, model chains, secrets) in CF worker
+  ([#1371](https://github.com/n24q02m/wet-mcp/pull/1371),
+  [`109aec0`](https://github.com/n24q02m/wet-mcp/commit/109aec071e7d1e6f11c7d090e484a3398e2f3f6a))
+
+- Forward container env (storage backends, model chains, secrets) in CF worker
+  ([#1370](https://github.com/n24q02m/wet-mcp/pull/1370),
+  [`c22f07b`](https://github.com/n24q02m/wet-mcp/commit/c22f07b5970ef3f2b2fb01d626061499769db377))
+
+- Keep outbound handlers off the public fetch entrypoint
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+- Point CF container image at :beta (has CF code + mcp-core b5)
+  ([#1371](https://github.com/n24q02m/wet-mcp/pull/1371),
+  [`109aec0`](https://github.com/n24q02m/wet-mcp/commit/109aec071e7d1e6f11c7d090e484a3398e2f3f6a))
+
+- Point CF container image at :beta (has CF code + mcp-core b5)
+  ([#1370](https://github.com/n24q02m/wet-mcp/pull/1370),
+  [`c22f07b`](https://github.com/n24q02m/wet-mcp/commit/c22f07b5970ef3f2b2fb01d626061499769db377))
+
+- Route CF container outbound to Worker bindings
+  ([#1371](https://github.com/n24q02m/wet-mcp/pull/1371),
+  [`109aec0`](https://github.com/n24q02m/wet-mcp/commit/109aec071e7d1e6f11c7d090e484a3398e2f3f6a))
+
+- Run wet-mcp correctly inside Cloudflare Containers
+  ([#1371](https://github.com/n24q02m/wet-mcp/pull/1371),
+  [`109aec0`](https://github.com/n24q02m/wet-mcp/commit/109aec071e7d1e6f11c7d090e484a3398e2f3f6a))
+
+- Use searxng search backend for CF wet (reuse self-hosted instance)
+  ([#1371](https://github.com/n24q02m/wet-mcp/pull/1371),
+  [`109aec0`](https://github.com/n24q02m/wet-mcp/commit/109aec071e7d1e6f11c7d090e484a3398e2f3f6a))
+
+- Use searxng search backend for CF wet (reuse self-hosted instance)
+  ([#1370](https://github.com/n24q02m/wet-mcp/pull/1370),
+  [`c22f07b`](https://github.com/n24q02m/wet-mcp/commit/c22f07b5970ef3f2b2fb01d626061499769db377))
+
+### Features
+
+- Add kv.internal __ready readiness probe to gate first credential write
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+- Bump mcp-core to 1.18.0b6 for CfKvBackend.ready() probe
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+- Freeze CF worker template + document copy-from-wet contract
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+- Gate first credential PUT on CF KV readiness probe
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+- Harden CF worker template (E.1 readiness probe + E.2 single-user DO/poll)
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+- Lock explicit single-user idFromName(default) DO contract
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+- Poll credential key read-back before reporting setup success
+  ([#1372](https://github.com/n24q02m/wet-mcp/pull/1372),
+  [`78a76b8`](https://github.com/n24q02m/wet-mcp/commit/78a76b8271592a02149c170ff8c860c9a09e7d35))
+
+
 ## v3.3.0-beta.10 (2026-06-15)
 
 ### Bug Fixes
