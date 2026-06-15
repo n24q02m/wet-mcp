@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.10 (2026-06-15)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.18.0b5 for vertex_express support
+  ([#1369](https://github.com/n24q02m/wet-mcp/pull/1369),
+  [`651c286`](https://github.com/n24q02m/wet-mcp/commit/651c286a0f407c1b6c1b703619f14d0a2ac7c9c7))
+
+- Correct credential storage and relay/auth claims in architecture docs
+  ([#1369](https://github.com/n24q02m/wet-mcp/pull/1369),
+  [`651c286`](https://github.com/n24q02m/wet-mcp/commit/651c286a0f407c1b6c1b703619f14d0a2ac7c9c7))
+
+
 ## v3.3.0-beta.9 (2026-06-15)
 
 ### Bug Fixes
