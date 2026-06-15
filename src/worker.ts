@@ -24,14 +24,39 @@ export interface Env {
   RERANK_MODELS: string
   LLM_MODELS: string
   SEARCH_BACKEND: string
+  WET_AUTO_SEARXNG: string
   PUBLIC_URL: string
   CREDENTIAL_SECRET: string
   JINA_AI_API_KEY: string
-  TAVILY_API_KEY: string
   GOOGLE_VERTEX_EXPRESS_API_KEY: string
   XAI_API_KEY: string
   MCP_RELAY_PASSWORD: string
   MCP_DCR_SERVER_SECRET: string
+  // search secrets — exactly one set depending on SEARCH_BACKEND
+  SEARXNG_URL?: string
+  TAVILY_API_KEY?: string
+}
+
+// Keys forwarded from the Worker env (wrangler vars + secrets) into the container
+// process. Unset/empty values are dropped so an unused optional secret (tavily vs
+// searxng) never injects a blank.
+const CONTAINER_ENV_KEYS = [
+  'MCP_STORAGE_BACKEND', 'MCP_KV_BASE_URL', 'DOCS_DB_BACKEND',
+  'MCP_D1_BASE_URL', 'MCP_VECTORIZE_BASE_URL', 'MCP_VECTORIZE_IDX',
+  'EMBEDDING_MODELS', 'RERANK_MODELS', 'LLM_MODELS',
+  'SEARCH_BACKEND', 'WET_AUTO_SEARXNG', 'SEARXNG_URL', 'TAVILY_API_KEY',
+  'PUBLIC_URL', 'CREDENTIAL_SECRET', 'JINA_AI_API_KEY',
+  'GOOGLE_VERTEX_EXPRESS_API_KEY', 'XAI_API_KEY',
+  'MCP_RELAY_PASSWORD', 'MCP_DCR_SERVER_SECRET',
+] as const
+
+function pickContainerEnv(env: Env): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const k of CONTAINER_ENV_KEYS) {
+    const v = (env as unknown as Record<string, unknown>)[k]
+    if (typeof v === 'string' && v !== '') out[k] = v
+  }
+  return out
 }
 
 export default {
@@ -111,24 +136,5 @@ export class WetContainer extends Container<Env> {
   // Forward Worker config (vars) + secrets into the container process. Without
   // this the Python server defaults to MCP_STORAGE_BACKEND=local / DOCS_DB_BACKEND=sqlite
   // on the ephemeral container FS and downloads local ONNX models.
-  envVars = {
-    MCP_STORAGE_BACKEND: this.env.MCP_STORAGE_BACKEND,
-    MCP_KV_BASE_URL: this.env.MCP_KV_BASE_URL,
-    DOCS_DB_BACKEND: this.env.DOCS_DB_BACKEND,
-    MCP_D1_BASE_URL: this.env.MCP_D1_BASE_URL,
-    MCP_VECTORIZE_BASE_URL: this.env.MCP_VECTORIZE_BASE_URL,
-    MCP_VECTORIZE_IDX: this.env.MCP_VECTORIZE_IDX,
-    EMBEDDING_MODELS: this.env.EMBEDDING_MODELS,
-    RERANK_MODELS: this.env.RERANK_MODELS,
-    LLM_MODELS: this.env.LLM_MODELS,
-    SEARCH_BACKEND: this.env.SEARCH_BACKEND,
-    PUBLIC_URL: this.env.PUBLIC_URL,
-    CREDENTIAL_SECRET: this.env.CREDENTIAL_SECRET,
-    JINA_AI_API_KEY: this.env.JINA_AI_API_KEY,
-    TAVILY_API_KEY: this.env.TAVILY_API_KEY,
-    GOOGLE_VERTEX_EXPRESS_API_KEY: this.env.GOOGLE_VERTEX_EXPRESS_API_KEY,
-    XAI_API_KEY: this.env.XAI_API_KEY,
-    MCP_RELAY_PASSWORD: this.env.MCP_RELAY_PASSWORD,
-    MCP_DCR_SERVER_SECRET: this.env.MCP_DCR_SERVER_SECRET,
-  }
+  envVars = pickContainerEnv(this.env)
 }
