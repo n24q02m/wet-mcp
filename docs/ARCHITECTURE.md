@@ -116,7 +116,7 @@ live in `src/wet_mcp/sources/_smart_chunks.py`.
 |---|---|---|
 | `~/.wet-mcp/docs.db` | Library docs index (chunks + embeddings) | SQLite WAL + sqlite-vec |
 | `~/.wet-mcp/cache.db` | Web search + extract cache (TTL gated) | SQLite WAL |
-| `~/.wet-mcp/config.enc` | Encrypted credentials (mcp-core managed) | AES-GCM, machine-bound key |
+| `~/.wet-mcp/config.json` | Encrypted credentials (mcp-core `PerPluginStore`) | AES-GCM, machine-bound key at `~/.wet-mcp/.secret` |
 | `~/.wet-mcp/downloads/` | Media download output dir | Filesystem |
 | `~/.wet-mcp/tokens/google_drive.json` | OAuth Device Code token (sync) | Filesystem 0600 perms |
 
@@ -161,12 +161,16 @@ This dispatch is shared with web-core's `selector_inference` module
 
 | Mode | Default? | Storage scope | Multi-user |
 |---|---|---|---|
-| stdio | Yes | Local user (`~/.wet-mcp/config.enc`, perm 0600) | No |
-| HTTP self-host | No | Per-JWT-sub credential vault | Yes |
+| stdio | Yes | Local user (`~/.wet-mcp/config.json`, perm 0600) | No |
+| HTTP self-host (single-user) | No | Shared local store (`~/.wet-mcp/config.json`), bind 127.0.0.1 | No |
+| HTTP self-host (multi-user) | No | Per-JWT-sub vault (`~/.wet-mcp/subs/<sub>/config.json`), bind 0.0.0.0 | Yes |
 
 The stdio default avoids OAuth complexity for single-machine personal
 use; HTTP self-host is recommended when multi-device sync, claude.ai web
-compatibility, or team sharing matters.
+compatibility, or team sharing matters. Multi-user mode is triggered by
+setting `PUBLIC_URL` (with `MCP_DCR_SERVER_SECRET` required as proof of
+intentional multi-user deployment); without it HTTP binds 127.0.0.1 and
+reuses the single-user store.
 
 ## Library docs search (Context7-parity)
 

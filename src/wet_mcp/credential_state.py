@@ -323,13 +323,13 @@ def credentials_for_current_request() -> dict[str, str]:
 
 
 def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:
-    """Save credentials from OAuth form to config.enc and apply to environment.
+    """Save credentials from OAuth form to ``config.json`` and apply to environment.
 
     ``context`` carries the per-authorize ``sub`` issued by mcp-core's local
     OAuth AS. In remote multi-user mode (``PUBLIC_URL`` set) we route the
     credentials into a per-sub bucket via :func:`store_for_sub` so concurrent
     users do not overwrite each other. In single-user mode the subject is
-    ignored and a single ``config.enc`` on the host is reused.
+    ignored and a single ``~/.wet-mcp/config.json`` on the host is reused.
 
     Called by the local OAuth AS when the user submits API keys via the
     browser form. Writes to encrypted config file, applies to env vars
