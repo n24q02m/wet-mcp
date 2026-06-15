@@ -129,8 +129,25 @@ const vectorizeOutbound: OutboundHandler<Env> = async (request, env) => {
   return new Response('not found', { status: 404 })
 }
 
+// Outbound handler registry, keyed by internal hostname. Both production (via
+// @cloudflare/containers -> WetContainer.outboundByHost) and the direct fetch
+// dispatch below share this single source of truth, so they can never drift.
+const OUTBOUND_BY_HOST: Record<string, OutboundHandler<Env>> = {
+  'kv.internal': kvOutbound,
+  'd1.internal': d1Outbound,
+  'vectorize.internal': vectorizeOutbound,
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    // Direct outbound entry: a request addressed to one of the internal hosts is
+    // serviced by its handler (the same registry the container proxy uses). This
+    // makes the handlers unit-testable and gives the kv.internal readiness probe
+    // a reachable endpoint.
+    const host = new URL(request.url).hostname
+    const handler = OUTBOUND_BY_HOST[host]
+    if (handler) return handler(request, env)
+
     // Inbound production request -> route to the per-user container DO.
     if (env.WET) {
       const userId = extractUserId(request)
@@ -172,9 +189,7 @@ export class WetContainer extends Container<Env> {
 }
 
 // Register outbound interception. MUST be an assignment (invokes the inherited
-// `static set outboundByHost`) — a class field would bypass the setter.
-WetContainer.outboundByHost = {
-  'kv.internal': kvOutbound as OutboundHandler,
-  'd1.internal': d1Outbound as OutboundHandler,
-  'vectorize.internal': vectorizeOutbound as OutboundHandler,
-}
+// `static set outboundByHost`) — a class field would bypass the setter. Reuses
+// OUTBOUND_BY_HOST so the proxy registry and the direct fetch dispatch are one
+// source of truth (footgun #1: assignment, never a static field).
+WetContainer.outboundByHost = OUTBOUND_BY_HOST as Record<string, OutboundHandler>
