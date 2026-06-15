@@ -216,17 +216,30 @@ Run your own single-user wet instance serverless on Cloudflare (Containers + D1 
    wrangler kv namespace create wet-kv
    ```
    Paste the returned IDs into `wrangler.jsonc`.
-4. Set secrets:
+4. Push the container image to your Cloudflare managed registry (CF Containers cannot
+   pull from external registries directly), then set `<YOUR_ACCOUNT_ID>` in `wrangler.jsonc`:
+   ```
+   docker pull ghcr.io/n24q02m/wet-mcp:beta
+   docker tag ghcr.io/n24q02m/wet-mcp:beta wet-mcp:beta
+   wrangler containers push wet-mcp:beta   # prints registry.cloudflare.com/<ACCOUNT_ID>/wet-mcp:beta
+   ```
+5. Set secrets (use `SEARXNG_URL` with basic-auth userinfo, e.g.
+   `https://user:pass@searxng.example.com`, or `TAVILY_API_KEY` if you set `SEARCH_BACKEND=tavily`):
    ```
    wrangler secret put CREDENTIAL_SECRET
    wrangler secret put JINA_AI_API_KEY
-   wrangler secret put TAVILY_API_KEY
+   wrangler secret put GOOGLE_VERTEX_EXPRESS_API_KEY
+   wrangler secret put XAI_API_KEY
+   wrangler secret put MCP_RELAY_PASSWORD
+   wrangler secret put MCP_DCR_SERVER_SECRET
+   wrangler secret put SEARXNG_URL
    ```
-5. `wrangler deploy` and complete setup in the browser relay form at your Worker domain.
+6. `wrangler deploy` and complete setup in the browser relay form at your Worker domain.
 
 Storage maps to Cloudflare via `MCP_STORAGE_BACKEND=cf-kv` (credentials/tokens, encrypted),
 `DOCS_DB_BACKEND=cf-d1` (docs + BM25 full-text), and Vectorize (embeddings). Web search uses
-Tavily (`SEARCH_BACKEND=tavily`); embed/rerank are forced cloud via `EMBEDDING_MODELS`/`RERANK_MODELS`.
+a SearXNG instance (`SEARCH_BACKEND=searxng`, `SEARXNG_URL`) or Tavily (`SEARCH_BACKEND=tavily`);
+embed/rerank are forced cloud via `EMBEDDING_MODELS`/`RERANK_MODELS`.
 
 ## Trust Model
 

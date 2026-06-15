@@ -114,7 +114,11 @@ async def extract_structured(
     # Step 3: Combine content, truncate
     combined_parts: list[str] = []
     for page in pages:
-        content = page.get("content", "")
+        # crawler.extract returns smart_chunks keys (clean_text / markdown);
+        # keep "content" as a backward-compat fallback.
+        content = (
+            page.get("clean_text") or page.get("markdown") or page.get("content", "")
+        )
         if content:
             title = page.get("title", "")
             url = page.get("url", "")

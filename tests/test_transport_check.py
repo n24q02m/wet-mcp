@@ -73,6 +73,28 @@ def test_is_uvx_tool_venv_false_in_docker(
     assert tc.is_uvx_tool_venv() is False
 
 
+def test_is_uvx_tool_venv_false_in_http_mode(
+    _allow_real_uvx_detection, monkeypatch, tmp_path
+):
+    """HTTP transport short-circuit: even with no pip AND no /.dockerenv marker
+    (the Cloudflare Containers case), HTTP mode must NOT be detected as uvx.
+
+    CF Containers run the ``uv sync`` image via a non-Docker runtime that omits
+    ``/.dockerenv``, so the no-pip fallback would otherwise wrongly reject
+    SearXNG actions there. The ``MCP_TRANSPORT=http`` signal keeps them allowed.
+    """
+    fake_exe = tmp_path / "app" / ".venv" / "bin" / "python"
+    fake_exe.parent.mkdir(parents=True)
+    fake_exe.touch()
+    monkeypatch.setattr(sys, "executable", str(fake_exe))
+    monkeypatch.setattr(tc.importlib.util, "find_spec", lambda name: None)
+    monkeypatch.setattr(tc, "_is_in_docker", lambda: False)
+    monkeypatch.setenv("MCP_TRANSPORT", "http")
+    monkeypatch.delenv("TRANSPORT_MODE", raising=False)
+
+    assert tc.is_uvx_tool_venv() is False
+
+
 def test_is_uvx_tool_venv_true_when_executable_under_uv_tools(
     _allow_real_uvx_detection, monkeypatch, tmp_path
 ):

@@ -90,9 +90,18 @@ def _browser_config(stealth: bool = False) -> BrowserConfig:
     """Create BrowserConfig with per-process isolated data directory."""
     extra_args: list[str] = []
 
-    # Docker/CI environments need --no-sandbox (Chromium cannot use
-    # the SUID sandbox inside unprivileged containers).
-    if os.path.exists("/.dockerenv") or os.environ.get("container"):
+    # Docker/CI/Cloudflare-Containers environments need --no-sandbox (Chromium
+    # cannot use the SUID sandbox inside unprivileged containers). CF Containers
+    # do not create the ``/.dockerenv`` marker nor set ``container``, so fall
+    # back to the HTTP-transport signal (any HTTP daemon deployment is a
+    # container) to keep chromium launchable there.
+    from wet_mcp.transport_check import _is_http_transport
+
+    if (
+        os.path.exists("/.dockerenv")
+        or os.environ.get("container")
+        or _is_http_transport()
+    ):
         extra_args += ["--no-sandbox", "--disable-dev-shm-usage"]
 
     return BrowserConfig(
