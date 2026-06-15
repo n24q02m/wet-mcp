@@ -66,3 +66,49 @@ describe('outbound handlers', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('single-user DO contract (E.2)', () => {
+  function envWithDoSpy() {
+    const calls: string[] = []
+    return {
+      calls,
+      env: {
+        WET: {
+          idFromName: (n: string) => {
+            calls.push(n)
+            return { name: n }
+          },
+          get: (_id: unknown) => ({ fetch: async () => new Response('routed', { status: 200 }) }),
+        },
+      },
+    }
+  }
+
+  it('no Bearer token -> routes to the "default" DO', async () => {
+    const { calls, env } = envWithDoSpy()
+    const res = await worker.fetch(new Request('https://wet.n24q02m.com/mcp'), env as never)
+    expect(res.status).toBe(200)
+    expect(calls).toEqual(['default'])
+  })
+
+  it('Bearer token without sub -> routes to the "default" DO', async () => {
+    const { calls, env } = envWithDoSpy()
+    // header.payload.sig where payload has no `sub`
+    const jwt = `h.${btoa(JSON.stringify({ aud: 'x' }))}.s`
+    await worker.fetch(
+      new Request('https://wet.n24q02m.com/mcp', { headers: { authorization: `Bearer ${jwt}` } }),
+      env as never,
+    )
+    expect(calls).toEqual(['default'])
+  })
+
+  it('Bearer token with sub -> routes to that sub DO (per-user isolation)', async () => {
+    const { calls, env } = envWithDoSpy()
+    const jwt = `h.${btoa(JSON.stringify({ sub: 'user-123' }))}.s`
+    await worker.fetch(
+      new Request('https://wet.n24q02m.com/mcp', { headers: { authorization: `Bearer ${jwt}` } }),
+      env as never,
+    )
+    expect(calls).toEqual(['user-123'])
+  })
+})

@@ -167,7 +167,10 @@ export default {
 
 function extractUserId(request: Request): string {
   // JWT sub from the Bearer token (verified by mcp-core OAuth middleware in the
-  // container). Single-instance-per-user: fall back to "default" when absent.
+  // container). SINGLE-USER CONTRACT (E.2): no token or no `sub` -> the reserved
+  // id "default", so setup and serving collapse onto ONE Durable Object id and
+  // the credential write+read avoid a cross-colo KV hop. Per-`sub` tokens get
+  // their own isolated DO (multi-user). Downstream servers MUST keep this.
   const auth = request.headers.get('authorization') ?? ''
   const m = auth.match(/^Bearer\s+(.+)$/)
   if (!m) return 'default'
