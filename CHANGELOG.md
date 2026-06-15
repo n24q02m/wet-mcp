@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.9 (2026-06-15)
+
+### Bug Fixes
+
+- Clarify embedding-model switch requires reindex (B2 guard)
+  ([#1341](https://github.com/n24q02m/wet-mcp/pull/1341),
+  [`c853ee9`](https://github.com/n24q02m/wet-mcp/commit/c853ee99358c0c3d26e20b2f74d082f3152b7f9a))
+
+- Correct credential storage and relay/auth claims in architecture docs
+  ([`b5b876a`](https://github.com/n24q02m/wet-mcp/commit/b5b876a36cbdd767e51310bc8e5802e1b2828abd))
+
+- Optimize _extract_passage sliding window search
+  ([#1327](https://github.com/n24q02m/wet-mcp/pull/1327),
+  [`1518453`](https://github.com/n24q02m/wet-mcp/commit/1518453c0435771d97b1b9a9db8490b4eeefd28c))
+
+- Optimize whitespace stripping with native string operations
+  ([#1339](https://github.com/n24q02m/wet-mcp/pull/1339),
+  [`34b5902`](https://github.com/n24q02m/wet-mcp/commit/34b5902cfbe39eb1aa4608f0af967d74ad1b518e))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to ff07b86
+  ([#1340](https://github.com/n24q02m/wet-mcp/pull/1340),
+  [`244a71a`](https://github.com/n24q02m/wet-mcp/commit/244a71a898f3100a5ba6238f867f4815a97b72c2))
+
+- **deps**: Update non-major dependencies ([#1338](https://github.com/n24q02m/wet-mcp/pull/1338),
+  [`76ccbe0`](https://github.com/n24q02m/wet-mcp/commit/76ccbe0c1bdf0b1f47d080f1e06e32b32849a6b8))
+
+- **deps**: Update python:3.13-slim-bookworm docker digest to 05b9539
+  ([#1337](https://github.com/n24q02m/wet-mcp/pull/1337),
+  [`a2da219`](https://github.com/n24q02m/wet-mcp/commit/a2da2193004f318193a6ec7c39f9ebed4d7824e7))
+
+### Features
+
+- Cloudflare serverless deployment (Phase 2 pilot)
+  ([`7d8a194`](https://github.com/n24q02m/wet-mcp/commit/7d8a194509a966fa4a381d993c77d42b28e9e041))
+
+
 ## v3.3.0-beta.8 (2026-06-12)
 
 ### Bug Fixes
