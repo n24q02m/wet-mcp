@@ -337,6 +337,34 @@ def _await_backend_ready() -> None:
         )
 
 
+def poll_until_readable(sub: str | None, retries: int = 8, delay: float = 0.5) -> bool:
+    """E.2: after a credential save, confirm the key is read-back-able from the
+    backend before reporting setup success, closing the KV cross-colo
+    eventual-consistency window (~60s) where the serving DO still sees "not
+    configured". Returns True once the blob is present, False if it never
+    propagates within the budget (caller proceeds; the client awaiting-setup poll
+    in ``cf_full_flow.py`` is the backstop). Reads raw ciphertext (presence is the
+    signal; no decrypt needed).
+    """
+    import time
+
+    backend = backend_from_env()
+    key = f"{PLUGIN_NAME}/subs/{sub}/config" if sub else f"{PLUGIN_NAME}/config"
+    for attempt in range(retries):
+        try:
+            if backend.get(key) is not None:
+                return True
+        except Exception:
+            pass  # transient read error during propagation -> keep polling
+        if attempt + 1 < retries:
+            time.sleep(delay)
+    logger.warning(
+        f"credential key {key} not yet readable after save; "
+        "relying on client awaiting-setup poll backstop"
+    )
+    return False
+
+
 def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:
     """Save credentials from OAuth form to ``config.json`` and apply to environment.
 
@@ -371,6 +399,7 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
         if not sub:
             raise RuntimeError("multi-user mode: SubjectContext sub required")
         store_for_sub(sub, config)
+        poll_until_readable(sub)  # E.2: confirm propagation before reporting success
         _state = CredentialState.CONFIGURED
         logger.info(f"Credentials saved for sub={sub} via remote multi-user form")
 
@@ -429,6 +458,7 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
 
     # Persist to per-plugin store (~/.wet-mcp/config.json)
     PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).save(config)
+    poll_until_readable(None)  # E.2: confirm propagation before reporting success
 
     # Apply to environment for immediate use
     apply_config(config)

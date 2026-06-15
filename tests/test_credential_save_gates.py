@@ -76,3 +76,27 @@ def test_ready_not_called_for_backend_without_ready(monkeypatch):
     # must not raise (no ready()) and must still persist the credential blob
     cs.save_credentials({"JINA_AI_API_KEY": "k"}, context={})
     assert "wet/config" in backend.store
+
+
+def test_poll_until_readable_returns_once_present(monkeypatch):
+    monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
+    backend = _ReadyTrackingBackend()
+    monkeypatch.setattr(cs, "backend_from_env", lambda: backend)
+    # single-user key becomes readable after the save
+    backend.store["wet/config"] = b"ciphertext"
+    assert cs.poll_until_readable(None, retries=5, delay=0) is True
+
+
+def test_poll_until_readable_times_out_gracefully(monkeypatch):
+    monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
+    backend = _ReadyTrackingBackend()  # store stays empty -> never readable
+    monkeypatch.setattr(cs, "backend_from_env", lambda: backend)
+    assert cs.poll_until_readable("user-1", retries=3, delay=0) is False
+
+
+def test_poll_until_readable_checks_sub_key(monkeypatch):
+    monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
+    backend = _ReadyTrackingBackend()
+    monkeypatch.setattr(cs, "backend_from_env", lambda: backend)
+    backend.store["wet/subs/user-1/config"] = b"ciphertext"
+    assert cs.poll_until_readable("user-1", retries=5, delay=0) is True
