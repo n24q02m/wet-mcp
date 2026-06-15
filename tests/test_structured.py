@@ -72,6 +72,47 @@ async def test_extract_structured_success():
         assert "validation_warning" not in result
 
 
+async def test_extract_structured_reads_clean_text_key():
+    """Regression: crawler.extract returns smart_chunks keys (``clean_text`` /
+    ``markdown``), not ``content``. extract_structured must read those, else it
+    wrongly reports "No content extracted" even though pages were fetched."""
+    real_shape_pages = [
+        {
+            "url": "https://example.com/product",
+            "clean_text": "Title: Widget\nPrice: $29.99",
+        }
+    ]
+    llm_output = json.dumps({"title": "Widget", "price": 29.99})
+
+    with (
+        patch(
+            "wet_mcp.sources.structured.raw_extract",
+            new_callable=AsyncMock,
+            return_value=json.dumps(real_shape_pages),
+        ),
+        patch("wet_mcp.sources.structured.settings") as mock_settings,
+        patch(
+            "wet_mcp.sources.structured.get_llm_config",
+            return_value={"model": "gpt-4", "fallbacks": None, "temperature": 0},
+        ),
+        patch(
+            "wet_mcp.sources.structured.acompletion",
+            new_callable=AsyncMock,
+            return_value=_mock_llm_response(llm_output),
+        ),
+    ):
+        mock_settings.resolve_provider_mode.return_value = "proxy"
+
+        result = json.loads(
+            await extract_structured(
+                urls=["https://example.com/product"], schema=SAMPLE_SCHEMA
+            )
+        )
+
+        assert "data" in result, result
+        assert result["data"]["title"] == "Widget"
+
+
 async def test_extract_structured_local_mode_error():
     """Local mode (no LLM) returns an error."""
     with patch("wet_mcp.sources.structured.settings") as mock_settings:
