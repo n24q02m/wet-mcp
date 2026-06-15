@@ -117,6 +117,12 @@ not via the deprecated `*_BACKEND`). Empty chain -> local ONNX. With cloud force
 `DOCS_DB_BACKEND=cf-d1` + `MCP_D1_BASE_URL`/`MCP_VECTORIZE_BASE_URL`/`MCP_VECTORIZE_IDX`,
 `SEARCH_BACKEND=tavily` + `TAVILY_API_KEY`, and `CREDENTIAL_SECRET`.
 
+- **CF template (frozen for P3 replication):** `docs/cf-template.md` pins the canonical
+  worker.ts/wrangler.jsonc copy contract (KEEP/DROP handler matrix, 5 footguns, the
+  security rule that outbound handlers stay OFF the public `fetch`, E.1 readiness probe
+  + E.2 single-user-DO/poll patterns, sync mode-gating). The 5 P3 servers copy this; do
+  not re-solve E.1/E.2 per server.
+
 ## Release & Deploy
 
 - Conventional Commits. Tag format: `v{version}`

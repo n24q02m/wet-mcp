@@ -88,6 +88,13 @@ function pickContainerEnv(env: Env): Record<string, string> {
 const kvOutbound: OutboundHandler<Env> = async (request, env) => {
   const url = new URL(request.url)
   const key = decodeURIComponent(url.pathname.replace(/^\//, ''))
+  // Readiness probe (E.1): once this handler answers, outbound interception is
+  // wired, so the container's first credential PUT is safe. Mirrors
+  // vectorizeOutbound's GET -> {ready:true}. Reserved key, checked before the
+  // normal key lookup so it never shadows a real KV key.
+  if (request.method === 'GET' && key === '__ready') {
+    return Response.json({ ready: true })
+  }
   if (request.method === 'GET') {
     // Credential blobs are binary (nonce + AES-GCM ciphertext); read/write as
     // ArrayBuffer so bytes round-trip without UTF-8 corruption.
@@ -129,9 +136,27 @@ const vectorizeOutbound: OutboundHandler<Env> = async (request, env) => {
   return new Response('not found', { status: 404 })
 }
 
+// Outbound handler registry, keyed by internal hostname. Production container
+// outbound (kv/d1/vectorize.internal) reaches these via @cloudflare/containers'
+// ContainerProxy + the WetContainer.outboundByHost assignment below — NOT via the
+// public `fetch` export. Exported so unit tests can invoke a handler directly
+// instead of routing an internal-host request through the public entrypoint.
+export const OUTBOUND_BY_HOST: Record<string, OutboundHandler<Env>> = {
+  'kv.internal': kvOutbound,
+  'd1.internal': d1Outbound,
+  'vectorize.internal': vectorizeOutbound,
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    // Inbound production request -> route to the per-user container DO.
+    // Public entrypoint: ONLY routes inbound requests to the per-user container
+    // DO. The kv/d1/vectorize.internal outbound handlers are deliberately NOT
+    // dispatched here — exposing them on the public fetch surface would let an
+    // external caller (request hostname spoofed to kv.internal) read/write/delete
+    // the credential KV namespace unauthenticated. Production container outbound
+    // reaches them via @cloudflare/containers' ContainerProxy + the
+    // WetContainer.outboundByHost registry below; unit tests call the handlers
+    // directly via the OUTBOUND_BY_HOST export.
     if (env.WET) {
       const userId = extractUserId(request)
       const stub = env.WET.get(env.WET.idFromName(userId))
@@ -143,7 +168,10 @@ export default {
 
 function extractUserId(request: Request): string {
   // JWT sub from the Bearer token (verified by mcp-core OAuth middleware in the
-  // container). Single-instance-per-user: fall back to "default" when absent.
+  // container). SINGLE-USER CONTRACT (E.2): no token or no `sub` -> the reserved
+  // id "default", so setup and serving collapse onto ONE Durable Object id and
+  // the credential write+read avoid a cross-colo KV hop. Per-`sub` tokens get
+  // their own isolated DO (multi-user). Downstream servers MUST keep this.
   const auth = request.headers.get('authorization') ?? ''
   const m = auth.match(/^Bearer\s+(.+)$/)
   if (!m) return 'default'
@@ -172,9 +200,7 @@ export class WetContainer extends Container<Env> {
 }
 
 // Register outbound interception. MUST be an assignment (invokes the inherited
-// `static set outboundByHost`) — a class field would bypass the setter.
-WetContainer.outboundByHost = {
-  'kv.internal': kvOutbound as OutboundHandler,
-  'd1.internal': d1Outbound as OutboundHandler,
-  'vectorize.internal': vectorizeOutbound as OutboundHandler,
-}
+// `static set outboundByHost`) — a class field would bypass the setter. Reuses
+// OUTBOUND_BY_HOST so the proxy registry and the direct fetch dispatch are one
+// source of truth (footgun #1: assignment, never a static field).
+WetContainer.outboundByHost = OUTBOUND_BY_HOST as Record<string, OutboundHandler>
