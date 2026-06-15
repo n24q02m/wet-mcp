@@ -2527,7 +2527,8 @@ async def run_http_server(port: int = 0) -> None:
     """Run wet-mcp as HTTP server. Local single-user (default) or remote
     multi-user (when ``PUBLIC_URL`` env set).
 
-    Local mode binds 127.0.0.1 with a single shared ``config.enc``. Remote
+    Local mode binds 127.0.0.1 with a single shared
+    ``~/.wet-mcp/config.json`` (PerPluginStore). Remote
     multi-user mode binds 0.0.0.0:8080, requires ``MCP_DCR_SERVER_SECRET``
     as proof of intentional multi-user deployment, and scopes credentials
     per JWT ``sub`` (see ``credential_state.store_for_sub`` and the

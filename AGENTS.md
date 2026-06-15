@@ -9,7 +9,7 @@ Xem `AGENTS.md` va `README.md` de hieu architecture va configuration.
   - `server.py` -- FastMCP server (orchestrator, file lon nhat)
   - `config.py` -- Pydantic Settings (singleton)
   - `cache.py`, `db.py`, `embedder.py`, `reranker.py` -- Infrastructure
-  - `relay_setup.py` -- Zero-config relay: create session, poll for config
+  - `relay_setup.py` -- `apply_config` / `load_config_from_file` env-applier used by the OAuth setup form (live setup UX = OAuth-AS browser form at `<PUBLIC_URL>/authorize`; the `ensure_config` create-session/poll path is legacy/unused in production)
   - `relay_schema.py` -- Relay form schema (2 modes: local/cloud)
   - `sync/` -- Docs sync backends: `gdrive.py` (Google Drive, OAuth Device Code, httpx) + `s3.py` (S3/R2/B2 operator mode) + `base.py`
   - `token_store.py` -- Local token storage cho OAuth (~/.wet-mcp/tokens/)
@@ -77,7 +77,8 @@ mise run dev       # uv run wet-mcp
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
 - Sync: `SYNC_ENABLED` (default true), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
 - Sync dung Google Drive API truc tiep (httpx). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`
-- Relay: `MCP_RELAY_URL` (required for remote-relay mode, no default — wet-mcp default is local-relay per matrix)
+- HTTP auth (live self-host): credentials are configured via the OAuth-AS browser form at `<PUBLIC_URL>/authorize`; `GET /mcp` without a Bearer token returns 401 + `www-authenticate` pointing at `/.well-known/oauth-protected-resource`. The browser form is gated by `MCP_RELAY_PASSWORD` (single shared password, gate only — empty disables it; not per-user). Multi-user remote mode also requires `CREDENTIAL_SECRET` (per-sub vault key) + `MCP_DCR_SERVER_SECRET` (proof of intentional multi-user deploy).
+- `MCP_RELAY_URL`: read only by the legacy `ensure_config` create-session/poll path (`relay_setup.py`), which has no production caller — the live setup UX is the OAuth-AS form above, not an ECDH relay.
 - Secrets: skret SSM namespace `/wet-mcp/prod` (region `ap-southeast-1`)
 
 ### Manual config example
