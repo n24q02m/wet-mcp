@@ -12,6 +12,51 @@ export interface Env {
     query(vector: number[], opts: { topK: number; filter?: unknown }): Promise<{ matches: unknown[] }>
   }
   WET?: { idFromName(n: string): unknown; get(id: unknown): { fetch(r: Request): Promise<Response> } }
+  // Container config (wrangler.jsonc `vars`) + secrets (`wrangler secret put`),
+  // forwarded into the container process via WetContainer.envVars.
+  MCP_STORAGE_BACKEND: string
+  MCP_KV_BASE_URL: string
+  DOCS_DB_BACKEND: string
+  MCP_D1_BASE_URL: string
+  MCP_VECTORIZE_BASE_URL: string
+  MCP_VECTORIZE_IDX: string
+  EMBEDDING_MODELS: string
+  RERANK_MODELS: string
+  LLM_MODELS: string
+  SEARCH_BACKEND: string
+  WET_AUTO_SEARXNG: string
+  PUBLIC_URL: string
+  CREDENTIAL_SECRET: string
+  JINA_AI_API_KEY: string
+  GOOGLE_VERTEX_EXPRESS_API_KEY: string
+  XAI_API_KEY: string
+  MCP_RELAY_PASSWORD: string
+  MCP_DCR_SERVER_SECRET: string
+  // search secrets — exactly one set depending on SEARCH_BACKEND
+  SEARXNG_URL?: string
+  TAVILY_API_KEY?: string
+}
+
+// Keys forwarded from the Worker env (wrangler vars + secrets) into the container
+// process. Unset/empty values are dropped so an unused optional secret (tavily vs
+// searxng) never injects a blank.
+const CONTAINER_ENV_KEYS = [
+  'MCP_STORAGE_BACKEND', 'MCP_KV_BASE_URL', 'DOCS_DB_BACKEND',
+  'MCP_D1_BASE_URL', 'MCP_VECTORIZE_BASE_URL', 'MCP_VECTORIZE_IDX',
+  'EMBEDDING_MODELS', 'RERANK_MODELS', 'LLM_MODELS',
+  'SEARCH_BACKEND', 'WET_AUTO_SEARXNG', 'SEARXNG_URL', 'TAVILY_API_KEY',
+  'PUBLIC_URL', 'CREDENTIAL_SECRET', 'JINA_AI_API_KEY',
+  'GOOGLE_VERTEX_EXPRESS_API_KEY', 'XAI_API_KEY',
+  'MCP_RELAY_PASSWORD', 'MCP_DCR_SERVER_SECRET',
+] as const
+
+function pickContainerEnv(env: Env): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const k of CONTAINER_ENV_KEYS) {
+    const v = (env as unknown as Record<string, unknown>)[k]
+    if (typeof v === 'string' && v !== '') out[k] = v
+  }
+  return out
 }
 
 export default {
@@ -85,4 +130,11 @@ function extractUserId(request: Request): string {
 export class WetContainer extends Container<Env> {
   defaultPort = 8080
   sleepAfter = '1h'
+  // The container reaches cloud model/search APIs (Jina, Vertex, Tavily) over the
+  // public internet; kv/d1/vectorize.internal stay intercepted by the Worker.
+  enableInternet = true
+  // Forward Worker config (vars) + secrets into the container process. Without
+  // this the Python server defaults to MCP_STORAGE_BACKEND=local / DOCS_DB_BACKEND=sqlite
+  // on the ephemeral container FS and downloads local ONNX models.
+  envVars = pickContainerEnv(this.env)
 }

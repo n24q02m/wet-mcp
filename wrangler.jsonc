@@ -9,7 +9,9 @@
     {
       "name": "wet-mcp-worker",
       "class_name": "WetContainer",
-      "image": "ghcr.io/n24q02m/wet-mcp:latest",
+      // :beta carries the CF worker code + mcp-core 1.18.0b5 (vertex_express).
+      // Switch to :latest once a stable release ships the Cloudflare backends.
+      "image": "ghcr.io/n24q02m/wet-mcp:beta",
       "instance_type": "standard-1",
       "max_instances": 100
     }
@@ -23,7 +25,23 @@
     { "binding": "D1", "database_name": "wet-docs", "database_id": "<wet-d1-database-id>", "migrations_dir": "migrations" }
   ],
   "vectorize": [{ "binding": "VECTORIZE", "index_name": "wet-docs-vectors" }],
-  "vars": { "PUBLIC_URL": "https://wet.n24q02m.com" },
+  // Non-secret container config (forwarded into the container by WetContainer.envVars).
+  // Secrets (CREDENTIAL_SECRET, JINA_AI_API_KEY, TAVILY_API_KEY, GOOGLE_VERTEX_EXPRESS_API_KEY,
+  // XAI_API_KEY, MCP_RELAY_PASSWORD, MCP_DCR_SERVER_SECRET) come from `wrangler secret put`.
+  "vars": {
+    "PUBLIC_URL": "https://wet.n24q02m.com",
+    "MCP_STORAGE_BACKEND": "cf-kv",
+    "MCP_KV_BASE_URL": "http://kv.internal",
+    "DOCS_DB_BACKEND": "cf-d1",
+    "MCP_D1_BASE_URL": "http://d1.internal",
+    "MCP_VECTORIZE_BASE_URL": "http://vectorize.internal",
+    "MCP_VECTORIZE_IDX": "wet-docs-vectors",
+    "EMBEDDING_MODELS": "jina_ai/jina-embeddings-v5-text-small",
+    "RERANK_MODELS": "jina_ai/jina-reranker-v3",
+    "LLM_MODELS": "vertex_express/gemini-3.5-flash,xai/grok-4.3",
+    "SEARCH_BACKEND": "searxng",
+    "WET_AUTO_SEARXNG": "false"
+  },
   "env": {
     "production": {
       "routes": [{ "pattern": "wet.n24q02m.com", "custom_domain": true }]
