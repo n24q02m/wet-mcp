@@ -172,8 +172,11 @@ def _chunk_quality_score(content: str) -> float:
         if not ln or ln.isspace():
             continue
         lines_count += 1
-        if _LINK_LINE_RE.match(ln):
-            link_lines += 1
+        # ⚡ Bolt Optimization: Fast substring pre-filter before executing regex
+        # _LINK_LINE_RE strictly matches lines starting with '[' or 'http'
+        if "[" in ln or "http" in ln:
+            if _LINK_LINE_RE.match(ln):
+                link_lines += 1
     if lines_count:
         ratio = link_lines / lines_count
         if ratio > 0.5:
