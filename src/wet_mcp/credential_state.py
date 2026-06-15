@@ -323,6 +323,20 @@ def credentials_for_current_request() -> dict[str, str]:
     return read_for_sub(sub)
 
 
+def _await_backend_ready() -> None:
+    """E.1: when the active backend is CF KV, poll its readiness probe before the
+    first credential write so the PUT never races outbound-interception. No-op for
+    LocalFs (stdio/VM) and any backend without a ``ready()`` method.
+    """
+    backend = backend_from_env()
+    ready = getattr(backend, "ready", None)
+    if callable(ready) and not ready():
+        logger.warning(
+            "CF KV backend not ready before credential save; "
+            "relying on client retry-on-500 backstop"
+        )
+
+
 def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:
     """Save credentials from OAuth form to ``config.json`` and apply to environment.
 
@@ -341,6 +355,11 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
     for the form to display.
     """
     global _state
+
+    # E.1: gate the first KV PUT on outbound-interception readiness (no-op for
+    # LocalFs / any backend without ready()). One probe per setup submit, at the
+    # single chokepoint both branches pass through.
+    _await_backend_ready()
 
     # Remote multi-user branch: scope credential storage by JWT sub so
     # concurrent /authorize sessions do not clobber each other. The GDrive
