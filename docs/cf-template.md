@@ -59,7 +59,11 @@ Hardened for E.1 + E.2 (PR series cf-p3-01); do not re-solve those per server.
 3. KV blobs read/written as `arrayBuffer` (binary AES-GCM ciphertext).
 4. CF has no `/.dockerenv`; detect container via `MCP_TRANSPORT=http`.
 5. CF managed registry only (`registry.cloudflare.com/<ACCOUNT_ID>`); re-pushing the
-   same tag does NOT roll a running app -> delete+recreate; `wrangler kv` needs `--remote`.
+   same tag does NOT roll a running app -> delete+recreate. `wrangler containers delete`
+   takes the container ID (from `wrangler containers list`), NOT the name
+   (wrangler 4.100.0: `Expected a container ID but got <name>`); it prompts -> pipe `yes`.
+   `wrangler deploy` reports "no changes" for the container (tracks tag not digest) until
+   the app is deleted+recreated. `wrangler kv` needs `--remote`.
 
 ## Sync mode-gating (servers with a docs/memory DB: wet, mnemo)
 - On CF (`DOCS_DB_BACKEND=cf-d1`) the GDrive/S3 DB-sync is REDUNDANT (D1+Vectorize is
@@ -71,7 +75,14 @@ Hardened for E.1 + E.2 (PR series cf-p3-01); do not re-solve those per server.
   `GET /mcp` (no token) -> 401 + www-authenticate.
 - Full OAuth password flow self-test PASS (replicate `cf_full_flow.py`): login ->
   save credential (retry-on-500) -> authenticated tool call via relay.
-- STATE SURVIVES delete+recreate (the key gate; first boot is not enough).
+  Verify needs `MCP_RELAY_PASSWORD` from `/oci-vm-prod/prod` (infra-shared login gate),
+  NOT the per-server `/<server>/prod` (runtime-only) -> compose 2 skret namespaces:
+  `skret run -e prod --path=/oci-vm-prod/prod -- bash -c 'export RELAY_PW=$MCP_RELAY_PASSWORD; skret run -e prod --path=/<server>/prod -- <verify>'`.
+  E.1 residual: <=1 `save 500 (interception race)` retry on a truly-cold instance is PASS
+  (the readiness probe reduces but cannot fully eliminate it; client retry is the backstop).
+- STATE SURVIVES delete+recreate (the key gate; first boot is not enough). Strong test:
+  mint+save creds -> tool call -> delete+recreate -> reuse SAME token (no setup) -> creds
+  resolve from KV (`cf_state_survives.py {mint|reuse}`).
 - Per-sub isolation: 2 distinct JWT subs -> separate state, no bleed.
 - T0 (precommit + CI) green; Protocol Test B (ClientSession all-tool-all-mode) PASS.
 - STABLE dispatched ONLY on explicit user request.
