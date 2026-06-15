@@ -9,7 +9,9 @@
     {
       "name": "wet-mcp-worker",
       "class_name": "WetContainer",
-      "image": "ghcr.io/n24q02m/wet-mcp:latest",
+      // :beta carries the CF worker code + mcp-core 1.18.0b5 (vertex_express).
+      // Switch to :latest once a stable release ships the Cloudflare backends.
+      "image": "ghcr.io/n24q02m/wet-mcp:beta",
       "instance_type": "standard-1",
       "max_instances": 100
     }
