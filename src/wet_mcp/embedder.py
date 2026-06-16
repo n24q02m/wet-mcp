@@ -277,13 +277,33 @@ class CloudEmbeddingBackend:
             f"(max {self.MAX_BATCH_SIZE}/batch)"
         )
 
+        semaphore = asyncio.Semaphore(
+            10
+        )  # Prevent unbounded concurrency and API rate limiting
+
+        async def _embed_batch(
+            batch: list[str], batch_num: int
+        ) -> tuple[int, list[list[float]]]:
+            async with semaphore:
+                logger.debug(
+                    f"Embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
+                )
+                result = await self._embed_batch_inner(batch, dimensions)
+                return batch_num, result
+
+        tasks = []
         for i in range(0, len(texts), self.MAX_BATCH_SIZE):
             batch = texts[i : i + self.MAX_BATCH_SIZE]
             batch_num = i // self.MAX_BATCH_SIZE + 1
-            logger.debug(
-                f"Embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
-            )
-            batch_result = await self._embed_batch_inner(batch, dimensions)
+            tasks.append(_embed_batch(batch, batch_num))
+
+        # ⚡ Bolt Optimization: Use `asyncio.gather` bounded by a semaphore to
+        # parallelize API calls while avoiding rate limits. Results are sorted
+        # to preserve original ordering.
+        results = await asyncio.gather(*tasks)
+        results.sort(key=lambda x: x[0])
+
+        for _, batch_result in results:
             all_embeddings.extend(batch_result)
 
         return all_embeddings
