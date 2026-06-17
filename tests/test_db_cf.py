@@ -43,6 +43,37 @@ def test_add_chunks_then_fts_search():
     assert results[0]["url"] == "https://a/p1"
 
 
+def test_stats_reports_counts():
+    # config(action="status") calls _docs_db.stats(); the CF backend must expose it
+    # (regression: wet CF config(status) crashed with "'DocsDBCfBackend' object has no
+    # attribute 'stats'", 2026-06-17).
+    db = _backend()
+    assert db.stats() == {"libraries": 0, "chunks": 0, "vec_enabled": True}
+    db.upsert_library("alpha", docs_url="https://a")
+    lib = db.get_library("alpha")
+    db.upsert_version(lib["id"], "1.0")
+    ver = db.get_best_version(lib["id"], "1.0")
+    db.add_chunks(
+        ver["id"],
+        lib["id"],
+        [
+            {
+                "id": "c1",
+                "url": "https://a/p1",
+                "title": "API",
+                "chunk_index": 0,
+                "content": "hello world",
+                "heading_path": "API",
+            },
+        ],
+        embeddings=None,
+    )
+    s = db.stats()
+    assert s["libraries"] == 1
+    assert s["chunks"] == 1
+    assert s["vec_enabled"] is True
+
+
 def test_hybrid_search_applies_rrf_and_url_diversity():
     db = _backend()
     db.upsert_library("alpha", docs_url="https://a")

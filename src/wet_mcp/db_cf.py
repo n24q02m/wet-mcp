@@ -26,6 +26,17 @@ class DocsDBCfBackend:
         self._vec = vectorize
         self._embedding_dims = embedding_dims
 
+    def stats(self) -> dict:
+        """Return database statistics. Mirrors wet_mcp.db.DocsDB.stats over D1 so
+        config(action="status") is polymorphic across the SQLite and CF backends."""
+        lib_row = self._d1.fetchone("SELECT COUNT(*) AS n FROM libraries", [])
+        chunk_row = self._d1.fetchone("SELECT COUNT(*) AS n FROM doc_chunks", [])
+        return {
+            "libraries": (lib_row or {}).get("n", 0),
+            "chunks": (chunk_row or {}).get("n", 0),
+            "vec_enabled": self._vec is not None,
+        }
+
     # --- relational CRUD (parameterized D1) ---
 
     def upsert_library(self, name: str, docs_url: str | None = None, **extra) -> str:
