@@ -69,14 +69,14 @@ dependencies = [
     "google-api-python-client>=2.197.0",
     "google-auth>=2.55.0",
     # S3-compatible sync (AWS S3, Cloudflare R2, Backblaze B2, MinIO)
-    "boto3>=1.43.31",
+    "boto3>=1.43.32",
     # Production WSGI server for embedded SearXNG on Windows
     # (Werkzeug dev server deadlocks under concurrent engine requests)
     "waitress>=3.0.2; sys_platform == 'win32'",
     # greenlet 3.5.0 (pulled transitively via patchright) ships no
     # manylinux_*_aarch64 wheels and has no source dist, so the Docker
     # arm64 build fails. Cap below until upstream re-publishes arm64.
-    "greenlet<3.5.2",
+    "greenlet<3.5.3",
     # urllib3 floor patches 2 HIGH CVEs (transitive via boto3/botocore,
     # requests, google-api-python-client): GHSA-qccp-gfcp-xxvc (sensitive
     # headers forwarded across origins in proxied low-level redirects) +
