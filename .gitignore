@@ -81,3 +81,6 @@ htmlcov/
 *.bak
 /*.patch
 /*.diff
+
+# CF deploy config with real resource IDs (never commit)
+wrangler.deploy.jsonc
