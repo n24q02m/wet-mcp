@@ -48,8 +48,23 @@ def _now_ts() -> float:
 _CODE_BLOCK_RE = re.compile(r"```")
 _LINK_LINE_RE = re.compile(r"^\s*[-*]?\s*\[.+?\]\(.+?\)\s*$|^\s*https?://\S+\s*$")
 # Function/class/type definitions (common across languages)
+_DEF_KEYWORDS = (
+    "def ",
+    "class ",
+    "fn ",
+    "func ",
+    "function ",
+    "interface ",
+    "type ",
+    "struct ",
+    "enum ",
+    "const ",
+    "let ",
+    "var ",
+    "export ",
+)
 _DEF_RE = re.compile(
-    r"^\s*(?:def |class |fn |func |function |interface |type |struct |enum |const |let |var |export )",
+    r"^\s*(?:" + "|".join(re.escape(k) for k in _DEF_KEYWORDS) + ")",
     re.MULTILINE,
 )
 # Docstring / doc comment patterns
@@ -138,22 +153,38 @@ def _chunk_quality_score(content: str) -> float:
     code_blocks = content.count("```") // 2
     score += min(code_blocks, 3) * 2.0  # up to +6
 
-    # Function/class definitions signal API documentation
-    # ⚡ Bolt Optimization: Use finditer with early break instead of findall to avoid full string scan
+    # ⚡ Bolt Optimization: Single-pass loop handles definitions, docstrings, and link ratio
+    # to avoid multiple full-string scans and regex overhead.
     defs = 0
-    for _ in _DEF_RE.finditer(content):
-        defs += 1
-        if defs >= 4:
-            break
-    score += defs * 1.5  # up to +6
-
-    # Docstrings/doc comments signal well-documented code
-    # ⚡ Bolt Optimization: Use finditer with early break instead of findall
     docstrings = 0
-    for _ in _DOCSTRING_RE.finditer(content):
-        docstrings += 1
-        if docstrings >= 3:
-            break
+    lines_count = 0
+    link_lines = 0
+
+    for ln in content.splitlines():
+        if not ln or ln.isspace():
+            continue
+        lines_count += 1
+
+        # Function/class definitions signal API documentation
+        if defs < 4 and ln.lstrip().startswith(_DEF_KEYWORDS):
+            defs += 1
+
+        # Docstrings/doc comments signal well-documented code
+        # ⚡ Bolt Optimization: Pre-filter: only run regex if a common marker exists.
+        # This eliminates re.finditer overhead for most lines.
+        if docstrings < 3 and (
+            '"""' in ln or "'''" in ln or "/**" in ln or "///" in ln or "#" in ln
+        ):
+            for _ in _DOCSTRING_RE.finditer(ln):
+                docstrings += 1
+                if docstrings >= 3:
+                    break
+
+        # Link-heavy content is usually navigation/TOC, not docs
+        if _LINK_LINE_RE.match(ln):
+            link_lines += 1
+
+    score += defs * 1.5  # up to +6
     score += docstrings * 1.0  # up to +3
 
     # Longer content tends to be more informative
@@ -163,17 +194,6 @@ def _chunk_quality_score(content: str) -> float:
     elif length > 200:
         score += 1.0
 
-    # ⚡ Bolt Optimization: Single-pass loop avoids allocating two temporary lists.
-    # Using splitlines() and isspace() avoids creating string copies via strip().
-    # Link-heavy content is usually navigation/TOC, not docs
-    lines_count = 0
-    link_lines = 0
-    for ln in content.splitlines():
-        if not ln or ln.isspace():
-            continue
-        lines_count += 1
-        if _LINK_LINE_RE.match(ln):
-            link_lines += 1
     if lines_count:
         ratio = link_lines / lines_count
         if ratio > 0.5:
