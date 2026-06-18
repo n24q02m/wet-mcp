@@ -9,7 +9,7 @@
   "devDependencies": {
     "@cloudflare/containers": "^0.3.7",
     "@cloudflare/workers-types": "^4.20260617.1",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.9",
     "wrangler": "^4.101.0"
   }
