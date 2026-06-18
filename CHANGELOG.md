@@ -2,6 +2,63 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.12 (2026-06-18)
+
+### Bug Fixes
+
+- Add coverage for embedding serialization error paths in db.py
+  ([`ff0d656`](https://github.com/n24q02m/wet-mcp/commit/ff0d6562ab0da42466de10783e7ba85854ea49f0))
+
+- Add post-deploy canary gate with auto-rollback to deploy_cf.py
+  ([`131da2d`](https://github.com/n24q02m/wet-mcp/commit/131da2d5d01aa47237158e68e397db0afbeed291))
+
+- Add stats() to DocsDBCfBackend so config(status) works on Cloudflare
+  ([#1379](https://github.com/n24q02m/wet-mcp/pull/1379),
+  [`28e9387`](https://github.com/n24q02m/wet-mcp/commit/28e9387f72f0783d21061a8ff81123b0d19a3de0))
+
+- Coerce non-list locked_libraries to empty list in get_project_context
+  ([`fe72946`](https://github.com/n24q02m/wet-mcp/commit/fe729460cdc755fbca5aa7da16223b067756921b))
+
+- Collapse chunk quality scoring into a single content pass
+  ([`d1587ca`](https://github.com/n24q02m/wet-mcp/commit/d1587cac23731bb934e80ca14e794ff21004d837))
+
+- Compare mcp-core pin floor as version, not brittle substring
+  ([#1374](https://github.com/n24q02m/wet-mcp/pull/1374),
+  [`642765f`](https://github.com/n24q02m/wet-mcp/commit/642765f51f969a4b5519e681fe5e6aee0fe615aa))
+
+- Cover searxng patch early-return branches when package dir is missing
+  ([`475945b`](https://github.com/n24q02m/wet-mcp/commit/475945b92ffba541e57d8b0f8f654d43f2f4f221))
+
+- Document CF deploy errata (containers delete by ID, relay-password namespace compose)
+  ([#1373](https://github.com/n24q02m/wet-mcp/pull/1373),
+  [`7ebd7a8`](https://github.com/n24q02m/wet-mcp/commit/7ebd7a835eaebe885c12ee79dfb8fce7ff266a33))
+
+- Prefix unused account var to satisfy RUF059
+  ([`131da2d`](https://github.com/n24q02m/wet-mcp/commit/131da2d5d01aa47237158e68e397db0afbeed291))
+
+- Refresh lockfile (renovate maintenance)
+  ([`67c8759`](https://github.com/n24q02m/wet-mcp/commit/67c8759b8c44c03b5a8109cd6ec79ffd22781a4c))
+
+- Update non-major dependencies
+  ([`0c58478`](https://github.com/n24q02m/wet-mcp/commit/0c58478ca84ec45e920bcc7a43c3cdd11e0d1d4a))
+
+- Update non-major dependencies
+  ([`cf05359`](https://github.com/n24q02m/wet-mcp/commit/cf0535906400f37118c13a85e29e0f92b46d511c))
+
+- Update typescript to v6
+  ([`1eb4823`](https://github.com/n24q02m/wet-mcp/commit/1eb482346a343e0ad7c562c480bc308421900c24))
+
+### Features
+
+- Add post-deploy canary gate with auto-rollback to deploy_cf.py
+  ([`131da2d`](https://github.com/n24q02m/wet-mcp/commit/131da2d5d01aa47237158e68e397db0afbeed291))
+
+### Testing
+
+- **db**: Add coverage for embedding serialization error paths
+  ([`ff0d656`](https://github.com/n24q02m/wet-mcp/commit/ff0d6562ab0da42466de10783e7ba85854ea49f0))
+
+
 ## v3.3.0-beta.11 (2026-06-15)
 
 ### Bug Fixes
