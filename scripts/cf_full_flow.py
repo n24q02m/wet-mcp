@@ -56,7 +56,10 @@ import time
 import urllib.parse
 from pathlib import Path
 
-DEFAULT_ENDPOINT = "https://wet.n24q02m.com"
+# No hardcoded host: set CF_ENDPOINT or pass --endpoint https://<your-worker-domain>.
+# This self-tests YOUR deployed CF server; creds come from env (MCP_RELAY_PASSWORD +
+# provider keys) -- the maintainer injects them via skret, but any export works.
+DEFAULT_ENDPOINT = os.environ.get("CF_ENDPOINT", "")
 
 # A distinctive query so the search path is exercised against the live web backend.
 SEARCH_QUERY = "cloudflare workers durable objects"
@@ -320,6 +323,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--endpoint",
         default=DEFAULT_ENDPOINT,
+        required=not DEFAULT_ENDPOINT,
         help=f"Deployed wet endpoint (default: {DEFAULT_ENDPOINT})",
     )
     mode = p.add_mutually_exclusive_group()
