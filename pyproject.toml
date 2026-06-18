@@ -58,7 +58,7 @@ dependencies = [
     # pluggable credential storage backends (CredentialBackend / CfKvBackend,
     # shipped in 1.18.0b4) + PerPluginStore token sub-key (1.18.0b5) +
     # CfKvBackend.ready() E.1 readiness probe (1.18.0b6). Beta pin until 1.18.0 stable.
-    "n24q02m-mcp-core[llm]>=1.18.0b6,<2",
+    "n24q02m-mcp-core[llm]>=1.18.0b12,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.4",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance

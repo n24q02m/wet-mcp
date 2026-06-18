@@ -2616,6 +2616,7 @@ async def run_http_server(port: int = 0) -> None:
         setup_complete_hook=wire_gdrive_callbacks,
         auth_scope=auth_scope,
         auth_disabled=auth_disabled,
+        stable_sub_enabled=True,
     )
 
 
