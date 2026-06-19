@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.13 (2026-06-19)
+
+### Bug Fixes
+
+- Make canary gate utf-8-safe (decode+encode) and Cloudflare-UA-aware
+  ([`e01dd96`](https://github.com/n24q02m/wet-mcp/commit/e01dd96e7b186053bc190c4aeab16acb91849316))
+
+- Make canary gate utf-8-safe and Cloudflare-UA-aware
+  ([`e01dd96`](https://github.com/n24q02m/wet-mcp/commit/e01dd96e7b186053bc190c4aeab16acb91849316))
+
+- Neutral default endpoint + env-first secrets in CF self-host scripts
+  ([`67ac018`](https://github.com/n24q02m/wet-mcp/commit/67ac01862ebc4fe3ffef53a7a213cc0b4e69874c))
+
+- Use contextlib.suppress for stdout reconfigure (SIM105)
+  ([`e01dd96`](https://github.com/n24q02m/wet-mcp/commit/e01dd96e7b186053bc190c4aeab16acb91849316))
+
+### Features
+
+- Capability provider chains for search + browser + disable-local toggles
+  ([#1386](https://github.com/n24q02m/wet-mcp/pull/1386),
+  [`58d3204`](https://github.com/n24q02m/wet-mcp/commit/58d3204197cee4d65b63ea22a2434b642f9c3529))
+
+- Enable username-stable-sub workspace bucket
+  ([`4fd3e29`](https://github.com/n24q02m/wet-mcp/commit/4fd3e29b99a057752c4e94deca81f1b94fb3c2a6))
+
+
 ## v3.3.0-beta.12 (2026-06-18)
 
 ### Bug Fixes
