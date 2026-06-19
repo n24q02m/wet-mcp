@@ -15,8 +15,14 @@ from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 def mock_settings():
     with patch("wet_mcp.searxng_runner.settings") as mock:
         mock.wet_auto_searxng = True
+        mock.disable_local_search = False
         mock.searxng_url = "http://external:8080"
         mock.wet_searxng_port = 8080
+        # Reflect the real auto_searxng_enabled() logic against the mock fields
+        # (a bare MagicMock method would return a truthy Mock, defeating the test).
+        mock.auto_searxng_enabled.side_effect = lambda: (
+            mock.wet_auto_searxng and not mock.disable_local_search
+        )
         yield mock
 
 

@@ -88,10 +88,13 @@ def make_docs_db():
             vectorize_backend_from_env(),
             embedding_dims=dims,
         )
-    if settings.resolve_embedding_backend() == "cloud":
+    embed_backend = settings.resolve_embedding_backend()
+    if embed_backend == "cloud":
         model_identity = settings.embedding_primary() or ""
-    else:
+    elif embed_backend == "local":
         model_identity = settings.resolve_local_embedding_model()
+    else:  # unavailable -- local disabled + no cloud chain; no active embed model
+        model_identity = ""
     return DocsDB(
         settings.get_db_path(),
         embedding_dims=dims,
@@ -299,7 +302,7 @@ async def _lifespan_startup() -> asyncio.Task | None:
     # pointing to Docker mode. Warming SearXNG in uvx mode wastes a Docker
     # spawn the user will never get value from.
     warmup_task: asyncio.Task | None = None
-    if settings.wet_auto_searxng and not is_uvx_tool_venv():
+    if settings.auto_searxng_enabled() and not is_uvx_tool_venv():
         warmup_task = asyncio.create_task(_warmup_searxng())
 
     # 2. Initialize web cache
@@ -510,6 +513,12 @@ async def _init_embedding_backend(mode: str) -> None:
 
     backend_type = settings.resolve_embedding_backend()
 
+    if backend_type == "unavailable":
+        logger.info(
+            "Embedding: unavailable (DISABLE_LOCAL_EMBED set + no cloud model configured)"
+        )
+        return
+
     if cred_state == CredentialState.LOCAL or backend_type == "local":
         local_model = settings.resolve_local_embedding_model()
         _maybe_register_custom_embed(local_model)
@@ -568,6 +577,12 @@ async def _init_reranker_backend(mode: str) -> None:
 
     if not rerank_backend_type:
         logger.info("Reranking disabled")
+        return
+
+    if rerank_backend_type == "unavailable":
+        logger.info(
+            "Reranker: unavailable (DISABLE_LOCAL_RERANK set + no cloud model configured)"
+        )
         return
 
     from wet_mcp.reranker import init_reranker
@@ -891,10 +906,6 @@ async def search(  # noqa: PLR0913
                     except json.JSONDecodeError:
                         pass
                     return cached_content
-            try:
-                backend = search_backends.search_backend_from_env()
-            except ValueError as exc:
-                return f"Error: {exc}"
             # Optional query expansion (LLM-driven, opt-in)
             search_query = normalized_query or query
             if expand:
@@ -904,11 +915,15 @@ async def search(  # noqa: PLR0913
                 if len(expanded) > 1:
                     search_query = " OR ".join(expanded)
 
-            # Only the local SearXNG backend needs the embedded instance started;
-            # point it at the live URL (auto-start may pick a dynamic port).
-            if isinstance(backend, search_backends.SearxngBackend):
+            # When the SearXNG backend is in the chain, resolve its live URL via
+            # ensure_searxng (which itself honors DISABLE_LOCAL_SEARCH /
+            # WET_AUTO_SEARXNG: it auto-starts the embedded instance only when
+            # enabled, else returns the configured external URL). Pass it to the
+            # chain so its SearxngBackend hits the right (possibly dynamic) port.
+            live_searxng_url: str | None = None
+            if "searxng" in search_backends.chain_backend_names():
                 try:
-                    backend.url = await asyncio.wait_for(
+                    live_searxng_url = await asyncio.wait_for(
                         ensure_searxng(), timeout=_SEARXNG_TIMEOUT
                     )
                 except TimeoutError:
@@ -917,7 +932,7 @@ async def search(  # noqa: PLR0913
                     return f"Error: SearXNG startup failed: {exc}"
 
             result = await _with_timeout(
-                backend.search(
+                search_backends.run_search_chain(
                     query=search_query,
                     categories=categories,
                     max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
@@ -925,6 +940,7 @@ async def search(  # noqa: PLR0913
                     language=language,
                     include_domains=include_domains,
                     exclude_domains=exclude_domains,
+                    searxng_url=live_searxng_url,
                 ),
                 "search",
             )

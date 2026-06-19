@@ -128,8 +128,10 @@ async def ensure_searxng() -> str:
 
     Falls back to ``settings.searxng_url`` on failure.
     """
-    if not settings.wet_auto_searxng:
-        logger.info("Auto SearXNG disabled, using external URL")
+    if not settings.auto_searxng_enabled():
+        logger.info(
+            "Auto SearXNG disabled (WET_AUTO_SEARXNG off or DISABLE_LOCAL_SEARCH set), using external URL"
+        )
         return settings.searxng_url
 
     try:

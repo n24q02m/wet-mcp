@@ -26,11 +26,15 @@ class TestRelaySchema:
 
     def test_schema_has_provider_and_chain_fields(self):
         fields = RELAY_SCHEMA["fields"]
-        # 3 model-chain tasks + 6 derived provider keys + ANTHROPIC + GITHUB_TOKEN
+        # 3 model-chain tasks + 1 search-chain + 11 password keys (9 derived
+        # model/search provider keys jina/gemini/openai/cohere/anthropic/xai/
+        # tavily/brave/exa + plain GITHUB_TOKEN + plain CAPSOLVER_API_KEY).
         chains = [f for f in fields if f.get("type") == "model-chain"]
+        search_chains = [f for f in fields if f.get("type") == "search-chain"]
         keys = [f for f in fields if f.get("type") == "password"]
         assert len(chains) == 3
-        assert len(keys) == 7
+        assert len(search_chains) == 1
+        assert len(keys) == 11
 
     def test_schema_field_keys(self):
         field_keys = [f["key"] for f in RELAY_SCHEMA["fields"]]

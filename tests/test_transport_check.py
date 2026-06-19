@@ -219,7 +219,10 @@ async def test_search_action_proceeds_when_not_uvx(monkeypatch):
         patch("wet_mcp.sources.searxng.search", new_callable=AsyncMock) as mock_search,
     ):
         mock_ensure.return_value = "http://localhost:8080"
-        mock_search.return_value = "Search Results"
+        mock_search.return_value = (
+            '{"results": [{"url": "https://e", "title": "T", "snippet": "Search Results"}], '
+            '"total": 1, "query": "hello world"}'
+        )
 
         result = await srv.search(action="search", query="hello world")
 

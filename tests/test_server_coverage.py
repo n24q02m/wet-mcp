@@ -92,13 +92,14 @@ async def test_lifespan_startup_no_github_token():
     ):
         cfg.setup_providers.return_value = "sdk"
         cfg.wet_auto_searxng = False
+        cfg.auto_searxng_enabled.return_value = False
         cfg.wet_cache = False
         cfg.sync_enabled = False
         cfg.sync_s3_bucket = ""
         cfg.resolve_embedding_dims.return_value = 768
         cfg.get_db_path.return_value = MagicMock()
         task = await server._lifespan_startup()
-        assert task is None  # wet_auto_searxng is False
+        assert task is None  # auto SearXNG disabled
 
 
 async def test_lifespan_startup_with_auto_searxng():
@@ -117,6 +118,7 @@ async def test_lifespan_startup_with_auto_searxng():
     ):
         cfg.setup_providers.return_value = "sdk"
         cfg.wet_auto_searxng = True
+        cfg.auto_searxng_enabled.return_value = True
         cfg.wet_cache = False
         cfg.sync_enabled = False
         cfg.sync_s3_bucket = ""
@@ -150,6 +152,7 @@ async def test_lifespan_startup_backends_init_failure():
     ):
         cfg.setup_providers.return_value = "sdk"
         cfg.wet_auto_searxng = False
+        cfg.auto_searxng_enabled.return_value = False
         cfg.wet_cache = False
         cfg.sync_enabled = False
         cfg.sync_s3_bucket = ""
@@ -176,6 +179,7 @@ async def test_lifespan_startup_sync_enabled():
     ):
         cfg.setup_providers.return_value = "sdk"
         cfg.wet_auto_searxng = False
+        cfg.auto_searxng_enabled.return_value = False
         cfg.wet_cache = False
         cfg.sync_enabled = True
         cfg.sync_s3_bucket = ""

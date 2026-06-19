@@ -173,7 +173,10 @@ async def test_search_success():
         patch("wet_mcp.sources.searxng.search", new_callable=AsyncMock) as mock_search,
     ):
         mock_ensure.return_value = "http://localhost:8080"
-        mock_search.return_value = "Search Results"
+        mock_search.return_value = (
+            '{"results": [{"url": "https://e", "title": "T", "snippet": "Search Results"}], '
+            '"total": 1, "query": "test query"}'
+        )
 
         result = await search(action="search", query="test query")
 
@@ -589,7 +592,10 @@ async def test_search_expand_flag():
         patch(
             "wet_mcp.sources.searxng.search",
             new_callable=AsyncMock,
-            return_value="Search Results",
+            return_value=(
+                '{"results": [{"url": "https://e", "title": "T", "snippet": "Search Results"}], '
+                '"total": 1, "query": "q"}'
+            ),
         ) as mock_search,
         patch(
             "wet_mcp.sources.search_strategies.expand_query",

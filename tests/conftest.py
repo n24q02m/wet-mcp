@@ -1,6 +1,6 @@
 """Pytest configuration and fixtures."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -15,10 +15,23 @@ def _stub_phase2_lifespan_hooks():
     Stub them out by default so tests that drive the lifespan don't hit
     real disk; tests that need the real migrations / warmup call them
     directly (test_migrations.py, test_tier1_warmup.py).
+
+    Also stubs the embedding/reranker backend FACTORIES so the lifespan's
+    fire-and-forget background init task (``wet-init-backends``) never loads a
+    real local ONNX model (~570MB download) nor makes a real cloud provider
+    call -- either of which hangs a cold CI runner long after a test's own
+    patches have exited. Tests that exercise these init factories patch the
+    same targets themselves; their patch overrides this default.
     """
+    embed_backend = MagicMock()
+    embed_backend.check_available = AsyncMock(return_value=768)
+    rerank = MagicMock()
+    rerank.check_available = MagicMock(return_value=True)
     with (
         patch("wet_mcp.migrations.run_migrations_on_startup"),
         patch("wet_mcp.sources.tier1_warmup.maybe_warm"),
+        patch("wet_mcp.embedder.init_backend", return_value=embed_backend),
+        patch("wet_mcp.reranker.init_reranker", return_value=rerank),
     ):
         yield
 

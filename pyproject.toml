@@ -20,10 +20,10 @@ classifiers = [
 requires-python = "==3.13.*"
 dependencies = [
     # Shared web infrastructure (SSRF, SearXNG, URL utils, ScrapingAgent + Crawl4AI transitive).
-    # wet consumes only web-core's PUBLIC SSRF surface (is_safe_url / safe_httpx_client);
-    # security.py + tests no longer reach into private internals, so web-core 2.2.x's
-    # factory refactor (_ssrf_event_hook -> _ssrf_event_hook_factory) is transparent here.
-    "n24q02m-web-core>=2.2.1,<2.3",
+    # wet consumes web-core's SSRF surface (is_safe_url / safe_httpx_client) AND, since 2.3.0,
+    # the remote render backends (CFBrowserRenderingClient / BrowserlessClient /
+    # RemoteRenderStrategy) for the browser provider chain + the under-rendered escalation fix.
+    "n24q02m-web-core>=2.3.0b1,<3",
     # MCP Server
     "mcp[cli]",
     # HTTP Client
@@ -57,8 +57,10 @@ dependencies = [
     # Relay setup (zero-env-config) + LLM passthrough (litellm via [llm] extra) +
     # pluggable credential storage backends (CredentialBackend / CfKvBackend,
     # shipped in 1.18.0b4) + PerPluginStore token sub-key (1.18.0b5) +
-    # CfKvBackend.ready() E.1 readiness probe (1.18.0b6). Beta pin until 1.18.0 stable.
-    "n24q02m-mcp-core[llm]>=1.18.0b12,<2",
+    # CfKvBackend.ready() E.1 readiness probe (1.18.0b6) + the mcp_core.chains
+    # capability provider-chain primitive (resolve_backend / run_with_fallback,
+    # 1.18.0b13) used by the search chain + disable-local toggles. Beta pin until 1.18.0 stable.
+    "n24q02m-mcp-core[llm]>=1.18.0b13,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.4",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance

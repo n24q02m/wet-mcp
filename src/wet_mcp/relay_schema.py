@@ -24,6 +24,8 @@ _LLM_SUGGESTED = [
     "anthropic/claude-haiku-4-5",
     "xai/grok-4-fast",
 ]
+# Named search backends (no model-prefix inference; resolved via providerKeys).
+_SEARCH_BACKENDS = ["searxng", "tavily", "brave", "exa"]
 
 
 def _key_field(key: str, label: str, ph: str, url: str) -> dict[str, Any]:
@@ -45,7 +47,8 @@ RELAY_SCHEMA: dict[str, Any] = {
         "Pick models per task (order = fallback). Leave a task empty for "
         "local ONNX (embedding/rerank) — LLM features need at least one model. "
         "Key fields appear automatically for the providers your models use. "
-        "Search + extraction are always local (no key needed)."
+        "Search runs local SearXNG by default; add cloud providers "
+        "(Tavily/Brave/Exa) for a fallback chain. Extraction is always local."
     ),
     "fields": [
         {
@@ -75,6 +78,22 @@ RELAY_SCHEMA: dict[str, Any] = {
             "hasLocal": False,
             "placeholder": "add LLM model…",
         },
+        {
+            "key": "SEARCH_BACKENDS",
+            "label": "Search providers",
+            "type": "search-chain",
+            "task": "search",
+            "suggestedModels": _SEARCH_BACKENDS,
+            "providerKeys": {
+                "tavily": "TAVILY_API_KEY",
+                "brave": "BRAVE_API_KEY",
+                "exa": "EXA_API_KEY",
+            },
+            "hasLocal": True,
+            "noun": "providers",
+            "localLabel": "local SearXNG",
+            "placeholder": "add search provider…",
+        },
         _key_field(
             "JINA_AI_API_KEY", "Jina AI API Key", "jina_...", "https://jina.ai/api-key"
         ),
@@ -103,6 +122,21 @@ RELAY_SCHEMA: dict[str, Any] = {
             "https://console.anthropic.com/settings/keys",
         ),
         _key_field("XAI_API_KEY", "xAI API Key", "xai-...", "https://console.x.ai/"),
+        _key_field(
+            "TAVILY_API_KEY",
+            "Tavily API Key",
+            "tvly-...",
+            "https://app.tavily.com/home",
+        ),
+        _key_field(
+            "BRAVE_API_KEY",
+            "Brave Search API Key",
+            "BSA...",
+            "https://api-dashboard.search.brave.com/app/keys",
+        ),
+        _key_field(
+            "EXA_API_KEY", "Exa API Key", "exa_...", "https://dashboard.exa.ai/api-keys"
+        ),
         {
             "key": "GITHUB_TOKEN",
             "label": "GitHub Personal Access Token",
@@ -112,12 +146,24 @@ RELAY_SCHEMA: dict[str, Any] = {
             "helpText": "Optional. Bumps GitHub API rate limit (60->5000 req/hr) for library docs discovery.",
             "required": False,
         },
+        {
+            "key": "CAPSOLVER_API_KEY",
+            "label": "CapSolver API Key",
+            "type": "password",
+            "placeholder": "CAP-...",
+            "helpUrl": "https://dashboard.capsolver.com/",
+            "helpText": "Optional. Solves reCAPTCHA / Cloudflare Turnstile on protected pages during extraction.",
+            "required": False,
+        },
     ],
     "capabilityInfo": [
         {
             "label": "Search",
-            "priority": "SearXNG (auto-start local)",
-            "description": "Web search via SearXNG. Auto-starts locally, no API key needed.",
+            "priority": "configurable",
+            "description": (
+                "Web search. Local SearXNG auto-starts by default (no key); add "
+                "cloud providers (Tavily/Brave/Exa) above for a fallback chain."
+            ),
         },
         {
             "label": "Extraction",
