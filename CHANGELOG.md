@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.14 (2026-06-19)
+
+### Features
+
+- Forward capability-chain env vars into the CF container
+  ([#1388](https://github.com/n24q02m/wet-mcp/pull/1388),
+  [`1d2ec19`](https://github.com/n24q02m/wet-mcp/commit/1d2ec193a48f0a8c25e1222db28ac93ff2d80164))
+
+
 ## v3.3.0-beta.13 (2026-06-19)
 
 ### Bug Fixes
