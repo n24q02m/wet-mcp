@@ -27,7 +27,7 @@ async def test_tavily_maps_rest_response():
             }
         )
         post.return_value = resp
-        out = json.loads(await TavilyBackend("k").search("q", max_results=1))
+        out = json.loads(await TavilyBackend(["k"]).search("q", max_results=1))
         assert out["total"] == 1
         assert out["query"] == "q"
         assert out["results"][0]["url"] == "https://e/1"
@@ -39,7 +39,7 @@ async def test_tavily_http_error_returns_error_json():
         resp = unittest.mock.AsyncMock()
         resp.status_code = 401
         post.return_value = resp
-        out = json.loads(await TavilyBackend("bad").search("q"))
+        out = json.loads(await TavilyBackend(["bad"]).search("q"))
         assert "error" in out
 
 
@@ -81,7 +81,7 @@ async def test_tavily_error_never_leaks_api_key():
             "body={'api_key': 'tvly-SECRET-DEADBEEF'}"
         ),
     ):
-        out = await TavilyBackend(secret).search("q")
+        out = await TavilyBackend([secret]).search("q")
     assert secret not in out
     assert "error" in json.loads(out)
 
@@ -124,7 +124,7 @@ async def test_brave_maps_web_results():
             }
         )
         get.return_value = resp
-        out = json.loads(await BraveBackend("k").search("q", max_results=1))
+        out = json.loads(await BraveBackend(["k"]).search("q", max_results=1))
         assert out["total"] == 1
         assert out["results"][0]["url"] == "https://b/1"
         assert out["results"][0]["snippet"] == "d1"
@@ -136,7 +136,7 @@ async def test_brave_http_error_returns_error_json():
         resp = unittest.mock.AsyncMock()
         resp.status_code = 429
         get.return_value = resp
-        assert "error" in json.loads(await BraveBackend("k").search("q"))
+        assert "error" in json.loads(await BraveBackend(["k"]).search("q"))
 
 
 async def test_brave_error_never_leaks_key():
@@ -145,7 +145,7 @@ async def test_brave_error_never_leaks_key():
         "httpx.AsyncClient.get",
         side_effect=httpx.ConnectError(f"failed token={secret}"),
     ):
-        out = await BraveBackend(secret).search("q")
+        out = await BraveBackend([secret]).search("q")
     assert secret not in out
 
 
@@ -159,7 +159,7 @@ async def test_exa_maps_results_with_text_snippet():
             }
         )
         post.return_value = resp
-        out = json.loads(await ExaBackend("k").search("q", max_results=1))
+        out = json.loads(await ExaBackend(["k"]).search("q", max_results=1))
         assert out["results"][0]["source"] == "exa"
         assert len(out["results"][0]["snippet"]) == 300  # truncated
 

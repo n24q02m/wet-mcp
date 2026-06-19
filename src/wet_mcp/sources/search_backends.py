@@ -1,17 +1,25 @@
 """Pluggable web-search backends. Default SearXNG (local), Tavily (cloud) for CF
 where SearXNG cannot run. All return the same JSON string {results, total, query}
 | {error} that server.py's search action already expects from searxng.search().
+
+Each cloud backend takes a LIST of API keys (CSV in the env): a single key keeps
+exactly today's behaviour, while multiple keys rotate automatically on a
+key-specific failure (HTTP 429 rate-limit / 401-403 auth) via the shared
+``mcp_core.llm.key_rotation`` primitive. An empty result from a working key is
+legitimate and never triggers rotation — only the PROVIDER chain advances on empty.
 """
 
 from __future__ import annotations
 
 import json
 import os
+from collections.abc import Awaitable, Callable
 from typing import Protocol
 
 import httpx
 from loguru import logger
 from mcp_core.chains import run_with_fallback
+from mcp_core.llm.key_rotation import rotate_keys, split_keys
 
 from wet_mcp.config import settings
 
@@ -27,6 +35,42 @@ class SearchBackend(Protocol):
         exclude_domains: list[str] | None = None,
         categories: str = "general",
     ) -> str: ...
+
+
+class _SearchHTTPError(Exception):
+    """A non-2xx response from a search provider, carrying ``status_code`` so
+    ``mcp_core.llm.key_rotation`` classifies 429/401/403 as a rotatable
+    (key-specific) failure and advances to the next key. The message is the safe
+    ``"<Provider> HTTP <code>"`` form — it never carries the request body/key."""
+
+    def __init__(self, provider: str, status_code: int) -> None:
+        self.status_code = status_code
+        super().__init__(f"{provider} HTTP {status_code}")
+
+
+async def _search_with_rotation(
+    keys: list[str],
+    attempt: Callable[[str], Awaitable[str]],
+    provider: str,
+) -> str:
+    """Rotate ``keys`` for one search provider, advancing only on a key-specific
+    failure (429/401/403). Returns the tool-contract error envelope when keys are
+    exhausted or a non-rotatable error occurs — type name only, never the
+    exception text (an httpx error may carry the request body, i.e. the key)."""
+    if not keys:
+        return json.dumps({"error": f"{provider} search backend has no API key"})
+    try:
+        return await rotate_keys(keys, attempt, label=provider.lower())
+    except _SearchHTTPError as exc:
+        return json.dumps(
+            {"error": str(exc)}
+        )  # "<Provider> HTTP <code>" — safe, no key
+    except (
+        httpx.HTTPError
+    ) as exc:  # transport — type name only (never echo, may carry the key)
+        return json.dumps({"error": f"{provider} request failed: {type(exc).__name__}"})
+    except Exception as exc:  # tool contract: error string, never raise; type name only
+        return json.dumps({"error": f"{provider} search failed: {type(exc).__name__}"})
 
 
 class SearxngBackend:
@@ -60,8 +104,37 @@ class SearxngBackend:
 class TavilyBackend:
     _URL = "https://api.tavily.com/search"
 
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
+    def __init__(self, keys: list[str]) -> None:
+        self.keys = keys
+
+    async def _search_one(self, key, query, max_results) -> str:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                self._URL,
+                json={
+                    "api_key": key,
+                    "query": query,
+                    "max_results": max_results,
+                    "search_depth": "basic",
+                },
+            )
+            if resp.status_code != 200:
+                raise _SearchHTTPError("Tavily", resp.status_code)
+            results = resp.json().get("results", [])
+            mapped = [
+                {
+                    "url": r.get("url", ""),
+                    "title": r.get("title", ""),
+                    "snippet": r.get("content", r.get("title", "")),
+                    "source": "tavily",
+                }
+                for r in results
+            ]
+            return json.dumps(
+                {"results": mapped, "total": len(mapped), "query": query},
+                ensure_ascii=False,
+                indent=2,
+            )
 
     async def search(
         self,
@@ -73,38 +146,11 @@ class TavilyBackend:
         exclude_domains=None,
         categories="general",
     ) -> str:
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(
-                    self._URL,
-                    json={
-                        "api_key": self.api_key,
-                        "query": query,
-                        "max_results": max_results,
-                        "search_depth": "basic",
-                    },
-                )
-                if resp.status_code != 200:
-                    return json.dumps({"error": f"Tavily HTTP {resp.status_code}"})
-                results = resp.json().get("results", [])
-                mapped = [
-                    {
-                        "url": r.get("url", ""),
-                        "title": r.get("title", ""),
-                        "snippet": r.get("content", r.get("title", "")),
-                        "source": "tavily",
-                    }
-                    for r in results
-                ]
-                return json.dumps(
-                    {"results": mapped, "total": len(mapped), "query": query},
-                    ensure_ascii=False,
-                    indent=2,
-                )
-        except httpx.HTTPError as e:  # network/transport — never echo the message (may carry the request body/key)
-            return json.dumps({"error": f"Tavily request failed: {type(e).__name__}"})
-        except Exception as e:  # tool contract: error string, never raise; type name only (no key leak)
-            return json.dumps({"error": f"Tavily search failed: {type(e).__name__}"})
+        return await _search_with_rotation(
+            self.keys,
+            lambda key: self._search_one(key, query, max_results),
+            "Tavily",
+        )
 
 
 class BraveBackend:
@@ -116,19 +162,10 @@ class BraveBackend:
 
     _URL = "https://api.search.brave.com/res/v1/web/search"
 
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
+    def __init__(self, keys: list[str]) -> None:
+        self.keys = keys
 
-    async def search(
-        self,
-        query: str,
-        max_results: int = 10,
-        time_range=None,
-        language=None,
-        include_domains=None,
-        exclude_domains=None,
-        categories="general",
-    ) -> str:
+    async def _search_one(self, key, query, max_results, time_range, language) -> str:
         params: dict[str, str | int] = {
             "q": query,
             "count": min(max(max_results, 1), 20),
@@ -142,35 +179,42 @@ class BraveBackend:
                 params["freshness"] = freshness
         if language:
             params["search_lang"] = language
-        headers = {"X-Subscription-Token": self.api_key, "Accept": "application/json"}
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.get(self._URL, params=params, headers=headers)
-                if resp.status_code != 200:
-                    return json.dumps({"error": f"Brave HTTP {resp.status_code}"})
-                results = resp.json().get("web", {}).get("results", [])
-                mapped = [
-                    {
-                        "url": r.get("url", ""),
-                        "title": r.get("title", ""),
-                        "snippet": r.get("description", r.get("title", "")),
-                        "source": "brave",
-                    }
-                    for r in results
-                ]
-                return json.dumps(
-                    {"results": mapped, "total": len(mapped), "query": query},
-                    ensure_ascii=False,
-                    indent=2,
-                )
-        except (
-            httpx.HTTPError
-        ) as e:  # transport — type name only (never echo, may carry the token)
-            return json.dumps({"error": f"Brave request failed: {type(e).__name__}"})
-        except (
-            Exception
-        ) as e:  # tool contract: error string, never raise; type name only
-            return json.dumps({"error": f"Brave search failed: {type(e).__name__}"})
+        headers = {"X-Subscription-Token": key, "Accept": "application/json"}
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(self._URL, params=params, headers=headers)
+            if resp.status_code != 200:
+                raise _SearchHTTPError("Brave", resp.status_code)
+            results = resp.json().get("web", {}).get("results", [])
+            mapped = [
+                {
+                    "url": r.get("url", ""),
+                    "title": r.get("title", ""),
+                    "snippet": r.get("description", r.get("title", "")),
+                    "source": "brave",
+                }
+                for r in results
+            ]
+            return json.dumps(
+                {"results": mapped, "total": len(mapped), "query": query},
+                ensure_ascii=False,
+                indent=2,
+            )
+
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        time_range=None,
+        language=None,
+        include_domains=None,
+        exclude_domains=None,
+        categories="general",
+    ) -> str:
+        return await _search_with_rotation(
+            self.keys,
+            lambda key: self._search_one(key, query, max_results, time_range, language),
+            "Brave",
+        )
 
 
 class ExaBackend:
@@ -183,8 +227,41 @@ class ExaBackend:
 
     _URL = "https://api.exa.ai/search"
 
-    def __init__(self, api_key: str) -> None:
-        self.api_key = api_key
+    def __init__(self, keys: list[str]) -> None:
+        self.keys = keys
+
+    async def _search_one(
+        self, key, query, max_results, include_domains, exclude_domains
+    ) -> str:
+        body: dict[str, object] = {
+            "query": query,
+            "numResults": min(max(max_results, 1), 100),
+            "contents": {"text": {"maxCharacters": 300}},
+        }
+        if include_domains:
+            body["includeDomains"] = include_domains
+        if exclude_domains:
+            body["excludeDomains"] = exclude_domains
+        headers = {"x-api-key": key, "Content-Type": "application/json"}
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(self._URL, json=body, headers=headers)
+            if resp.status_code != 200:
+                raise _SearchHTTPError("Exa", resp.status_code)
+            results = resp.json().get("results", [])
+            mapped = [
+                {
+                    "url": r.get("url", ""),
+                    "title": r.get("title", ""),
+                    "snippet": (r.get("text") or r.get("title", ""))[:300],
+                    "source": "exa",
+                }
+                for r in results
+            ]
+            return json.dumps(
+                {"results": mapped, "total": len(mapped), "query": query},
+                ensure_ascii=False,
+                indent=2,
+            )
 
     async def search(
         self,
@@ -196,44 +273,13 @@ class ExaBackend:
         exclude_domains=None,
         categories="general",
     ) -> str:
-        body: dict[str, object] = {
-            "query": query,
-            "numResults": min(max(max_results, 1), 100),
-            "contents": {"text": {"maxCharacters": 300}},
-        }
-        if include_domains:
-            body["includeDomains"] = include_domains
-        if exclude_domains:
-            body["excludeDomains"] = exclude_domains
-        headers = {"x-api-key": self.api_key, "Content-Type": "application/json"}
-        try:
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp = await client.post(self._URL, json=body, headers=headers)
-                if resp.status_code != 200:
-                    return json.dumps({"error": f"Exa HTTP {resp.status_code}"})
-                results = resp.json().get("results", [])
-                mapped = [
-                    {
-                        "url": r.get("url", ""),
-                        "title": r.get("title", ""),
-                        "snippet": (r.get("text") or r.get("title", ""))[:300],
-                        "source": "exa",
-                    }
-                    for r in results
-                ]
-                return json.dumps(
-                    {"results": mapped, "total": len(mapped), "query": query},
-                    ensure_ascii=False,
-                    indent=2,
-                )
-        except (
-            httpx.HTTPError
-        ) as e:  # transport — type name only (never echo, may carry the key)
-            return json.dumps({"error": f"Exa request failed: {type(e).__name__}"})
-        except (
-            Exception
-        ) as e:  # tool contract: error string, never raise; type name only
-            return json.dumps({"error": f"Exa search failed: {type(e).__name__}"})
+        return await _search_with_rotation(
+            self.keys,
+            lambda key: self._search_one(
+                key, query, max_results, include_domains, exclude_domains
+            ),
+            "Exa",
+        )
 
 
 def _make_backend(name: str, searxng_url: str | None = None) -> SearchBackend:
@@ -241,25 +287,26 @@ def _make_backend(name: str, searxng_url: str | None = None) -> SearchBackend:
 
     ``searxng_url`` overrides ``settings.searxng_url`` for the SearXNG backend
     (the live auto-started URL, which may use a dynamic port) without mutating
-    the global settings.
+    the global settings. Cloud backends read a CSV of keys (``split_keys``): a
+    single key is unchanged, multiple keys rotate on rate-limit/auth failure.
     """
     if name == "searxng":
         return SearxngBackend(searxng_url or settings.searxng_url)
     if name == "tavily":
-        key = os.getenv("TAVILY_API_KEY", settings.tavily_api_key)
-        if not key:
+        keys = split_keys(os.getenv("TAVILY_API_KEY", settings.tavily_api_key))
+        if not keys:
             raise ValueError("TAVILY_API_KEY required for the tavily search backend")
-        return TavilyBackend(key)
+        return TavilyBackend(keys)
     if name == "brave":
-        key = os.getenv("BRAVE_API_KEY", settings.brave_api_key)
-        if not key:
+        keys = split_keys(os.getenv("BRAVE_API_KEY", settings.brave_api_key))
+        if not keys:
             raise ValueError("BRAVE_API_KEY required for the brave search backend")
-        return BraveBackend(key)
+        return BraveBackend(keys)
     if name == "exa":
-        key = os.getenv("EXA_API_KEY", settings.exa_api_key)
-        if not key:
+        keys = split_keys(os.getenv("EXA_API_KEY", settings.exa_api_key))
+        if not keys:
             raise ValueError("EXA_API_KEY required for the exa search backend")
-        return ExaBackend(key)
+        return ExaBackend(keys)
     raise ValueError(f"Unknown search backend: {name}")
 
 
