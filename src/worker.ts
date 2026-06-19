@@ -53,6 +53,20 @@ export interface Env {
   // search secrets — exactly one set depending on SEARCH_BACKEND
   SEARXNG_URL?: string
   TAVILY_API_KEY?: string
+  // Capability provider chains (search/browser) + per-task disable-local toggles.
+  SEARCH_BACKENDS?: string
+  BRAVE_API_KEY?: string
+  EXA_API_KEY?: string
+  BROWSER_BACKENDS?: string
+  CF_ACCOUNT_ID?: string
+  CF_BROWSER_RENDERING_TOKEN?: string
+  BROWSERLESS_URL?: string
+  BROWSERLESS_TOKEN?: string
+  CAPSOLVER_API_KEY?: string
+  DISABLE_LOCAL_EMBED?: string
+  DISABLE_LOCAL_RERANK?: string
+  DISABLE_LOCAL_SEARCH?: string
+  DISABLE_LOCAL_BROWSER?: string
 }
 
 // Keys forwarded from the Worker env (wrangler vars + secrets) into the container
@@ -66,6 +80,12 @@ const CONTAINER_ENV_KEYS = [
   'PUBLIC_URL', 'CREDENTIAL_SECRET', 'JINA_AI_API_KEY',
   'GOOGLE_VERTEX_EXPRESS_API_KEY', 'XAI_API_KEY',
   'MCP_RELAY_PASSWORD', 'MCP_DCR_SERVER_SECRET',
+  // capability provider chains + disable-local toggles (WS-2/3/4/5)
+  'SEARCH_BACKENDS', 'BRAVE_API_KEY', 'EXA_API_KEY',
+  'BROWSER_BACKENDS', 'CF_ACCOUNT_ID', 'CF_BROWSER_RENDERING_TOKEN',
+  'BROWSERLESS_URL', 'BROWSERLESS_TOKEN', 'CAPSOLVER_API_KEY',
+  'DISABLE_LOCAL_EMBED', 'DISABLE_LOCAL_RERANK',
+  'DISABLE_LOCAL_SEARCH', 'DISABLE_LOCAL_BROWSER',
 ] as const
 
 function pickContainerEnv(env: Env): Record<string, string> {
