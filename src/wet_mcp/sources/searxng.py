@@ -23,8 +23,19 @@ from web_core.search.client import (  # noqa: F401
     _build_filtered_query,
 )
 
+from wet_mcp.config import settings
+
 # Default health check timeout
 _HEALTH_CHECK_TIMEOUT = 5.0
+
+
+def _searxng_auth() -> tuple[str, str] | None:
+    """HTTP basic-auth ``(user, pass)`` for an external authenticated SearXNG
+    (e.g. behind Caddy basic-auth), or ``None`` when not both configured — the
+    auto-local SearXNG needs none. Avoids embedding credentials in SEARXNG_URL."""
+    user = settings.searxng_auth_user
+    pwd = settings.searxng_auth_pass
+    return (user, pwd) if user and pwd else None
 
 
 async def _check_health(searxng_url: str) -> bool:
@@ -33,6 +44,8 @@ async def _check_health(searxng_url: str) -> bool:
     Returns True if SearXNG is responsive, False otherwise.
     """
     try:
+        auth = _searxng_auth()
+        extra = {"auth": auth} if auth else {}
         async with httpx.AsyncClient(timeout=_HEALTH_CHECK_TIMEOUT) as client:
             response = await client.get(
                 f"{searxng_url}/healthz",
@@ -40,6 +53,7 @@ async def _check_health(searxng_url: str) -> bool:
                     "X-Real-IP": "127.0.0.1",
                     "X-Forwarded-For": "127.0.0.1",
                 },
+                **extra,
             )
             return response.status_code == 200
     except Exception:
@@ -118,6 +132,7 @@ async def search(
             language=language,
             include_domains=include_domains,
             exclude_domains=exclude_domains,
+            auth=_searxng_auth(),
         )
 
         output = {

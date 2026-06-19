@@ -1818,7 +1818,7 @@ llm = [
 
 [[package]]
 name = "n24q02m-web-core"
-version = "2.3.0b1"
+version = "2.3.0b2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
@@ -1832,9 +1832,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/f9/8b6658a07414c2ec5716cd2e3a8ee1f96e72b066162107fa9ae75ed9911d/n24q02m_web_core-2.3.0b1.tar.gz", hash = "sha256:e0f6736f6b09e2e08992e22488b80c21221abe3e2a6f75bd36686782fdf31167", size = 245769, upload-time = "2026-06-19T07:03:41.892Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/55/5c/a2a6137ae9995474db1f903cba03b8e3cbd9eee4ea2a86478cdf76911208/n24q02m_web_core-2.3.0b2.tar.gz", hash = "sha256:273befba0369ac1ed7cfb5dcb7eadaf025322cf9fda0c156a8b1c096866760ef", size = 246139, upload-time = "2026-06-19T13:17:53.936Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cd/4f/9bf9d9fb71ba7a02d90b0c24347f708ecc8dc6304e3b128b2174fa7986ce/n24q02m_web_core-2.3.0b1-py3-none-any.whl", hash = "sha256:b675060a90198552126743bf3cbfb93d725b541912cf8d1a120adee08fc64ae4", size = 67209, upload-time = "2026-06-19T07:03:40.767Z" },
+    { url = "https://files.pythonhosted.org/packages/b0/6b/7d12b7c7f61c597d0e867bae3021105b39a1fe19b977767e86b90fcba490/n24q02m_web_core-2.3.0b2-py3-none-any.whl", hash = "sha256:9e0c3f94ed00d5b21623bb914447994cae83861ba44a4ea5672ec3aa59f740a4", size = 67431, upload-time = "2026-06-19T13:17:52.796Z" },
 ]
 
 [[package]]
@@ -3460,7 +3460,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "3.3.0b14"
+version = "3.3.0b15"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3522,7 +3522,7 @@ requires-dist = [
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
     { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.18.0b14,<2" },
-    { name = "n24q02m-web-core", specifier = ">=2.3.0b1,<3" },
+    { name = "n24q02m-web-core", specifier = ">=2.3.0b2,<3" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pydantic", specifier = ">=2.13.4,<2.14" },
     { name = "pydantic-settings" },

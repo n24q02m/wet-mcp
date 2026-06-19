@@ -162,6 +162,7 @@ async def test_search_passes_all_params(mock_wc_search):
         language="vi",
         include_domains=["docs.python.org"],
         exclude_domains=["pinterest.com"],
+        auth=None,
     )
 
 
