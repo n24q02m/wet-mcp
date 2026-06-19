@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.15 (2026-06-19)
+
+### Features
+
+- Rotate search-provider API keys on rate-limit (CSV multi-key)
+  ([`8cdd1e4`](https://github.com/n24q02m/wet-mcp/commit/8cdd1e47cc20d3b9c0cc627f46077d5b3396f135))
+
+
 ## v3.3.0-beta.14 (2026-06-19)
 
 ### Features
