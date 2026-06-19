@@ -102,7 +102,7 @@ def test_run_migrations_offline_full_chain_fails_gracefully(tmp_path: Path) -> N
     """Verify that offline migration for the full chain fails due to live DB inspection.
 
     This test documents a known limitation: some migration scripts (like docs_002)
-    use live database inspection (PRAGMA table_info) which fails in offline mode
+    use live database inspection (pragma_table_info) which fails in offline mode
     because 'op.get_bind()' returns a 'MockConnection' that doesn't support 'exec_driver_sql'.
 
     Even though it fails in the migration script, it still exercises the

@@ -219,7 +219,9 @@ class TestLibraryMigration:
         # Second call triggers OperationalError because column exists
         db._create_libraries_table()
         # Check if column exists
-        info = db._conn.execute("PRAGMA table_info(libraries)").fetchall()
+        info = db._conn.execute(
+            "SELECT name FROM pragma_table_info('libraries')"
+        ).fetchall()
         cols = [c["name"] for c in info]
         assert "discovery_version" in cols
 
@@ -685,7 +687,7 @@ class TestMarkLibraryIndexed:
     def test_mark_library_indexed_legacy_db(self, db):
         """No-op if columns are missing (lines 600-601)."""
         # We can't easily mock sqlite3.Connection.execute as it's read-only.
-        # Instead, mock the return value of fetchall for PRAGMA table_info.
+        # Instead, mock the return value of fetchall for pragma_table_info.
 
         mock_results = [{"name": "id"}, {"name": "name"}]
 
@@ -702,10 +704,10 @@ class TestMarkLibraryIndexed:
             db.mark_library_indexed("legacy1", total_versions=10)
 
             # Verify it did NOT call execute with UPDATE
-            # The first call should be PRAGMA table_info
+            # The first call should be pragma_table_info
             # If it didn't return early, there would be a second call with UPDATE
             assert mock_conn.execute.call_count == 1
-            assert "PRAGMA table_info" in mock_conn.execute.call_args[0][0]
+            assert "pragma_table_info" in mock_conn.execute.call_args[0][0]
 
 
 # ---------------------------------------------------------------------------
