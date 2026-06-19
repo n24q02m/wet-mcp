@@ -35,6 +35,7 @@ def _key_field(key: str, label: str, ph: str, url: str) -> dict[str, Any]:
         "type": "password",
         "placeholder": ph,
         "helpUrl": url,
+        "helpText": "Multiple keys: comma-separate for automatic rotation on rate-limit.",
         "derived": True,
         "required": False,
     }
