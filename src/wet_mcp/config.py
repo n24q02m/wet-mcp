@@ -80,6 +80,11 @@ class Settings(BaseSettings):
     # SearXNG
     searxng_url: str = "http://localhost:41592"
     searxng_timeout: int = 30
+    # Optional HTTP basic-auth for an external SearXNG behind a reverse-proxy
+    # auth gate (e.g. Caddy basic-auth). Both must be set to take effect; the
+    # auto-local SearXNG needs neither. Avoids embedding credentials in SEARXNG_URL.
+    searxng_auth_user: str = ""  # env SEARXNG_AUTH_USER
+    searxng_auth_pass: str = ""  # env SEARXNG_AUTH_PASS
 
     # Pluggable web search backend selector. "searxng" (default, local) or
     # "tavily" (cloud adapter for CF where embedded SearXNG cannot run).

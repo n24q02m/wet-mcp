@@ -264,6 +264,7 @@ async def test_search_passes_params_to_web_core(mock_wc_search):
         language="vi",
         include_domains=["docs.python.org"],
         exclude_domains=["pinterest.com"],
+        auth=None,
     )
 
 
