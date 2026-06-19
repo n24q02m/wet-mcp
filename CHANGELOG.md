@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.16 (2026-06-19)
+
+### Bug Fixes
+
+- Read SEARXNG_AUTH_USER/PASS and apply basic-auth to external SearXNG
+  ([`450dd1e`](https://github.com/n24q02m/wet-mcp/commit/450dd1e1b0832043c5925fd7e7d40b626c4edb32))
+
+
 ## v3.3.0-beta.15 (2026-06-19)
 
 ### Features
