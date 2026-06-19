@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from loguru import logger
+from mcp_core.chains import resolve_backend
 from mcp_core.llm.providers import key_env_for_model
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings
@@ -82,12 +83,46 @@ class Settings(BaseSettings):
 
     # Pluggable web search backend selector. "searxng" (default, local) or
     # "tavily" (cloud adapter for CF where embedded SearXNG cannot run).
-    search_backend: str = "searxng"  # env SEARCH_BACKEND: searxng | tavily
+    search_backend: str = (
+        "searxng"  # env SEARCH_BACKEND: searxng | tavily | brave | exa
+    )
     tavily_api_key: str = ""  # env TAVILY_API_KEY
+
+    # SEARCH_BACKENDS: CSV provider chain with runtime fallback (try each, on
+    # error/empty -> next, return first non-empty). Empty -> falls back to the
+    # single SEARCH_BACKEND for back-compat (= a chain of length 1). Providers:
+    # searxng (self-host) | tavily | brave | exa (cloud).
+    search_backends: str = ""  # env SEARCH_BACKENDS
+    brave_api_key: str = ""  # env BRAVE_API_KEY
+    exa_api_key: str = ""  # env EXA_API_KEY
+    # Disable-local toggle for search (cross-cutting, see mcp_core.chains): skip
+    # the auto-local SearXNG spawn. An external SEARXNG_URL or cloud backends
+    # still work; only the heavy local SearXNG auto-start is suppressed.
+    disable_local_search: bool = False  # env DISABLE_LOCAL_SEARCH
 
     # Crawler
     crawler_headless: bool = True
     crawler_timeout: int = 60
+
+    # Browser backend chain for the headless (JS-render) leg. BROWSER_BACKENDS
+    # CSV (order = agent escalation/fallback): native (in-process chromium) |
+    # cf-browser-rendering (Cloudflare REST) | browserless (self-host REST).
+    # Empty -> native locally; the deploy sets it explicitly on container
+    # transports to offload rendering. DISABLE_LOCAL_BROWSER drops the heavy
+    # in-process native chromium (the browser capability's disable-local toggle).
+    browser_backends: str = ""  # env BROWSER_BACKENDS
+    disable_local_browser: bool = False  # env DISABLE_LOCAL_BROWSER
+    cf_account_id: str = ""  # env CF_ACCOUNT_ID
+    cf_browser_rendering_token: str = ""  # env CF_BROWSER_RENDERING_TOKEN
+    browserless_url: str = ""  # env BROWSERLESS_URL
+    browserless_token: str = ""  # env BROWSERLESS_TOKEN
+
+    # Optional, key-gated CAPTCHA escalation tier (CapSolver). Off unless a key
+    # is set (user brings their own — per-sub, user-funded). When set, a
+    # CaptchaStrategy is appended as the last escalation tier and only acts on a
+    # detected reCAPTCHA/Cloudflare Turnstile. Solves the CAPTCHA layer only, not
+    # IP reputation.
+    capsolver_api_key: str = ""  # env CAPSOLVER_API_KEY
 
     # SearXNG Management
     # web-core runner tries Docker fallback first, then subprocess install.
@@ -138,6 +173,15 @@ class Settings(BaseSettings):
     rerank_models: str = ""
     # DEPRECATED (2026-06-11): folded into EMBEDDING_MODELS/RERANK_MODELS,
     # honored one release with a warning. Backend now inferred.
+
+    # Per-capability disable-local toggles (cross-cutting; see mcp_core.chains).
+    # Turn OFF the heavy local qwen3 ONNX fallback (~570MB download) WITHOUT
+    # pinning a specific cloud model. Toggle on + no cloud chain => the feature
+    # is gracefully UNAVAILABLE (clear status), never silently forced to a
+    # provider. Independent per task: a user may disable local embed but keep
+    # local rerank, or vice versa.
+    disable_local_embed: bool = False  # env DISABLE_LOCAL_EMBED
+    disable_local_rerank: bool = False  # env DISABLE_LOCAL_RERANK
 
     # Embedding
     embedding_model: str = ""  # DEPRECATED: folded into EMBEDDING_MODELS
@@ -228,6 +272,34 @@ class Settings(BaseSettings):
     def get_cache_db_path(self) -> Path:
         """Get resolved web cache database path."""
         return self.get_data_dir() / "cache.db"
+
+    def auto_searxng_enabled(self) -> bool:
+        """Whether to auto-spawn a local SearXNG.
+
+        ``DISABLE_LOCAL_SEARCH`` suppresses the heavy local SearXNG auto-start
+        (the search capability's disable-local toggle) regardless of
+        ``WET_AUTO_SEARXNG``; an external ``SEARXNG_URL`` or the cloud search
+        backends still serve search.
+        """
+        return self.wet_auto_searxng and not self.disable_local_search
+
+    def browser_backend_chain(self) -> list[str]:
+        """Ordered headless backends for the JS-render leg.
+
+        ``BROWSER_BACKENDS`` CSV; empty -> ``['native']`` (in-process chromium).
+        ``DISABLE_LOCAL_BROWSER`` drops the ``native`` leg (the browser
+        capability's disable-local toggle) so a slim container renders only via
+        the cloud/self-host backends.
+        """
+        raw = (os.getenv("BROWSER_BACKENDS", self.browser_backends) or "").strip()
+        names: list[str] = (
+            [n.strip().lower() for n in raw.split(",") if n.strip()]
+            if raw
+            else ["native"]
+        )
+        if self.disable_local_browser:
+            names = [n for n in names if n != "native"]
+        return names
 
     # --- API key management ---
 
@@ -375,11 +447,16 @@ class Settings(BaseSettings):
         )
 
     def resolve_embedding_backend(self) -> str:
-        """Resolve embedding backend: 'local' or 'cloud'.
+        """Resolve embedding backend: 'cloud', 'local', or 'unavailable'.
 
-        Always returns a valid backend (never empty). Backend is inferred
-        from EMBEDDING_MODELS (non-empty chain -> cloud, empty -> local);
-        the deprecated EMBEDDING_BACKEND env var is honored for one release.
+        3-way resolution via the shared mcp-core primitive:
+        - 'cloud'       -- a non-empty EMBEDDING_MODELS chain (with keys).
+        - 'local'       -- empty chain AND the local leg is enabled.
+        - 'unavailable' -- empty chain AND DISABLE_LOCAL_EMBED is set (the
+          local qwen3 ONNX download is skipped and no cloud chain is
+          configured, so embedding is gracefully unavailable -- NOT forced).
+
+        The deprecated EMBEDDING_BACKEND env var is honored for one release.
         """
         if self.embedding_backend:
             logger.warning(
@@ -391,7 +468,10 @@ class Settings(BaseSettings):
                 if self.embedding_backend in ("cloud", "litellm")
                 else self.embedding_backend
             )
-        return "cloud" if self.embedding_chain() else "local"
+        return resolve_backend(
+            has_cloud_chain=bool(self.embedding_chain()),
+            local_enabled=not self.disable_local_embed,
+        ).value
 
     # --- Reranking resolution ---
 
@@ -412,11 +492,12 @@ class Settings(BaseSettings):
         )
 
     def resolve_rerank_backend(self) -> str:
-        """Resolve reranking backend: 'cloud', 'local', or '' (disabled).
+        """Resolve reranking backend: 'cloud', 'local', 'unavailable', or '' (disabled).
 
-        Disabled when rerank_enabled is False. Otherwise inferred from
-        RERANK_MODELS (non-empty chain -> cloud, empty -> local); the
-        deprecated RERANK_BACKEND env var is honored for one release.
+        '' when rerank_enabled is False. Otherwise 3-way via the shared
+        mcp-core primitive (same semantics as resolve_embedding_backend, keyed
+        on RERANK_MODELS + DISABLE_LOCAL_RERANK); the deprecated RERANK_BACKEND
+        env var is honored for one release.
         """
         if not self.rerank_enabled:
             return ""
@@ -429,7 +510,10 @@ class Settings(BaseSettings):
                 if self.rerank_backend in ("cloud", "litellm")
                 else self.rerank_backend
             )
-        return "cloud" if self.rerank_chain() else "local"
+        return resolve_backend(
+            has_cloud_chain=bool(self.rerank_chain()),
+            local_enabled=not self.disable_local_rerank,
+        ).value
 
     # --- Provider mode resolution ---
 

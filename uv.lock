@@ -1791,7 +1791,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.18.0b12"
+version = "1.18.0b13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1806,9 +1806,9 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b6/93/7bacfbaeaf6805fad2f4883ffb2f9aba4c2f147eb0d2d4d3d2d423733836/n24q02m_mcp_core-1.18.0b12.tar.gz", hash = "sha256:b8dffee8d18468a0ded29d7aa0eccb6af5daed62fd1ef96f8833787cbca2eb03", size = 287572, upload-time = "2026-06-18T12:36:36.077Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/74/de/63e21abb61c6463bf9ef5700b96f97c41755272154eac550cbf9eb0283f3/n24q02m_mcp_core-1.18.0b13.tar.gz", hash = "sha256:d8d56e7bbc89305e86ba3d5a61f3ae269063ec7f533a3b76e761dc36b7dc196b", size = 292494, upload-time = "2026-06-19T07:03:07.568Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/19/98/cdf75f3d9cf5eec197384d0b5c8e0e237ac2bc03d2685f64c4e881414006/n24q02m_mcp_core-1.18.0b12-py3-none-any.whl", hash = "sha256:f87d26b576836d406fbdd43d3f6c5a398a6cd721d7db5dd51eeabe6cbe8917fc", size = 158657, upload-time = "2026-06-18T12:36:37.321Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/ac/97a7befbeb87e04a10c673468fff7cd02909914209cd2dee5571f000da25/n24q02m_mcp_core-1.18.0b13-py3-none-any.whl", hash = "sha256:7ca71aa27a01eb6e44e3144346c6fddaae980f092a106e440aa30cf22e5a8439", size = 161881, upload-time = "2026-06-19T07:03:06.06Z" },
 ]
 
 [package.optional-dependencies]
@@ -1818,7 +1818,7 @@ llm = [
 
 [[package]]
 name = "n24q02m-web-core"
-version = "2.2.1"
+version = "2.3.0b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
@@ -1832,9 +1832,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ec/79/50147e7b007743dcb3f21edd8f651421ac56edd8b37638bf3f6ad26bc02c/n24q02m_web_core-2.2.1.tar.gz", hash = "sha256:5db321a1928a708f063869f9ac4d4d0c0b66186056897234721843c1dcdd248e", size = 230971, upload-time = "2026-06-09T02:53:35.425Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/f9/8b6658a07414c2ec5716cd2e3a8ee1f96e72b066162107fa9ae75ed9911d/n24q02m_web_core-2.3.0b1.tar.gz", hash = "sha256:e0f6736f6b09e2e08992e22488b80c21221abe3e2a6f75bd36686782fdf31167", size = 245769, upload-time = "2026-06-19T07:03:41.892Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/72/5bf251ef3925190ae9e2940423cfc01bc1e9f5ecc2bff83d88a956864c7e/n24q02m_web_core-2.2.1-py3-none-any.whl", hash = "sha256:0182ec9d06504e8bc974903166d1d435c2cd222f614641ad563e7a53382d1ef4", size = 60577, upload-time = "2026-06-09T02:53:34.206Z" },
+    { url = "https://files.pythonhosted.org/packages/cd/4f/9bf9d9fb71ba7a02d90b0c24347f708ecc8dc6304e3b128b2174fa7986ce/n24q02m_web_core-2.3.0b1-py3-none-any.whl", hash = "sha256:b675060a90198552126743bf3cbfb93d725b541912cf8d1a120adee08fc64ae4", size = 67209, upload-time = "2026-06-19T07:03:40.767Z" },
 ]
 
 [[package]]
@@ -3521,8 +3521,8 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.18.0b12,<2" },
-    { name = "n24q02m-web-core", specifier = ">=2.2.1,<2.3" },
+    { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.18.0b13,<2" },
+    { name = "n24q02m-web-core", specifier = ">=2.3.0b1,<3" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pydantic", specifier = ">=2.13.4,<2.14" },
     { name = "pydantic-settings" },

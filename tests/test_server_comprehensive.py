@@ -228,7 +228,10 @@ async def test_search_tool_search():
         patch("wet_mcp.sources.searxng.search", new_callable=AsyncMock) as mock_search,
     ):
         mock_ensure.return_value = "http://searxng"
-        mock_search.return_value = "search_result"
+        mock_search.return_value = (
+            '{"results": [{"url": "https://e", "title": "T", "snippet": "search_result"}], '
+            '"total": 1, "query": "test"}'
+        )
         res = await server.search("search", query="test")
         assert "search_result" in res
 
@@ -898,6 +901,7 @@ async def test_lifespan_startup_sync_enabled():
     ):
         ms.setup_providers.return_value = "sdk"
         ms.wet_auto_searxng = False
+        ms.auto_searxng_enabled.return_value = False
         ms.wet_cache = False
         ms.sync_enabled = True
         ms.sync_s3_bucket = ""
@@ -931,6 +935,7 @@ async def test_lifespan_shutdown_sync_enabled():
     ):
         ms.setup_providers.return_value = "sdk"
         ms.wet_auto_searxng = False
+        ms.auto_searxng_enabled.return_value = False
         ms.wet_cache = False
         ms.sync_enabled = True
         ms.sync_s3_bucket = ""

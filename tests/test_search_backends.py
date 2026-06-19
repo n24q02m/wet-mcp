@@ -5,9 +5,15 @@ import httpx
 import pytest
 
 from wet_mcp.sources.search_backends import (
+    BraveBackend,
+    ExaBackend,
     SearxngBackend,
     TavilyBackend,
+    _search_result_is_empty,
+    chain_backend_names,
+    run_search_chain,
     search_backend_from_env,
+    search_backends_from_env,
 )
 
 
@@ -49,20 +55,21 @@ def test_factory_tavily_requires_key(monkeypatch):
         search_backend_from_env()
 
 
-async def test_server_search_routes_through_backend(monkeypatch):
-    monkeypatch.setenv("SEARCH_BACKEND", "searxng")
-    fake = unittest.mock.AsyncMock()
-    fake.search = unittest.mock.AsyncMock(
-        return_value='{"results": [], "total": 0, "query": "q"}'
+async def test_server_search_routes_through_chain(monkeypatch):
+    # A non-searxng chain avoids the embedded SearXNG spawn; run_search_chain is
+    # the single integration point the server now calls.
+    monkeypatch.setenv("SEARCH_BACKENDS", "tavily")
+    fake_chain = unittest.mock.AsyncMock(
+        return_value='{"results": [{"url": "https://e/1", "title": "R1", "snippet": "s"}], "total": 1, "query": "q"}'
     )
     with unittest.mock.patch(
-        "wet_mcp.sources.search_backends.search_backend_from_env", return_value=fake
+        "wet_mcp.sources.search_backends.run_search_chain", fake_chain
     ):
         from wet_mcp.server import search
 
         result = await search(action="search", query="python tutorial", max_results=5)
         assert "results" in result
-        fake.search.assert_awaited()
+        fake_chain.assert_awaited()
 
 
 async def test_tavily_error_never_leaks_api_key():
@@ -79,14 +86,153 @@ async def test_tavily_error_never_leaks_api_key():
     assert "error" in json.loads(out)
 
 
-async def test_server_search_tavily_missing_key_returns_error(monkeypatch):
-    monkeypatch.setenv("SEARCH_BACKEND", "tavily")
+async def test_server_search_tavily_missing_key_degrades_gracefully(monkeypatch):
+    # New chain behaviour: a backend whose key is missing is SKIPPED; when the
+    # whole chain is empty the result is a clear (non-fatal) "missing API keys"
+    # envelope rather than the old hard "Error: TAVILY_API_KEY required".
+    monkeypatch.setenv("SEARCH_BACKENDS", "tavily")
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
     from wet_mcp.config import settings
 
     monkeypatch.setattr(settings, "tavily_api_key", "", raising=False)
+    monkeypatch.setattr(settings, "search_backends", "tavily", raising=False)
     from wet_mcp.server import search
 
+    # The search action wraps results in untrusted-content guards, so assert on
+    # substrings rather than parsing.
     result = await search(action="search", query="python tutorial")
-    assert result.startswith("Error")
-    assert "TAVILY_API_KEY" in result
+    assert "missing API keys" in result
+    assert "tavily" in result
+
+
+# ---------------------------------------------------------------------------
+# Brave + Exa backends
+# ---------------------------------------------------------------------------
+
+
+async def test_brave_maps_web_results():
+    with unittest.mock.patch("httpx.AsyncClient.get") as get:
+        resp = unittest.mock.AsyncMock()
+        resp.status_code = 200
+        resp.json = unittest.mock.Mock(
+            return_value={
+                "web": {
+                    "results": [
+                        {"url": "https://b/1", "title": "B1", "description": "d1"}
+                    ]
+                }
+            }
+        )
+        get.return_value = resp
+        out = json.loads(await BraveBackend("k").search("q", max_results=1))
+        assert out["total"] == 1
+        assert out["results"][0]["url"] == "https://b/1"
+        assert out["results"][0]["snippet"] == "d1"
+        assert out["results"][0]["source"] == "brave"
+
+
+async def test_brave_http_error_returns_error_json():
+    with unittest.mock.patch("httpx.AsyncClient.get") as get:
+        resp = unittest.mock.AsyncMock()
+        resp.status_code = 429
+        get.return_value = resp
+        assert "error" in json.loads(await BraveBackend("k").search("q"))
+
+
+async def test_brave_error_never_leaks_key():
+    secret = "brave-test-token-not-real"  # noqa: S105 - low-entropy fake for leak test
+    with unittest.mock.patch(
+        "httpx.AsyncClient.get",
+        side_effect=httpx.ConnectError(f"failed token={secret}"),
+    ):
+        out = await BraveBackend(secret).search("q")
+    assert secret not in out
+
+
+async def test_exa_maps_results_with_text_snippet():
+    with unittest.mock.patch("httpx.AsyncClient.post") as post:
+        resp = unittest.mock.AsyncMock()
+        resp.status_code = 200
+        resp.json = unittest.mock.Mock(
+            return_value={
+                "results": [{"url": "https://x/1", "title": "X1", "text": "y" * 500}]
+            }
+        )
+        post.return_value = resp
+        out = json.loads(await ExaBackend("k").search("q", max_results=1))
+        assert out["results"][0]["source"] == "exa"
+        assert len(out["results"][0]["snippet"]) == 300  # truncated
+
+
+# ---------------------------------------------------------------------------
+# Chain resolution + runtime fallback
+# ---------------------------------------------------------------------------
+
+
+def test_chain_backend_names_csv(monkeypatch):
+    monkeypatch.setenv("SEARCH_BACKENDS", "searxng, tavily , brave")
+    assert chain_backend_names() == ["searxng", "tavily", "brave"]
+
+
+def test_chain_falls_back_to_single_backend(monkeypatch):
+    monkeypatch.delenv("SEARCH_BACKENDS", raising=False)
+    monkeypatch.setenv("SEARCH_BACKEND", "tavily")
+    monkeypatch.setenv("TAVILY_API_KEY", "k")
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(settings, "search_backends", "", raising=False)
+    assert chain_backend_names() == ["tavily"]
+
+
+def test_chain_skips_missing_key_backends(monkeypatch):
+    monkeypatch.setenv("SEARCH_BACKENDS", "tavily,searxng")
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(settings, "search_backends", "tavily,searxng", raising=False)
+    monkeypatch.setattr(settings, "tavily_api_key", "", raising=False)
+    backends = search_backends_from_env()
+    # tavily skipped (no key); only searxng remains.
+    assert len(backends) == 1
+    assert isinstance(backends[0], SearxngBackend)
+
+
+def test_search_result_is_empty_predicate():
+    assert _search_result_is_empty('{"error": "boom"}') is True
+    assert _search_result_is_empty('{"results": []}') is True
+    assert _search_result_is_empty("not json") is True
+    assert _search_result_is_empty('{"results": [{"url": "x"}]}') is False
+
+
+async def test_run_search_chain_falls_back_on_empty(monkeypatch):
+    # First backend returns empty, second returns a hit -> second wins.
+    empty = unittest.mock.AsyncMock(
+        return_value='{"results": [], "total": 0, "query": "q"}'
+    )
+    hit = unittest.mock.AsyncMock(
+        return_value='{"results": [{"url": "https://h/1"}], "total": 1, "query": "q"}'
+    )
+    b0 = unittest.mock.Mock()
+    b0.search = empty
+    b1 = unittest.mock.Mock()
+    b1.search = hit
+    with unittest.mock.patch(
+        "wet_mcp.sources.search_backends.search_backends_from_env",
+        return_value=[b0, b1],
+    ):
+        out = json.loads(await run_search_chain("q"))
+        assert out["results"][0]["url"] == "https://h/1"
+        empty.assert_awaited()
+        hit.assert_awaited()
+
+
+async def test_run_search_chain_empty_when_no_backends(monkeypatch):
+    monkeypatch.setenv("SEARCH_BACKENDS", "brave")
+    from wet_mcp.config import settings
+
+    monkeypatch.setattr(settings, "search_backends", "brave", raising=False)
+    monkeypatch.setattr(settings, "brave_api_key", "", raising=False)
+    monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+    out = json.loads(await run_search_chain("q"))
+    assert out["results"] == []
+    assert "brave" in out["error"]

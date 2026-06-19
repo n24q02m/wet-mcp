@@ -173,6 +173,103 @@ def test_resolve_rerank_backend_local_when_empty():
 
 
 # -----------------------------------------------------------------------
+# Disable-local toggle (DISABLE_LOCAL_EMBED / DISABLE_LOCAL_RERANK)
+# 3-way resolution truth table — the conflation fix.
+# -----------------------------------------------------------------------
+
+
+def test_embedding_unavailable_when_local_disabled_and_no_chain():
+    """DISABLE_LOCAL_EMBED + empty chain -> 'unavailable' (NOT forced to a model)."""
+    settings = Settings(
+        embedding_backend="", embedding_models="", disable_local_embed=True
+    )
+    with mock.patch.dict(os.environ, {}, clear=True):
+        assert settings.resolve_embedding_backend() == "unavailable"
+
+
+def test_embedding_cloud_wins_even_when_local_disabled():
+    """A configured cloud chain still resolves to 'cloud' with local disabled."""
+    settings = Settings(
+        embedding_backend="",
+        embedding_models="gemini/gemini-embedding-001",
+        disable_local_embed=True,
+    )
+    assert settings.resolve_embedding_backend() == "cloud"
+
+
+def test_embedding_local_when_toggle_off_and_no_chain():
+    """Toggle off (default) + empty chain -> 'local' (unchanged behaviour)."""
+    settings = Settings(
+        embedding_backend="", embedding_models="", disable_local_embed=False
+    )
+    with mock.patch.dict(os.environ, {}, clear=True):
+        assert settings.resolve_embedding_backend() == "local"
+
+
+def test_rerank_unavailable_when_local_disabled_and_no_chain():
+    """DISABLE_LOCAL_RERANK + empty chain (rerank enabled) -> 'unavailable'."""
+    settings = Settings(
+        rerank_enabled=True,
+        rerank_backend="",
+        rerank_models="",
+        disable_local_rerank=True,
+    )
+    with mock.patch.dict(os.environ, {}, clear=True):
+        assert settings.resolve_rerank_backend() == "unavailable"
+
+
+def test_rerank_disabled_overrides_toggle():
+    """rerank_enabled=False still wins -> '' even with the toggle set."""
+    settings = Settings(rerank_enabled=False, disable_local_rerank=True)
+    assert settings.resolve_rerank_backend() == ""
+
+
+def test_auto_searxng_enabled_default():
+    """Default: auto-spawn local SearXNG enabled."""
+    assert (
+        Settings(
+            wet_auto_searxng=True, disable_local_search=False
+        ).auto_searxng_enabled()
+        is True
+    )
+
+
+def test_disable_local_search_suppresses_auto_spawn():
+    """DISABLE_LOCAL_SEARCH suppresses the auto-spawn even with WET_AUTO_SEARXNG on."""
+    assert (
+        Settings(
+            wet_auto_searxng=True, disable_local_search=True
+        ).auto_searxng_enabled()
+        is False
+    )
+
+
+def test_auto_searxng_disabled_when_wet_auto_off():
+    assert (
+        Settings(
+            wet_auto_searxng=False, disable_local_search=False
+        ).auto_searxng_enabled()
+        is False
+    )
+
+
+def test_embed_and_rerank_toggles_are_independent():
+    """A user may disable local embed but keep local rerank (and vice versa)."""
+    settings = Settings(
+        embedding_backend="",
+        embedding_models="",
+        rerank_backend="",
+        rerank_models="",
+        rerank_enabled=True,
+        disable_local_embed=True,
+        disable_local_rerank=False,
+    )
+    with mock.patch.dict(os.environ, {}, clear=True):
+        assert settings.resolve_embedding_backend() == "unavailable"
+        assert settings.resolve_rerank_backend() == "local"
+
+
+# -----------------------------------------------------------------------
 # Embedding model resolution
 # -----------------------------------------------------------------------
 
