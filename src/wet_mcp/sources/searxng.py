@@ -39,9 +39,14 @@ def _searxng_auth() -> tuple[str, str] | None:
 
 
 async def _check_health(searxng_url: str) -> bool:
-    """Quick health check before issuing a search request.
+    """Whether the SearXNG instance is REACHABLE (not whether /healthz is 200).
 
-    Returns True if SearXNG is responsive, False otherwise.
+    Any HTTP response means the instance is up: 200 = ready, and 401/403 = up but
+    auth-gated / reverse-proxy-blocked (an external SearXNG behind Caddy/CF basic
+    auth answers /healthz with 401/403 even though /search works — the search call
+    itself carries the auth). Only a 5xx or a connection/timeout error means it is
+    actually down and worth an auto-restart. Returning True on 401/403 stops the
+    pointless restart→spawn of a local SearXNG when an external one is configured.
     """
     try:
         auth = _searxng_auth()
@@ -55,7 +60,7 @@ async def _check_health(searxng_url: str) -> bool:
                 },
                 **extra,
             )
-            return response.status_code == 200
+            return response.status_code < 500
     except Exception:
         return False
 
