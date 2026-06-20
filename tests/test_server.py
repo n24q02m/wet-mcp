@@ -13,6 +13,22 @@ from wet_mcp.server import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_real_searxng_spawn():
+    """The search action's chain path reaches ``_ensure_searxng_healthy`` ->
+    ``ensure_searxng()`` — a real SearXNG subprocess spawn that hangs a Windows CI
+    runner blocking on the child's stdout. Stub the health-check so no test_server
+    test ever starts a real SearXNG; tests asserting on these targets re-patch
+    them and their patch overrides this default (same pattern as the conftest
+    backend/crawler stubs)."""
+    with patch(
+        "wet_mcp.sources.searxng._ensure_searxng_healthy",
+        new_callable=AsyncMock,
+        side_effect=lambda url: url,
+    ):
+        yield
+
+
 def test_maybe_register_custom_embed_no_optin_noop(monkeypatch):
     """No registration when LOCAL_EMBEDDING_MODEL is unset (default local)."""
     import qwen3_embed
@@ -404,7 +420,7 @@ async def test_search_applies_reranking():
             return_value="http://localhost:41592",
         ),
         patch(
-            "wet_mcp.server.searxng_search",
+            "wet_mcp.sources.searxng.search",
             new_callable=AsyncMock,
             return_value=mock_results,
         ),
@@ -652,7 +668,7 @@ async def test_search_enrich_flag():
             return_value="http://localhost:8080",
         ),
         patch(
-            "wet_mcp.server.searxng_search",
+            "wet_mcp.sources.searxng.search",
             new_callable=AsyncMock,
             return_value=mock_results,
         ),
