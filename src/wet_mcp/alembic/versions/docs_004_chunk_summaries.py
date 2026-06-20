@@ -32,9 +32,9 @@ def upgrade() -> None:
     # migration on an already-upgraded DB is a no-op. PRAGMA table_info
     # returns rows shaped as (cid, name, type, notnull, dflt_value, pk).
     existing_cols = {
-        row[1]
+        row[0]
         for row in op.get_bind()
-        .exec_driver_sql("PRAGMA table_info(doc_chunks)")
+        .exec_driver_sql("SELECT name FROM pragma_table_info(?)", ("doc_chunks",))
         .fetchall()
     }
     if "summary" not in existing_cols:

@@ -44,14 +44,18 @@ logger = logging.getLogger("alembic.runtime.migration")
 
 def _existing_columns(table: str) -> set[str]:
     bind = op.get_bind()
-    rows = bind.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
-    return {row[1] for row in rows}
+    rows = bind.exec_driver_sql(
+        "SELECT name FROM pragma_table_info(?)", (table,)
+    ).fetchall()
+    return {row[0] for row in rows}
 
 
 def _existing_indexes(table: str) -> set[str]:
     bind = op.get_bind()
-    rows = bind.exec_driver_sql(f"PRAGMA index_list({table})").fetchall()
-    return {row[1] for row in rows}
+    rows = bind.exec_driver_sql(
+        "SELECT name FROM pragma_index_list(?)", (table,)
+    ).fetchall()
+    return {row[0] for row in rows}
 
 
 def _add_column_if_missing(table: str, name: str, ddl: str) -> None:
