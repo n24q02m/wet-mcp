@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.17 (2026-06-20)
+
+### Bug Fixes
+
+- Treat reachable SearXNG (401/403) as healthy + stop test_server spawning real SearXNG
+  ([`aa87c30`](https://github.com/n24q02m/wet-mcp/commit/aa87c3072895eb34ece2186995d61ba973afc1cc))
+
+
 ## v3.3.0-beta.16 (2026-06-19)
 
 ### Bug Fixes
