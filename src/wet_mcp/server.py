@@ -111,11 +111,12 @@ def _require_credentials() -> str | None:
     * **HTTP multi-user request** (``_current_sub`` set via auth_scope) —
       look up the per-sub PerPluginStore bucket. If empty, return
       AWAITING_SETUP error so the user opens the relay form. If non-empty,
-      apply to ``os.environ`` for the duration of the asyncio task so the
-      existing provider-init code (settings.setup_providers, JINA/Gemini
-      client builders, …) picks the right user's keys, and allow the call.
-      Per-asyncio-task contextvar isolation guarantees concurrent users
-      see only their own values.
+      allow the call. The credentials stay request-scoped: the cloud
+      dispatch (embedder / reranker / llm) resolves the right provider key
+      per call via :func:`credential_state.api_key_for_model`. We do NOT
+      copy them into the process-global ``os.environ`` — that bled one
+      ``sub``'s keys into another's request (``os.environ`` is shared
+      mutable state, not contextvar-isolated).
 
     * **Stdio / single-user HTTP / no JWT** — ``_current_sub`` is ``None``;
       fall back to the legacy ``CredentialState`` machine driven by env
@@ -147,17 +148,10 @@ def _require_credentials() -> str | None:
                     ),
                 }
             )
-        # Apply per-sub creds to env for the request. Python contextvar +
-        # asyncio task isolation ensures concurrent requests for different
-        # subs do not race on os.environ at the per-call boundary used by
-        # downstream provider builders. (We never reset because each
-        # request overwrites with its own sub's values; missing keys for
-        # this sub fall through to whatever the previous request set,
-        # which is acceptable per spec §4.2 since `_require_credentials`
-        # already verified at least one key is present.)
-        for key, value in creds.items():
-            if value:
-                os.environ[key] = value
+        # Credentials verified for this sub. They stay request-scoped:
+        # the cloud dispatch resolves the per-sub key per call via
+        # credential_state.api_key_for_model. Do NOT write them into
+        # os.environ (process-global -> cross-sub bleed).
         return None
 
     state = get_state()

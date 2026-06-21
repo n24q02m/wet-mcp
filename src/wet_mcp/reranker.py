@@ -81,13 +81,19 @@ class CloudReranker:
         # Lazy import: litellm costs ~1-2s on first import.
         from mcp_core.llm import rerank as core_rerank
 
+        from wet_mcp.credential_state import api_key_for_model
+
+        litellm_model = self._litellm_model()
+        # Resolve the provider key from the request-scoped per-sub bucket
+        # (HTTP multi-user) or the process env (single-user); explicit
+        # api_key wins. Avoids os.environ cross-user bleed.
         response = core_rerank(
-            model=self._litellm_model(),
+            model=litellm_model,
             query=query,
             documents=documents,
             top_n=top_n,
             api_base=os.getenv("RERANK_API_BASE") or None,
-            api_key=self.api_key or None,
+            api_key=self.api_key or api_key_for_model(litellm_model),
         )
 
         # litellm RerankResponse.results defaults to None and rerank items

@@ -323,6 +323,31 @@ def credentials_for_current_request() -> dict[str, str]:
     return read_for_sub(sub)
 
 
+def api_key_for_model(model: str) -> str | None:
+    """Resolve the provider API key for ``model`` from the CURRENT request.
+
+    HTTP multi-user (``_current_sub`` set): return the ``<PROVIDER>_API_KEY``
+    from THAT subject's per-sub bucket so the cloud dispatch (embedder /
+    reranker / llm) passes it EXPLICITLY per call — instead of leaking it
+    into the process-global ``os.environ``, which bled one ``sub``'s keys
+    into another's request (``os.environ`` is shared mutable state, not
+    contextvar-isolated).
+
+    Single-user / stdio (no sub): return ``None`` so litellm's own provider
+    env fallback applies unchanged — the single-user dispatch contract is
+    untouched (this is the documented "empty api_key -> None -> env" path).
+    """
+    sub = _current_sub.get()
+    if sub is None:
+        return None
+    from mcp_core.llm.providers import key_env_for_model
+
+    key_env = key_env_for_model(model)
+    if not key_env:
+        return None
+    return read_for_sub(sub).get(key_env) or None
+
+
 def _await_backend_ready() -> None:
     """E.1: when the active backend is CF KV, poll its readiness probe before the
     first credential write so the PUT never races outbound-interception. No-op for
