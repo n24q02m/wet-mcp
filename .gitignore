@@ -57,6 +57,10 @@ tests/benchmark_results.jsonl
 # Cloudflare Worker
 .wrangler/
 .wrangler-dryrun/
+# Deploy-time config carrying real CF resource IDs (account/KV/D1/Vectorize) and
+# the substituted account-id image ref. Never commit (used by scripts/cf-deploy.mjs).
+wrangler.deploy.jsonc
+.wrangler-deploy-*.jsonc
 
 # AI Agent
 .jules/
