@@ -284,13 +284,27 @@ class CloudEmbeddingBackend:
             f"(max {self.MAX_BATCH_SIZE}/batch)"
         )
 
+        # ⚡ Bolt Optimization: Parallelize batch API calls to speed up large document embedding
+        # Use a semaphore to prevent unbounded concurrency and avoid API rate limits
+        sem = asyncio.Semaphore(8)
+
+        async def _embed_with_sem(
+            batch: list[str], batch_num: int
+        ) -> list[list[float]]:
+            async with sem:
+                logger.debug(
+                    f"Embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
+                )
+                return await self._embed_batch_inner(batch, dimensions)
+
+        tasks = []
         for i in range(0, len(texts), self.MAX_BATCH_SIZE):
             batch = texts[i : i + self.MAX_BATCH_SIZE]
             batch_num = i // self.MAX_BATCH_SIZE + 1
-            logger.debug(
-                f"Embedding batch {batch_num}/{total_batches}: {len(batch)} texts"
-            )
-            batch_result = await self._embed_batch_inner(batch, dimensions)
+            tasks.append(_embed_with_sem(batch, batch_num))
+
+        batch_results = await asyncio.gather(*tasks)
+        for batch_result in batch_results:
             all_embeddings.extend(batch_result)
 
         return all_embeddings
