@@ -458,10 +458,60 @@ class Qwen3EmbedBackend:
 
 _backend: EmbeddingBackend | None = None
 
+# Shared local ONNX backend for the HTTP multi-user path. Local inference is
+# stateless and key-free, so a single instance is safely shared across subs
+# (no per-sub data flows through it). Lazily created so single-user / stdio
+# deployments that never hit the multi-user resolver don't download the model.
+_shared_local_backend: Qwen3EmbedBackend | None = None
+
 
 def get_backend() -> EmbeddingBackend | None:
-    """Get the current embedding backend singleton."""
+    """Get the current embedding backend singleton (startup-resolved)."""
     return _backend
+
+
+def _shared_local_embed_backend() -> Qwen3EmbedBackend:
+    """Return the process-shared local ONNX embedding backend (lazy)."""
+    global _shared_local_backend
+    if _shared_local_backend is None:
+        _shared_local_backend = Qwen3EmbedBackend()
+    return _shared_local_backend
+
+
+def resolve_embed_backend_for_request() -> EmbeddingBackend | None:
+    """Resolve the embedding backend for the CURRENT request.
+
+    * **Stdio / single-user HTTP** (``_current_sub`` is ``None``): return the
+      module-level startup singleton resolved once at lifespan start
+      (:func:`get_backend`). Behaviour is unchanged.
+
+    * **HTTP multi-user** (``_current_sub`` set): resolve PER REQUEST from the
+      sub's credential bucket. If the sub has a cloud embedding chain whose
+      provider key is present, build a fresh request-scoped
+      :class:`CloudEmbeddingBackend` carrying that sub's key explicitly (so the
+      key flows down the call, never into ``os.environ``). Otherwise fall back
+      to the process-shared local ONNX backend.
+
+    A per-sub request NEVER rebinds the module-level ``_backend`` singleton —
+    that would let one user's cloud model/key serve another concurrent user
+    (cross-sub contamination). The startup singleton is read-only here.
+    """
+    from wet_mcp.config import settings
+    from wet_mcp.credential_state import (
+        api_key_for_model,
+        credentials_for_current_request,
+        get_current_sub,
+    )
+
+    if get_current_sub() is None:
+        return get_backend()
+
+    creds = credentials_for_current_request()
+    chain = settings.embedding_chain_for_creds(creds)
+    if chain:
+        model = chain[0]
+        return CloudEmbeddingBackend(model, api_key=api_key_for_model(model))
+    return _shared_local_embed_backend()
 
 
 def init_backend(

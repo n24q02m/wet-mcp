@@ -621,9 +621,9 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
         is_query: If True, use query_embed for instruction-aware asymmetric
             retrieval (Qwen3). Document embeddings stay raw.
     """
-    from wet_mcp.embedder import Qwen3EmbedBackend, get_backend
+    from wet_mcp.embedder import Qwen3EmbedBackend, resolve_embed_backend_for_request
 
-    backend = get_backend()
+    backend = resolve_embed_backend_for_request()
     if not backend:
         return None
     try:
@@ -637,9 +637,9 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
 
 async def _embed_batch(texts: list[str]) -> list[list[float]] | None:
     """Embed batch of texts if backend is available."""
-    from wet_mcp.embedder import get_backend
+    from wet_mcp.embedder import resolve_embed_backend_for_request
 
-    backend = get_backend()
+    backend = resolve_embed_backend_for_request()
     if not backend:
         return None
     try:
@@ -658,9 +658,9 @@ async def _rerank_results(
 
     Falls back to original results if reranking fails or is unavailable.
     """
-    from wet_mcp.reranker import get_reranker
+    from wet_mcp.reranker import resolve_rerank_backend_for_request
 
-    reranker = get_reranker()
+    reranker = resolve_rerank_backend_for_request()
     if not reranker or len(results) <= top_n:
         return results[:top_n]
 
@@ -2212,9 +2212,9 @@ async def _background_index_and_search(
         # Generate embeddings
         embeddings = None
         if all_chunks:
-            from wet_mcp.embedder import get_backend
+            from wet_mcp.embedder import resolve_embed_backend_for_request
 
-            if get_backend() is not None:
+            if resolve_embed_backend_for_request() is not None:
                 embed_texts_list = []
                 for c in all_chunks:
                     parts = []

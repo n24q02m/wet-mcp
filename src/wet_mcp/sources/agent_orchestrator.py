@@ -13,23 +13,18 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 from typing import Any
 
 from loguru import logger
 
-# Order matches spec section 5.6 priority: Gemini > OpenAI > Anthropic > xAI.
-# wet currently does not ship an Anthropic SDK direct binding (it lives in
-# the LiteLLM-compatible layer that was dropped in Phase 1). The provider
-# is still listed so the env-detection error message stays accurate; if
-# only ANTHROPIC_API_KEY is set we fall through to "no provider" rather
-# than half-heartedly call a route we do not implement.
-_PROVIDER_KEYS = (
-    "GEMINI_API_KEY",
-    "GOOGLE_API_KEY",
-    "OPENAI_API_KEY",
-    "XAI_API_KEY",
-)
+from wet_mcp.credential_state import LLM_PROVIDER_KEYS
+
+# LLM-provider key env names, in spec-section-5.6 fallback priority. The
+# canonical list now lives in ``credential_state.LLM_PROVIDER_KEYS`` so the
+# availability gate is single-sourced (it previously omitted ANTHROPIC even
+# though dispatch is litellm passthrough, which supports anthropic/*).
+# Aliased here for the tests that key off ``ao._PROVIDER_KEYS``.
+_PROVIDER_KEYS = LLM_PROVIDER_KEYS
 
 _DEFAULT_MAX_URLS = 5
 _HARD_MAX_URLS = 20
@@ -43,13 +38,15 @@ _EXTRACT_CONCURRENCY = 3
 def detect_llm_provider() -> str | None:
     """Return the first configured provider key name, or ``None``.
 
-    Order is the spec-section-5.6 fallback chain. ``None`` means the
+    Sub-aware (delegates to ``credential_state.detect_llm_provider_key``): in
+    HTTP multi-user mode it reads the request's per-sub credential bucket so
+    keys that are never in ``os.environ`` are seen; in stdio / single-user it
+    reads ``os.environ`` (incl. the GOOGLE->GEMINI alias). ``None`` means the
     orchestrator should bail out with a structured error rather than try.
     """
-    for key in _PROVIDER_KEYS:
-        if os.getenv(key):
-            return key
-    return None
+    from wet_mcp.credential_state import detect_llm_provider_key
+
+    return detect_llm_provider_key()
 
 
 def _no_provider_error() -> str:
