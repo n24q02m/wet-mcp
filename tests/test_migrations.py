@@ -40,10 +40,12 @@ def _make_alembic_cfg(db_path: Path) -> Config:
 def _table_columns(db_path: Path, table: str) -> set[str]:
     conn = sqlite3.connect(str(db_path))
     try:
-        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        rows = conn.execute(
+            "SELECT name FROM pragma_table_info(?)", (table,)
+        ).fetchall()
     finally:
         conn.close()
-    return {r[1] for r in rows}
+    return {r[0] for r in rows}
 
 
 def _table_exists(db_path: Path, table: str) -> bool:
