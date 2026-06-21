@@ -67,10 +67,10 @@ def test_get_llm_config_fallbacks(mock_settings):
 
 
 def test_get_llm_config_empty_models(mock_settings):
-    """Test LLM config with empty or whitespace models string."""
+    """Whitespace-only models -> empty chain -> no model (LLM feature off)."""
     settings.llm_models = "   ,  "
     config = get_llm_config()
-    assert config["model"] == "gemini/gemini-3-flash-preview"
+    assert config["model"] is None
     assert config["fallbacks"] is None
 
 

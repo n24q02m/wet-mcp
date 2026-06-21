@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     # Media Analysis (Provider API keys)
     api_keys: SecretStr | None = None  # ENV_VAR:key,ENV_VAR:key (multiple providers)
 
-    llm_models: str = "gemini/gemini-3-flash-preview,openai/gpt-5.4-mini-2026-03-17"  # provider/model (fallback chain)
+    llm_models: str = ""  # provider/model fallback chain; empty -> key-gated default
     llm_temperature: float | None = None
 
     # Cache (web operations)
@@ -431,7 +431,15 @@ class Settings(BaseSettings):
         return c[0] if c else None
 
     def llm_chain(self) -> list[str]:
-        return [m.strip() for m in self.llm_models.split(",") if m.strip()]
+        # Key-gated like embedding/rerank: an explicit LLM_MODELS chain is used
+        # verbatim; an empty env falls to the curated default filtered to models
+        # whose provider key is configured (none -> [] -> LLM feature off, never
+        # a keyless cloud model that 401s at call time).
+        return self._chain(
+            self.llm_models,
+            "",
+            ("gemini/gemini-3-flash-preview", "openai/gpt-5.4-mini-2026-03-17"),
+        )
 
     # --- Embedding resolution ---
 

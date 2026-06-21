@@ -156,12 +156,14 @@ async def acompletion(
 
 
 def get_llm_config() -> dict:
-    """Build LLM configuration with fallback."""
-    models = [m.strip() for m in settings.llm_models.split(",") if m.strip()]
-    if not models:
-        models = ["gemini/gemini-3-flash-preview"]
+    """Build LLM configuration from the key-gated chain.
 
-    primary = models[0]
+    Uses ``settings.llm_chain()`` so an unconfigured default never emits a
+    keyless cloud model. When the chain is empty (no provider key configured)
+    ``model`` is ``None`` and callers degrade gracefully (LLM feature off).
+    """
+    models = settings.llm_chain()
+    primary = models[0] if models else None
     fallbacks = models[1:] if len(models) > 1 else None
 
     return {
