@@ -228,17 +228,24 @@ class CloudEmbeddingBackend:
         # Lazy import: litellm costs ~1-2s on first import.
         from mcp_core.llm import aembedding
 
+        from wet_mcp.credential_state import api_key_for_model
+
         kwargs: dict = {}
         if dimensions:
             kwargs["dimensions"] = dimensions
         if self._provider == "cohere":
             kwargs["input_type"] = "search_document"
 
+        litellm_model = self._litellm_model()
+        # Resolve the provider key from the request-scoped per-sub bucket
+        # (HTTP multi-user) or the process env (single-user); explicit
+        # api_key (init-time override) wins. Avoids relying on os.environ,
+        # which bled keys across concurrent users.
         response = await aembedding(
-            model=self._litellm_model(),
+            model=litellm_model,
             input=texts,
             api_base=self.api_base or os.getenv("EMBEDDING_API_BASE") or None,
-            api_key=self.api_key or None,
+            api_key=self.api_key or api_key_for_model(litellm_model),
             **kwargs,
         )
 

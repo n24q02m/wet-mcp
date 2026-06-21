@@ -115,10 +115,15 @@ async def acompletion(
     if response_format is not None:
         call_kwargs["response_format"] = response_format
 
+    from wet_mcp.credential_state import api_key_for_model
+
     resolved_api_base = api_base or os.getenv("LLM_API_BASE") or None
-    # Normalise empty string to None: mcp_core.llm forwards a non-None
-    # api_key to litellm, which suppresses provider env-var fallback (401).
-    resolved_api_key = api_key or None
+    # Resolve the provider key from the request-scoped per-sub bucket (HTTP
+    # multi-user) or the process env (single-user); an explicit api_key wins.
+    # Resolved per model so a fallback to a different provider gets its own
+    # key. Avoids relying on os.environ (cross-user bleed). Empty string ->
+    # None so litellm's own provider env fallback still applies single-user.
+    resolved_api_key = api_key or api_key_for_model(model) or None
 
     try:
         return await core_acompletion(
@@ -137,7 +142,7 @@ async def acompletion(
                         model=fb_model,
                         messages=messages,
                         api_base=resolved_api_base,
-                        api_key=resolved_api_key,
+                        api_key=api_key or api_key_for_model(fb_model) or None,
                         **call_kwargs,
                     )
                 except Exception:
