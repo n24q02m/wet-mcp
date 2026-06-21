@@ -209,7 +209,7 @@ function extractUserId(request: Request): string {
 // + EXPOSE 8080).
 export class WetContainer extends Container<Env> {
   defaultPort = 8080
-  sleepAfter = '1h'
+  sleepAfter = '5m'
   // The container reaches cloud model/search APIs (Jina, Vertex, Tavily) over the
   // public internet; kv/d1/vectorize.internal stay intercepted (see outboundByHost).
   enableInternet = true
