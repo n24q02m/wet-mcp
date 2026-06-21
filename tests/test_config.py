@@ -604,8 +604,16 @@ def test_wet_rerank_openai_only_is_local(monkeypatch):
 
 
 def test_wet_llm_chain_default(monkeypatch):
+    # Empty LLM_MODELS -> key-gated curated default: only models whose provider
+    # key is configured. With the Gemini key the chain head is the gemini
+    # default; with no key the chain is empty (LLM off, no keyless cloud model).
     monkeypatch.delenv("LLM_MODELS", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     assert Settings().llm_chain()[0] == "gemini/gemini-3-flash-preview"
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert Settings().llm_chain() == []
 
 
 def test_wet_embedding_primary(monkeypatch):

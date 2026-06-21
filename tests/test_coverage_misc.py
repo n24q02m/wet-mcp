@@ -1122,16 +1122,19 @@ class TestQwen3EmbedSingleQuery:
 class TestGetLlmConfigEmptyModels:
     """Cover line 33: empty models fallback."""
 
-    async def test_empty_models_fallback(self):
+    async def test_empty_models_fallback(self, monkeypatch):
         from wet_mcp.config import settings
         from wet_mcp.llm import get_llm_config
 
+        for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY"):
+            monkeypatch.delenv(k, raising=False)
         original = settings.llm_models
         settings.llm_models = ""
 
         try:
             config = get_llm_config()
-            assert config["model"] == "gemini/gemini-3-flash-preview"
+            # Empty chain + no provider key -> no model (LLM feature off).
+            assert config["model"] is None
         finally:
             settings.llm_models = original
 
