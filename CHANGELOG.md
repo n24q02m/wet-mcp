@@ -2,6 +2,70 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.18 (2026-06-21)
+
+### Bug Fixes
+
+- Add cf:deploy script for live wrangler deploy
+  ([#1407](https://github.com/n24q02m/wet-mcp/pull/1407),
+  [`36fd28c`](https://github.com/n24q02m/wet-mcp/commit/36fd28c24d3ec8e4883761241702226c726a5bf4))
+
+- Annotate e2e env dict[str, str] for ty 0.0.51 Popen overload
+  ([#1394](https://github.com/n24q02m/wet-mcp/pull/1394),
+  [`47dc0c3`](https://github.com/n24q02m/wet-mcp/commit/47dc0c3bb32d17122854fc2bac9d6967ea0d8213))
+
+- Drop env-derived value from cf_deploy log (CodeQL js/clear-text-logging)
+  ([#1407](https://github.com/n24q02m/wet-mcp/pull/1407),
+  [`36fd28c`](https://github.com/n24q02m/wet-mcp/commit/36fd28c24d3ec8e4883761241702226c726a5bf4))
+
+- Keep wet container on standard-1 (basic 4GB disk too small for crawl4ai image); sleepAfter=5m
+  carries the idle-cost win ([#1408](https://github.com/n24q02m/wet-mcp/pull/1408),
+  [`4803f97`](https://github.com/n24q02m/wet-mcp/commit/4803f970c5f6751220586c636bf82fa76fd6bc7e))
+
+- Key-gate the wet LLM default chain (no keyless cloud model)
+  ([#1402](https://github.com/n24q02m/wet-mcp/pull/1402),
+  [`96c7b65`](https://github.com/n24q02m/wet-mcp/commit/96c7b65bcd8160033658a9a5fd0e87d5e441785f))
+
+- Make LLM gate + embed/rerank backend sub-aware in multi-user
+  ([#1405](https://github.com/n24q02m/wet-mcp/pull/1405),
+  [`d04e075`](https://github.com/n24q02m/wet-mcp/commit/d04e07595bd3687cf7c1bf30307ec41654f6f773))
+
+- Resolve per-sub api_key in dispatch instead of mutating os.environ
+  ([#1401](https://github.com/n24q02m/wet-mcp/pull/1401),
+  [`e11b1be`](https://github.com/n24q02m/wet-mcp/commit/e11b1be6c6c3337463b5a7e722ed5bc6d7699fbd))
+
+- Rightsize CF container to fit $10 budget ([#1406](https://github.com/n24q02m/wet-mcp/pull/1406),
+  [`b96b21f`](https://github.com/n24q02m/wet-mcp/commit/b96b21f4ca1c2104287255902aec84fb22d70d03))
+
+- Surface SearXNG URL field on relay + skip GDrive device-code on Cloudflare
+  ([#1403](https://github.com/n24q02m/wet-mcp/pull/1403),
+  [`c222069`](https://github.com/n24q02m/wet-mcp/commit/c2220697d431ff69f9926abaa72c8c5eb7d9ed42))
+
+- **deps**: Update non-major dependencies ([#1392](https://github.com/n24q02m/wet-mcp/pull/1392),
+  [`9894870`](https://github.com/n24q02m/wet-mcp/commit/9894870d118d5c5e6049bd0ba28d4294fd75ac73))
+
+### Chores
+
+- **deps**: Bump the uv group across 1 directory with 2 updates
+  ([#1404](https://github.com/n24q02m/wet-mcp/pull/1404),
+  [`236c612`](https://github.com/n24q02m/wet-mcp/commit/236c612dfc40a812e1f2deedcd3e9c53d5bbdea5))
+
+- **deps**: Lock file maintenance ([#1394](https://github.com/n24q02m/wet-mcp/pull/1394),
+  [`47dc0c3`](https://github.com/n24q02m/wet-mcp/commit/47dc0c3bb32d17122854fc2bac9d6967ea0d8213))
+
+- **deps**: Update actions/checkout action to v7
+  ([#1393](https://github.com/n24q02m/wet-mcp/pull/1393),
+  [`602dd24`](https://github.com/n24q02m/wet-mcp/commit/602dd24a1408f9eb800cfe7947a30578ccdd2e91))
+
+- **deps**: Update dependency langsmith to v0.8.18 [security]
+  ([#1398](https://github.com/n24q02m/wet-mcp/pull/1398),
+  [`4d49575`](https://github.com/n24q02m/wet-mcp/commit/4d495754034aa1349de7d3069f4652500a901b41))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to d0a0a75
+  ([#1391](https://github.com/n24q02m/wet-mcp/pull/1391),
+  [`11be254`](https://github.com/n24q02m/wet-mcp/commit/11be254635933300601db26b41623c716fa63ba4))
+
+
 ## v3.3.0-beta.17 (2026-06-20)
 
 ### Bug Fixes
