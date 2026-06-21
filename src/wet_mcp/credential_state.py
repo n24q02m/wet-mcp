@@ -57,6 +57,7 @@ CLOUD_KEYS = [
     "GEMINI_API_KEY",
     "OPENAI_API_KEY",
     "COHERE_API_KEY",
+    "ANTHROPIC_API_KEY",
     "XAI_API_KEY",
 ]
 
@@ -321,6 +322,51 @@ def credentials_for_current_request() -> dict[str, str]:
     if sub is None:
         return {k: v for k, v in os.environ.items() if k in CLOUD_KEYS and v}
     return read_for_sub(sub)
+
+
+# LLM-provider key env vars, in fallback-priority order. Used by the
+# sub-aware LLM availability gates (agent_orchestrator.detect_llm_provider /
+# llm._has_llm_provider). GOOGLE_API_KEY is the GEMINI alias; ANTHROPIC and
+# XAI round out the litellm-passthrough providers the relay form offers.
+LLM_PROVIDER_KEYS = (
+    "GEMINI_API_KEY",
+    "GOOGLE_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "XAI_API_KEY",
+)
+
+
+def detect_llm_provider_key() -> str | None:
+    """Return the first available LLM-provider key env name, or ``None``.
+
+    Sub-aware: in HTTP multi-user mode (``_current_sub`` set) it reads the
+    request's per-sub bucket via :func:`credentials_for_current_request` so
+    per-sub keys -- which never live in ``os.environ`` -- are seen. In stdio /
+    single-user mode it additionally consults ``os.environ`` directly so the
+    GEMINI alias ``GOOGLE_API_KEY`` (not a ``CLOUD_KEYS`` member) is still
+    honored. Order is the litellm fallback priority.
+
+    Centralises the availability check that ``agent_orchestrator`` and ``llm``
+    used to hand-maintain against an ``os.getenv`` tuple that (a) omitted
+    ANTHROPIC and (b) was blind to per-sub buckets.
+    """
+    sub = _current_sub.get()
+    creds = credentials_for_current_request()
+    for key in LLM_PROVIDER_KEYS:
+        if creds.get(key):
+            return key
+        # Single-user only: also honor env vars outside CLOUD_KEYS (the
+        # GOOGLE->GEMINI alias). Per-sub mode must NOT fall back to os.environ
+        # (that would read another process-global value, not this user's).
+        if sub is None and os.getenv(key):
+            return key
+    return None
+
+
+def has_llm_provider() -> bool:
+    """Whether any LLM provider key is available for the current request."""
+    return detect_llm_provider_key() is not None
 
 
 def api_key_for_model(model: str) -> str | None:

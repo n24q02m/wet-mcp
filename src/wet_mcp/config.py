@@ -384,6 +384,10 @@ class Settings(BaseSettings):
         "jina_ai/jina-reranker-v3",
         "cohere/rerank-v3.5",
     )
+    _DEFAULT_LLM_CHAIN = (
+        "gemini/gemini-3-flash-preview",
+        "openai/gpt-5.4-mini-2026-03-17",
+    )
 
     def _key_available(self, env_var: str) -> bool:
         """Whether a provider key is set (env or GOOGLE->GEMINI alias)."""
@@ -395,6 +399,44 @@ class Settings(BaseSettings):
             if canonical == env_var and os.getenv(alias):
                 return True
         return False
+
+    def _key_available_in(self, env_var: str, creds: dict[str, str]) -> bool:
+        """Whether a provider key is present in an explicit ``creds`` dict.
+
+        Multi-user analogue of :meth:`_key_available`: instead of reading
+        ``os.environ`` (which never holds per-sub keys, and whose mutation
+        would bleed one user's key into another's concurrent request), it
+        consults the request-scoped per-sub credential bucket. The GOOGLE ->
+        GEMINI alias is honored the same way.
+        """
+        if creds.get(env_var):
+            return True
+        aliases = getattr(self, "_ENV_ALIASES", {})
+        for alias, canonical in aliases.items():
+            if canonical == env_var and creds.get(alias):
+                return True
+        return False
+
+    def _chain_for_creds(
+        self,
+        explicit: str,
+        default: tuple[str, ...],
+        creds: dict[str, str],
+    ) -> list[str]:
+        """Resolve a model chain from an explicit ``<TASK>_MODELS`` value or
+        the curated default, key-gated against an explicit ``creds`` dict.
+
+        Mirrors :meth:`_chain` for the per-sub (HTTP multi-user) path: an
+        explicit chain submitted by the user is used verbatim; otherwise the
+        curated default is filtered to models whose provider key is in the
+        sub's bucket (none -> empty -> local ONNX). No ``os.environ`` reads,
+        so a second sub never inherits the first sub's chain.
+        """
+        if explicit:
+            return [m.strip() for m in explicit.split(",") if m.strip()]
+        return [
+            m for m in default if self._key_available_in(key_env_for_model(m), creds)
+        ]
 
     def _chain(self, primary: str, legacy: str, default: tuple[str, ...]) -> list[str]:
         if primary:
@@ -435,10 +477,38 @@ class Settings(BaseSettings):
         # verbatim; an empty env falls to the curated default filtered to models
         # whose provider key is configured (none -> [] -> LLM feature off, never
         # a keyless cloud model that 401s at call time).
-        return self._chain(
-            self.llm_models,
-            "",
-            ("gemini/gemini-3-flash-preview", "openai/gpt-5.4-mini-2026-03-17"),
+        return self._chain(self.llm_models, "", self._DEFAULT_LLM_CHAIN)
+
+    # --- Per-sub (HTTP multi-user) chain resolution ---
+    #
+    # The single-user *_chain() methods above key-gate against ``os.environ``.
+    # In remote multi-user mode per-sub keys live in the request's PerPluginStore
+    # bucket (never in ``os.environ``), so these *_chain_for_creds variants
+    # resolve the chain from that explicit dict. An explicit ``<TASK>_MODELS``
+    # submitted by the user takes the chain field; otherwise the curated default
+    # is filtered to the providers the sub has a key for.
+
+    def embedding_chain_for_creds(self, creds: dict[str, str]) -> list[str]:
+        return self._chain_for_creds(
+            creds.get("EMBEDDING_MODELS", ""),
+            self._DEFAULT_EMBEDDING_CHAIN,
+            creds,
+        )
+
+    def rerank_chain_for_creds(self, creds: dict[str, str]) -> list[str]:
+        if not self.rerank_enabled:
+            return []
+        return self._chain_for_creds(
+            creds.get("RERANK_MODELS", ""),
+            self._DEFAULT_RERANK_CHAIN,
+            creds,
+        )
+
+    def llm_chain_for_creds(self, creds: dict[str, str]) -> list[str]:
+        return self._chain_for_creds(
+            creds.get("LLM_MODELS", ""),
+            self._DEFAULT_LLM_CHAIN,
+            creds,
         )
 
     # --- Embedding resolution ---

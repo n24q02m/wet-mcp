@@ -232,10 +232,59 @@ class Qwen3Reranker:
 
 _backend: RerankerBackend | None = None
 
+# Shared local ONNX reranker for the HTTP multi-user path. Local inference is
+# stateless and key-free, so one instance is safely shared across subs. Lazy
+# so single-user / stdio deployments never download the model unnecessarily.
+_shared_local_backend: Qwen3Reranker | None = None
+
 
 def get_reranker() -> RerankerBackend | None:
-    """Get the current reranker backend singleton."""
+    """Get the current reranker backend singleton (startup-resolved)."""
     return _backend
+
+
+def _shared_local_reranker() -> Qwen3Reranker:
+    """Return the process-shared local ONNX reranker backend (lazy)."""
+    global _shared_local_backend
+    if _shared_local_backend is None:
+        _shared_local_backend = Qwen3Reranker()
+    return _shared_local_backend
+
+
+def resolve_rerank_backend_for_request() -> RerankerBackend | None:
+    """Resolve the reranker backend for the CURRENT request.
+
+    * **Stdio / single-user HTTP** (``_current_sub`` is ``None``): return the
+      module-level startup singleton (:func:`get_reranker`). Unchanged.
+
+    * **HTTP multi-user** (``_current_sub`` set): resolve PER REQUEST from the
+      sub's credential bucket. If the sub has a cloud rerank chain whose
+      provider key is present, build a fresh request-scoped
+      :class:`CloudReranker` carrying that sub's key explicitly. Otherwise fall
+      back to the process-shared local ONNX reranker.
+
+    A per-sub request NEVER rebinds the module-level ``_backend`` singleton, so
+    one user's cloud reranker/key can't serve another concurrent user.
+    """
+    from wet_mcp.config import settings
+    from wet_mcp.credential_state import (
+        api_key_for_model,
+        credentials_for_current_request,
+        get_current_sub,
+    )
+
+    if get_current_sub() is None:
+        return get_reranker()
+
+    if not settings.rerank_enabled:
+        return None
+
+    creds = credentials_for_current_request()
+    chain = settings.rerank_chain_for_creds(creds)
+    if chain:
+        model = chain[0]
+        return CloudReranker(model=model, api_key=api_key_for_model(model))
+    return _shared_local_reranker()
 
 
 def init_reranker(

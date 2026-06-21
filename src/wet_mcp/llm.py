@@ -46,13 +46,18 @@ def _strip_provider(model: str) -> str:
 
 
 def _has_llm_provider() -> bool:
-    """Check if any LLM provider API key is configured."""
-    return bool(
-        os.getenv("GEMINI_API_KEY")
-        or os.getenv("GOOGLE_API_KEY")
-        or os.getenv("OPENAI_API_KEY")
-        or os.getenv("XAI_API_KEY")
-    )
+    """Check if any LLM provider API key is configured.
+
+    Sub-aware (delegates to ``credential_state.has_llm_provider``): in HTTP
+    multi-user mode it reads the request's per-sub credential bucket (keys
+    that never live in ``os.environ``), and in stdio / single-user it reads
+    ``os.environ`` (incl. the GOOGLE->GEMINI alias). Now also recognises
+    ANTHROPIC_API_KEY — dispatch is litellm passthrough, which supports
+    anthropic/*, so the gate no longer drifts from the relay's offer.
+    """
+    from wet_mcp.credential_state import has_llm_provider
+
+    return has_llm_provider()
 
 
 def _detect_provider(model: str) -> str:
