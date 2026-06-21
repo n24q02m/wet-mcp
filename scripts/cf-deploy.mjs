@@ -82,7 +82,6 @@ console.log(`$ ${cmd} ${args.join(" ")}`);
 try {
   if (dryRun) {
     console.log("(--dry-run) resolved config written; not invoking wrangler deploy.");
-    console.log(substituted);
     process.exit(0);
   }
   const result = spawnSync(cmd, args, { stdio: "inherit", shell: true });
