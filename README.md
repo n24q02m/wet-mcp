@@ -60,6 +60,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 - [Features](#features)
 - [Status](#status)
 - [Quick install](#quick-install)
+- [Configuration](#configuration)
 - [Documentation](#documentation)
 - [Tools](#tools)
 - [Comparison](#comparison)
@@ -77,14 +78,14 @@ mcp-name: io.github.n24q02m/wet-mcp
 
 ## Features
 
-- **Web Search** -- Embedded SearXNG metasearch (Google, Bing, DuckDuckGo, Brave) with query expansion, TTL cache (1 h general / 5 min time-sensitive), standardized citation format, and 200-token snippet cap
+- **Web Search** -- Embedded SearXNG metasearch (Google, Bing, DuckDuckGo, Brave) with query expansion, TTL cache (1 h general / 5 min time-sensitive), standardized citation format, and 200-token snippet cap. Optional cloud search backends (Tavily, Brave, Exa) as a fallback chain via `SEARCH_BACKENDS`
 - **Academic Research** -- Search Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
 - **Library Docs** -- Auto-discover and index documentation with FTS5 hybrid search, HyDE-enhanced retrieval, and version-specific docs
 - **Content Extract** -- 5-strategy escalation chain via `n24q02m-web-core` `ScrapingAgent` (`basic_http` -> `tls_spoof` -> `headless` Crawl4AI), markitdown bridge for low-tier HTML/MD fallback, smart chunks structured output (clean text + markdown + JSON-LD + code blocks + metadata), batch processing (up to 50 URLs), deep crawling, site mapping
 - **Local File Conversion** -- Convert PDF, DOCX, XLSX, CSV, HTML, EPUB, PPTX to Markdown
-- **Media** -- List + download images / videos / audio files. `analyze` deprecated v&lt;auto&gt;+ -- use `imagine-mcp.understand` for vision/audio inference
+- **Media** -- List + download images / videos / audio files. `analyze` was removed in v2.0.0 -- use `imagine-mcp.understand` for vision/audio inference
 - **Anti-bot** -- Stealth strategies bypass Cloudflare, Medium, LinkedIn, Twitter
-- **Zero Config** -- Built-in local Qwen3 embedding + reranking, no API keys needed. Optional cloud providers (Jina AI, Gemini, OpenAI, Cohere) for higher-quality vectors
+- **Zero Config** -- Built-in local Qwen3 embedding + reranking, no API keys needed. Optional cloud providers (Jina AI, Gemini, OpenAI, Cohere, xAI, Anthropic) selected per task via the `EMBEDDING_MODELS` / `RERANK_MODELS` / `LLM_MODELS` model chains for higher-quality vectors and LLM features
 - **Sync** -- Cross-machine sync of indexed docs via Google Drive (OAuth Device Code, no browser redirect)
 
 ## Quick install
@@ -94,7 +95,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 /plugin marketplace add n24q02m/claude-plugins
 /plugin install wet-mcp@n24q02m-plugins
 
-# Method 1 (CLI): direct uvx invocation
+# Method 2 (CLI): direct uvx invocation
 claude mcp add wet -- uvx wet-mcp
 
 # Method 3 (recommended for HTTP / multi-device / OAuth)
@@ -110,25 +111,80 @@ and the paste-to-agent snippets at
 [claude-plugins/plugins/wet-mcp/setup-with-agent.md](https://github.com/n24q02m/claude-plugins/blob/main/plugins/wet-mcp/setup-with-agent.md)
 (per Spec F single source of truth).
 
+## Configuration
+
+wet runs zero-config out of the box: web search uses an embedded local SearXNG,
+and embedding/reranking fall back to the bundled local Qwen3 ONNX models when no
+cloud keys are set. For higher-quality results, point each task at a cloud model
+chain. All settings are plain environment variables (no app prefix) -- in the
+HTTP self-host mode they are entered through the browser setup form instead.
+
+**Model chains** (CSV `provider/model,provider/model`; order = fallback). Leave a
+chain empty to use the local ONNX models (embedding/rerank) or to disable LLM
+features (LLM):
+
+| Env var | Task | Empty default |
+|---|---|---|
+| `EMBEDDING_MODELS` | Embeddings for docs search | Local Qwen3-Embedding ONNX |
+| `RERANK_MODELS` | Result reranking | Local Qwen3-Reranker ONNX |
+| `LLM_MODELS` | `extract(action="agent")` synthesis | LLM features disabled |
+
+**Provider keys** -- the provider is inferred from each model's prefix; supply the
+matching key (litellm `<PROVIDER>_API_KEY` convention):
+
+| Model prefix | Key env var | Get it at |
+|---|---|---|
+| `jina_ai/` | `JINA_AI_API_KEY` | jina.ai/api-key |
+| `gemini/` | `GEMINI_API_KEY` | aistudio.google.com/apikey |
+| `openai/` (or bare) | `OPENAI_API_KEY` | platform.openai.com |
+| `cohere/` | `COHERE_API_KEY` | dashboard.cohere.com |
+| `xai/` | `XAI_API_KEY` | console.x.ai |
+| `anthropic/` | `ANTHROPIC_API_KEY` | console.anthropic.com |
+
+Any other litellm provider works via env passthrough -- see
+[litellm provider docs](https://docs.litellm.ai/docs/providers) for its key name.
+
+**Search backends** -- `SEARCH_BACKENDS` (CSV, runtime fallback chain) over
+`searxng` (default, local) plus optional cloud providers `tavily` / `brave` /
+`exa`. Point at an external SearXNG with `SEARXNG_URL`. Cloud providers need
+`TAVILY_API_KEY` / `BRAVE_API_KEY` / `EXA_API_KEY`.
+
+**Docs sync** -- `SYNC_ENABLED` (default `true`), `GOOGLE_DRIVE_CLIENT_ID`
+(required for sync), `SYNC_FOLDER` (default `wet-mcp`), `SYNC_INTERVAL` (default
+`300`s). Sync uses Google Drive over the OAuth Device Code flow (no browser
+redirect).
+
+**HTTP self-host** -- `MCP_TRANSPORT=http`, `PUBLIC_URL=<your-domain>`. The setup
+form is gated by `MCP_RELAY_PASSWORD`; multi-user deployments also require
+`CREDENTIAL_SECRET` (per-user vault key) and `MCP_DCR_SERVER_SECRET`.
+
+Example stdio config (cloud chains):
+
+```json
+{
+  "mcpServers": {
+    "wet": {
+      "command": "uvx",
+      "args": ["wet-mcp"],
+      "env": {
+        "EMBEDDING_MODELS": "jina_ai/jina-embeddings-v5-text-small",
+        "RERANK_MODELS": "jina_ai/jina-reranker-v3",
+        "LLM_MODELS": "gemini/gemini-3-flash-preview",
+        "JINA_AI_API_KEY": "jina_xxx",
+        "GEMINI_API_KEY": "AIza_xxx"
+      }
+    }
+  }
+}
+```
+
 ## Status
 
-> **2026-05-02 -- Architecture stabilization update**
->
-> Past months saw significant churn around credential handling and the daemon-bridge auto-spawn pattern. This caused multi-process races, browser tab spam, and inconsistent setup UX across plugins. **As of v&lt;auto&gt;, the architecture is stable**: 2 clean modes (stdio + HTTP), no daemon-bridge layer, no auto-spawn from stdio.
->
-> Apologies for the instability period. If you encountered issues with prior versions, please update to v&lt;auto&gt;+ and follow the current [setup docs](https://mcp.n24q02m.com/servers/wet-mcp/setup/) -- most prior workarounds are no longer needed.
->
-> **Related plugins from the same author**:
-> - [wet-mcp](https://github.com/n24q02m/wet-mcp) -- Web search + content extraction
-> - [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) -- Persistent AI memory
-> - [imagine-mcp](https://github.com/n24q02m/imagine-mcp) -- Image/video understanding + generation
-> - [better-notion-mcp](https://github.com/n24q02m/better-notion-mcp) -- Notion API
-> - [better-email-mcp](https://github.com/n24q02m/better-email-mcp) -- Email management
-> - [better-telegram-mcp](https://github.com/n24q02m/better-telegram-mcp) -- Telegram
-> - [better-godot-mcp](https://github.com/n24q02m/better-godot-mcp) -- Godot Engine
-> - [better-code-review-graph](https://github.com/n24q02m/better-code-review-graph) -- Code review knowledge graph
->
-> All plugins share the same architecture (this spec) -- install once, learn pattern transfers.
+Stable architecture with two transports: **stdio** (default, local) and
+**HTTP** (self-host, OAuth-gated). No daemon-bridge layer and no auto-spawn
+from stdio. The `media.analyze` action was removed in the v2.0.0 BREAKING
+release -- see [`docs/migration.md`](docs/migration.md) for the upgrade
+recipe. Current release line: v3.x.
 
 ## Documentation
 
@@ -158,7 +214,7 @@ In-repo references (Spec F single source of truth: setup docs live in
 |:-----|:------------|
 | `search` | Web (SearXNG metasearch), news, images, academic research (Scholar / arXiv / PubMed / CrossRef / Semantic Scholar / BASE), library docs (HyDE + FTS5), find similar pages. Includes `docs_resolve` (library name -> ranked id), `docs_query` (version-aware + topic + 5000-token cap), `docs_lock_project` (Cabinets project pin via pyproject / package.json / go.mod / Cargo.toml manifest detection). |
 | `extract` | URL -> smart chunks dict (`clean_text` + `markdown` + `structured_data` + `code_blocks` + `metadata`) via web-core 5-strategy chain. Batch processing (up to 50 URLs), deep crawling, site mapping, local file conversion (PDF/DOCX/XLSX/PPTX/EPUB), structured extraction (JSON Schema) |
-| `media` | `list` (discover URLs from gallery pages), `download` (SSRF-safe). `analyze` deprecated v&lt;auto&gt;+ -- forwards to `imagine-mcp.understand` |
+| `media` | `list` (discover URLs from gallery pages), `download` (SSRF-safe). `analyze` was removed in v2.0.0 -- use `imagine-mcp.understand` instead |
 | `config` | `status`, `set`, `cache_clear`, `docs_reindex`, `warmup`, `setup_sync`, `setup_status`, `setup_skip`, `setup_reset`, `setup_complete` |
 | `help` | Per-tool documentation: `search`, `extract`, `media`, `config` |
 | `config__open_relay` | Re-trigger the zero-config relay setup flow (prints a fresh relay URL for the browser form). Registered via `mcp-core`'s `register_open_relay_tool` so an LLM can restart setup without a manual restart. |
