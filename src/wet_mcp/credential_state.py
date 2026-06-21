@@ -390,6 +390,16 @@ def poll_until_readable(sub: str | None, retries: int = 8, delay: float = 0.5) -
     return False
 
 
+def _sync_redundant_on_cf() -> bool:
+    """Whether Google Drive docs-sync is redundant on this deployment.
+
+    On Cloudflare the docs DB is D1 + Vectorize (durable across container
+    recreate), so the GDrive delta-sync is redundant. Skip the device-code flow
+    there so the relay never offers a non-functional Google Drive setup.
+    """
+    return os.environ.get("DOCS_DB_BACKEND", "").strip().lower() == "cf-d1"
+
+
 def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:
     """Save credentials from OAuth form to ``config.json`` and apply to environment.
 
@@ -434,7 +444,11 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
         try:
             from wet_mcp.config import settings as s
 
-            if s.google_drive_client_id and s.google_drive_client_secret:
+            if (
+                s.google_drive_client_id
+                and s.google_drive_client_secret
+                and not _sync_redundant_on_cf()
+            ):
                 import httpx
 
                 response = httpx.post(
@@ -506,7 +520,11 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
     try:
         from wet_mcp.config import settings as s
 
-        if s.google_drive_client_id and s.google_drive_client_secret:
+        if (
+            s.google_drive_client_id
+            and s.google_drive_client_secret
+            and not _sync_redundant_on_cf()
+        ):
             import httpx
 
             response = httpx.post(

@@ -86,6 +86,7 @@ RELAY_SCHEMA: dict[str, Any] = {
             "task": "search",
             "suggestedModels": _SEARCH_BACKENDS,
             "providerKeys": {
+                "searxng": "SEARXNG_URL",
                 "tavily": "TAVILY_API_KEY",
                 "brave": "BRAVE_API_KEY",
                 "exa": "EXA_API_KEY",
@@ -138,6 +139,23 @@ RELAY_SCHEMA: dict[str, Any] = {
         _key_field(
             "EXA_API_KEY", "Exa API Key", "exa_...", "https://dashboard.exa.ai/api-keys"
         ),
+        {
+            # SearXNG is a named backend (not a model-prefix provider): selecting
+            # it in the search chain derives this field via providerKeys so the
+            # user can point at an external instance. Blank -> auto-started local
+            # SearXNG. Optional basic-auth via env SEARXNG_AUTH_USER/PASS.
+            "key": "SEARXNG_URL",
+            "label": "SearXNG URL (external instance)",
+            "type": "url",
+            "placeholder": "https://searxng.example.com",
+            "helpText": (
+                "Point at an external SearXNG. Leave blank to use the local "
+                "auto-started instance. Basic-auth (if any): set env "
+                "SEARXNG_AUTH_USER / SEARXNG_AUTH_PASS."
+            ),
+            "derived": True,
+            "required": False,
+        },
         {
             "key": "GITHUB_TOKEN",
             "label": "GitHub Personal Access Token",
