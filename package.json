@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test:worker": "vitest run tests/worker.test.ts",
-    "cf:dryrun": "wrangler deploy --dry-run --outdir .wrangler-dryrun"
+    "cf:dryrun": "wrangler deploy --dry-run --outdir .wrangler-dryrun",
+    "cf:deploy": "node scripts/cf-deploy.mjs"
   },
   "devDependencies": {
     "@cloudflare/containers": "^0.3.7",
