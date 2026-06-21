@@ -14,7 +14,7 @@
       // image first: `docker pull ghcr.io/n24q02m/wet-mcp:beta && docker tag ... wet-mcp:beta
       // && wrangler containers push wet-mcp:beta`, then fill <YOUR_ACCOUNT_ID>.
       "image": "registry.cloudflare.com/<YOUR_ACCOUNT_ID>/wet-mcp:beta",
-      "instance_type": "basic",
+      "instance_type": "standard-1",
       "max_instances": 10
     }
   ],
