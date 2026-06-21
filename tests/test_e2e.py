@@ -588,7 +588,7 @@ async def test_http_oauth_full_flow(request, tmp_path):
 
     # --- Phase 2: Start server in HTTP mode ---
     print("\n=== Phase 2: Start server ===", flush=True)
-    env = {
+    env: dict[str, str] = {
         **os.environ,
         "LOG_LEVEL": "WARNING",
         "CACHE_DIR": str(tmp_path),
