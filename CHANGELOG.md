@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.20 (2026-06-22)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.18.0b19 (relay model-search catalog + OAuth refresh-TTL)
+  ([#1412](https://github.com/n24q02m/wet-mcp/pull/1412),
+  [`4137709`](https://github.com/n24q02m/wet-mcp/commit/4137709ad8f16fc38042f07c03a866d3f8f7f301))
+
+
 ## v3.3.0-beta.19 (2026-06-22)
 
 ### Bug Fixes
