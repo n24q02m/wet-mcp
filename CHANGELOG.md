@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.19 (2026-06-22)
+
+### Bug Fixes
+
+- Correct README doc rot from bot-PR + migration churn
+  ([#1409](https://github.com/n24q02m/wet-mcp/pull/1409),
+  [`e63ad53`](https://github.com/n24q02m/wet-mcp/commit/e63ad5355b65737babf5e078907192d2a4a38e6b))
+
+- Pin CF container max_instances to 3 ([#1411](https://github.com/n24q02m/wet-mcp/pull/1411),
+  [`f8a3dec`](https://github.com/n24q02m/wet-mcp/commit/f8a3dec16b79fb41260d3d3730d40a2229dec42f))
+
+### Chores
+
+- **deps**: Lock file maintenance ([#1410](https://github.com/n24q02m/wet-mcp/pull/1410),
+  [`5726a74`](https://github.com/n24q02m/wet-mcp/commit/5726a747435dd89fc107c1d69779c4339792349f))
+
+
 ## v3.3.0-beta.18 (2026-06-21)
 
 ### Bug Fixes
