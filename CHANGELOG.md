@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.21 (2026-06-22)
+
+### Bug Fixes
+
+- Force real litellm to win unclecode-litellm file collision to restore catalog/LLM
+  ([#1413](https://github.com/n24q02m/wet-mcp/pull/1413),
+  [`ddca53d`](https://github.com/n24q02m/wet-mcp/commit/ddca53dab0c959c298018f7ac3837d53f61746e1))
+
+
 ## v3.3.0-beta.20 (2026-06-22)
 
 ### Bug Fixes
