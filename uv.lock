@@ -1776,7 +1776,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.18.0b16"
+version = "1.18.0b17"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1791,9 +1791,9 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/37/56/4b7f384b3f0e1b11103c037bcf0e3c2114447e3e99fea6014b6ca201babe/n24q02m_mcp_core-1.18.0b16.tar.gz", hash = "sha256:acc9c97798aea53a2897d29bcf17ed35a730897534ec7e1d0792f156e20c68a8", size = 294322, upload-time = "2026-06-20T01:56:29.858Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c1/2d/a2d450c24537562990075017b084e599d635d9d6eccc4555d07e08289cec/n24q02m_mcp_core-1.18.0b17.tar.gz", hash = "sha256:20f248e87bfa624b773b9de72a2d72514cd94c683a0e3c461925604294f5eea0", size = 296350, upload-time = "2026-06-21T14:04:58.503Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bf/5c/8f1bd872923b961c7183cc2bfde0132c9920b67f129d55a1afa8ced61f40/n24q02m_mcp_core-1.18.0b16-py3-none-any.whl", hash = "sha256:8f4c9936d1cc933c1dfe1b43da329b4155e5432f67f78345e403f2387812135a", size = 163277, upload-time = "2026-06-20T01:56:28.592Z" },
+    { url = "https://files.pythonhosted.org/packages/2b/f4/e697dc528ae5117d8923b34ab68de06bb541c152b28cbe30a876de97a7dc/n24q02m_mcp_core-1.18.0b17-py3-none-any.whl", hash = "sha256:6822068967c1257459058f45731ac5da88f4e1672bad0e99a1a2311930985f2a", size = 164476, upload-time = "2026-06-21T14:04:57.004Z" },
 ]
 
 [package.optional-dependencies]
@@ -3435,7 +3435,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "3.3.0b17"
+version = "3.3.0b18"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
