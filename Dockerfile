@@ -39,6 +39,17 @@ RUN sed -i '/^\[tool\.uv\.sources\]/,/^$/d' pyproject.toml && \
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
+# crawl4ai pulls `unclecode-litellm` (a hard fork that ships files under the same
+# top-level `litellm/` package as real `litellm`). The two distributions collide
+# on `litellm/constants.py`; install order decides which wins, and when the fork's
+# older constants.py (no REDIS_CIRCUIT_BREAKER_FAILURE_THRESHOLD) lands last the
+# real litellm 1.89.x redis_cache.py fails to import -> mcp_core.llm.catalog dies.
+# Reinstall real litellm LAST so its files are authoritative, then a build-time
+# smoke test fails the build loud rather than ever shipping a broken litellm.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install --reinstall-package litellm "litellm==$(uv pip show litellm | awk '/^Version:/ {print $2}')" \
+    && uv run python -c "import litellm; from litellm.constants import REDIS_CIRCUIT_BREAKER_FAILURE_THRESHOLD; from mcp_core.llm.catalog import list_models; n=len(list_models(modes=('chat',), configured_only=False, limit=5000)); assert n > 100, f'catalog too small: {n}'; print(f'litellm import OK, catalog chat models={n}')"
+
 # Install SearXNG from GitHub (zip archive + no-build-isolation for speed)
 # Then patch version_frozen.py (zip has no .git for version detection)
 RUN --mount=type=cache,target=/root/.cache/uv \
