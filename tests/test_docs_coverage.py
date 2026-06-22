@@ -1408,7 +1408,7 @@ class TestStripNavBlocks:
         """Removes blocks of 8+ consecutive nav link lines."""
         nav_lines = [f"- [Page {i}](https://example.com/page{i})" for i in range(10)]
         content = "# Title\n\nIntro text.\n\n" + "\n".join(nav_lines) + "\n\nContent."
-        result = _strip_nav_blocks(content)
+        result = "\n".join(_strip_nav_blocks(content.splitlines()))
         assert "Page 5" not in result
         assert "Intro text." in result
         assert "Content." in result
@@ -1417,7 +1417,7 @@ class TestStripNavBlocks:
         """Keeps blocks of fewer than 8 nav link lines."""
         nav_lines = [f"- [Page {i}](https://example.com/page{i})" for i in range(3)]
         content = "# Title\n\n" + "\n".join(nav_lines) + "\n\nContent."
-        result = _strip_nav_blocks(content)
+        result = "\n".join(_strip_nav_blocks(content.splitlines()))
         assert "Page 1" in result
 
 
@@ -1431,7 +1431,7 @@ class TestStripNavHeadingBlocks:
         """Removes 5+ consecutive same-level headings with no content."""
         headings = "\n".join([f"## Topic {i}" for i in range(7)])
         content = "# Title\n\nIntro.\n\n" + headings + "\n\nContent."
-        result = _strip_nav_heading_blocks(content)
+        result = "\n".join(_strip_nav_heading_blocks(content.splitlines()))
         assert "Topic 3" not in result
         assert "Intro." in result
 
@@ -1442,13 +1442,13 @@ class TestStripNavHeadingBlocks:
             lines.append(f"## Section {i}")
             lines.append("x" * 100)  # Substantial content
         content = "\n".join(lines)
-        result = _strip_nav_heading_blocks(content)
+        result = "\n".join(_strip_nav_heading_blocks(content.splitlines()))
         assert "Section 3" in result
 
     def test_fewer_than_5_headings_unchanged(self):
         """Content with fewer than 5 headings is returned unchanged."""
         content = "## A\nText\n## B\nText\n## C\nText"
-        result = _strip_nav_heading_blocks(content)
+        result = "\n".join(_strip_nav_heading_blocks(content.splitlines()))
         assert result == content
 
 

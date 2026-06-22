@@ -4,3 +4,6 @@
 ## 2025-05-14 - Parallelize Batch API Calls
 **Learning:** Sequential batch API processing logic (e.g., in a `for` loop) can severely bottleneck processing of large inputs. `asyncio.gather` bounded by a semaphore effectively maximizes throughput without hitting rate limits.
 **Action:** When making numerous API calls (such as chunks of a large text for embeddings), use an `asyncio.Semaphore` with `asyncio.gather` instead of awaiting sequential iterations in a loop.
+## 2024-06-22 - [Optimized document cleaning pipeline]
+**Learning:** In `src/wet_mcp/sources/docs.py`, `_clean_doc_content` was doing repetitive `.splitlines()` and `\n.join()` operations inside helper functions, causing unnecessary string manipulations and memory allocation, especially for large documents.
+**Action:** Consolidate list/string conversions by changing intermediate functions to accept `list[str]` instead of strings. Always try to process lists sequentially or string conversions once.
