@@ -15,7 +15,7 @@
       // && wrangler containers push wet-mcp:beta`, then fill <YOUR_ACCOUNT_ID>.
       "image": "registry.cloudflare.com/<YOUR_ACCOUNT_ID>/wet-mcp:beta",
       "instance_type": "standard-1",
-      "max_instances": 3
+      "max_instances": 1
     }
   ],
   "durable_objects": {
