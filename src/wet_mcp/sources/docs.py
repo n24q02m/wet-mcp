@@ -18,6 +18,7 @@ import json
 import os
 import re
 import zlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -2023,7 +2024,7 @@ _MKDOCS_UI_RE = re.compile(
 _NAV_BLOCK_MIN_LINES = 8
 
 
-def _strip_nav_blocks(lines: list[str]) -> list[str]:
+def _strip_nav_blocks(lines: Sequence[str]) -> list[str]:
     """Remove navigation sidebar blocks from crawled content.
 
     Detects blocks of 8+ consecutive lines that look like site navigation
@@ -2054,7 +2055,7 @@ def _strip_nav_blocks(lines: list[str]) -> list[str]:
     return result
 
 
-def _strip_nav_heading_blocks(lines: list[str]) -> list[str]:
+def _strip_nav_heading_blocks(lines: Sequence[str]) -> list[str]:
     """Remove navigation-like blocks of consecutive headings.
 
     Navigation sidebars from rendered HTML sometimes produce long sequences
@@ -2077,7 +2078,7 @@ def _strip_nav_heading_blocks(lines: list[str]) -> list[str]:
             headings[i] = (len(m.group(1)), m.group(2))
 
     if len(headings) < 5:
-        return lines
+        return list(lines)
 
     # Find runs of same-level headings with minimal content between them
     nav_lines: set[int] = set()
@@ -2109,7 +2110,7 @@ def _strip_nav_heading_blocks(lines: list[str]) -> list[str]:
             i += 1
 
     if not nav_lines:
-        return lines
+        return list(lines)
 
     return [line for i, line in enumerate(lines) if i not in nav_lines]
 
