@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.22 (2026-06-23)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.18.0b20 (relay catalog Jina/normalize + keyword)
+  ([#1417](https://github.com/n24q02m/wet-mcp/pull/1417),
+  [`1e7df27`](https://github.com/n24q02m/wet-mcp/commit/1e7df27b1b75eab35640e56fc77fc60f2cc360a3))
+
+- Bump mcp-core to 1.18.0b20 for relay catalog + drop hardcoded suggestions
+  ([#1417](https://github.com/n24q02m/wet-mcp/pull/1417),
+  [`1e7df27`](https://github.com/n24q02m/wet-mcp/commit/1e7df27b1b75eab35640e56fc77fc60f2cc360a3))
+
+### Features
+
+- Drop hardcoded model suggestions; relay dropdown is now catalog-driven
+  ([#1417](https://github.com/n24q02m/wet-mcp/pull/1417),
+  [`1e7df27`](https://github.com/n24q02m/wet-mcp/commit/1e7df27b1b75eab35640e56fc77fc60f2cc360a3))
+
+
 ## v3.3.0-beta.21 (2026-06-22)
 
 ### Bug Fixes
