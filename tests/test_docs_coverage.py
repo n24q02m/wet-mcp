@@ -1408,17 +1408,19 @@ class TestStripNavBlocks:
         """Removes blocks of 8+ consecutive nav link lines."""
         nav_lines = [f"- [Page {i}](https://example.com/page{i})" for i in range(10)]
         content = "# Title\n\nIntro text.\n\n" + "\n".join(nav_lines) + "\n\nContent."
-        result = _strip_nav_blocks(content)
-        assert "Page 5" not in result
-        assert "Intro text." in result
-        assert "Content." in result
+        result = _strip_nav_blocks(content.splitlines())
+        result_str = "\n".join(result)
+        assert "Page 5" not in result_str
+        assert "Intro text." in result_str
+        assert "Content." in result_str
 
     def test_keeps_short_link_list(self):
         """Keeps blocks of fewer than 8 nav link lines."""
         nav_lines = [f"- [Page {i}](https://example.com/page{i})" for i in range(3)]
         content = "# Title\n\n" + "\n".join(nav_lines) + "\n\nContent."
-        result = _strip_nav_blocks(content)
-        assert "Page 1" in result
+        result = _strip_nav_blocks(content.splitlines())
+        result_str = "\n".join(result)
+        assert "Page 1" in result_str
 
 
 # ---------------------------------------------------------------------------
@@ -1431,9 +1433,10 @@ class TestStripNavHeadingBlocks:
         """Removes 5+ consecutive same-level headings with no content."""
         headings = "\n".join([f"## Topic {i}" for i in range(7)])
         content = "# Title\n\nIntro.\n\n" + headings + "\n\nContent."
-        result = _strip_nav_heading_blocks(content)
-        assert "Topic 3" not in result
-        assert "Intro." in result
+        result = _strip_nav_heading_blocks(content.splitlines())
+        result_str = "\n".join(result)
+        assert "Topic 3" not in result_str
+        assert "Intro." in result_str
 
     def test_keeps_headings_with_content(self):
         """Keeps headings that have substantial content between them."""
@@ -1442,14 +1445,15 @@ class TestStripNavHeadingBlocks:
             lines.append(f"## Section {i}")
             lines.append("x" * 100)  # Substantial content
         content = "\n".join(lines)
-        result = _strip_nav_heading_blocks(content)
-        assert "Section 3" in result
+        result = _strip_nav_heading_blocks(content.splitlines())
+        result_str = "\n".join(result)
+        assert "Section 3" in result_str
 
     def test_fewer_than_5_headings_unchanged(self):
         """Content with fewer than 5 headings is returned unchanged."""
         content = "## A\nText\n## B\nText\n## C\nText"
-        result = _strip_nav_heading_blocks(content)
-        assert result == content
+        result = _strip_nav_heading_blocks(content.splitlines())
+        assert result == content.splitlines()
 
 
 # ---------------------------------------------------------------------------

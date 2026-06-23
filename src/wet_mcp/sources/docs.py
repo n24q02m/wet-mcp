@@ -2023,7 +2023,7 @@ _MKDOCS_UI_RE = re.compile(
 _NAV_BLOCK_MIN_LINES = 8
 
 
-def _strip_nav_blocks(content: str) -> str:
+def _strip_nav_blocks(lines: list[str]) -> list[str]:
     """Remove navigation sidebar blocks from crawled content.
 
     Detects blocks of 8+ consecutive lines that look like site navigation
@@ -2031,7 +2031,6 @@ def _strip_nav_blocks(content: str) -> str:
     This targets MkDocs Material sidebars, Sphinx toctrees, and similar
     navigation structures that leak into crawled markdown.
     """
-    lines = content.splitlines()
     result: list[str] = []
     nav_block: list[str] = []
 
@@ -2052,10 +2051,10 @@ def _strip_nav_blocks(content: str) -> str:
     if len(nav_block) < _NAV_BLOCK_MIN_LINES:
         result.extend(nav_block)
 
-    return "\n".join(result)
+    return result
 
 
-def _strip_nav_heading_blocks(content: str) -> str:
+def _strip_nav_heading_blocks(lines: list[str]) -> list[str]:
     """Remove navigation-like blocks of consecutive headings.
 
     Navigation sidebars from rendered HTML sometimes produce long sequences
@@ -2070,8 +2069,6 @@ def _strip_nav_heading_blocks(content: str) -> str:
     When 5+ consecutive headings at the same level have <= 50 chars of text
     between them, they are stripped as navigation artifacts.
     """
-    lines = content.splitlines()
-
     # Build heading map: line_index -> (level, text)
     headings: dict[int, tuple[int, str]] = {}
     for i, line in enumerate(lines):
@@ -2080,7 +2077,7 @@ def _strip_nav_heading_blocks(content: str) -> str:
             headings[i] = (len(m.group(1)), m.group(2))
 
     if len(headings) < 5:
-        return content
+        return lines
 
     # Find runs of same-level headings with minimal content between them
     nav_lines: set[int] = set()
@@ -2112,9 +2109,9 @@ def _strip_nav_heading_blocks(content: str) -> str:
             i += 1
 
     if not nav_lines:
-        return content
+        return lines
 
-    return "\n".join(line for i, line in enumerate(lines) if i not in nav_lines)
+    return [line for i, line in enumerate(lines) if i not in nav_lines]
 
 
 # Patterns that indicate a page was blocked by bot protection (Cloudflare,
@@ -2187,14 +2184,18 @@ def _clean_doc_content(content: str) -> str:
     # Remove TOC anchor links (- [Title](#section))
     content = _TOC_LINK_RE.sub("", content)
 
+    # ⚡ Bolt Optimization: optimize text processing by passing a `list[str]`
+    # through multiple helper functions instead of repeatedly splitting and
+    # re-joining strings via `splitlines()` and `\n.join()`.
+    lines = content.splitlines()
+
     # Remove navigation sidebar blocks (MkDocs Material, Sphinx, etc.)
-    content = _strip_nav_blocks(content)
+    lines = _strip_nav_blocks(lines)
 
     # Remove navigation heading blocks (## Topic A / ## Topic B / ...)
-    content = _strip_nav_heading_blocks(content)
+    lines = _strip_nav_heading_blocks(lines)
 
     # Filter noise lines
-    lines = content.splitlines()
     cleaned = []
     for line in lines:
         stripped = line.strip()
