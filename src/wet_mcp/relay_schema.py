@@ -11,19 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
-_EMBEDDING_SUGGESTED = [
-    "jina_ai/jina-embeddings-v5-text-small",
-    "gemini/gemini-embedding-001",
-    "openai/text-embedding-3-large",
-    "cohere/embed-multilingual-v3.0",
-]
-_RERANK_SUGGESTED = ["jina_ai/jina-reranker-v3", "cohere/rerank-v3.5"]
-_LLM_SUGGESTED = [
-    "gemini/gemini-3-flash-preview",
-    "openai/gpt-5.4-mini-2026-03-17",
-    "anthropic/claude-haiku-4-5",
-    "xai/grok-4-fast",
-]
+# model-chain tasks (embedding/rerank/chat) carry NO hardcoded suggestions: the
+# relay widget's dropdown is fully catalog-driven (live Jina + normalized litellm
+# from mcp-core). Only the search-chain below keeps a curated list, since its
+# named backends are not litellm models and have no catalog to search.
 # Named search backends (no model-prefix inference; resolved via providerKeys).
 _SEARCH_BACKENDS = ["searxng", "tavily", "brave", "exa"]
 
@@ -57,7 +48,6 @@ RELAY_SCHEMA: dict[str, Any] = {
             "label": "Embedding models",
             "type": "model-chain",
             "task": "embedding",
-            "suggestedModels": _EMBEDDING_SUGGESTED,
             "hasLocal": True,
             "placeholder": "add embedding model…",
         },
@@ -66,7 +56,6 @@ RELAY_SCHEMA: dict[str, Any] = {
             "label": "Rerank models",
             "type": "model-chain",
             "task": "rerank",
-            "suggestedModels": _RERANK_SUGGESTED,
             "hasLocal": True,
             "placeholder": "add rerank model…",
         },
@@ -75,7 +64,6 @@ RELAY_SCHEMA: dict[str, Any] = {
             "label": "LLM models",
             "type": "model-chain",
             "task": "chat",
-            "suggestedModels": _LLM_SUGGESTED,
             "hasLocal": False,
             "placeholder": "add LLM model…",
         },
