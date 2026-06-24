@@ -2021,16 +2021,23 @@ async def _fetch_and_chunk_docs(
                 f"(min {_MIN_GH_CHUNKS}), falling through"
             )
 
+    # ⚡ Bolt Optimization: Bound markdown chunking concurrency.
+    # chunk_markdown uses CPU-bound regex parsing via asyncio.to_thread.
+    # Bounding it with a semaphore prevents unbounded thread allocation and
+    # CPU starvation when parsing dozens of large GitHub files or docs pages.
+    chunk_sem = asyncio.Semaphore(10)
+
     async def _process_page(page: dict) -> list[dict]:
-        p_chunks = await asyncio.to_thread(
-            chunk_markdown,
-            content=page["content"],
-            url=page.get("url", ""),
-        )
-        for chunk in p_chunks:
-            if not chunk.get("title") and page.get("title"):
-                chunk["title"] = page["title"]
-        return p_chunks
+        async with chunk_sem:
+            p_chunks = await asyncio.to_thread(
+                chunk_markdown,
+                content=page["content"],
+                url=page.get("url", ""),
+            )
+            for chunk in p_chunks:
+                if not chunk.get("title") and page.get("title"):
+                    chunk["title"] = page["title"]
+            return p_chunks
 
     # Tier 1: Try GitHub raw markdown (clean content, no JS rendering)
     gh_target = repo_url or docs_url
