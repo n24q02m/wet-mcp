@@ -58,9 +58,9 @@ def _existing_indexes(table: str) -> set[str]:
     return {row[0] for row in rows}
 
 
-def _add_column_if_missing(table: str, name: str, ddl: str) -> None:
+def _add_column_if_missing(table: str, name: str, stmt: str) -> None:
     if name not in _existing_columns(table):
-        op.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+        op.execute(stmt)
     else:
         logger.info(f"docs_002: {table}.{name} already present, skipping")
 
@@ -68,14 +68,36 @@ def _add_column_if_missing(table: str, name: str, ddl: str) -> None:
 def upgrade() -> None:
     """Add Phase 2 columns idempotently + backfill key fields."""
     # libraries
-    _add_column_if_missing("libraries", "canonical_name", "canonical_name TEXT")
-    _add_column_if_missing("libraries", "homepage", "homepage TEXT")
-    _add_column_if_missing("libraries", "github_url", "github_url TEXT")
-    _add_column_if_missing("libraries", "package_managers", "package_managers TEXT")
-    _add_column_if_missing("libraries", "tier", "tier INTEGER NOT NULL DEFAULT 2")
-    _add_column_if_missing("libraries", "last_indexed_at", "last_indexed_at REAL")
     _add_column_if_missing(
-        "libraries", "total_versions", "total_versions INTEGER NOT NULL DEFAULT 0"
+        "libraries",
+        "canonical_name",
+        "ALTER TABLE libraries ADD COLUMN canonical_name TEXT",
+    )
+    _add_column_if_missing(
+        "libraries", "homepage", "ALTER TABLE libraries ADD COLUMN homepage TEXT"
+    )
+    _add_column_if_missing(
+        "libraries", "github_url", "ALTER TABLE libraries ADD COLUMN github_url TEXT"
+    )
+    _add_column_if_missing(
+        "libraries",
+        "package_managers",
+        "ALTER TABLE libraries ADD COLUMN package_managers TEXT",
+    )
+    _add_column_if_missing(
+        "libraries",
+        "tier",
+        "ALTER TABLE libraries ADD COLUMN tier INTEGER NOT NULL DEFAULT 2",
+    )
+    _add_column_if_missing(
+        "libraries",
+        "last_indexed_at",
+        "ALTER TABLE libraries ADD COLUMN last_indexed_at REAL",
+    )
+    _add_column_if_missing(
+        "libraries",
+        "total_versions",
+        "ALTER TABLE libraries ADD COLUMN total_versions INTEGER NOT NULL DEFAULT 0",
     )
 
     # Backfill canonical_name + last_indexed_at for pre-existing rows.
@@ -88,14 +110,30 @@ def upgrade() -> None:
     )
 
     # versions
-    _add_column_if_missing("versions", "release_date", "release_date REAL")
-    _add_column_if_missing("versions", "source_url", "source_url TEXT")
+    _add_column_if_missing(
+        "versions", "release_date", "ALTER TABLE versions ADD COLUMN release_date REAL"
+    )
+    _add_column_if_missing(
+        "versions", "source_url", "ALTER TABLE versions ADD COLUMN source_url TEXT"
+    )
 
     # doc_chunks
-    _add_column_if_missing("doc_chunks", "section", "section TEXT")
-    _add_column_if_missing("doc_chunks", "topic", "topic TEXT")
-    _add_column_if_missing("doc_chunks", "content_hash", "content_hash TEXT")
-    _add_column_if_missing("doc_chunks", "token_count", "token_count INTEGER")
+    _add_column_if_missing(
+        "doc_chunks", "section", "ALTER TABLE doc_chunks ADD COLUMN section TEXT"
+    )
+    _add_column_if_missing(
+        "doc_chunks", "topic", "ALTER TABLE doc_chunks ADD COLUMN topic TEXT"
+    )
+    _add_column_if_missing(
+        "doc_chunks",
+        "content_hash",
+        "ALTER TABLE doc_chunks ADD COLUMN content_hash TEXT",
+    )
+    _add_column_if_missing(
+        "doc_chunks",
+        "token_count",
+        "ALTER TABLE doc_chunks ADD COLUMN token_count INTEGER",
+    )
 
     if "idx_doc_chunks_lib_ver_topic" not in _existing_indexes("doc_chunks"):
         op.execute(
