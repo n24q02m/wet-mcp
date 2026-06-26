@@ -36,8 +36,6 @@ from wet_mcp.sources.docs import (
     _safe_httpx_client,
     _score_url_by_query,
     _sort_urls_by_query,
-    _strip_nav_blocks,
-    _strip_nav_heading_blocks,
     _try_github_raw_docs,
     chunk_llms_txt,
     chunk_markdown,
@@ -1399,16 +1397,16 @@ class TestTryLlmsTxtCoverage:
 
 
 # ---------------------------------------------------------------------------
-# _strip_nav_blocks
+# _clean_doc_content
 # ---------------------------------------------------------------------------
 
 
-class TestStripNavBlocks:
+class TestCleanDocContent:
     def test_removes_long_nav_block(self):
         """Removes blocks of 8+ consecutive nav link lines."""
         nav_lines = [f"- [Page {i}](https://example.com/page{i})" for i in range(10)]
         content = "# Title\n\nIntro text.\n\n" + "\n".join(nav_lines) + "\n\nContent."
-        result = _strip_nav_blocks(content)
+        result = _clean_doc_content(content)
         assert "Page 5" not in result
         assert "Intro text." in result
         assert "Content." in result
@@ -1417,21 +1415,14 @@ class TestStripNavBlocks:
         """Keeps blocks of fewer than 8 nav link lines."""
         nav_lines = [f"- [Page {i}](https://example.com/page{i})" for i in range(3)]
         content = "# Title\n\n" + "\n".join(nav_lines) + "\n\nContent."
-        result = _strip_nav_blocks(content)
+        result = _clean_doc_content(content)
         assert "Page 1" in result
 
-
-# ---------------------------------------------------------------------------
-# _strip_nav_heading_blocks
-# ---------------------------------------------------------------------------
-
-
-class TestStripNavHeadingBlocks:
     def test_removes_consecutive_headings(self):
         """Removes 5+ consecutive same-level headings with no content."""
         headings = "\n".join([f"## Topic {i}" for i in range(7)])
         content = "# Title\n\nIntro.\n\n" + headings + "\n\nContent."
-        result = _strip_nav_heading_blocks(content)
+        result = _clean_doc_content(content)
         assert "Topic 3" not in result
         assert "Intro." in result
 
@@ -1442,22 +1433,15 @@ class TestStripNavHeadingBlocks:
             lines.append(f"## Section {i}")
             lines.append("x" * 100)  # Substantial content
         content = "\n".join(lines)
-        result = _strip_nav_heading_blocks(content)
+        result = _clean_doc_content(content)
         assert "Section 3" in result
 
     def test_fewer_than_5_headings_unchanged(self):
         """Content with fewer than 5 headings is returned unchanged."""
         content = "## A\nText\n## B\nText\n## C\nText"
-        result = _strip_nav_heading_blocks(content)
+        result = _clean_doc_content(content)
         assert result == content
 
-
-# ---------------------------------------------------------------------------
-# _clean_doc_content
-# ---------------------------------------------------------------------------
-
-
-class TestCleanDocContent:
     def test_removes_nav_lines(self):
         """Removes navigation UI lines."""
         content = "# Title\n\nContent here.\n\nSkip to main content\n\nMore content."

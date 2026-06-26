@@ -4,3 +4,6 @@
 ## 2025-05-14 - Parallelize Batch API Calls
 **Learning:** Sequential batch API processing logic (e.g., in a `for` loop) can severely bottleneck processing of large inputs. `asyncio.gather` bounded by a semaphore effectively maximizes throughput without hitting rate limits.
 **Action:** When making numerous API calls (such as chunks of a large text for embeddings), use an `asyncio.Semaphore` with `asyncio.gather` instead of awaiting sequential iterations in a loop.
+## 2025-05-14 - String Processing and Allocation Overhead
+**Learning:** Functions that perform multiple passes over the same text via repeated `splitlines()` and `join()` calls generate massive temporary string allocations and garbage collection overhead. Furthermore, executing unanchored regex searches on every line is expensive compared to static string checks.
+**Action:** When filtering multiline text blocks, consolidate all line iterations into a single `splitlines()` loop. Pre-filter regex match conditions using tuple-based `str.startswith()` where possible, which operates in O(1) time and quickly bypasses engine overhead for the vast majority of string processing tasks.

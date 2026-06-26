@@ -2023,100 +2023,6 @@ _MKDOCS_UI_RE = re.compile(
 _NAV_BLOCK_MIN_LINES = 8
 
 
-def _strip_nav_blocks(content: str) -> str:
-    """Remove navigation sidebar blocks from crawled content.
-
-    Detects blocks of 8+ consecutive lines that look like site navigation
-    (bullet/numbered lists with full-URL markdown links) and removes them.
-    This targets MkDocs Material sidebars, Sphinx toctrees, and similar
-    navigation structures that leak into crawled markdown.
-    """
-    lines = content.splitlines()
-    result: list[str] = []
-    nav_block: list[str] = []
-
-    for line in lines:
-        if _NAV_LINK_LINE_RE.match(line):
-            nav_block.append(line)
-        else:
-            if len(nav_block) >= _NAV_BLOCK_MIN_LINES:
-                # Navigation block detected — discard it
-                pass
-            else:
-                # Short link list — keep it (could be legitimate content)
-                result.extend(nav_block)
-            nav_block = []
-            result.append(line)
-
-    # Handle trailing nav block
-    if len(nav_block) < _NAV_BLOCK_MIN_LINES:
-        result.extend(nav_block)
-
-    return "\n".join(result)
-
-
-def _strip_nav_heading_blocks(content: str) -> str:
-    """Remove navigation-like blocks of consecutive headings.
-
-    Navigation sidebars from rendered HTML sometimes produce long sequences
-    of same-level headings with no meaningful content between them::
-
-        ## Flexbox & Grid
-        ## Spacing
-        ## Sizing
-        ## Typography
-        ## Tables
-
-    When 5+ consecutive headings at the same level have <= 50 chars of text
-    between them, they are stripped as navigation artifacts.
-    """
-    lines = content.splitlines()
-
-    # Build heading map: line_index -> (level, text)
-    headings: dict[int, tuple[int, str]] = {}
-    for i, line in enumerate(lines):
-        m = _ANY_HEADING_RE.match(line.lstrip())
-        if m:
-            headings[i] = (len(m.group(1)), m.group(2))
-
-    if len(headings) < 5:
-        return content
-
-    # Find runs of same-level headings with minimal content between them
-    nav_lines: set[int] = set()
-    heading_indices = sorted(headings.keys())
-
-    i = 0
-    while i < len(heading_indices):
-        start_idx = heading_indices[i]
-        level = headings[start_idx][0]
-        run = [start_idx]
-
-        j = i + 1
-        while j < len(heading_indices):
-            idx = heading_indices[j]
-            if headings[idx][0] != level:
-                break
-            # Content between this heading and previous must be minimal
-            prev_idx = run[-1]
-            between = "\n".join(lines[k] for k in range(prev_idx + 1, idx)).strip()
-            if len(between) > 50:
-                break
-            run.append(idx)
-            j += 1
-
-        if len(run) >= 5:
-            nav_lines.update(run)
-            i = j
-        else:
-            i += 1
-
-    if not nav_lines:
-        return content
-
-    return "\n".join(line for i, line in enumerate(lines) if i not in nav_lines)
-
-
 # Patterns that indicate a page was blocked by bot protection (Cloudflare,
 # hCaptcha, reCAPTCHA, etc.).  When all crawled pages match these patterns
 # the content is useless; filtering them lets fallback tiers take over.
@@ -2161,6 +2067,27 @@ def _is_blocked_content(content: str) -> bool:
     return False
 
 
+_NAV_PREFIXES = (
+    "← Previous",
+    "Next →",
+    "Skip to content",
+    "Skip to main content",
+    "Table of contents",
+    "Table of Contents",
+    "On this page",
+    "Edit this page",
+    "Edit this on GitHub",
+    "Edit on page",
+    "Edit on GitHub",
+    "Suggest changes",
+    "Suggest edits",
+    "Was this page helpful?",
+    "Was this article helpful?",
+    "⭐ Star us",
+    "⭐ Star this",
+)
+
+
 def _clean_doc_content(content: str) -> str:
     """Strip noise from crawled documentation content.
 
@@ -2169,44 +2096,95 @@ def _clean_doc_content(content: str) -> str:
     navigation sidebar blocks, and navigation heading blocks.
     Applied before chunking to reduce index noise.
     """
-    # Remove YAML frontmatter (must be at start of content)
     content = _FRONTMATTER_RE.sub("", content)
-
-    # Remove badge images
     content = _BADGE_RE.sub("", content)
-
-    # Remove mkdocs admonition blocks (keep content readable)
     content = _ADMONITION_RE.sub("", content)
-
-    # Remove mkdocstrings directives
     content = _MKDOCSTRINGS_RE.sub("", content)
-
-    # Remove standalone HTML tags (not code/pre)
     content = _HTML_TAG_RE.sub("", content)
-
-    # Remove TOC anchor links (- [Title](#section))
     content = _TOC_LINK_RE.sub("", content)
 
-    # Remove navigation sidebar blocks (MkDocs Material, Sphinx, etc.)
-    content = _strip_nav_blocks(content)
-
-    # Remove navigation heading blocks (## Topic A / ## Topic B / ...)
-    content = _strip_nav_heading_blocks(content)
-
-    # Filter noise lines
+    # ⚡ Bolt Optimization: single consolidated loop to process nav blocks,
+    # heading nav blocks, and standard regex filters. Bypasses repetitive
+    # string split/joins, and pre-filters `_NAV_RE` using `str.startswith()`
     lines = content.splitlines()
+    if not lines:
+        return content
+
+    nav_block_start = -1
+    nav_block_len = 0
+    headings: dict[int, tuple[int, str]] = {}
+    nav_lines: set[int] = set()
+
+    for i, line in enumerate(lines):
+        if _NAV_LINK_LINE_RE.match(line):
+            if nav_block_len == 0:
+                nav_block_start = i
+            nav_block_len += 1
+        else:
+            if nav_block_len >= _NAV_BLOCK_MIN_LINES:
+                nav_lines.update(
+                    range(nav_block_start, nav_block_start + nav_block_len)
+                )
+            nav_block_len = 0
+
+            m = _ANY_HEADING_RE.match(line.lstrip())
+            if m:
+                headings[i] = (len(m.group(1)), m.group(2))
+
+    if nav_block_len >= _NAV_BLOCK_MIN_LINES:
+        nav_lines.update(range(nav_block_start, nav_block_start + nav_block_len))
+
+    if len(headings) >= 5:
+        heading_indices = sorted(headings.keys())
+        i = 0
+        while i < len(heading_indices):
+            start_idx = heading_indices[i]
+            level = headings[start_idx][0]
+            run = [start_idx]
+
+            j = i + 1
+            while j < len(heading_indices):
+                idx = heading_indices[j]
+                if headings[idx][0] != level:
+                    break
+
+                prev_idx = run[-1]
+                between_len = sum(
+                    len(lines[k].strip())
+                    for k in range(prev_idx + 1, idx)
+                    if k not in nav_lines
+                )
+                if between_len > 50:
+                    break
+
+                run.append(idx)
+                j += 1
+
+            if len(run) >= 5:
+                nav_lines.update(run)
+                i = j
+            else:
+                i += 1
+
     cleaned = []
-    for line in lines:
+    for i, line in enumerate(lines):
+        if i in nav_lines:
+            continue
+
         stripped = line.strip()
         if not stripped:
             cleaned.append(line)
             continue
-        if _NAV_RE.match(stripped):
-            continue
+
+        if stripped.startswith(_NAV_PREFIXES):
+            if _NAV_RE.match(stripped):
+                continue
+
         if _FOOTER_RE.match(stripped):
             continue
         if _MKDOCS_UI_RE.match(stripped):
             continue
+
         cleaned.append(line)
 
     return "\n".join(cleaned)
