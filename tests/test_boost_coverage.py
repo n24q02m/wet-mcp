@@ -2217,6 +2217,7 @@ class TestSetupTool:
             result = clear_model_cache("nonexistent/model")
             assert result is None
 
+    @patch("wet_mcp.config.settings.google_drive_client_secret", "dummy_secret")
     async def test_run_setup_sync_success(self):
         """setup sync returns success."""
         from wet_mcp.setup_tool import run_setup_sync
@@ -2229,6 +2230,7 @@ class TestSetupTool:
             result = await run_setup_sync()
             assert result["status"] == "ok"
 
+    @patch("wet_mcp.config.settings.google_drive_client_secret", "dummy_secret")
     async def test_run_setup_sync_failure(self):
         """setup sync returns failure."""
         from wet_mcp.setup_tool import run_setup_sync

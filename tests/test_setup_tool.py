@@ -166,6 +166,7 @@ class TestRunWarmup:
 class TestRunSetupSync:
     """Tests for run_setup_sync() returning structured dict."""
 
+    @patch("wet_mcp.config.settings.google_drive_client_secret", "dummy_secret")
     async def test_setup_sync_returns_dict_with_status(self):
         """run_setup_sync() must return a dict with 'status' key."""
         with patch("wet_mcp.sync.setup_google_auth", return_value=True):
@@ -177,6 +178,7 @@ class TestRunSetupSync:
         assert "status" in result
         assert result["status"] == "ok"
 
+    @patch("wet_mcp.config.settings.google_drive_client_secret", "dummy_secret")
     async def test_setup_sync_auth_fails(self):
         """Returns error when auth fails."""
         with patch("wet_mcp.sync.setup_google_auth", return_value=False):
@@ -187,6 +189,7 @@ class TestRunSetupSync:
         assert result["status"] == "error"
         assert "failed" in result["error"].lower()
 
+    @patch("wet_mcp.config.settings.google_drive_client_secret", "dummy_secret")
     async def test_setup_sync_exception(self):
         """Sync setup exception returns error dict."""
         with patch(
