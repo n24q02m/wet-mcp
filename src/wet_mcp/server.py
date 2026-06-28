@@ -2021,12 +2021,18 @@ async def _fetch_and_chunk_docs(
                 f"(min {_MIN_GH_CHUNKS}), falling through"
             )
 
+    # ⚡ Bolt Optimization: Bound concurrency for CPU-bound chunk_markdown
+    # Limit to 10 concurrent thread offloads to prevent thread pool exhaustion
+    # and main event loop starvation during large batch page processing.
+    sem = asyncio.Semaphore(10)
+
     async def _process_page(page: dict) -> list[dict]:
-        p_chunks = await asyncio.to_thread(
-            chunk_markdown,
-            content=page["content"],
-            url=page.get("url", ""),
-        )
+        async with sem:
+            p_chunks = await asyncio.to_thread(
+                chunk_markdown,
+                content=page["content"],
+                url=page.get("url", ""),
+            )
         for chunk in p_chunks:
             if not chunk.get("title") and page.get("title"):
                 chunk["title"] = page["title"]

@@ -4,3 +4,6 @@
 ## 2025-05-14 - Parallelize Batch API Calls
 **Learning:** Sequential batch API processing logic (e.g., in a `for` loop) can severely bottleneck processing of large inputs. `asyncio.gather` bounded by a semaphore effectively maximizes throughput without hitting rate limits.
 **Action:** When making numerous API calls (such as chunks of a large text for embeddings), use an `asyncio.Semaphore` with `asyncio.gather` instead of awaiting sequential iterations in a loop.
+## 2025-05-14 - Bound Concurrency for CPU-Bound Async Tasks
+**Learning:** Using `asyncio.to_thread` for CPU-bound tasks inside concurrent loops like `asyncio.gather` can spawn too many threads, leading to thread pool exhaustion and event loop starvation.
+**Action:** Always bound concurrency using an `asyncio.Semaphore` (e.g., `asyncio.Semaphore(10)`) when fanning out tasks that internally delegate to `asyncio.to_thread`.
