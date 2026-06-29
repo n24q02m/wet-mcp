@@ -1095,6 +1095,7 @@ async def search(  # noqa: PLR0913
             if not _docs_db:
                 return "Error: Docs database not initialized"
             from wet_mcp.sources.docs import (
+                DocsQueryOptions,
                 ingest_tier2,
                 query_docs,
                 resolve_library,
@@ -1147,9 +1148,11 @@ async def search(  # noqa: PLR0913
                 _docs_db,
                 lib_id,
                 query,
-                effective_version,
-                topic,
-                limit,
+                DocsQueryOptions(
+                    version=effective_version,
+                    topic=topic,
+                    limit=limit,
+                ),
             )
             return json.dumps(
                 {

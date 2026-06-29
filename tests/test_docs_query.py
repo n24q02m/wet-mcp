@@ -55,6 +55,7 @@ else:
 
 DocsDB = _db_mod.DocsDB
 query_docs = _docs_mod.query_docs
+DocsQueryOptions = _docs_mod.DocsQueryOptions
 DOCS_QUERY_TOKEN_CAP = _docs_mod.DOCS_QUERY_TOKEN_CAP
 
 
@@ -118,7 +119,9 @@ def _seed_library_with_versions(
 def test_docs_query_filters_by_version(db: DocsDB) -> None:
     lib_id, v18, v19 = _seed_library_with_versions(db)
 
-    results = query_docs(db, lib_id, query="useState", version="18.0.0")
+    results = query_docs(
+        db, lib_id, query="useState", options=DocsQueryOptions(version="18.0.0")
+    )
 
     assert len(results) >= 1
     for chunk in results:
@@ -131,7 +134,9 @@ def test_docs_query_filters_by_version(db: DocsDB) -> None:
 def test_docs_query_topic_filter(db: DocsDB) -> None:
     lib_id, _, _ = _seed_library_with_versions(db)
 
-    results = query_docs(db, lib_id, query="React", topic="useState")
+    results = query_docs(
+        db, lib_id, query="React", options=DocsQueryOptions(topic="useState")
+    )
     assert len(results) >= 1
     for chunk in results:
         assert chunk.get("title", "").lower().startswith("usestate"), (
@@ -149,7 +154,12 @@ def test_docs_query_pinned_version_not_indexed_returns_empty(
 ) -> None:
     lib_id, _, _ = _seed_library_with_versions(db)
     # Pin a version that does not exist.
-    assert query_docs(db, lib_id, query="useState", version="99.0.0") == []
+    assert (
+        query_docs(
+            db, lib_id, query="useState", options=DocsQueryOptions(version="99.0.0")
+        )
+        == []
+    )
 
 
 def test_docs_query_token_cap_enforced(db: DocsDB) -> None:
@@ -171,7 +181,9 @@ def test_docs_query_token_cap_enforced(db: DocsDB) -> None:
     db.add_chunks(version_id=ver_id, library_id=lib_id, chunks=chunks)
     db.mark_version_indexed(ver_id, page_count=20, chunk_count=20)
 
-    results = query_docs(db, lib_id, query="keyword", limit=20)
+    results = query_docs(
+        db, lib_id, query="keyword", options=DocsQueryOptions(limit=20)
+    )
     assert results, "Expected at least one chunk"
     total_tokens = sum(c.get("token_count", 0) for c in results)
     # Cap is 5000 — first chunk 2000 -> 2000, second 4000, third would be
@@ -201,7 +213,7 @@ def test_docs_query_estimates_tokens_when_count_missing(db: DocsDB) -> None:
     db.add_chunks(version_id=ver_id, library_id=lib_id, chunks=chunks)
     db.mark_version_indexed(ver_id, page_count=5, chunk_count=5)
 
-    results = query_docs(db, lib_id, query="x", limit=10)
+    results = query_docs(db, lib_id, query="x", options=DocsQueryOptions(limit=10))
     # Even with chars/4 estimation we should return at least one and respect cap.
     if results:
         used = sum(_docs_mod._estimate_tokens(c["content"]) for c in results)

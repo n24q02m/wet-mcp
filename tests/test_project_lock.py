@@ -66,6 +66,7 @@ DocsDB = _db_mod.DocsDB
 detect_manifests = _pl_mod.detect_manifests
 lock_project = _pl_mod.lock_project
 query_docs = _docs_mod.query_docs
+DocsQueryOptions = _docs_mod.DocsQueryOptions
 
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "projects"
@@ -243,6 +244,8 @@ def test_docs_query_respects_lock(db: DocsDB) -> None:
     )
 
     # Direct query_docs honors version pin only when caller passes it.
-    pinned_results = query_docs(db, lib_id, query="useState", version="18.0.0")
+    pinned_results = query_docs(
+        db, lib_id, query="useState", options=DocsQueryOptions(version="18.0.0")
+    )
     for chunk in pinned_results:
         assert "v18" in chunk.get("url", "")
