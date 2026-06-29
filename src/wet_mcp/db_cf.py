@@ -260,13 +260,28 @@ def _build_results_cf(scored, fts_chunks, d1: D1Backend, limit: int):
             adj_keys.add((url, ver, idx - 1))
             adj_keys.add((url, ver, idx + 1))
     adj_map: dict[tuple[str, str, int], str] = {}
-    for url, ver, idx in adj_keys:
-        row = d1.fetchone(
-            "SELECT content FROM doc_chunks WHERE url = ? AND version_id = ? AND chunk_index = ?",
-            [url, ver, idx],
-        )
-        if row:
-            adj_map[(url, ver, idx)] = row["content"]
+    if adj_keys:
+        # Avoid N+1 by batching (url, version_id, chunk_index) lookups.
+        # Safe traditional SQLite parameter limit is 999.
+        unique_keys = sorted(adj_keys)
+        batch_size = 333  # 333 * 3 = 999 params
+
+        for i in range(0, len(unique_keys), batch_size):
+            batch = unique_keys[i : i + batch_size]
+            placeholders = ",".join(["(?,?,?)"] * len(batch))
+            params = [val for key in batch for val in key]
+
+            # Security: Placeholders are constructed from static tokens (?,?,?)
+            # and strictly separated from the query structure.
+            sql = (
+                "SELECT url, version_id, chunk_index, content "
+                "FROM doc_chunks "
+                f"WHERE (url, version_id, chunk_index) IN ({placeholders})"
+            )
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            rows = d1.fetchall(sql, params)
+            for r in rows:
+                adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r["content"]
 
     results: list[dict] = []
     for cid, score in scored:

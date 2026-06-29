@@ -125,3 +125,39 @@ def test_cf_search_matches_sqlite_golden(cf_corpus, cf_golden_topk):
         assert overlap >= 2, (
             f"top-3 rank parity failed for {q!r}: {cf_top[:3]} vs {golden[:3]}"
         )
+
+
+def test_search_fetches_adjacent_context():
+    db = _backend()
+    db.upsert_library("alpha", docs_url="https://a")
+    lib = db.get_library("alpha")
+    db.upsert_version(lib["id"], "1.0")
+    ver = db.get_best_version(lib["id"], "1.0")
+    chunks = []
+    for p in range(3):
+        for i in range(3):
+            chunks.append(
+                {
+                    "id": f"c_{p}_{i}",
+                    "url": f"https://a/p{p}",
+                    "title": f"Page {p}",
+                    "chunk_index": i,
+                    "content": f"page {p} chunk {i}",
+                    "heading_path": "API",
+                }
+            )
+    db.add_chunks(ver["id"], lib["id"], chunks, embeddings=None)
+
+    # Search for "chunk 1", should return "page 0 chunk 1", "page 1 chunk 1", "page 2 chunk 1"
+    # They should all have context_before (chunk 0) and context_after (chunk 2)
+    results = db.search("chunk 1", limit=10)
+
+    found_pages = set()
+    for r in results:
+        for p in range(3):
+            if r["content"] == f"page {p} chunk 1":
+                assert r["context_before"] == f"page {p} chunk 0"
+                assert r["context_after"] == f"page {p} chunk 2"
+                found_pages.add(p)
+
+    assert found_pages == {0, 1, 2}
