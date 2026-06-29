@@ -897,29 +897,10 @@ class DocsDB:
         post ``docs_004_chunk_summaries`` for Phase 3).
         """
         now = _now_ts()
-
-        # Pre-generate IDs for all chunks
-        chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
-
-        # Detect optional columns once so we can branch on a single INSERT.
-        existing_cols = {
-            r[0]
-            for r in self._conn.execute(
-                "SELECT name FROM pragma_table_info(?)", ("doc_chunks",)
-            ).fetchall()
-        }
-        phase2_cols = [
-            c
-            for c in (
-                "topic",
-                "section",
-                "content_hash",
-                "token_count",
-                "summary",
-                "summary_provider",
-            )
-            if c in existing_cols
-        ]
+        optional_cols = self._get_optional_doc_chunks_columns()
+        chunk_ids, chunk_rows = self._prepare_chunk_rows(
+            version_id, library_id, chunks, optional_cols, now
+        )
 
         base_cols = (
             "id",
@@ -932,24 +913,7 @@ class DocsDB:
             "heading_path",
             "created_at",
         )
-        all_cols = base_cols + tuple(phase2_cols)
-
-        chunk_rows = []
-        for i, chunk in enumerate(chunks):
-            row = [
-                chunk_ids[i],
-                version_id,
-                library_id,
-                chunk.get("url", ""),
-                chunk.get("title", ""),
-                chunk.get("chunk_index", i),
-                chunk["content"],
-                chunk.get("heading_path", ""),
-                now,
-            ]
-            for col in phase2_cols:
-                row.append(chunk.get(col))
-            chunk_rows.append(tuple(row))
+        all_cols = base_cols + tuple(optional_cols)
 
         # Security: Validate all column names against a strict allowlist.
         for c in all_cols:
@@ -963,26 +927,85 @@ class DocsDB:
             chunk_rows,
         )
 
-        # Batch insert vector embeddings if available
-        if self._vec_enabled and embeddings:
-            vec_rows = []
-            for i, emb in enumerate(embeddings):
-                if i < len(chunk_ids) and emb:
-                    try:
-                        vec_rows.append((chunk_ids[i], _serialize_f32(emb)))
-                    except Exception as e:
-                        logger.debug(f"Failed to serialize embedding: {e}")
-            if vec_rows:
-                try:
-                    self._conn.executemany(
-                        "INSERT INTO doc_chunks_vec (id, embedding) VALUES (?, ?)",
-                        vec_rows,
-                    )
-                except Exception as e:
-                    logger.debug(f"Failed to batch-insert embeddings: {e}")
+        self._add_chunk_vectors(chunk_ids, embeddings)
 
         self._conn.commit()
         return len(chunks)
+
+    def _add_chunk_vectors(
+        self,
+        chunk_ids: list[str],
+        embeddings: list[list[float]] | None,
+    ) -> None:
+        """Batch insert vector embeddings if available."""
+        if not (self._vec_enabled and embeddings):
+            return
+
+        vec_rows = []
+        for i, emb in enumerate(embeddings):
+            if i < len(chunk_ids) and emb:
+                try:
+                    vec_rows.append((chunk_ids[i], _serialize_f32(emb)))
+                except Exception as e:
+                    logger.debug(f"Failed to serialize embedding: {e}")
+
+        if vec_rows:
+            try:
+                self._conn.executemany(
+                    "INSERT INTO doc_chunks_vec (id, embedding) VALUES (?, ?)",
+                    vec_rows,
+                )
+            except Exception as e:
+                logger.debug(f"Failed to batch-insert embeddings: {e}")
+
+    def _prepare_chunk_rows(
+        self,
+        version_id: str,
+        library_id: str,
+        chunks: list[dict],
+        optional_cols: list[str],
+        now: float,
+    ) -> tuple[list[str], list[tuple]]:
+        """Generate chunk IDs and prepare rows for database insertion."""
+        chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
+        chunk_rows = []
+        for i, chunk in enumerate(chunks):
+            row = [
+                chunk_ids[i],
+                version_id,
+                library_id,
+                chunk.get("url", ""),
+                chunk.get("title", ""),
+                chunk.get("chunk_index", i),
+                chunk["content"],
+                chunk.get("heading_path", ""),
+                now,
+            ]
+            for col in optional_cols:
+                row.append(chunk.get(col))
+            chunk_rows.append(tuple(row))
+        return chunk_ids, chunk_rows
+
+    def _get_optional_doc_chunks_columns(self) -> list[str]:
+        """Detect optional columns in doc_chunks table."""
+        existing_cols = {
+            r[0]
+            for r in self._conn.execute(
+                "SELECT name FROM pragma_table_info(?)", ("doc_chunks",)
+            ).fetchall()
+        }
+        return [
+            c
+            for c in (
+                "topic",
+                "section",
+                "content_hash",
+                "token_count",
+                "summary",
+                "summary_provider",
+            )
+            if c in existing_cols
+        ]
 
     def clear_version_chunks(self, version_id: str) -> int:
         """Remove all chunks for a version (before re-indexing)."""
