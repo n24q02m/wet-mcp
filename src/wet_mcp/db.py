@@ -1055,96 +1055,60 @@ class DocsDB:
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored
 
-    def search(
+    def _run_fts_search(
         self,
-        query: str,
-        library_name: str | None = None,
-        version: str | None = None,
-        limit: int = 10,
-        query_embedding: list[float] | None = None,
-    ) -> list[dict]:
-        """Hybrid search: FTS5 + optional vector + quality scoring.
-
-        Uses tiered FTS5 queries (AND -> OR fallback), BM25 column weights
-        (boosting title/heading matches), min-max score normalization,
-        and RRF fusion when vector search is available.
-        Recency is intentionally excluded -- all doc chunks share the same
-        indexing timestamp, making recency meaningless for static docs.
-
-        Args:
-            query: Search query text
-            library_name: Filter by library name
-            version: Filter by version
-            limit: Max results
-            query_embedding: Optional embedding vector for semantic search
-
-        Returns:
-            List of chunk dicts sorted by relevance score
-        """
-        # Resolve library/version filters
-        library_id = None
-        version_id = None
-        if library_name:
-            lib = self.get_library(library_name)
-            if not lib:
-                return []
-            library_id = lib["id"]
-            if version:
-                ver = self.get_best_version(library_id, version)
-                if ver:
-                    version_id = ver["id"]
-
-        candidate_limit = limit * 3
-
-        # --- FTS5 search with tiered queries + BM25 column weights ---
-        # Weights: id(0), content(2), title(3), heading_path(2)
-        # Flattened: content is the primary signal, title gets a moderate
-        # boost, heading_path gets minimal boost (BM25 already naturally
-        # up-weights matches in short fields via tf-idf).
-        fts_queries = _build_fts_queries(query)
+        fts_queries: list[str],
+        library_id: str | None,
+        version_id: str | None,
+        candidate_limit: int,
+    ) -> tuple[dict[str, float], dict[str, dict]]:
+        """Execute FTS5 search with tiered queries and min-max normalization."""
         fts_scores: dict[str, float] = {}
         fts_chunks: dict[str, dict] = {}
 
-        if fts_queries:
-            try:
-                subqueries = []
-                fts_params: list = []
-                for fts_query in fts_queries:
-                    sq = f"""
-                        SELECT * FROM (
-                            SELECT c.*,
-                                   l.name AS _library_name,
-                                   bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
-                            FROM doc_chunks_fts f
-                            JOIN doc_chunks c ON f.id = c.id
-                            LEFT JOIN libraries l ON c.library_id = l.id
-                            WHERE doc_chunks_fts MATCH ?
-                            {" AND c.library_id = ?" if library_id else ""}
-                            {" AND c.version_id = ?" if version_id else ""}
-                            ORDER BY bm25_score LIMIT ?
-                        )
-                    """
-                    fts_params.append(fts_query)
-                    if library_id:
-                        fts_params.append(library_id)
-                    if version_id:
-                        fts_params.append(version_id)
-                    fts_params.append(candidate_limit)
-                    subqueries.append(sq)
+        if not fts_queries:
+            return fts_scores, fts_chunks
 
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                full_fts_sql = " UNION ALL ".join(subqueries)
-                rows = self._conn.execute(full_fts_sql, fts_params).fetchall()
-                for row in rows:
-                    chunk = dict(row)
-                    cid = chunk["id"]
-                    score = -chunk.pop("bm25_score", 0)
-                    # Keep the best score across tiers (PHRASE > AND > OR)
-                    if cid not in fts_scores or score > fts_scores[cid]:
-                        fts_scores[cid] = score
-                        fts_chunks[cid] = chunk
-            except Exception as e:
-                logger.debug(f"FTS search error: {e}")
+        try:
+            subqueries = []
+            fts_params: list = []
+            for fts_query in fts_queries:
+                sq = f"""
+                    SELECT * FROM (
+                        SELECT c.*,
+                               l.name AS _library_name,
+                               bm25(doc_chunks_fts, 0.0, 2.0, 3.0, 2.0) AS bm25_score
+                        FROM doc_chunks_fts f
+                        JOIN doc_chunks c ON f.id = c.id
+                        LEFT JOIN libraries l ON c.library_id = l.id
+                        WHERE doc_chunks_fts MATCH ?
+                        {" AND c.library_id = ?" if library_id else ""}
+                        {" AND c.version_id = ?" if version_id else ""}
+                        ORDER BY bm25_score LIMIT ?
+                    )
+                """
+                fts_params.append(fts_query)
+                if library_id:
+                    fts_params.append(library_id)
+                if version_id:
+                    fts_params.append(version_id)
+                fts_params.append(candidate_limit)
+                subqueries.append(sq)
+
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            full_fts_sql = " UNION ALL ".join(subqueries)
+            rows = self._conn.execute(full_fts_sql, fts_params).fetchall()
+            for row in rows:
+                chunk = dict(row)
+                cid = chunk["id"]
+                score = -chunk.pop("bm25_score", 0)
+                # Keep the best score across tiers (PHRASE > AND > OR)
+                if cid not in fts_scores or score > fts_scores[cid]:
+                    fts_scores[cid] = score
+                    fts_chunks[cid] = chunk
+        except Exception as e:
+            logger.debug(f"FTS search error: {e}")
+
         # Min-max normalize FTS scores to 0-1
         if fts_scores:
             min_f = min(fts_scores.values())
@@ -1155,7 +1119,17 @@ class DocsDB:
             else:
                 fts_scores = dict.fromkeys(fts_scores, 1.0)
 
-        # --- Vector search ---
+        return fts_scores, fts_chunks
+
+    def _run_vec_search(
+        self,
+        query_embedding: list[float] | None,
+        library_id: str | None,
+        version_id: str | None,
+        candidate_limit: int,
+        fts_chunks: dict[str, dict],
+    ) -> dict[str, float]:
+        """Execute vector matching and update fts_chunks for new hits."""
         vec_scores: dict[str, float] = {}
         if self._vec_enabled and query_embedding:
             try:
@@ -1191,17 +1165,14 @@ class DocsDB:
                         fts_chunks[chunk_id] = chunk_data
             except Exception as e:
                 logger.debug(f"Vector search error: {e}")
+        return vec_scores
 
-        # --- Combine scores ---
-        scored = self._combine_scores(fts_scores, vec_scores, fts_chunks)
-
-        # Build results with cross-chunk context + URL diversity limit
-        # Cap results per URL to avoid returning 4-5 chunks from the same page
-        max_per_url = 2
-        url_counts: dict[str, int] = {}
-        results = []
-
-        # ---- Prefetch adjacent chunks in one batch query ----
+    def _prefetch_adjacent_chunks(
+        self,
+        scored: list[tuple[str, float]],
+        fts_chunks: dict[str, dict],
+    ) -> dict[tuple[str, str, int], str]:
+        """Batch fetch adjacent chunks for cross-chunk context."""
         _adj_keys: list[tuple[str, str, int]] = []
         for _cid, _sc in scored:
             _ch = fts_chunks.get(_cid)
@@ -1215,33 +1186,91 @@ class DocsDB:
                 _adj_keys.append((_url, _ver, _idx + 1))
 
         _adj_map: dict[tuple[str, str, int], str] = {}
-        if _adj_keys:
-            # ⚡ Bolt Optimization: Use row-value IN to fetch all adjacent chunks in a single query.
-            # This avoids the N+1 query problem by batching multiple (url, version_id, chunk_index) tuples.
-            # We use sorted(set()) to ensure uniqueness and improve cache locality.
-            _unique_keys = sorted(set(_adj_keys))
-            _batch_size = (
-                32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
-            ) // 3
+        if not _adj_keys:
+            return _adj_map
 
-            for i in range(0, len(_unique_keys), _batch_size):
-                _batch = _unique_keys[i : i + _batch_size]
-                _placeholders = ",".join(["(?,?,?)"] * len(_batch))
-                _params = [item for key_tuple in _batch for item in key_tuple]
+        _unique_keys = sorted(set(_adj_keys))
+        _batch_size = (32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999) // 3
 
-                # Security: Placeholders are constructed from static tokens (?,?,?)
-                # and strictly separated from the query structure.
-                sql = (
-                    "SELECT url, version_id, chunk_index, content "
-                    "FROM doc_chunks "
-                    "WHERE (url, version_id, chunk_index) IN (" + _placeholders + ")"
-                )
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                rows = self._conn.execute(sql, _params).fetchall()
-                for r in rows:
-                    _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r[
-                        "content"
-                    ]
+        for i in range(0, len(_unique_keys), _batch_size):
+            _batch = _unique_keys[i : i + _batch_size]
+            _placeholders = ",".join(["(?,?,?)"] * len(_batch))
+            _params = [item for key_tuple in _batch for item in key_tuple]
+
+            sql = (
+                "SELECT url, version_id, chunk_index, content "
+                "FROM doc_chunks "
+                "WHERE (url, version_id, chunk_index) IN (" + _placeholders + ")"
+            )
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            rows = self._conn.execute(sql, _params).fetchall()
+            for r in rows:
+                _adj_map[(r["url"], r["version_id"], r["chunk_index"])] = r["content"]
+        return _adj_map
+
+    def search(
+        self,
+        query: str,
+        library_name: str | None = None,
+        version: str | None = None,
+        limit: int = 10,
+        query_embedding: list[float] | None = None,
+    ) -> list[dict]:
+        """Hybrid search: FTS5 + optional vector + quality scoring.
+
+        Uses tiered FTS5 queries (AND -> OR fallback), BM25 column weights
+        (boosting title/heading matches), min-max score normalization,
+        and RRF fusion when vector search is available.
+        Recency is intentionally excluded -- all doc chunks share the same
+        indexing timestamp, making recency meaningless for static docs.
+
+        Args:
+            query: Search query text
+            library_name: Filter by library name
+            version: Filter by version
+            limit: Max results
+            query_embedding: Optional embedding vector for semantic search
+
+        Returns:
+            List of chunk dicts sorted by relevance score
+        """
+        # Resolve library/version filters
+        library_id = None
+        version_id = None
+        if library_name:
+            lib = self.get_library(library_name)
+            if not lib:
+                return []
+            library_id = lib["id"]
+
+            if version:
+                ver = self.get_best_version(library_id, version)
+                if ver:
+                    version_id = ver["id"]
+
+        candidate_limit = limit * 3
+
+        fts_queries = _build_fts_queries(query)
+        fts_scores, fts_chunks = self._run_fts_search(
+            fts_queries, library_id, version_id, candidate_limit
+        )
+
+        vec_scores = self._run_vec_search(
+            query_embedding,
+            library_id,
+            version_id,
+            candidate_limit,
+            fts_chunks,
+        )
+
+        scored = self._combine_scores(fts_scores, vec_scores, fts_chunks)
+        _adj_map = self._prefetch_adjacent_chunks(scored, fts_chunks)
+
+        # Build results with cross-chunk context + URL diversity limit
+        # Cap results per URL to avoid returning 4-5 chunks from the same page
+        max_per_url = 2
+        url_counts: dict[str, int] = {}
+        results = []
 
         for cid, score in scored:
             if len(results) >= limit:
