@@ -446,76 +446,46 @@ def _sync_redundant_on_cf() -> bool:
     return os.environ.get("DOCS_DB_BACKEND", "").strip().lower() == "cf-d1"
 
 
-def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:
-    """Save credentials from OAuth form to ``config.json`` and apply to environment.
+def _trigger_gdrive_device_code(sub: str | None = None) -> dict | None:
+    """Trigger GDrive OAuth Device Code flow if configured."""
+    try:
+        from wet_mcp.config import settings as s
 
-    ``context`` carries the per-authorize ``sub`` issued by mcp-core's local
-    OAuth AS. In remote multi-user mode (``PUBLIC_URL`` set) we route the
-    credentials into a per-sub bucket via :func:`store_for_sub` so concurrent
-    users do not overwrite each other. In single-user mode the subject is
-    ignored and a single ``~/.wet-mcp/config.json`` on the host is reused.
+        if (
+            s.google_drive_client_id
+            and s.google_drive_client_secret
+            and not _sync_redundant_on_cf()
+        ):
+            import httpx
 
-    Called by the local OAuth AS when the user submits API keys via the
-    browser form. Writes to encrypted config file, applies to env vars
-    for immediate use, re-initializes providers, and shares keys with
-    sibling MCP servers.
-
-    Returns optional dict with next_step info (e.g., GDrive device code)
-    for the form to display.
-    """
-    global _state
-
-    # E.1: gate the first KV PUT on outbound-interception readiness (no-op for
-    # LocalFs / any backend without ready()). One probe per setup submit, at the
-    # single chokepoint both branches pass through.
-    _await_backend_ready()
-
-    # Remote multi-user branch: scope credential storage by JWT sub so
-    # concurrent /authorize sessions do not clobber each other. The GDrive
-    # device-code flow ALSO needs to be per-sub: token lands in
-    # ``~/.wet-mcp/subs/<sub>/tokens/google_drive.json`` so user A's
-    # refresh-token is invisible to user B sharing the same deployment.
-    if os.environ.get("PUBLIC_URL"):
-        sub = context.get("sub") if context else None
-        if not sub:
-            raise RuntimeError("multi-user mode: SubjectContext sub required")
-        store_for_sub(sub, config)
-        poll_until_readable(sub)  # E.2: confirm propagation before reporting success
-        _state = CredentialState.CONFIGURED
-        logger.info(f"Credentials saved for sub={sub} via remote multi-user form")
-
-        # Mirror the single-user GDrive trigger but pin token storage to
-        # this sub. Without this branch, multi-user mode silently skipped
-        # GDrive auth entirely (cross-user token leak gap, spec 04-25 #134).
-        try:
-            from wet_mcp.config import settings as s
-
-            if (
-                s.google_drive_client_id
-                and s.google_drive_client_secret
-                and not _sync_redundant_on_cf()
-            ):
-                import httpx
-
-                response = httpx.post(
-                    "https://oauth2.googleapis.com/device/code",
-                    data={
-                        "client_id": s.google_drive_client_id,
-                        "scope": "https://www.googleapis.com/auth/drive.file",
-                    },
-                    timeout=15.0,
-                )
-                if response.status_code == 200:
-                    device_data = response.json()
+            response = httpx.post(
+                "https://oauth2.googleapis.com/device/code",
+                data={
+                    "client_id": s.google_drive_client_id,
+                    "scope": "https://www.googleapis.com/auth/drive.file",
+                },
+                timeout=15.0,
+            )
+            if response.status_code == 200:
+                device_data = response.json()
+                if sub:
                     logger.info(
                         "GDrive device code (sub={}), user_code={}",
                         sub,
                         device_data.get("user_code"),
                     )
-                    import asyncio
-                    import threading
+                else:
+                    logger.info(
+                        "GDrive device code requested, user_code={}",
+                        device_data.get("user_code"),
+                    )
 
-                    def _poll() -> None:
+                # Start background polling for token
+                import asyncio
+                import threading
+
+                def _poll_gdrive_token() -> None:
+                    if sub:
                         asyncio.run(
                             _gdrive_token_poll(
                                 s.google_drive_client_id,
@@ -526,19 +496,57 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
                                 sub=sub,
                             )
                         )
+                    else:
+                        asyncio.run(
+                            _gdrive_token_poll(
+                                s.google_drive_client_id,
+                                s.google_drive_client_secret,
+                                device_data["device_code"],
+                                device_data.get("interval", 5),
+                                device_data.get("expires_in", 1800),
+                            )
+                        )
 
-                    threading.Thread(target=_poll, daemon=True).start()
-                    return {
-                        "type": "oauth_device_code",
-                        "verification_url": device_data["verification_url"],
-                        "user_code": device_data["user_code"],
-                    }
-        except Exception:
-            logger.opt(exception=True).debug(
-                "Multi-user GDrive device code request failed (non-fatal)"
-            )
-        return None
+                threading.Thread(target=_poll_gdrive_token, daemon=True).start()
 
+                if not sub:
+                    # Auto-launch the default browser at Google's device-code page.
+                    # Best-effort -- headless hosts silently no-op and the user
+                    # still sees the URL rendered in the credential form.
+                    from mcp_core import try_open_browser
+
+                    try_open_browser(device_data["verification_url"])
+
+                return {
+                    "type": "oauth_device_code",
+                    "verification_url": device_data["verification_url"],
+                    "user_code": device_data["user_code"],
+                }
+    except Exception:
+        logger.opt(exception=True).debug(
+            "GDrive device code request failed (non-fatal)"
+        )
+    return None
+
+
+def _save_credentials_multi_user(config: dict[str, str], sub: str) -> dict | None:
+    """Handle credential saving for remote multi-user mode."""
+    global _state
+
+    store_for_sub(sub, config)
+    poll_until_readable(sub)  # E.2: confirm propagation before reporting success
+    _state = CredentialState.CONFIGURED
+    logger.info(f"Credentials saved for sub={sub} via remote multi-user form")
+
+    # Mirror the single-user GDrive trigger but pin token storage to
+    # this sub. Without this branch, multi-user mode silently skipped
+    # GDrive auth entirely (cross-user token leak gap, spec 04-25 #134).
+    return _trigger_gdrive_device_code(sub=sub)
+
+
+def _save_credentials_single_user(config: dict[str, str]) -> dict | None:
+    """Handle credential saving for single-user mode."""
+    global _state
     from wet_mcp.relay_setup import apply_config
 
     # Persist to per-plugin store (~/.wet-mcp/config.json)
@@ -563,69 +571,47 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
         )
 
     # Trigger GDrive OAuth Device Code flow if configured
-    try:
-        from wet_mcp.config import settings as s
-
-        if (
-            s.google_drive_client_id
-            and s.google_drive_client_secret
-            and not _sync_redundant_on_cf()
-        ):
-            import httpx
-
-            response = httpx.post(
-                "https://oauth2.googleapis.com/device/code",
-                data={
-                    "client_id": s.google_drive_client_id,
-                    "scope": "https://www.googleapis.com/auth/drive.file",
-                },
-                timeout=15.0,
-            )
-            if response.status_code == 200:
-                device_data = response.json()
-                logger.info(
-                    "GDrive device code requested, user_code={}",
-                    device_data.get("user_code"),
-                )
-
-                # Start background polling for token
-                import asyncio
-                import threading
-
-                def _poll_gdrive_token():
-                    asyncio.run(
-                        _gdrive_token_poll(
-                            s.google_drive_client_id,
-                            s.google_drive_client_secret,
-                            device_data["device_code"],
-                            device_data.get("interval", 5),
-                            device_data.get("expires_in", 1800),
-                        )
-                    )
-
-                threading.Thread(target=_poll_gdrive_token, daemon=True).start()
-
-                # Auto-launch the default browser at Google's device-code page.
-                # Best-effort -- headless hosts silently no-op and the user
-                # still sees the URL rendered in the credential form.
-                from mcp_core import try_open_browser
-
-                try_open_browser(device_data["verification_url"])
-
-                return {
-                    "type": "oauth_device_code",
-                    "verification_url": device_data["verification_url"],
-                    "user_code": device_data["user_code"],
-                }
-    except Exception:
-        logger.opt(exception=True).debug(
-            "GDrive device code request failed (non-fatal)"
-        )
+    res = _trigger_gdrive_device_code()
+    if res:
+        return res
 
     # No GDrive: cloud-only setup is done -- schedule local spawn cleanup so
     # the browser renders "Setup complete!" then the local server closes.
     _schedule_spawn_cleanup()
     return None
+
+
+def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | None:
+    """Save credentials from OAuth form to ``config.json`` and apply to environment.
+
+    ``context`` carries the per-authorize ``sub`` issued by mcp-core's local
+    OAuth AS. In remote multi-user mode (``PUBLIC_URL`` set) we route the
+    credentials into a per-sub bucket via :func:`store_for_sub` so concurrent
+    users do not overwrite each other. In single-user mode the subject is
+    ignored and a single ``~/.wet-mcp/config.json`` on the host is reused.
+
+    Called by the local OAuth AS when the user submits API keys via the
+    browser form. Writes to encrypted config file, applies to env vars
+    for immediate use, re-initializes providers, and shares keys with
+    sibling MCP servers.
+
+    Returns optional dict with next_step info (e.g., GDrive device code)
+    for the form to display.
+    """
+    # E.1: gate the first KV PUT on outbound-interception readiness (no-op for
+    # LocalFs / any backend without ready()). One probe per setup submit, at the
+    # single chokepoint both branches pass through.
+    _await_backend_ready()
+
+    # Remote multi-user branch: scope credential storage by JWT sub so
+    # concurrent /authorize sessions do not clobber each other.
+    if os.environ.get("PUBLIC_URL"):
+        sub = context.get("sub") if context else None
+        if not sub:
+            raise RuntimeError("multi-user mode: SubjectContext sub required")
+        return _save_credentials_multi_user(config, sub)
+
+    return _save_credentials_single_user(config)
 
 
 async def _gdrive_token_poll(
