@@ -3857,14 +3857,19 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text or "") // 4)
 
 
+@dataclass
+class DocsQueryOptions:
+    version: str | None = None
+    topic: str | None = None
+    limit: int = 10
+    query_embedding: list[float] | None = None
+
+
 def query_docs(
     db: Any,
     library_id: str,
     query: str,
-    version: str | None = None,
-    topic: str | None = None,
-    limit: int = 10,
-    query_embedding: list[float] | None = None,
+    options: DocsQueryOptions | None = None,
 ) -> list[dict]:
     """Phase 2 docs query honoring version + topic filter + token cap.
 
@@ -3885,6 +3890,8 @@ def query_docs(
     if not library_id or not query:
         return []
 
+    opt = options or DocsQueryOptions()
+
     # Hydrate library + version metadata.
     lib_row = db._conn.execute(
         "SELECT * FROM libraries WHERE id = ?", (library_id,)
@@ -3893,9 +3900,9 @@ def query_docs(
         return []
     library_name = lib_row["name"]
 
-    if version and version != "latest":
-        ver_row = db.get_best_version(library_id, version)
-        if ver_row is None or ver_row.get("version") != version:
+    if opt.version and opt.version != "latest":
+        ver_row = db.get_best_version(library_id, opt.version)
+        if ver_row is None or ver_row.get("version") != opt.version:
             # Version not indexed (or only the fallback latest exists) —
             # caller decides whether to trigger ingest.
             return []
@@ -3903,13 +3910,13 @@ def query_docs(
     candidates = db.search(
         query=query,
         library_name=library_name,
-        version=version if version and version != "latest" else None,
-        limit=limit * 2,
-        query_embedding=query_embedding,
+        version=opt.version if opt.version and opt.version != "latest" else None,
+        limit=opt.limit * 2,
+        query_embedding=opt.query_embedding,
     )
 
-    if topic:
-        norm_topic = topic.lower().strip()
+    if opt.topic:
+        norm_topic = opt.topic.lower().strip()
         candidates = [
             c
             for c in candidates
@@ -3920,7 +3927,7 @@ def query_docs(
     out: list[dict] = []
     used_tokens = 0
     for chunk in candidates:
-        if len(out) >= limit:
+        if len(out) >= opt.limit:
             break
         token_count = chunk.get("token_count")
         if not token_count:
