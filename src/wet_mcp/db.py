@@ -964,7 +964,7 @@ class DocsDB:
         library_id: str,
         chunks: list[dict],
         optional_cols: list[str],
-        now: int,
+        now: float,
     ) -> tuple[list[str], list[tuple]]:
         """Generate chunk IDs and prepare rows for database insertion."""
         chunk_ids = [uuid.uuid4().hex[:12] for _ in chunks]
