@@ -649,6 +649,73 @@ class TestQwen3EmbedBackend:
 
         assert dims == 0
 
+    async def test_check_available_embed_exception(self):
+        """Returns 0 when model.embed fails."""
+        backend = Qwen3EmbedBackend()
+        mock_model = MagicMock()
+        mock_model.embed.side_effect = Exception("Runtime error")
+
+        with patch.object(backend, "_get_model", return_value=mock_model):
+            dims = await backend.check_available()
+
+        assert dims == 0
+
+    async def test_check_available_empty_result(self):
+        """Returns 0 when model.embed returns empty list."""
+        backend = Qwen3EmbedBackend()
+        mock_model = MagicMock()
+        mock_model.embed.return_value = []
+
+        with patch.object(backend, "_get_model", return_value=mock_model):
+            dims = await backend.check_available()
+
+        assert dims == 0
+
+    async def test_embed_single_query_success(self):
+        """embed_single_query calls model.query_embed."""
+        import numpy as np
+
+        backend = Qwen3EmbedBackend()
+        mock_model = MagicMock()
+        mock_model.query_embed.return_value = iter([np.array([0.1, 0.2])])
+
+        with patch.object(backend, "_get_model", return_value=mock_model):
+            vec = await backend.embed_single_query("query")
+
+        assert vec == pytest.approx([0.1, 0.2])
+        mock_model.query_embed.assert_called_once_with("query")
+
+    async def test_embed_single_query_with_mrl(self):
+        """embed_single_query passes dim parameter to model.query_embed."""
+        import numpy as np
+
+        backend = Qwen3EmbedBackend()
+        mock_model = MagicMock()
+        mock_model.query_embed.return_value = iter([np.array([0.1, 0.2])])
+
+        with patch.object(backend, "_get_model", return_value=mock_model):
+            vec = await backend.embed_single_query("query", dimensions=2)
+
+        assert vec == pytest.approx([0.1, 0.2])
+        mock_model.query_embed.assert_called_once_with("query", dim=2)
+
+    async def test_get_model_caching(self):
+        """_get_model instantiates TextEmbedding once and caches it."""
+        backend = Qwen3EmbedBackend()
+        with patch("qwen3_embed.TextEmbedding") as mock_cls:
+            mock_model = MagicMock()
+            mock_cls.return_value = mock_model
+
+            # First call
+            model1 = backend._get_model()
+            assert model1 is mock_model
+            mock_cls.assert_called_once_with(model_name=backend._model_name)
+
+            # Second call
+            model2 = backend._get_model()
+            assert model2 is mock_model
+            assert mock_cls.call_count == 1
+
 
 # -----------------------------------------------------------------------
 # Factory functions
@@ -785,3 +852,31 @@ class TestQwen3GetModelWarning:
         mock_model.embed.return_value = iter([np.array([0.1, 0.2, 0.3])])
         with patch.object(backend, "_get_model", return_value=mock_model):
             assert await backend.check_available() == 3
+
+
+class TestSharedLocalBackend:
+    def test_shared_local_embed_backend_lazy(self):
+        """_shared_local_embed_backend lazily creates and caches instance."""
+        # Reset global state for test
+        import wet_mcp.embedder
+        from wet_mcp.embedder import _shared_local_embed_backend
+
+        original = wet_mcp.embedder._shared_local_backend
+        wet_mcp.embedder._shared_local_backend = None
+
+        try:
+            with patch("wet_mcp.embedder.Qwen3EmbedBackend") as mock_cls:
+                instance = MagicMock()
+                mock_cls.return_value = instance
+
+                # First call
+                res1 = _shared_local_embed_backend()
+                assert res1 is instance
+                mock_cls.assert_called_once()
+
+                # Second call
+                res2 = _shared_local_embed_backend()
+                assert res2 is instance
+                assert mock_cls.call_count == 1
+        finally:
+            wet_mcp.embedder._shared_local_backend = original
