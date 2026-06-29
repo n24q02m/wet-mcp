@@ -1,6 +1,7 @@
 import os
 from unittest import mock
 
+import pytest
 from pydantic import SecretStr
 
 from wet_mcp.config import Settings
@@ -339,15 +340,12 @@ def test_setup_api_keys_file_not_found():
     """setup_api_keys raises FileNotFoundError for missing file."""
     settings = Settings(api_keys=SecretStr("@/nonexistent/keys.txt"))
 
-    import pytest
-
     with pytest.raises(FileNotFoundError, match="API keys file not found"):
         settings.setup_api_keys()
 
 
 def test_setup_api_keys_file_read_error(tmp_path):
     """setup_api_keys raises ValueError when file read fails."""
-    import pytest
 
     keys_file = tmp_path / "keys.txt"
     keys_file.write_text("dummy")
@@ -661,3 +659,69 @@ def test_wet_google_alias_satisfies_gemini(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "x")
     # GOOGLE_API_KEY alias satisfies GEMINI_API_KEY for the gemini default.
     assert "gemini/gemini-embedding-001" in Settings().embedding_chain()
+
+
+def test_llm_chain_for_creds_explicit():
+    settings = Settings()
+    creds = {"LLM_MODELS": "openai/gpt-4o,anthropic/claude-3-5-sonnet"}
+    assert settings.llm_chain_for_creds(creds) == [
+        "openai/gpt-4o",
+        "anthropic/claude-3-5-sonnet",
+    ]
+
+
+def test_llm_chain_for_creds_default_gemini():
+    settings = Settings()
+    creds = {"GEMINI_API_KEY": "test-key"}
+    # _DEFAULT_LLM_CHAIN starts with "gemini/gemini-3-flash-preview"
+    chain = settings.llm_chain_for_creds(creds)
+    assert "gemini/gemini-3-flash-preview" in chain
+    assert len(chain) == 1  # only gemini key provided
+
+
+def test_llm_chain_for_creds_empty():
+    settings = Settings()
+    creds = {}
+    assert settings.llm_chain_for_creds(creds) == []
+
+
+def test_embedding_chain_for_creds_explicit():
+    settings = Settings()
+    creds = {"EMBEDDING_MODELS": "jina_ai/jina-embeddings-v3"}
+    assert settings.embedding_chain_for_creds(creds) == ["jina_ai/jina-embeddings-v3"]
+
+
+def test_embedding_chain_for_creds_default_jina():
+    settings = Settings()
+    creds = {"JINA_AI_API_KEY": "test-key"}
+    chain = settings.embedding_chain_for_creds(creds)
+    assert "jina_ai/jina-embeddings-v5-text-small" in chain
+    assert len(chain) == 1
+
+
+def test_rerank_chain_for_creds_explicit():
+    settings = Settings(rerank_enabled=True)
+    creds = {"RERANK_MODELS": "cohere/rerank-v3.5"}
+    assert settings.rerank_chain_for_creds(creds) == ["cohere/rerank-v3.5"]
+
+
+def test_rerank_chain_for_creds_disabled():
+    settings = Settings(rerank_enabled=False)
+    creds = {"RERANK_MODELS": "cohere/rerank-v3.5"}
+    assert settings.rerank_chain_for_creds(creds) == []
+
+
+def test_rerank_chain_for_creds_default_cohere():
+    settings = Settings(rerank_enabled=True)
+    creds = {"COHERE_API_KEY": "test-key"}
+    chain = settings.rerank_chain_for_creds(creds)
+    assert "cohere/rerank-v3.5" in chain
+    assert len(chain) == 1
+
+
+def test_llm_chain_for_creds_google_alias():
+    settings = Settings()
+    # GOOGLE_API_KEY satisfies GEMINI_API_KEY
+    creds = {"GOOGLE_API_KEY": "test-key"}
+    chain = settings.llm_chain_for_creds(creds)
+    assert "gemini/gemini-3-flash-preview" in chain
