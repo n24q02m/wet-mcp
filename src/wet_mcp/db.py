@@ -1336,28 +1336,165 @@ class DocsDB:
 
         return "\n".join(lines)
 
+    def _clear_for_import(self) -> None:
+        """Clear all tables before a "replace" import."""
+        if self._vec_enabled:
+            try:
+                self._conn.execute("DELETE FROM doc_chunks_vec")
+            except Exception:
+                logger.warning(
+                    "Failed to clear vector table during import replace",
+                    exc_info=True,
+                )
+        self._conn.execute("DELETE FROM doc_chunks")
+        self._conn.execute("DELETE FROM versions")
+        self._conn.execute("DELETE FROM libraries")
+
+    def _get_existing_ids_for_import(self, table: str, items: list[dict]) -> set[str]:
+        """Fetch existing IDs for a set of items in batches."""
+        allowed_queries = {
+            "libraries": "SELECT id FROM libraries WHERE id IN ({})",
+            "versions": "SELECT id FROM versions WHERE id IN ({})",
+            "doc_chunks": "SELECT id FROM doc_chunks WHERE id IN ({})",
+        }
+        if table not in allowed_queries:
+            raise ValueError(f"Invalid table name: {table}")
+        if not items:
+            return set()
+        ids = [obj["id"] for obj in items]
+        existing = set()
+        batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i : i + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            # Safe because table is strictly validated against allowlist
+            # and placeholders string contains only static "?" and ",".
+            query = allowed_queries[table].replace("{}", placeholders)
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            res = self._conn.execute(query, batch).fetchall()
+            existing.update(r[0] for r in res)
+        return existing
+
+    def _import_libraries(self, libraries: list[dict], mode: str, stats: dict) -> None:
+        """Import library entities."""
+        if not libraries:
+            return
+        existing_libs = (
+            self._get_existing_ids_for_import("libraries", libraries)
+            if mode == "merge"
+            else set()
+        )
+        to_insert = []
+        for obj in libraries:
+            if mode == "merge" and obj["id"] in existing_libs:
+                stats["skipped"] += 1
+                continue
+            if mode == "merge":
+                existing_libs.add(obj["id"])
+            to_insert.append(
+                (
+                    obj["id"],
+                    obj["name"],
+                    obj.get("docs_url"),
+                    obj.get("registry"),
+                    obj.get("description"),
+                    obj["created_at"],
+                    obj["updated_at"],
+                )
+            )
+        if to_insert:
+            self._conn.executemany(
+                """INSERT OR REPLACE INTO libraries
+                   (id, name, docs_url, registry, description, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                to_insert,
+            )
+            stats["libraries"] += len(to_insert)
+
+    def _import_versions(self, versions: list[dict], mode: str, stats: dict) -> None:
+        """Import version entities."""
+        if not versions:
+            return
+        existing_vers = (
+            self._get_existing_ids_for_import("versions", versions)
+            if mode == "merge"
+            else set()
+        )
+        to_insert = []
+        for obj in versions:
+            if mode == "merge" and obj["id"] in existing_vers:
+                stats["skipped"] += 1
+                continue
+            if mode == "merge":
+                existing_vers.add(obj["id"])
+            to_insert.append(
+                (
+                    obj["id"],
+                    obj["library_id"],
+                    obj["version"],
+                    obj.get("docs_url"),
+                    obj.get("indexed_at"),
+                    obj.get("page_count", 0),
+                    obj.get("chunk_count", 0),
+                    obj.get("status", "indexed"),
+                )
+            )
+        if to_insert:
+            self._conn.executemany(
+                """INSERT OR REPLACE INTO versions
+                   (id, library_id, version, docs_url, indexed_at, page_count, chunk_count, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                to_insert,
+            )
+            stats["versions"] += len(to_insert)
+
+    def _import_chunks(self, chunks: list[dict], mode: str, stats: dict) -> None:
+        """Import chunk entities."""
+        if not chunks:
+            return
+        existing_chunks = (
+            self._get_existing_ids_for_import("doc_chunks", chunks)
+            if mode == "merge"
+            else set()
+        )
+        to_insert = []
+        for obj in chunks:
+            if mode == "merge" and obj["id"] in existing_chunks:
+                stats["skipped"] += 1
+                continue
+            if mode == "merge":
+                existing_chunks.add(obj["id"])
+            to_insert.append(
+                (
+                    obj["id"],
+                    obj["version_id"],
+                    obj["library_id"],
+                    obj.get("url", ""),
+                    obj.get("title", ""),
+                    obj.get("chunk_index", 0),
+                    obj["content"],
+                    obj.get("heading_path", ""),
+                    obj["created_at"],
+                )
+            )
+        if to_insert:
+            self._conn.executemany(
+                """INSERT OR REPLACE INTO doc_chunks
+                   (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                to_insert,
+            )
+            stats["chunks"] += len(to_insert)
+
     def import_jsonl(self, data: str, mode: str = "merge") -> dict:
         """Import JSONL data. mode: merge (skip existing) or replace (clear first)."""
         stats = {"libraries": 0, "versions": 0, "chunks": 0, "skipped": 0}
 
         if mode == "replace":
-            if self._vec_enabled:
-                try:
-                    self._conn.execute("DELETE FROM doc_chunks_vec")
-                except Exception:
-                    logger.warning(
-                        "Failed to clear vector table during import replace",
-                        exc_info=True,
-                    )
-            self._conn.execute("DELETE FROM doc_chunks")
-            self._conn.execute("DELETE FROM versions")
-            self._conn.execute("DELETE FROM libraries")
+            self._clear_for_import()
 
         lines = data.split("\n")
-
-        libraries = []
-        versions = []
-        chunks = []
+        libraries, versions, chunks = [], [], []
 
         for line in lines:
             # ⚡ Bolt Optimization: Use `not line or line.isspace()` for truthiness
@@ -1374,122 +1511,9 @@ class DocsDB:
             elif obj_type == "chunk":
                 chunks.append(obj)
 
-        def _get_existing(table: str, items: list) -> set:
-            allowed_queries = {
-                "libraries": "SELECT id FROM libraries WHERE id IN ({})",
-                "versions": "SELECT id FROM versions WHERE id IN ({})",
-                "doc_chunks": "SELECT id FROM doc_chunks WHERE id IN ({})",
-            }
-            if table not in allowed_queries:
-                raise ValueError(f"Invalid table name: {table}")
-            if not items:
-                return set()
-            ids = [obj["id"] for obj in items]
-            existing = set()
-            batch_size = 32766 if sqlite3.sqlite_version_info >= (3, 32, 0) else 999
-            for i in range(0, len(ids), batch_size):
-                batch = ids[i : i + batch_size]
-                placeholders = ",".join("?" * len(batch))
-                # Safe because table is strictly validated against allowlist
-                # and placeholders string contains only static "?" and ",".
-                query = allowed_queries[table].replace("{}", placeholders)
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                res = self._conn.execute(query, batch).fetchall()
-                existing.update(r[0] for r in res)
-            return existing
-
-        existing_libs = (
-            _get_existing("libraries", libraries) if mode == "merge" else set()
-        )
-        to_insert_libs = []
-        for obj in libraries:
-            if mode == "merge" and obj["id"] in existing_libs:
-                stats["skipped"] += 1
-                continue
-            if mode == "merge":
-                existing_libs.add(obj["id"])
-            to_insert_libs.append(
-                (
-                    obj["id"],
-                    obj["name"],
-                    obj.get("docs_url"),
-                    obj.get("registry"),
-                    obj.get("description"),
-                    obj["created_at"],
-                    obj["updated_at"],
-                )
-            )
-        if to_insert_libs:
-            self._conn.executemany(
-                """INSERT OR REPLACE INTO libraries
-                   (id, name, docs_url, registry, description, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                to_insert_libs,
-            )
-            stats["libraries"] += len(to_insert_libs)
-
-        existing_vers = (
-            _get_existing("versions", versions) if mode == "merge" else set()
-        )
-        to_insert_vers = []
-        for obj in versions:
-            if mode == "merge" and obj["id"] in existing_vers:
-                stats["skipped"] += 1
-                continue
-            if mode == "merge":
-                existing_vers.add(obj["id"])
-            to_insert_vers.append(
-                (
-                    obj["id"],
-                    obj["library_id"],
-                    obj["version"],
-                    obj.get("docs_url"),
-                    obj.get("indexed_at"),
-                    obj.get("page_count", 0),
-                    obj.get("chunk_count", 0),
-                    obj.get("status", "indexed"),
-                )
-            )
-        if to_insert_vers:
-            self._conn.executemany(
-                """INSERT OR REPLACE INTO versions
-                   (id, library_id, version, docs_url, indexed_at, page_count, chunk_count, status)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                to_insert_vers,
-            )
-            stats["versions"] += len(to_insert_vers)
-
-        existing_chunks = (
-            _get_existing("doc_chunks", chunks) if mode == "merge" else set()
-        )
-        to_insert_chunks = []
-        for obj in chunks:
-            if mode == "merge" and obj["id"] in existing_chunks:
-                stats["skipped"] += 1
-                continue
-            if mode == "merge":
-                existing_chunks.add(obj["id"])
-            to_insert_chunks.append(
-                (
-                    obj["id"],
-                    obj["version_id"],
-                    obj["library_id"],
-                    obj.get("url", ""),
-                    obj.get("title", ""),
-                    obj.get("chunk_index", 0),
-                    obj["content"],
-                    obj.get("heading_path", ""),
-                    obj["created_at"],
-                )
-            )
-        if to_insert_chunks:
-            self._conn.executemany(
-                """INSERT OR REPLACE INTO doc_chunks
-                   (id, version_id, library_id, url, title, chunk_index, content, heading_path, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                to_insert_chunks,
-            )
-            stats["chunks"] += len(to_insert_chunks)
+        self._import_libraries(libraries, mode, stats)
+        self._import_versions(versions, mode, stats)
+        self._import_chunks(chunks, mode, stats)
 
         self._conn.commit()
         return stats
