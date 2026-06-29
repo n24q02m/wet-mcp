@@ -2,6 +2,42 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.23 (2026-06-29)
+
+### Bug Fixes
+
+- Bound concurrency for CPU-bound markdown chunking
+  ([`015d6b6`](https://github.com/n24q02m/wet-mcp/commit/015d6b640059824c0a9d849f511a1ff3e5a5072d))
+
+- Cap max_instances=1 for CF container cost (solo dev default)
+  ([`f0f3280`](https://github.com/n24q02m/wet-mcp/commit/f0f32803a64aa2d9350be32ae0fa8d43a6e75738))
+
+- Force real litellm to win unclecode-litellm file collision to restore catalog/LLM
+  ([`f0f3280`](https://github.com/n24q02m/wet-mcp/commit/f0f32803a64aa2d9350be32ae0fa8d43a6e75738))
+
+- Streamline doc-cleaning pipeline (avoid redundant string allocations)
+  ([`dc44815`](https://github.com/n24q02m/wet-mcp/commit/dc448158b9638b5b1c0abe13e558501bb40a6b02))
+
+- Update ghcr.io/astral-sh/uv:latest docker digest
+  ([`216e3cf`](https://github.com/n24q02m/wet-mcp/commit/216e3cf5036dcbc3e89b485cff0658792f8b8e8e))
+
+- Update non-major dependencies
+  ([`9ef5882`](https://github.com/n24q02m/wet-mcp/commit/9ef5882ece6366f53dc7a90a86ee05fc99f0d97c))
+
+### Chores
+
+- **deps**: Lock file maintenance ([#1415](https://github.com/n24q02m/wet-mcp/pull/1415),
+  [`0b93bb5`](https://github.com/n24q02m/wet-mcp/commit/0b93bb555c0b4e4920f00d6c1a4c895ed3081cb1))
+
+- **deps**: Update actions/setup-python digest to ece7cb0
+  ([#1421](https://github.com/n24q02m/wet-mcp/pull/1421),
+  [`8383b00`](https://github.com/n24q02m/wet-mcp/commit/8383b006c5e0696f90ac7c28669a5392535b4371))
+
+- **deps**: Update python:3.13-slim-bookworm docker digest to fcbd8df
+  ([#1422](https://github.com/n24q02m/wet-mcp/pull/1422),
+  [`31ee725`](https://github.com/n24q02m/wet-mcp/commit/31ee725e42aa27ed0768a5b76f9654aca0219563))
+
+
 ## v3.3.0-beta.22 (2026-06-23)
 
 ### Bug Fixes
