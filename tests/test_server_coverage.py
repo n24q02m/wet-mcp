@@ -1362,3 +1362,21 @@ async def test_background_index_skip_same_netloc():
         args = server._docs_db.add_chunks.call_args
         chunks = args.kwargs.get("chunks") or args[1].get("chunks")
         assert len(chunks) == 1
+
+
+# ---------------------------------------------------------------------------
+# _warmup_searxng exception coverage (line 196)
+# ---------------------------------------------------------------------------
+
+
+async def test_warmup_searxng_ensure_fails():
+    """Line 196: _warmup_searxng handles Exception from ensure_searxng."""
+    with (
+        patch("wet_mcp.setup.run_auto_setup", return_value=None),
+        patch(
+            "wet_mcp.searxng_runner.ensure_searxng", new_callable=AsyncMock
+        ) as mock_ensure,
+    ):
+        mock_ensure.side_effect = Exception("searxng fail")
+        # Should not raise
+        await server._warmup_searxng()
