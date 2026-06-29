@@ -24,7 +24,7 @@ export interface Env {
     put(k: string, v: string | ArrayBuffer): Promise<void>
     delete(k: string): Promise<void>
   }
-  D1: { prepare(sql: string): { bind(...p: unknown[]): { all(): Promise<{ results: unknown[] }> } } }
+  D1: { prepare(sql: string): { bind(...p: unknown[]): { all(): Promise<{ results: unknown[] }> } }; batch(statements: unknown[]): Promise<{ results: unknown[] }[]> }
   VECTORIZE: {
     upsert(v: unknown[]): Promise<{ mutationId: string }>
     query(vector: number[], opts: { topK: number; filter?: unknown }): Promise<{ matches: unknown[] }>
@@ -134,10 +134,18 @@ const kvOutbound: OutboundHandler<Env> = async (request, env) => {
 
 const d1Outbound: OutboundHandler<Env> = async (request, env) => {
   const url = new URL(request.url)
-  if (url.pathname === '/query' && request.method === 'POST') {
-    const { sql, params } = (await request.json()) as { sql: string; params: unknown[] }
-    const { results } = await env.D1.prepare(sql).bind(...(params ?? [])).all()
-    return Response.json({ results })
+  if (request.method === 'POST') {
+    if (url.pathname === '/query') {
+      const { sql, params } = (await request.json()) as { sql: string; params: unknown[] }
+      const { results } = await env.D1.prepare(sql).bind(...(params ?? [])).all()
+      return Response.json({ results })
+    }
+    if (url.pathname === '/batch') {
+      const queries = (await request.json()) as { sql: string; params: unknown[] }[]
+      const stmts = queries.map((q) => env.D1.prepare(q.sql).bind(...(q.params ?? [])))
+      const batchResults = await env.D1.batch(stmts)
+      return Response.json({ results: batchResults })
+    }
   }
   return new Response('not found', { status: 404 })
 }

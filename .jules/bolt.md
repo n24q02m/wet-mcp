@@ -7,3 +7,6 @@
 ## 2025-05-14 - Bound Concurrency for CPU-Bound Async Tasks
 **Learning:** Using `asyncio.to_thread` for CPU-bound tasks inside concurrent loops like `asyncio.gather` can spawn too many threads, leading to thread pool exhaustion and event loop starvation.
 **Action:** Always bound concurrency using an `asyncio.Semaphore` (e.g., `asyncio.Semaphore(10)`) when fanning out tasks that internally delegate to `asyncio.to_thread`.
+## 2026-06-29 - D1 Batch Execution Optimization
+**Learning:** Executing multiple SQL statements iteratively in Cloudflare D1 via separate HTTP roundtrips introduces significant N+1 overhead. D1's native `batch()` API allows combining multiple statements into a single request, which is much more efficient for migrations and bulk updates.
+**Action:** Use the `/batch` endpoint (backed by `env.D1.batch()`) for `executescript` and `executemany` (non-INSERT) in the D1 backend to minimize network roundtrips.
