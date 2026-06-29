@@ -1,8 +1,0 @@
-I have refactored the `import_jsonl` method in `src/wet_mcp/db.py` to improve readability and maintainability.
-Key changes:
-- Extracted clearing logic into `_clear_for_import()`.
-- Extracted ID existence check into `_get_existing_ids_for_import()`.
-- Extracted insertion logic for libraries, versions, and chunks into `_import_libraries()`, `_import_versions()`, and `_import_chunks()`.
-- Simplified the main `import_jsonl` loop.
-- Maintained all existing optimizations (Bolt optimization for empty lines, batching for IDs, safe placeholder replacement).
-- Verified with tests in `tests/test_db.py`, `tests/test_db_coverage.py`, and `tests/test_security_sql.py`.
