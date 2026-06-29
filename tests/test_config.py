@@ -661,3 +661,67 @@ def test_wet_google_alias_satisfies_gemini(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "x")
     # GOOGLE_API_KEY alias satisfies GEMINI_API_KEY for the gemini default.
     assert "gemini/gemini-embedding-001" in Settings().embedding_chain()
+
+
+# -----------------------------------------------------------------------
+# Per-sub (HTTP multi-user) chain resolution (_for_creds variants)
+# -----------------------------------------------------------------------
+
+
+def test_embedding_chain_for_creds_explicit():
+    """Returns explicit models from creds."""
+    s = Settings()
+    creds = {"EMBEDDING_MODELS": "provider/m1,provider/m2"}
+    assert s.embedding_chain_for_creds(creds) == ["provider/m1", "provider/m2"]
+
+
+def test_embedding_chain_for_creds_default_filtered():
+    """Filters default chain to models with keys in creds."""
+    s = Settings()
+    # Assuming JINA_AI_API_KEY and GEMINI_API_KEY are in the default chain
+    creds = {"JINA_AI_API_KEY": "j-key", "GEMINI_API_KEY": "g-key"}
+    chain = s.embedding_chain_for_creds(creds)
+    assert "jina_ai/jina-embeddings-v5-text-small" in chain
+    assert "gemini/gemini-embedding-001" in chain
+    assert "openai/text-embedding-3-large" not in chain
+
+
+def test_embedding_chain_for_creds_google_alias():
+    """GOOGLE_API_KEY satisfies GEMINI_API_KEY in creds."""
+    s = Settings()
+    creds = {"GOOGLE_API_KEY": "goog-key"}
+    chain = s.embedding_chain_for_creds(creds)
+    assert "gemini/gemini-embedding-001" in chain
+
+
+def test_rerank_chain_for_creds_disabled():
+    """Returns empty list if rerank_enabled is False."""
+    s = Settings(rerank_enabled=False)
+    creds = {"COHERE_API_KEY": "c-key"}
+    assert s.rerank_chain_for_creds(creds) == []
+
+
+def test_rerank_chain_for_creds_enabled():
+    """Returns filtered default rerank chain when enabled."""
+    s = Settings(rerank_enabled=True)
+    creds = {"COHERE_API_KEY": "c-key"}
+    chain = s.rerank_chain_for_creds(creds)
+    assert "cohere/rerank-v3.5" in chain
+    assert "jina_ai/jina-reranker-v3" not in chain
+
+
+def test_llm_chain_for_creds_explicit():
+    """Returns explicit LLM models from creds."""
+    s = Settings()
+    creds = {"LLM_MODELS": "xai/grok-beta"}
+    assert s.llm_chain_for_creds(creds) == ["xai/grok-beta"]
+
+
+def test_llm_chain_for_creds_default():
+    """Filters default LLM chain to keys in creds."""
+    s = Settings()
+    creds = {"GEMINI_API_KEY": "g-key"}
+    chain = s.llm_chain_for_creds(creds)
+    # Default LLM chain includes gemini/gemini-3-flash-preview
+    assert "gemini/gemini-3-flash-preview" in chain
+    assert "openai/gpt-4o" not in chain
