@@ -435,20 +435,20 @@ class DocsDB:
         # Idempotent column adds for legacy DBs that pre-date Alembic.
         # Each ALTER is wrapped in a try/except so re-running on a fresh
         # head-shape table does not raise.
-        for col_ddl in (
-            "discovery_version INTEGER DEFAULT 0",
-            "canonical_name TEXT",
-            "homepage TEXT",
-            "github_url TEXT",
-            "package_managers TEXT",
-            "tier INTEGER NOT NULL DEFAULT 2",
-            "last_indexed_at REAL",
-            "total_versions INTEGER NOT NULL DEFAULT 0",
+        for sql in (
+            "ALTER TABLE libraries ADD COLUMN discovery_version INTEGER DEFAULT 0",
+            "ALTER TABLE libraries ADD COLUMN canonical_name TEXT",
+            "ALTER TABLE libraries ADD COLUMN homepage TEXT",
+            "ALTER TABLE libraries ADD COLUMN github_url TEXT",
+            "ALTER TABLE libraries ADD COLUMN package_managers TEXT",
+            "ALTER TABLE libraries ADD COLUMN tier INTEGER NOT NULL DEFAULT 2",
+            "ALTER TABLE libraries ADD COLUMN last_indexed_at REAL",
+            "ALTER TABLE libraries ADD COLUMN total_versions INTEGER NOT NULL DEFAULT 0",
         ):
             try:
-                self._conn.execute(f"ALTER TABLE libraries ADD COLUMN {col_ddl}")
+                self._conn.execute(sql)
                 self._conn.commit()
-                col_name = col_ddl.split()[0]
+                col_name = sql.split("COLUMN ")[1].split()[0]
                 logger.debug(f"Migrated libraries table: added {col_name}")
             except sqlite3.OperationalError:
                 pass  # Column already exists
@@ -472,9 +472,12 @@ class DocsDB:
             )
         """)
         # Idempotent column adds for legacy DBs.
-        for col_ddl in ("release_date REAL", "source_url TEXT"):
+        for sql in (
+            "ALTER TABLE versions ADD COLUMN release_date REAL",
+            "ALTER TABLE versions ADD COLUMN source_url TEXT",
+        ):
             try:
-                self._conn.execute(f"ALTER TABLE versions ADD COLUMN {col_ddl}")
+                self._conn.execute(sql)
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
@@ -501,14 +504,14 @@ class DocsDB:
             )
         """)
         # Idempotent column adds for legacy DBs.
-        for col_ddl in (
-            "section TEXT",
-            "topic TEXT",
-            "content_hash TEXT",
-            "token_count INTEGER",
+        for sql in (
+            "ALTER TABLE doc_chunks ADD COLUMN section TEXT",
+            "ALTER TABLE doc_chunks ADD COLUMN topic TEXT",
+            "ALTER TABLE doc_chunks ADD COLUMN content_hash TEXT",
+            "ALTER TABLE doc_chunks ADD COLUMN token_count INTEGER",
         ):
             try:
-                self._conn.execute(f"ALTER TABLE doc_chunks ADD COLUMN {col_ddl}")
+                self._conn.execute(sql)
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass
@@ -583,14 +586,7 @@ class DocsDB:
             if not row:
                 # Security: Dimensions are validated as 0-65536 integer in __init__.
                 # Schema construction (CREATE VIRTUAL TABLE) does not support parameters.
-                dims_str = str(int(self._embedding_dims))
-                sql = (
-                    "CREATE VIRTUAL TABLE doc_chunks_vec USING vec0("
-                    "id TEXT PRIMARY KEY, "
-                    "embedding float[" + dims_str + "]"
-                    ")"
-                )
-                # nosemgrep: python.lang.security.audit.formatted-sql-query.formatted-sql-query, python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+                sql = f"CREATE VIRTUAL TABLE doc_chunks_vec USING vec0(id TEXT PRIMARY KEY, embedding float[{int(self._embedding_dims)}])"
                 self._conn.execute(sql)
 
     # -----------------------------------------------------------------------
