@@ -192,23 +192,32 @@ class DocsDBCfBackend:
                 mfilter["library_id"] = library_id
             if version_id:
                 mfilter["version_id"] = version_id
-            for m in self._vec.query(
-                query_embedding,
-                top_k=min(candidate_limit, 50),
-                metadata_filter=mfilter or None,
-            ):
+            vec_results = list(
+                self._vec.query(
+                    query_embedding,
+                    top_k=min(candidate_limit, 50),
+                    metadata_filter=mfilter or None,
+                )
+            )
+            missing_ids = []
+            for m in vec_results:
                 cid = m["id"]
-                # cosine score already 0..1-ish
                 vec_scores[cid] = max(0.0, float(m["score"]))
                 if cid not in fts_chunks:
-                    fts_chunks[cid] = (
-                        self._d1.fetchone(
-                            "SELECT c.*, l.name AS _library_name FROM doc_chunks c "
-                            "LEFT JOIN libraries l ON c.library_id = l.id WHERE c.id = ?",
-                            [cid],
-                        )
-                        or {}
-                    )
+                    missing_ids.append(cid)
+
+            if missing_ids:
+                placeholders = ",".join(["?"] * len(missing_ids))
+                sql = (
+                    "SELECT c.*, l.name AS _library_name FROM doc_chunks c "
+                    "LEFT JOIN libraries l ON c.library_id = l.id "
+                    f"WHERE c.id IN ({placeholders})"
+                )
+                for row in self._d1.execute(sql, missing_ids):
+                    fts_chunks[row["id"]] = row
+                for cid in missing_ids:
+                    if cid not in fts_chunks:
+                        fts_chunks[cid] = {}
 
         scored = _combine_scores_cf(fts_scores, vec_scores, fts_chunks)
         return _build_results_cf(scored, fts_chunks, self._d1, limit)
@@ -260,13 +269,22 @@ def _build_results_cf(scored, fts_chunks, d1: D1Backend, limit: int):
             adj_keys.add((url, ver, idx - 1))
             adj_keys.add((url, ver, idx + 1))
     adj_map: dict[tuple[str, str, int], str] = {}
-    for url, ver, idx in adj_keys:
-        row = d1.fetchone(
-            "SELECT content FROM doc_chunks WHERE url = ? AND version_id = ? AND chunk_index = ?",
-            [url, ver, idx],
-        )
-        if row:
-            adj_map[(url, ver, idx)] = row["content"]
+    if adj_keys:
+        unique_keys = sorted(adj_keys)
+        batch_size = 100
+        for i in range(0, len(unique_keys), batch_size):
+            batch = unique_keys[i : i + batch_size]
+            placeholders = ",".join(["(?,?,?)"] * len(batch))
+            params = [v for k in batch for v in k]
+            sql = (
+                "SELECT url, version_id, chunk_index, content "
+                "FROM doc_chunks WHERE (url, version_id, chunk_index) "
+                f"IN (VALUES {placeholders})"
+            )
+            for row in d1.execute(sql, params):
+                adj_map[(row["url"], row["version_id"], row["chunk_index"])] = row[
+                    "content"
+                ]
 
     results: list[dict] = []
     for cid, score in scored:
