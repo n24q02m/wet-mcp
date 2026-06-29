@@ -609,111 +609,95 @@ class DocsDB:
             "vec_enabled": self._vec_enabled,
         }
 
-    # -----------------------------------------------------------------------
-    # Library CRUD
-    # -----------------------------------------------------------------------
-
-    def upsert_library(
-        self,
-        name: str,
-        docs_url: str | None = None,
-        registry: str | None = None,
-        description: str | None = None,
-        tier: int | None = None,
-        package_managers: list[str] | None = None,
-        homepage: str | None = None,
-        github_url: str | None = None,
-        canonical_name: str | None = None,
-    ) -> str:
-        """Create or update a library. Returns library ID.
-
-        Automatically stamps the current ``DISCOVERY_VERSION``.
-
-        Phase 2 (spec §5.4) adds optional metadata: ``tier`` (1 curated /
-        2 on-demand), ``package_managers`` (JSON list), ``homepage``,
-        ``github_url``, and ``canonical_name`` (display label). Columns
-        are added by ``docs_002_libraries`` migration; this writer
-        gracefully skips any field whose column is missing so it can run
-        against pre-Alembic legacy databases for one cycle.
-        """
-        now = _now_ts()
-        # Normalize name to lowercase
-        norm_name = name.lower().strip()
-
-        # Phase 2 columns may be absent on a pre-Alembic legacy DB. Detect
-        # presence once per call so we don't crash on older schemas.
-        existing_cols = {
+    def _get_table_columns(self, table_name: str) -> set[str]:
+        """Retrieve the set of column names for a given table."""
+        return {
             r[0]
             for r in self._conn.execute(
-                "SELECT name FROM pragma_table_info(?)", ("libraries",)
+                "SELECT name FROM pragma_table_info(?)", (table_name,)
             ).fetchall()
         }
-        pkg_json = (
-            json.dumps(package_managers, ensure_ascii=False)
-            if package_managers is not None
-            else None
-        )
 
-        row = self._conn.execute(
-            "SELECT id FROM libraries WHERE name = ?", (norm_name,)
-        ).fetchone()
-
-        if row:
-            lib_id = row["id"]
-            updates: list[str] = []
-            params: list = []
-            if docs_url is not None:
-                updates.append("docs_url = ?")
-                params.append(docs_url)
-            if registry is not None:
-                updates.append("registry = ?")
-                params.append(registry)
-            if description is not None:
-                updates.append("description = ?")
-                params.append(description)
-            if canonical_name is not None and "canonical_name" in existing_cols:
-                updates.append("canonical_name = ?")
-                params.append(canonical_name)
-            if homepage is not None and "homepage" in existing_cols:
-                updates.append("homepage = ?")
-                params.append(homepage)
-            if github_url is not None and "github_url" in existing_cols:
-                updates.append("github_url = ?")
-                params.append(github_url)
-            if pkg_json is not None and "package_managers" in existing_cols:
-                updates.append("package_managers = ?")
-                params.append(pkg_json)
-            if tier is not None and "tier" in existing_cols:
-                updates.append("tier = ?")
-                params.append(int(tier))
-            if "last_indexed_at" in existing_cols:
-                updates.append("last_indexed_at = ?")
-                params.append(now)
-            updates.append("discovery_version = ?")
-            params.append(DISCOVERY_VERSION)
-            updates.append("updated_at = ?")
+    def _update_library_inner(
+        self,
+        lib_id: str,
+        now: float,
+        existing_cols: set[str],
+        docs_url: str | None,
+        registry: str | None,
+        description: str | None,
+        canonical_name: str | None,
+        homepage: str | None,
+        github_url: str | None,
+        pkg_json: str | None,
+        tier: int | None,
+    ) -> None:
+        """Internal helper for updating an existing library."""
+        updates: list[str] = []
+        params: list = []
+        if docs_url is not None:
+            updates.append("docs_url = ?")
+            params.append(docs_url)
+        if registry is not None:
+            updates.append("registry = ?")
+            params.append(registry)
+        if description is not None:
+            updates.append("description = ?")
+            params.append(description)
+        if canonical_name is not None and "canonical_name" in existing_cols:
+            updates.append("canonical_name = ?")
+            params.append(canonical_name)
+        if homepage is not None and "homepage" in existing_cols:
+            updates.append("homepage = ?")
+            params.append(homepage)
+        if github_url is not None and "github_url" in existing_cols:
+            updates.append("github_url = ?")
+            params.append(github_url)
+        if pkg_json is not None and "package_managers" in existing_cols:
+            updates.append("package_managers = ?")
+            params.append(pkg_json)
+        if tier is not None and "tier" in existing_cols:
+            updates.append("tier = ?")
+            params.append(int(tier))
+        if "last_indexed_at" in existing_cols:
+            updates.append("last_indexed_at = ?")
             params.append(now)
-            params.append(lib_id)
-            if updates:
-                # Security: Validate column names against an explicit allowlist
-                # to prevent injection if the update logic is made more dynamic.
-                allowed_cols = _LIBRARIES_COLUMNS
-                for u in updates:
-                    col = u.split("=")[0].strip()
-                    if col not in allowed_cols:
-                        raise ValueError(f"Unauthorized column update: {col}")
 
-                # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
-                self._conn.execute(
-                    "UPDATE libraries SET " + ", ".join(updates) + " WHERE id = ?",
-                    params,
-                )
-                self._conn.commit()
-            return lib_id
+        updates.append("discovery_version = ?")
+        params.append(DISCOVERY_VERSION)
+        updates.append("updated_at = ?")
+        params.append(now)
+        params.append(lib_id)
 
-        lib_id = uuid.uuid4().hex[:12]
-        # Build the INSERT dynamically so we only target columns that exist
-        # in the current schema (legacy DBs may lack Phase 2 columns).
+        if updates:
+            for u in updates:
+                col = u.split("=")[0].strip()
+                if col not in _LIBRARIES_COLUMNS:
+                    raise ValueError(f"Unauthorized column update: {col}")
+
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
+            self._conn.execute(
+                "UPDATE libraries SET " + ", ".join(updates) + " WHERE id = ?",
+                params,
+            )
+            self._conn.commit()
+
+    def _insert_library_inner(
+        self,
+        lib_id: str,
+        norm_name: str,
+        now: float,
+        existing_cols: set[str],
+        docs_url: str | None,
+        registry: str | None,
+        description: str | None,
+        canonical_name: str | None,
+        homepage: str | None,
+        github_url: str | None,
+        pkg_json: str | None,
+        tier: int | None,
+    ) -> None:
+        """Internal helper for inserting a new library."""
         cols = [
             "id",
             "name",
@@ -739,13 +723,13 @@ class DocsDB:
             ("homepage", homepage, False),
             ("github_url", github_url, False),
             ("package_managers", pkg_json, False),
-            ("tier", tier, False),  # Skip — column defaults to 2
+            ("tier", tier, False),
             ("last_indexed_at", now, True),
         ):
             if col_name in existing_cols and (value is not None or include_when_none):
                 cols.append(col_name)
                 vals.append(value)
-        # Security: Validate all column names against a strict allowlist.
+
         for c in cols:
             if c not in _LIBRARIES_COLUMNS:
                 raise ValueError(f"Unauthorized library column: {c}")
@@ -757,8 +741,80 @@ class DocsDB:
             vals,
         )
         self._conn.commit()
+
+    def upsert_library(
+        self,
+        name: str,
+        docs_url: str | None = None,
+        registry: str | None = None,
+        description: str | None = None,
+        tier: int | None = None,
+        package_managers: list[str] | None = None,
+        homepage: str | None = None,
+        github_url: str | None = None,
+        canonical_name: str | None = None,
+    ) -> str:
+        """Create or update a library. Returns library ID.
+
+        Automatically stamps the current ``DISCOVERY_VERSION``.
+
+        Phase 2 (spec §5.4) adds optional metadata: ``tier`` (1 curated /
+        2 on-demand), ``package_managers`` (JSON list), ``homepage``,
+        ``github_url``, and ``canonical_name`` (display label). Columns
+        are added by ``docs_002_libraries`` migration; this writer
+        gracefully skips any field whose column is missing so it can run
+        against pre-Alembic legacy databases for one cycle.
+        """
+        now = _now_ts()
+        norm_name = name.lower().strip()
+        existing_cols = self._get_table_columns("libraries")
+        pkg_json = (
+            json.dumps(package_managers, ensure_ascii=False)
+            if package_managers is not None
+            else None
+        )
+
+        row = self._conn.execute(
+            "SELECT id FROM libraries WHERE name = ?", (norm_name,)
+        ).fetchone()
+
+        if row:
+            lib_id = row["id"]
+            self._update_library_inner(
+                lib_id=lib_id,
+                now=now,
+                existing_cols=existing_cols,
+                docs_url=docs_url,
+                registry=registry,
+                description=description,
+                canonical_name=canonical_name,
+                homepage=homepage,
+                github_url=github_url,
+                pkg_json=pkg_json,
+                tier=tier,
+            )
+            return lib_id
+
+        lib_id = uuid.uuid4().hex[:12]
+        self._insert_library_inner(
+            lib_id=lib_id,
+            norm_name=norm_name,
+            now=now,
+            existing_cols=existing_cols,
+            docs_url=docs_url,
+            registry=registry,
+            description=description,
+            canonical_name=canonical_name,
+            homepage=homepage,
+            github_url=github_url,
+            pkg_json=pkg_json,
+            tier=tier,
+        )
         return lib_id
 
+    # -----------------------------------------------------------------------
+    # Library CRUD
+    # -----------------------------------------------------------------------
     def mark_library_indexed(
         self, library_id: str, total_versions: int | None = None
     ) -> None:
