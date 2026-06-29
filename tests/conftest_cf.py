@@ -50,13 +50,25 @@ class FakeD1Http:
         self.conn.executescript(ddl_sql)
 
     def request(self, method, url, data=None, headers=None):
-        assert method == "POST" and url.endswith("/query")
-        payload = json.loads(data.decode())
-        sql, params = payload["sql"], payload.get("params", [])
-        cur = self.conn.execute(sql, params)
-        rows = [dict(r) for r in cur.fetchall()] if cur.description else []
-        self.conn.commit()
-        return (200, json.dumps({"results": rows}).encode())
+        assert method == "POST"
+        if url.endswith("/query"):
+            payload = json.loads(data.decode())
+            sql, params = payload["sql"], payload.get("params", [])
+            cur = self.conn.execute(sql, params)
+            rows = [dict(r) for r in cur.fetchall()] if cur.description else []
+            self.conn.commit()
+            return (200, json.dumps({"results": rows}).encode())
+        if url.endswith("/batch"):
+            queries = json.loads(data.decode())
+            batch_results = []
+            for q in queries:
+                sql, params = q["sql"], q.get("params", [])
+                cur = self.conn.execute(sql, params)
+                rows = [dict(r) for r in cur.fetchall()] if cur.description else []
+                batch_results.append({"results": rows})
+            self.conn.commit()
+            return (200, json.dumps({"results": batch_results}).encode())
+        raise AssertionError(f"unexpected url {url}")
 
 
 class FakeVectorizeHttp:

@@ -61,6 +61,17 @@ class D1Backend:
             raise RuntimeError(f"D1Backend query failed: HTTP {status}")
         return json.loads(data.decode()).get("results", [])
 
+    def batch(self, queries: list[dict[str, Any]]) -> list[list[dict]]:
+        if not queries:
+            return []
+        body = json.dumps(queries).encode()
+        status, data = self._http.request(
+            "POST", f"{self.base_url}/batch", body, self._headers()
+        )
+        if status != 200:
+            raise RuntimeError(f"D1Backend batch failed: HTTP {status}")
+        return json.loads(data.decode()).get("results", [])
+
     def fetchall(self, sql: str, params: list[Any]) -> list[dict]:
         return self.execute(sql, params)
 
@@ -83,14 +94,14 @@ class D1Backend:
                 flat = [v for row in batch for v in row]
                 self.execute(batched_sql, flat)
             else:
-                for row in batch:
-                    self.execute(sql, row)
+                self.batch([{"sql": sql, "params": row} for row in batch])
 
     def executescript(self, sql: str) -> None:
-        # Migrations: split on ';' and run each non-empty statement.
-        for stmt in (s.strip() for s in sql.split(";")):
-            if stmt:
-                self.execute(stmt, [])
+        # Migrations: split on ';' and run in batches.
+        stmts = [s.strip() for s in sql.split(";") if s.strip()]
+        for i in range(0, len(stmts), self.max_rows_per_insert):
+            batch = stmts[i : i + self.max_rows_per_insert]
+            self.batch([{"sql": stmt, "params": []} for stmt in batch])
 
 
 def d1_backend_from_env() -> D1Backend:
