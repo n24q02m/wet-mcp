@@ -977,3 +977,79 @@ class TestGdriveTokenPoll:
         ):
             await _gdrive_token_poll("cid", "csec", "dev", 1, 1000)
             mock_save.assert_called_once()
+
+
+class TestLlmProviderDetection:
+    """Cover detect_llm_provider_key and has_llm_provider."""
+
+    def test_single_user_env_vars(self):
+        from wet_mcp.credential_state import detect_llm_provider_key, set_current_sub
+
+        set_current_sub(None)
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-123"}, clear=True):
+            assert detect_llm_provider_key() == "OPENAI_API_KEY"
+
+    def test_single_user_google_alias(self):
+        """GOOGLE_API_KEY is an alias for GEMINI, honored in single-user mode."""
+        from wet_mcp.credential_state import detect_llm_provider_key, set_current_sub
+
+        set_current_sub(None)
+        with patch.dict(os.environ, {"GOOGLE_API_KEY": "g-123"}, clear=True):
+            assert detect_llm_provider_key() == "GOOGLE_API_KEY"
+
+    def test_multi_user_sub_aware(self):
+        """In multi-user mode, it reads from read_for_sub and ignores os.environ."""
+        from wet_mcp.credential_state import detect_llm_provider_key, set_current_sub
+
+        set_current_sub("user-123")
+        with (
+            patch(
+                "wet_mcp.credential_state.read_for_sub",
+                return_value={"ANTHROPIC_API_KEY": "ant-123"},
+            ),
+            patch.dict(os.environ, {"OPENAI_API_KEY": "sk-global"}, clear=True),
+        ):
+            assert detect_llm_provider_key() == "ANTHROPIC_API_KEY"
+
+    def test_multi_user_no_fallback_to_env(self):
+        """Per-sub mode must NOT fall back to os.environ."""
+        from wet_mcp.credential_state import detect_llm_provider_key, set_current_sub
+
+        set_current_sub("user-123")
+        with (
+            patch("wet_mcp.credential_state.read_for_sub", return_value={}),
+            patch.dict(os.environ, {"OPENAI_API_KEY": "sk-global"}, clear=True),
+        ):
+            assert detect_llm_provider_key() is None
+
+    def test_priority_order(self):
+        """Order is GEMINI > GOOGLE > OPENAI > ANTHROPIC > XAI."""
+        from wet_mcp.credential_state import detect_llm_provider_key, set_current_sub
+
+        set_current_sub(None)
+        with patch.dict(
+            os.environ,
+            {
+                "OPENAI_API_KEY": "sk-123",
+                "ANTHROPIC_API_KEY": "ant-123",
+                "XAI_API_KEY": "x-123",
+            },
+            clear=True,
+        ):
+            assert detect_llm_provider_key() == "OPENAI_API_KEY"
+
+        with patch.dict(
+            os.environ,
+            {"GEMINI_API_KEY": "gem-123", "GOOGLE_API_KEY": "g-123"},
+            clear=True,
+        ):
+            assert detect_llm_provider_key() == "GEMINI_API_KEY"
+
+    def test_has_llm_provider(self):
+        from wet_mcp.credential_state import has_llm_provider, set_current_sub
+
+        set_current_sub(None)
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "sk-123"}, clear=True):
+            assert has_llm_provider() is True
+        with patch.dict(os.environ, {}, clear=True):
+            assert has_llm_provider() is False
