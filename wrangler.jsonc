@@ -5,6 +5,7 @@
   "name": "wet-mcp-worker",
   "main": "src/worker.ts",
   "compatibility_date": "2026-06-14",
+  "compatibility_flags": ["nodejs_compat"],
   "containers": [
     {
       "name": "wet-mcp-worker",
@@ -32,6 +33,10 @@
   // GOOGLE_VERTEX_EXPRESS_API_KEY, XAI_API_KEY, MCP_RELAY_PASSWORD, MCP_DCR_SERVER_SECRET,
   // and SEARXNG_URL (with basic-auth userinfo) — or TAVILY_API_KEY if SEARCH_BACKEND=tavily.
   "vars": {
+    "DISABLE_LOCAL_BROWSER": "true",
+    "DISABLE_LOCAL_EMBED": "true",
+    "BROWSER_BACKENDS": "cf-browser-rendering,browserless",
+    "CF_ACCOUNT_ID": "<YOUR_ACCOUNT_ID>",
     "PUBLIC_URL": "https://wet.n24q02m.com",
     "MCP_STORAGE_BACKEND": "cf-kv",
     "MCP_KV_BASE_URL": "http://kv.internal",
