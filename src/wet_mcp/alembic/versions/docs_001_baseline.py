@@ -40,6 +40,20 @@ depends_on = None
 
 def upgrade() -> None:
     """Idempotent baseline create: matches DocsDB._create_*_table SQL exactly."""
+    _create_libraries_table()
+    _create_versions_table()
+    _create_doc_chunks_table()
+    _create_fts_table()
+    _create_triggers()
+
+
+def downgrade() -> None:
+    """No-op: baseline is the earliest schema state."""
+    return None
+
+
+def _create_libraries_table() -> None:
+    """Create libraries table and indexes."""
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS libraries (
@@ -56,6 +70,9 @@ def upgrade() -> None:
     )
     op.execute("CREATE INDEX IF NOT EXISTS idx_libraries_name ON libraries(name)")
 
+
+def _create_versions_table() -> None:
+    """Create versions table."""
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS versions (
@@ -73,6 +90,9 @@ def upgrade() -> None:
         """
     )
 
+
+def _create_doc_chunks_table() -> None:
+    """Create doc_chunks table and indexes."""
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS doc_chunks (
@@ -105,6 +125,9 @@ def upgrade() -> None:
         "ON doc_chunks(url, version_id, chunk_index)"
     )
 
+
+def _create_fts_table() -> None:
+    """Create FTS virtual table."""
     op.execute(
         """
         CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks_fts
@@ -120,6 +143,9 @@ def upgrade() -> None:
         """
     )
 
+
+def _create_triggers() -> None:
+    """Create FTS sync triggers."""
     op.execute(
         """
         CREATE TRIGGER IF NOT EXISTS chunks_ai AFTER INSERT ON doc_chunks BEGIN
@@ -146,8 +172,3 @@ def upgrade() -> None:
         END
         """
     )
-
-
-def downgrade() -> None:
-    """No-op: baseline is the earliest schema state."""
-    return None
