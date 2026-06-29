@@ -612,6 +612,8 @@ def save_credentials(config: dict[str, str], context: dict[str, str]) -> dict | 
         return _save_credentials_multi_user(config, sub)
 
     return _save_credentials_single_user(config)
+
+
 async def _gdrive_token_poll(
     client_id: str,
     client_secret: str,
