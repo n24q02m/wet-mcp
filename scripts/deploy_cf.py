@@ -334,7 +334,17 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_build:
         print("[1/4] docker build --target http")
         _run(
-            ["docker", "build", "--target", "http", "-t", local, "."],
+            [
+                "docker",
+                "build",
+                "--target",
+                "http",
+                "--build-arg",
+                "SLIM=1",
+                "-t",
+                local,
+                ".",
+            ],
             dry=args.dry_run,
             cwd=repo,
         )

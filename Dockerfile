@@ -63,9 +63,13 @@ vf = Path(spec.submodule_search_locations[0]) / 'version_frozen.py'; \
 vf.write_text('VERSION_STRING = \"0.0.0\"\nVERSION_TAG = \"v0.0.0\"\nDOCKER_TAG = \"\"\nGIT_URL = \"https://github.com/searxng/searxng\"\nGIT_BRANCH = \"master\"\n'); \
 print(f'Created {vf}')"
 
-# Install Playwright chromium browser
+# Install Playwright chromium browser (skipped in SLIM CF builds — the browser
+# leg is offloaded to remote backends: CF Browser Rendering + OCI browserless,
+# selected via BROWSER_BACKENDS + DISABLE_LOCAL_BROWSER. Dropping the ~640MB
+# chromium binary slims the CF container image.)
+ARG SLIM=0
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
-RUN uv run python -m playwright install chromium
+RUN mkdir -p /opt/playwright && if [ "$SLIM" != "1" ]; then uv run python -m playwright install chromium; fi
 
 # ========================
 # Stage 2: Runtime base (shared by stdio + http targets)
