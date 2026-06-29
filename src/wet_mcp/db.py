@@ -903,8 +903,15 @@ class DocsDB:
         )
 
         base_cols = (
-            "id", "version_id", "library_id", "url", "title",
-            "chunk_index", "content", "heading_path", "created_at",
+            "id",
+            "version_id",
+            "library_id",
+            "url",
+            "title",
+            "chunk_index",
+            "content",
+            "heading_path",
+            "created_at",
         )
         all_cols = base_cols + tuple(optional_cols)
 
@@ -924,10 +931,6 @@ class DocsDB:
 
         self._conn.commit()
         return len(chunks)
-
-
-
-
 
     def _add_chunk_vectors(
         self,
