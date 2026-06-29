@@ -661,3 +661,44 @@ def test_wet_google_alias_satisfies_gemini(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "x")
     # GOOGLE_API_KEY alias satisfies GEMINI_API_KEY for the gemini default.
     assert "gemini/gemini-embedding-001" in Settings().embedding_chain()
+
+
+# -----------------------------------------------------------------------
+# Per-sub chain resolution (chain_for_creds)
+# -----------------------------------------------------------------------
+
+
+def test_embedding_chain_for_creds():
+    s = Settings()
+    # Explicit
+    assert s.embedding_chain_for_creds({"EMBEDDING_MODELS": "a,b"}) == ["a", "b"]
+    # Default filtered
+    creds = {"GEMINI_API_KEY": "x"}
+    assert s.embedding_chain_for_creds(creds) == ["gemini/gemini-embedding-001"]
+    # Default filtered - none
+    assert s.embedding_chain_for_creds({}) == []
+
+
+def test_rerank_chain_for_creds():
+    # Disabled
+    assert Settings(rerank_enabled=False).rerank_chain_for_creds({}) == []
+
+    s = Settings(rerank_enabled=True)
+    # Explicit
+    assert s.rerank_chain_for_creds({"RERANK_MODELS": "c,d"}) == ["c", "d"]
+    # Default filtered
+    creds = {"COHERE_API_KEY": "y"}
+    assert s.rerank_chain_for_creds(creds) == ["cohere/rerank-v3.5"]
+    # Default filtered - none
+    assert s.rerank_chain_for_creds({}) == []
+
+
+def test_llm_chain_for_creds():
+    s = Settings()
+    # Explicit
+    assert s.llm_chain_for_creds({"LLM_MODELS": "e,f"}) == ["e", "f"]
+    # Default filtered
+    creds = {"GEMINI_API_KEY": "z"}
+    assert s.llm_chain_for_creds(creds) == ["gemini/gemini-3-flash-preview"]
+    # Default filtered - none
+    assert s.llm_chain_for_creds({}) == []
