@@ -50,9 +50,17 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --reinstall-package litellm "litellm==$(uv pip show litellm | awk '/^Version:/ {print $2}')" \
     && uv run python -c "import litellm; from litellm.constants import REDIS_CIRCUIT_BREAKER_FAILURE_THRESHOLD; from mcp_core.llm.catalog import list_models; n=len(list_models(modes=('chat',), configured_only=False, limit=5000)); assert n > 100, f'catalog too small: {n}'; print(f'litellm import OK, catalog chat models={n}')"
 
-# Install SearXNG from GitHub (zip archive + no-build-isolation for speed)
-# Then patch version_frozen.py (zip has no .git for version detection)
+# SLIM=1 (CF builds) drops all three LOCAL capability legs (native chromium,
+# qwen3 ONNX embed/rerank, bundled SearXNG) — the CF deploy offloads each to a
+# remote/cloud tier via DISABLE_LOCAL_BROWSER/EMBED/SEARCH. Declared HERE (after
+# uv sync) so it does not bust the apt + uv-sync layer cache above.
+ARG SLIM=0
+
+# Install SearXNG from GitHub (zip archive + no-build-isolation for speed).
+# SLIM (CF) builds skip it — the search-local leg is offloaded to external
+# SearXNG (SEARXNG_URL) + cloud backends (Tavily/Brave/Exa); DISABLE_LOCAL_SEARCH.
 RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ "$SLIM" != "1" ]; then \
     uv pip install --quiet msgspec setuptools wheel pyyaml \
     && uv pip install --quiet --no-build-isolation \
     https://github.com/searxng/searxng/archive/refs/heads/master.zip \
@@ -61,13 +69,22 @@ import importlib.util; from pathlib import Path; \
 spec = importlib.util.find_spec('searx'); \
 vf = Path(spec.submodule_search_locations[0]) / 'version_frozen.py'; \
 vf.write_text('VERSION_STRING = \"0.0.0\"\nVERSION_TAG = \"v0.0.0\"\nDOCKER_TAG = \"\"\nGIT_URL = \"https://github.com/searxng/searxng\"\nGIT_BRANCH = \"master\"\n'); \
-print(f'Created {vf}')"
+print(f'Created {vf}')"; \
+    else echo "SLIM: skipping local SearXNG (external SEARXNG_URL used)"; fi
+
+# SLIM builds also drop the local qwen3 ONNX embed/rerank deps (CF uses cloud
+# Jina via EMBEDDING_MODELS; DISABLE_LOCAL_EMBED/RERANK). qwen3_embed is
+# lazy-imported, so the slim image runs fine as long as the cloud chain is set.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    if [ "$SLIM" = "1" ]; then \
+    uv pip uninstall qwen3-embed onnxruntime || true; \
+    echo "SLIM: pruned qwen3-embed + onnxruntime"; \
+    else echo "full build: keeping local qwen3 embed/rerank"; fi
 
 # Install Playwright chromium browser (skipped in SLIM CF builds — the browser
 # leg is offloaded to remote backends: CF Browser Rendering + OCI browserless,
 # selected via BROWSER_BACKENDS + DISABLE_LOCAL_BROWSER. Dropping the ~640MB
 # chromium binary slims the CF container image.)
-ARG SLIM=0
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 RUN mkdir -p /opt/playwright && if [ "$SLIM" != "1" ]; then uv run python -m playwright install chromium; fi
 
