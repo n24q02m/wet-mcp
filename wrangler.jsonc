@@ -36,7 +36,7 @@
     "DISABLE_LOCAL_SEARCH": "true",
     "DISABLE_LOCAL_BROWSER": "true",
     "DISABLE_LOCAL_EMBED": "true",
-    "BROWSER_BACKENDS": "cf-browser-rendering,browserless",
+    "BROWSER_BACKENDS": "browserless,cf-browser-rendering",
     "CF_ACCOUNT_ID": "<YOUR_ACCOUNT_ID>",
     "PUBLIC_URL": "https://wet.n24q02m.com",
     "MCP_STORAGE_BACKEND": "cf-kv",
