@@ -21,6 +21,17 @@ docs/
 Dockerfile
 docker-compose.yml
 
+# Build artifacts + local state — NOT needed in the container image and they
+# bloat the build context (node_modules ~243MB, .venv, wrangler local state),
+# making the context transfer crawl (every build was effectively re-shipping
+# 243MB+). The CF worker bundle uses node_modules locally via `wrangler deploy`,
+# never inside the container image.
+node_modules/
+.venv/
+.wrangler/
+.wrangler-dryrun/
+wrangler.deploy.jsonc
+
 # Config
 .pre-commit-config.yaml
 .editorconfig

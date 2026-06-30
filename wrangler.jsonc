@@ -33,6 +33,7 @@
   // GOOGLE_VERTEX_EXPRESS_API_KEY, XAI_API_KEY, MCP_RELAY_PASSWORD, MCP_DCR_SERVER_SECRET,
   // and SEARXNG_URL (with basic-auth userinfo) — or TAVILY_API_KEY if SEARCH_BACKEND=tavily.
   "vars": {
+    "DISABLE_LOCAL_SEARCH": "true",
     "DISABLE_LOCAL_BROWSER": "true",
     "DISABLE_LOCAL_EMBED": "true",
     "BROWSER_BACKENDS": "cf-browser-rendering,browserless",
