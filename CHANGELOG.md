@@ -2,6 +2,83 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.24 (2026-06-30)
+
+### Bug Fixes
+
+- Add test for detect_llm_provider_key ([#1443](https://github.com/n24q02m/wet-mcp/pull/1443),
+  [`6fb644c`](https://github.com/n24q02m/wet-mcp/commit/6fb644c800b8cf3b4ef1aa10cf3e7b4ae35dc3c3))
+
+- Add test for except path in embedder ([#1444](https://github.com/n24q02m/wet-mcp/pull/1444),
+  [`2c57e7e`](https://github.com/n24q02m/wet-mcp/commit/2c57e7e3c830b5c557311580906f732ab1c059ec))
+
+- Add test for except path in server ([#1441](https://github.com/n24q02m/wet-mcp/pull/1441),
+  [`ab5cff1`](https://github.com/n24q02m/wet-mcp/commit/ab5cff110f153456eb3e87edcb63b5f228d304c7))
+
+- Add test for rerank_chain_for_creds ([#1433](https://github.com/n24q02m/wet-mcp/pull/1433),
+  [`4f7a3c6`](https://github.com/n24q02m/wet-mcp/commit/4f7a3c6f88ed44828c652c07d7fc71da3c6bcead))
+
+- Batch execute-script loop to avoid N+1 ([#1447](https://github.com/n24q02m/wet-mcp/pull/1447),
+  [`faf75a3`](https://github.com/n24q02m/wet-mcp/commit/faf75a36db13003ad8798e74989ce03bffeae312))
+
+- Batch vector search result fetch to avoid N+1
+  ([#1435](https://github.com/n24q02m/wet-mcp/pull/1435),
+  [`4c5fc64`](https://github.com/n24q02m/wet-mcp/commit/4c5fc641db6ffcf0267997ca4428996140a766e7))
+
+- Canary Gate-A/B settle-retry to avoid false-fail on slow container startup
+  ([#1450](https://github.com/n24q02m/wet-mcp/pull/1450),
+  [`3b834a5`](https://github.com/n24q02m/wet-mcp/commit/3b834a504501044186294beb71d48160242102b7))
+
+- Collapse OAuth + per-sub routing to one DO (resolve max_instances=1 deadlock)
+  ([#1458](https://github.com/n24q02m/wet-mcp/pull/1458),
+  [`fb27101`](https://github.com/n24q02m/wet-mcp/commit/fb271016e077bf47afff6fb483592276d6aab042))
+
+- Extract add_chunks helpers for readability ([#1439](https://github.com/n24q02m/wet-mcp/pull/1439),
+  [`e925347`](https://github.com/n24q02m/wet-mcp/commit/e9253477d1996d9a76b6533f29b4c6b4e0b196d1))
+
+- Extract import_jsonl per-entity helpers for readability
+  ([#1438](https://github.com/n24q02m/wet-mcp/pull/1438),
+  [`30e09a0`](https://github.com/n24q02m/wet-mcp/commit/30e09a03d262746251a1b1b6397f66f9c2dbf8bd))
+
+- Extract search FTS/vec/adjacent helpers for readability
+  ([#1445](https://github.com/n24q02m/wet-mcp/pull/1445),
+  [`50c574c`](https://github.com/n24q02m/wet-mcp/commit/50c574cb6c15cfcca65ae3bb9bd32cf675a6692e))
+
+- Extract upsert_library insert/update helpers for readability
+  ([#1437](https://github.com/n24q02m/wet-mcp/pull/1437),
+  [`8199114`](https://github.com/n24q02m/wet-mcp/commit/8199114d46798df65c055e38840d302e1b093ad0))
+
+- Pass query_docs optional args via DocsQueryOptions dataclass
+  ([#1440](https://github.com/n24q02m/wet-mcp/pull/1440),
+  [`58bba73`](https://github.com/n24q02m/wet-mcp/commit/58bba73af98bccc2f16a6b28f8b85537a68c8b6b))
+
+- Prefer self-hosted browserless over CF Browser Rendering in CF deploy
+  ([#1459](https://github.com/n24q02m/wet-mcp/pull/1459),
+  [`1cb8f92`](https://github.com/n24q02m/wet-mcp/commit/1cb8f927293e144ddb91556e76430c7df0169e89))
+
+- Route OAuth /token refresh to the sub's DO to avoid max_instances=1 deadlock
+  ([#1452](https://github.com/n24q02m/wet-mcp/pull/1452),
+  [`cd7f169`](https://github.com/n24q02m/wet-mcp/commit/cd7f169fe362ff94e958ad069880572fe0fd6a89))
+
+- SLIM build drops all 3 local capability legs + fix .dockerignore context bloat
+  ([#1457](https://github.com/n24q02m/wet-mcp/pull/1457),
+  [`665c44d`](https://github.com/n24q02m/wet-mcp/commit/665c44d05bdddabb76614fe5d893a2bd25990aa4))
+
+- Slim CF container by offloading the browser to remote backends
+  ([#1451](https://github.com/n24q02m/wet-mcp/pull/1451),
+  [`1bd0eb0`](https://github.com/n24q02m/wet-mcp/commit/1bd0eb04d4e6ad12443ecd399471f536b85687ae))
+
+- Split save_credentials into multi-user/single-user helpers
+  ([#1449](https://github.com/n24q02m/wet-mcp/pull/1449),
+  [`dece6f3`](https://github.com/n24q02m/wet-mcp/commit/dece6f38f4700cf257c1f750d6d7280643f12932))
+
+- Update dependency @cloudflare/workers-types to ^4.20260630.1
+  ([`1eea087`](https://github.com/n24q02m/wet-mcp/commit/1eea087eee4b029866b59ab0f16534369bdd482b))
+
+- Use literal ALTER statements in libraries migration (B608)
+  ([`8a51032`](https://github.com/n24q02m/wet-mcp/commit/8a51032eb31fc59dd538f2044a1448b1523ec603))
+
+
 ## v3.3.0-beta.23 (2026-06-29)
 
 ### Bug Fixes
