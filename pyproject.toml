@@ -73,7 +73,7 @@ dependencies = [
     "google-api-python-client>=2.198.0",
     "google-auth>=2.55.1",
     # S3-compatible sync (AWS S3, Cloudflare R2, Backblaze B2, MinIO)
-    "boto3>=1.43.36",
+    "boto3>=1.43.37",
     # Production WSGI server for embedded SearXNG on Windows
     # (Werkzeug dev server deadlocks under concurrent engine requests)
     "waitress>=3.0.2; sys_platform == 'win32'",
