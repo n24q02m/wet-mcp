@@ -186,7 +186,7 @@ export default {
     // WetContainer.outboundByHost registry below; unit tests call the handlers
     // directly via the OUTBOUND_BY_HOST export.
     if (env.WET) {
-      const userId = await extractUserId(request)
+      const userId = await extractUserId()
       const stub = env.WET.get(env.WET.idFromName(userId))
       return stub.fetch(request)
     }
@@ -194,46 +194,17 @@ export default {
   },
 }
 
-async function extractUserId(request: Request): Promise<string> {
-  // JWT sub from the Bearer token (verified by mcp-core OAuth middleware in the
-  // container). SINGLE-USER CONTRACT (E.2): no token or no `sub` -> the reserved
-  // id "default", so setup and serving collapse onto ONE Durable Object id and
-  // the credential write+read avoid a cross-colo KV hop. Per-`sub` tokens get
-  // their own isolated DO (multi-user). Downstream servers MUST keep this.
-  const auth = request.headers.get('authorization') ?? ''
-  const m = auth.match(/^Bearer\s+(.+)$/)
-  if (m) {
-    try {
-      const payload = JSON.parse(atob(m[1].split('.')[1] ?? ''))
-      if (typeof payload.sub === 'string') return payload.sub
-    } catch {
-      /* fall through to the OAuth /token + default handling below */
-    }
-  }
-  // OAuth `POST /token` (grant_type=refresh_token) carries NO Bearer header, so
-  // the header path above routes it to the reserved "default" id. But the
-  // refresh_token IS a self-contained JWT with `sub`, and refresh rotation is
-  // stateless (any warm container can verify+rotate it). Route it to that sub's
-  // (already-warm, serving /mcp) DO instead of "default" so a refresh while the
-  // sub container is warm does NOT need to spawn a second container — under
-  // max_instances=1 that spawn fails ("max running container instances
-  // exceeded" -> 500 -> refresh fails -> tokens expire -> server unusable).
-  // Read the body off a CLONE so the original (forwarded to the container) is
-  // untouched. authorization_code grant + /authorize + /.well-known keep
-  // "default" (initial setup, low-freq, no warm-sub conflict).
-  try {
-    const url = new URL(request.url)
-    if (request.method === 'POST' && url.pathname === '/token') {
-      const form = await request.clone().formData()
-      if (form.get('grant_type') === 'refresh_token') {
-        const rt = String(form.get('refresh_token') ?? '')
-        const payload = JSON.parse(atob(rt.split('.')[1] ?? ''))
-        if (typeof payload.sub === 'string') return payload.sub
-      }
-    }
-  } catch {
-    /* malformed token/body -> fall through to default */
-  }
+async function extractUserId(): Promise<string> {
+  // SINGLE-DO COLLAPSE (2026-06-30): route EVERY request (OAuth /authorize,
+  // /token, /.well-known AND every sub's /mcp) to the one reserved "default"
+  // Durable Object. Under max_instances=1 (locked solo-dev cost rule) the prior
+  // per-sub-DO routing DEADLOCKED: the OAuth flow (no Bearer) warmed DO "default"
+  // while the first /mcp (Bearer sub) needed DO "<sub>" -- a 2nd container that
+  // cannot spawn under max=1 ("Maximum number of running container instances
+  // exceeded" 500). Safe: the container is STATELESS -- per-sub data is
+  // externalised (D1 sub-column / Vectorize sub-filter / KV) keyed by the Bearer
+  // JWT sub, so one container serves all subs with no leakage. (Trade-off: one
+  // shared container for all subs; fine for solo / low concurrency.)
   return 'default'
 }
 
