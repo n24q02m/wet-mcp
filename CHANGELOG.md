@@ -2,6 +2,27 @@
 
 <!-- version list -->
 
+## v3.3.1-beta.1 (2026-07-01)
+
+### Bug Fixes
+
+- Add Vertex AI (Express) API key field to relay schema
+  ([#1469](https://github.com/n24q02m/wet-mcp/pull/1469),
+  [`0884c18`](https://github.com/n24q02m/wet-mcp/commit/0884c183526db99224aa50023cb693b8fda4eeea))
+
+- Add vertex ai (express) support to the relay credential form
+  ([#1469](https://github.com/n24q02m/wet-mcp/pull/1469),
+  [`0884c18`](https://github.com/n24q02m/wet-mcp/commit/0884c183526db99224aa50023cb693b8fda4eeea))
+
+- Bump mcp-core to 1.18.1b1 for the vertex relay dropdown fix
+  ([#1470](https://github.com/n24q02m/wet-mcp/pull/1470),
+  [`c9a818e`](https://github.com/n24q02m/wet-mcp/commit/c9a818e255e551a390b068989cab1b48ab5eea9e))
+
+- Recognize the Vertex Express key as a configured cloud credential
+  ([#1469](https://github.com/n24q02m/wet-mcp/pull/1469),
+  [`0884c18`](https://github.com/n24q02m/wet-mcp/commit/0884c183526db99224aa50023cb693b8fda4eeea))
+
+
 ## v3.3.0 (2026-07-01)
 
 
