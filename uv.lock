@@ -1470,7 +1470,7 @@ wheels = [
 
 [[package]]
 name = "litellm"
-version = "1.89.3"
+version = "1.90.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -1486,9 +1486,9 @@ dependencies = [
     { name = "tiktoken" },
     { name = "tokenizers" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/56/f1/f7cfead063f2ab1877c8fb465d0d7fe300b75f081bcb73525f6d550aeb1c/litellm-1.89.3.tar.gz", hash = "sha256:8fcdb2b7a0ef3381d41adf164443842e31ef9f0cd5bcda6fc3c0bd8bc2959510", size = 14080611, upload-time = "2026-06-20T22:42:26.997Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/88/00/4187e33818d0de19fd602214ce15a6e1cfa5bf04fb50a6e59606214a92df/litellm-1.90.2.tar.gz", hash = "sha256:b536603894ba2a0ccd14a6f1ebeb5f46cc35b19d4537e8fda7bfdfc7757f19d3", size = 14819154, upload-time = "2026-07-01T02:29:58.397Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d1/f1/34d174ff1d84e459b30f971606ac9cb7078ad24cd7661e9786b25adf7def/litellm-1.89.3-py3-none-any.whl", hash = "sha256:414ef5aee504b2b3eb1b219d39f1c11902db399cbdbc06e5fb550c15d731abeb", size = 15495226, upload-time = "2026-06-20T22:42:23.156Z" },
+    { url = "https://files.pythonhosted.org/packages/24/30/3afa7b212ce1f9bb8b6fa5f58c631f437c1d7b3a025e4e4ed6b01b3d28ad/litellm-1.90.2-py3-none-any.whl", hash = "sha256:6fb46f485150cc861be62a62d670f94d33adbd26991091befeb51bcdfdad34f6", size = 16612720, upload-time = "2026-07-01T02:29:55.215Z" },
 ]
 
 [[package]]
@@ -1780,7 +1780,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.18.0b20"
+version = "1.18.1b1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1795,9 +1795,9 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0c/10/ec1bdeff0df00bb00382107f79ca575c784c28067fda4229083ab3a97dc7/n24q02m_mcp_core-1.18.0b20.tar.gz", hash = "sha256:6814f5e0c9887dff3afdf2c7049ff4b598fa1c2cbca0656d95f48fb1f2226d8b", size = 301569, upload-time = "2026-06-23T02:28:51.212Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/2f/1d7d959c288767da22b2ede972b3f469726f7956a3007e0dededfa8517b3/n24q02m_mcp_core-1.18.1b1.tar.gz", hash = "sha256:e508d95350c2c0f6ad1538b8e9038629d4652132d4a365d1b2f5275b534a3ec3", size = 305285, upload-time = "2026-07-01T16:16:36.081Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/db/a555b269c368c2238a82186e90f65a41a07a93b11d0c4b8516703a19a90b/n24q02m_mcp_core-1.18.0b20-py3-none-any.whl", hash = "sha256:66fae2c80c3287b1a7c5d3aa3eec0948ccd819efb1ddc9549a9ecfb003be3d84", size = 168546, upload-time = "2026-06-23T02:28:49.873Z" },
+    { url = "https://files.pythonhosted.org/packages/60/17/cfbb9120e17c5bea3e47d709789ed3c179970010d847351a123fb2229fa3/n24q02m_mcp_core-1.18.1b1-py3-none-any.whl", hash = "sha256:b173071fbbbe7aec7665676e58ff9faf68b4dfb257083f4b7f976bc5363cb01f", size = 169902, upload-time = "2026-07-01T16:16:34.97Z" },
 ]
 
 [package.optional-dependencies]
@@ -2935,8 +2935,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography" },
-    { name = "jeepney" },
+    { name = "cryptography", marker = "sys_platform != 'win32'" },
+    { name = "jeepney", marker = "sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -3429,7 +3429,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "3.3.0b24"
+version = "3.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
