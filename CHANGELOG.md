@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.26 (2026-07-01)
+
+### Bug Fixes
+
+- Downgrade wet-mcp CF instance_type to basic now that the slim image fits
+  ([#1465](https://github.com/n24q02m/wet-mcp/pull/1465),
+  [`52537dc`](https://github.com/n24q02m/wet-mcp/commit/52537dc5dc76691562ea617f34be76f925ed7ad4))
+
+
 ## v3.3.0-beta.25 (2026-07-01)
 
 ### Bug Fixes
