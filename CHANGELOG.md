@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.3.0-beta.25 (2026-07-01)
+
+### Bug Fixes
+
+- Document browserless render backend and BROWSER_BACKENDS config
+  ([#1464](https://github.com/n24q02m/wet-mcp/pull/1464),
+  [`528ef12`](https://github.com/n24q02m/wet-mcp/commit/528ef12e0089e7ca28f39d433b2d55247b115294))
+
+- **deps**: Update non-major dependencies ([#1461](https://github.com/n24q02m/wet-mcp/pull/1461),
+  [`8e0580c`](https://github.com/n24q02m/wet-mcp/commit/8e0580cda208bdb076da3dd325375c7f6c952b4f))
+
+### Chores
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to 3d868e5
+  ([#1460](https://github.com/n24q02m/wet-mcp/pull/1460),
+  [`7b2b34e`](https://github.com/n24q02m/wet-mcp/commit/7b2b34e95865d28cbadefa9124ebd78aa26a73f4))
+
+
 ## v3.3.0-beta.24 (2026-06-30)
 
 ### Bug Fixes
