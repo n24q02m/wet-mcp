@@ -81,7 +81,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 - **Web Search** -- Embedded SearXNG metasearch (Google, Bing, DuckDuckGo, Brave) with query expansion, TTL cache (1 h general / 5 min time-sensitive), standardized citation format, and 200-token snippet cap. Optional cloud search backends (Tavily, Brave, Exa) as a fallback chain via `SEARCH_BACKENDS`
 - **Academic Research** -- Search Google Scholar, Semantic Scholar, arXiv, PubMed, CrossRef, BASE
 - **Library Docs** -- Auto-discover and index documentation with FTS5 hybrid search, HyDE-enhanced retrieval, and version-specific docs
-- **Content Extract** -- 5-strategy escalation chain via `n24q02m-web-core` `ScrapingAgent` (`basic_http` -> `tls_spoof` -> `headless` Crawl4AI), markitdown bridge for low-tier HTML/MD fallback, smart chunks structured output (clean text + markdown + JSON-LD + code blocks + metadata), batch processing (up to 50 URLs), deep crawling, site mapping
+- **Content Extract** -- 5-strategy escalation chain via `n24q02m-web-core` `ScrapingAgent` (`basic_http` -> `tls_spoof` -> render backends from `BROWSER_BACKENDS` (`native` / `browserless` / `cf-browser-rendering`) -> optional key-gated `captcha`), markitdown bridge for low-tier HTML/MD fallback, smart chunks structured output (clean text + markdown + JSON-LD + code blocks + metadata), batch processing (up to 50 URLs), deep crawling, site mapping
 - **Local File Conversion** -- Convert PDF, DOCX, XLSX, CSV, HTML, EPUB, PPTX to Markdown
 - **Media** -- List + download images / videos / audio files. `analyze` was removed in v2.0.0 -- use `imagine-mcp.understand` for vision/audio inference
 - **Anti-bot** -- Stealth strategies bypass Cloudflare, Medium, LinkedIn, Twitter
@@ -148,6 +148,19 @@ Any other litellm provider works via env passthrough -- see
 `searxng` (default, local) plus optional cloud providers `tavily` / `brave` /
 `exa`. Point at an external SearXNG with `SEARXNG_URL`. Cloud providers need
 `TAVILY_API_KEY` / `BRAVE_API_KEY` / `EXA_API_KEY`.
+
+**Browser render backends** -- `BROWSER_BACKENDS` (CSV, escalation chain) picks
+the headless render leg of `extract`: `native` (in-process chromium, the
+zero-config default), `browserless` (self-host render service -- set
+`BROWSERLESS_URL` + `BROWSERLESS_TOKEN`), and `cf-browser-rendering` (Cloudflare
+Browser Rendering -- set `CF_ACCOUNT_ID` + `CF_BROWSER_RENDERING_TOKEN`). Empty
+chain falls back to `native`. Set `CAPSOLVER_API_KEY` to append an optional,
+key-gated CAPTCHA tier as the last escalation step.
+
+**Disable local fallbacks** -- opt out of the heavy in-process local fallbacks
+per capability (e.g. on a slim container that renders/searches/embeds via cloud
+backends only): `DISABLE_LOCAL_BROWSER`, `DISABLE_LOCAL_SEARCH`,
+`DISABLE_LOCAL_EMBED`, `DISABLE_LOCAL_RERANK`.
 
 **Docs sync** -- `SYNC_ENABLED` (default `true`), `GOOGLE_DRIVE_CLIENT_ID`
 (required for sync), `SYNC_FOLDER` (default `wet-mcp`), `SYNC_INTERVAL` (default
@@ -289,6 +302,9 @@ Run your own single-user wet instance serverless on Cloudflare (Containers + D1 
    wrangler secret put MCP_RELAY_PASSWORD
    wrangler secret put MCP_DCR_SERVER_SECRET
    wrangler secret put SEARXNG_URL
+   wrangler secret put BROWSERLESS_URL          # render backend (BROWSER_BACKENDS default = browserless,cf-browser-rendering)
+   wrangler secret put BROWSERLESS_TOKEN
+   wrangler secret put CF_BROWSER_RENDERING_TOKEN
    ```
 6. `wrangler deploy` and complete setup in the browser relay form at your Worker domain.
 
