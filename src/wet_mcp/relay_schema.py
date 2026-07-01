@@ -113,6 +113,12 @@ RELAY_SCHEMA: dict[str, Any] = {
         ),
         _key_field("XAI_API_KEY", "xAI API Key", "xai-...", "https://console.x.ai/"),
         _key_field(
+            "GOOGLE_VERTEX_EXPRESS_API_KEY",
+            "Vertex AI (Express) API Key",
+            "AQ...",
+            "https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview",
+        ),
+        _key_field(
             "TAVILY_API_KEY",
             "Tavily API Key",
             "tvly-...",
