@@ -41,3 +41,15 @@ def test_model_chain_fields_have_no_hardcoded_suggestions():
         "brave",
         "exa",
     ]
+
+
+def test_vertex_express_key_field_present_and_derived():
+    # Selecting a vertex_express/gemini model must surface a credential box, so
+    # the schema declares GOOGLE_VERTEX_EXPRESS_API_KEY as a derived field. The
+    # unsupported vertex_ai/ variant (SA-only) is never offered nor declared.
+    by_key = {f["key"]: f for f in RELAY_SCHEMA["fields"]}
+    assert "GOOGLE_VERTEX_EXPRESS_API_KEY" in by_key
+    f = by_key["GOOGLE_VERTEX_EXPRESS_API_KEY"]
+    assert f.get("derived") is True
+    assert f.get("type") == "password"
+    assert "VERTEX_AI_API_KEY" not in by_key  # no dead-end field

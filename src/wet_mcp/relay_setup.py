@@ -28,6 +28,7 @@ CLOUD_KEYS = [
     "OPENAI_API_KEY",
     "COHERE_API_KEY",
     "XAI_API_KEY",
+    "GOOGLE_VERTEX_EXPRESS_API_KEY",
 ]
 
 # 5 minutes: user needs time to copy URL, open browser, fill 4 keys
