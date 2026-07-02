@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.4.0-beta.2 (2026-07-02)
+
+### Bug Fixes
+
+- Bun install in deploy-cf so wrangler can bundle worker.ts
+  ([#1475](https://github.com/n24q02m/wet-mcp/pull/1475),
+  [`e6daa20`](https://github.com/n24q02m/wet-mcp/commit/e6daa20d3fbf0c666b3640517ccf45c83b91512c))
+
+
 ## v3.4.0-beta.1 (2026-07-02)
 
 ### Bug Fixes
