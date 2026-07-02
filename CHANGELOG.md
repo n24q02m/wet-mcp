@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.4.0 (2026-07-02)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.18.1 ([#1478](https://github.com/n24q02m/wet-mcp/pull/1478),
+  [`0ec45c5`](https://github.com/n24q02m/wet-mcp/commit/0ec45c55152037ff74561240a4e897a73a47f908))
+
+### Features
+
+- Document vertex_express provider option ([#1476](https://github.com/n24q02m/wet-mcp/pull/1476),
+  [`be304b1`](https://github.com/n24q02m/wet-mcp/commit/be304b1bd9d208aaaa6f5b9e6e4bc890e309a2cc))
+
+
 ## v3.4.0-beta.2 (2026-07-02)
 
 ### Bug Fixes
