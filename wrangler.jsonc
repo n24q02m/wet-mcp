@@ -38,7 +38,7 @@
     "DISABLE_LOCAL_EMBED": "true",
     "BROWSER_BACKENDS": "browserless,cf-browser-rendering",
     "CF_ACCOUNT_ID": "<YOUR_ACCOUNT_ID>",
-    "PUBLIC_URL": "https://wet.n24q02m.com",
+    "PUBLIC_URL": "<YOUR_PUBLIC_URL>",
     "MCP_STORAGE_BACKEND": "cf-kv",
     "MCP_KV_BASE_URL": "http://kv.internal",
     "DOCS_DB_BACKEND": "cf-d1",
@@ -51,6 +51,6 @@
     "SEARCH_BACKEND": "searxng",
     "WET_AUTO_SEARXNG": "false"
   },
-  "routes": [{ "pattern": "wet.n24q02m.com", "custom_domain": true }],
+  "routes": [{ "pattern": "<YOUR_WORKER_DOMAIN>", "custom_domain": true }],
   "observability": { "enabled": true }
 }
