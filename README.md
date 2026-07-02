@@ -136,6 +136,7 @@ matching key (litellm `<PROVIDER>_API_KEY` convention):
 |---|---|---|
 | `jina_ai/` | `JINA_AI_API_KEY` | jina.ai/api-key |
 | `gemini/` | `GEMINI_API_KEY` | aistudio.google.com/apikey |
+| `vertex_express/` | `GOOGLE_VERTEX_EXPRESS_API_KEY` | cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview |
 | `openai/` (or bare) | `OPENAI_API_KEY` | platform.openai.com |
 | `cohere/` | `COHERE_API_KEY` | dashboard.cohere.com |
 | `xai/` | `XAI_API_KEY` | console.x.ai |

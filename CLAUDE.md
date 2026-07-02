@@ -60,11 +60,12 @@ mise run dev       # uv run wet-mcp
   - `EMBEDDING_MODELS` -- chain embedding. Rong = local ONNX (qwen3-embed).
   - `RERANK_MODELS` -- chain rerank. Rong = local ONNX cross-encoder.
   - `LLM_MODELS` -- chain LLM. Rong = tat feature LLM.
-- Provider duoc suy ra tu prefix model. API key theo convention litellm `<PROVIDER>_API_KEY`. 6 provider servers goi y:
+- Provider duoc suy ra tu prefix model. API key theo convention litellm `<PROVIDER>_API_KEY`. 7 provider servers goi y:
 
   | model prefix | key env var | get it at |
   |---|---|---|
   | `gemini/` | `GEMINI_API_KEY` | aistudio.google.com/apikey |
+  | `vertex_express/` | `GOOGLE_VERTEX_EXPRESS_API_KEY` | cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview |
   | `openai/` (or bare) | `OPENAI_API_KEY` | platform.openai.com |
   | `jina_ai/` | `JINA_AI_API_KEY` | jina.ai/api-key |
   | `cohere/` | `COHERE_API_KEY` | dashboard.cohere.com |
