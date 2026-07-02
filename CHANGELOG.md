@@ -2,6 +2,25 @@
 
 <!-- version list -->
 
+## v3.4.0-beta.1 (2026-07-02)
+
+### Bug Fixes
+
+- Assert rendered deploy template via parsed JSON not url substring
+  ([#1474](https://github.com/n24q02m/wet-mcp/pull/1474),
+  [`1b2e253`](https://github.com/n24q02m/wet-mcp/commit/1b2e253bb80e0059df7a1192d32bf229a31db29d))
+
+- Run deploy-cf on beta releases too so a beta dispatch redeploys CF
+  ([#1474](https://github.com/n24q02m/wet-mcp/pull/1474),
+  [`1b2e253`](https://github.com/n24q02m/wet-mcp/commit/1b2e253bb80e0059df7a1192d32bf229a31db29d))
+
+### Features
+
+- Deploy CF Worker+Container on stable release from cd.yml
+  ([#1474](https://github.com/n24q02m/wet-mcp/pull/1474),
+  [`1b2e253`](https://github.com/n24q02m/wet-mcp/commit/1b2e253bb80e0059df7a1192d32bf229a31db29d))
+
+
 ## v3.3.1-beta.1 (2026-07-01)
 
 ### Bug Fixes
