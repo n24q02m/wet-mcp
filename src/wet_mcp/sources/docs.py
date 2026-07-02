@@ -2219,7 +2219,8 @@ def _clean_doc_content(content: str) -> str:
 # ---------------------------------------------------------------------------
 
 # Heading pattern for markdown
-_HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$", re.MULTILINE)
+# ⚡ Bolt Optimization: Removed redundant re.MULTILINE since we match against individual lines
+_HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$")
 
 
 @dataclass
@@ -2286,7 +2287,12 @@ def chunk_markdown(
     h2 = ""
 
     for line in content.split("\n"):
-        heading_match = _HEADING_RE.match(line)
+        # ⚡ Bolt Optimization: Fast-path string check avoids regex overhead for most lines
+        if line.startswith("#"):
+            heading_match = _HEADING_RE.match(line)
+        else:
+            heading_match = None
+
         if heading_match:
             level = len(heading_match.group(1))
             heading_text = heading_match.group(2).strip()
