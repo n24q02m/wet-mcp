@@ -12,24 +12,23 @@
  *      account/KV/D1/Vectorize IDs. Preferred when present (this is the live
  *      deploy path; the committed wrangler.jsonc keeps placeholder resource IDs).
  *   2. wrangler.jsonc         - committed reference config. Used as a fallback; its
- *      <YOUR_ACCOUNT_ID>/<YOUR_PUBLIC_URL> placeholders are substituted and its
- *      routes block is dropped at deploy time.
+ *      <YOUR_ACCOUNT_ID>/<YOUR_PUBLIC_URL>/<YOUR_WORKER_DOMAIN> placeholders are
+ *      substituted at deploy time.
  *
- * The committed file is never mutated: substitution + routes-drop happen into a
- * temp config. <YOUR_ACCOUNT_ID> -> $CLOUDFLARE_ACCOUNT_ID and (when the
- * placeholder is present) <YOUR_PUBLIC_URL> -> $PUBLIC_URL; the routes block is
- * stripped so the <YOUR_WORKER_DOMAIN> placeholder never reaches wrangler (the
- * deploy token can't reconcile custom-domain routes, so wrangler.deploy.jsonc
- * omits routes and attaches the domain out-of-band). On the deploy.jsonc path
- * these are no-ops (it carries real values and no routes). Image, secrets, and
- * resource IDs are otherwise left untouched.
+ * The committed file is never mutated: substitution happens into a temp config.
+ * <YOUR_ACCOUNT_ID> -> $CLOUDFLARE_ACCOUNT_ID, and (when the <YOUR_PUBLIC_URL>
+ * placeholder is present) <YOUR_PUBLIC_URL> -> $PUBLIC_URL plus the
+ * <YOUR_WORKER_DOMAIN> custom-domain route pattern -> the host of $PUBLIC_URL. On
+ * the deploy.jsonc path these are no-ops (it carries real values). Image, secrets,
+ * and resource IDs are otherwise left untouched.
  *
  * Env (export before running; any secret manager works):
  *   CLOUDFLARE_API_TOKEN   - required. CF API token with Workers + Containers edit.
  *   CLOUDFLARE_ACCOUNT_ID  - required. Substituted for the <YOUR_ACCOUNT_ID>
  *                            placeholder in the image ref.
  *   PUBLIC_URL             - required only on the wrangler.jsonc fallback path,
- *                            where it fills the <YOUR_PUBLIC_URL> placeholder.
+ *                            where it fills the <YOUR_PUBLIC_URL> placeholder and
+ *                            the <YOUR_WORKER_DOMAIN> route pattern (its host).
  *
  * Usage:
  *   export CLOUDFLARE_API_TOKEN=...      # however you store secrets
@@ -49,12 +48,10 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 
 const PLACEHOLDER = "<YOUR_ACCOUNT_ID>";
-const PUBLIC_URL_PLACEHOLDER = "<YOUR_PUBLIC_URL>";
 const dryRun = process.argv.includes("--dry-run");
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-const publicUrl = process.env.PUBLIC_URL;
 if (!token) {
   console.error("CLOUDFLARE_API_TOKEN is not set. Export it (e.g. from skret) first.");
   process.exit(1);
@@ -72,40 +69,34 @@ const sourceConfig = existsSync("wrangler.deploy.jsonc")
 console.log(`cf:deploy using config: ${sourceConfig}`);
 
 const original = readFileSync(sourceConfig, "utf8");
-const substituted = original.split(PLACEHOLDER).join(accountId);
+let substituted = original.split(PLACEHOLDER).join(accountId);
 if (substituted.includes(PLACEHOLDER)) {
   console.error(`Failed to substitute ${PLACEHOLDER} in ${sourceConfig}.`);
   process.exit(1);
 }
 
-// The committed reference wrangler.jsonc uses a <YOUR_PUBLIC_URL> placeholder so
-// a forker fills their own domain. Substitute it from $PUBLIC_URL, mirroring the
-// account guard; only required when the placeholder is actually present (the
-// wrangler.deploy.jsonc path already carries a real PUBLIC_URL, so this is a
-// no-op there and does not add a new env requirement to the live deploy).
-let resolved = substituted;
-if (resolved.includes(PUBLIC_URL_PLACEHOLDER)) {
+// The committed reference wrangler.jsonc keeps the PUBLIC_URL + custom-domain
+// route as placeholders so a forker fills their own domain. Substitute them from
+// $PUBLIC_URL (the route pattern is its host); only required when the placeholder
+// is present, so the wrangler.deploy.jsonc path (real values) is a no-op and the
+// live deploy gains no new env requirement.
+const PUBLIC_URL_PLACEHOLDER = "<YOUR_PUBLIC_URL>";
+if (substituted.includes(PUBLIC_URL_PLACEHOLDER)) {
+  const publicUrl = process.env.PUBLIC_URL;
   if (!publicUrl) {
-    console.error(
-      `${PUBLIC_URL_PLACEHOLDER} is present in ${sourceConfig} but PUBLIC_URL is not set. Export it (e.g. from skret) first.`,
-    );
+    console.error("PUBLIC_URL is not set (base wrangler.jsonc uses <YOUR_PUBLIC_URL>).");
     process.exit(1);
   }
-  resolved = resolved.split(PUBLIC_URL_PLACEHOLDER).join(publicUrl);
+  substituted = substituted.split(PUBLIC_URL_PLACEHOLDER).join(publicUrl);
+  substituted = substituted.split("<YOUR_WORKER_DOMAIN>").join(new URL(publicUrl).host);
 }
-
-// Drop the routes block: the deploy token can't reconcile custom-domain routes
-// (wrangler.deploy.jsonc omits routes for the same reason and attaches the domain
-// out-of-band), and the reference config carries a <YOUR_WORKER_DOMAIN>
-// placeholder that must never reach wrangler.
-resolved = resolved.replace(/[ \t]*"routes"\s*:\s*\[[^\]]*\][ \t]*,?\r?\n?/g, "");
 
 // Write the substituted config to a temp file so the committed/gitignored source
 // is never mutated. wrangler resolves relative paths (main, migrations_dir)
 // against the config file's directory, so keep the temp file in the repo root.
 const tmpDir = mkdtempSync(join(tmpdir(), "wet-cf-deploy-"));
 const tmpConfig = join(process.cwd(), `.wrangler-deploy-${process.pid}.jsonc`);
-writeFileSync(tmpConfig, resolved, "utf8");
+writeFileSync(tmpConfig, substituted, "utf8");
 
 const cmd = "wrangler";
 const args = ["deploy", "--config", tmpConfig];
