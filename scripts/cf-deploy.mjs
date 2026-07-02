@@ -11,17 +11,24 @@
  *   1. wrangler.deploy.jsonc  - GITIGNORED deploy-time copy carrying the REAL
  *      account/KV/D1/Vectorize IDs. Preferred when present (this is the live
  *      deploy path; the committed wrangler.jsonc keeps placeholder resource IDs).
- *   2. wrangler.jsonc         - committed config. Used as a fallback; its
- *      <YOUR_ACCOUNT_ID> image-ref placeholder is substituted at deploy time.
+ *   2. wrangler.jsonc         - committed reference config. Used as a fallback; its
+ *      <YOUR_ACCOUNT_ID>/<YOUR_PUBLIC_URL>/<YOUR_WORKER_DOMAIN> placeholders are
+ *      substituted at deploy time.
  *
- * In both cases the literal <YOUR_ACCOUNT_ID> placeholder (if any) is replaced
- * with $CLOUDFLARE_ACCOUNT_ID into a temp config, so the committed file is never
- * mutated. Image, secrets, and resource IDs are otherwise left untouched.
+ * The committed file is never mutated: substitution happens into a temp config.
+ * <YOUR_ACCOUNT_ID> -> $CLOUDFLARE_ACCOUNT_ID, and (when the <YOUR_PUBLIC_URL>
+ * placeholder is present) <YOUR_PUBLIC_URL> -> $PUBLIC_URL plus the
+ * <YOUR_WORKER_DOMAIN> custom-domain route pattern -> the host of $PUBLIC_URL. On
+ * the deploy.jsonc path these are no-ops (it carries real values). Image, secrets,
+ * and resource IDs are otherwise left untouched.
  *
  * Env (export before running; any secret manager works):
  *   CLOUDFLARE_API_TOKEN   - required. CF API token with Workers + Containers edit.
  *   CLOUDFLARE_ACCOUNT_ID  - required. Substituted for the <YOUR_ACCOUNT_ID>
  *                            placeholder in the image ref.
+ *   PUBLIC_URL             - required only on the wrangler.jsonc fallback path,
+ *                            where it fills the <YOUR_PUBLIC_URL> placeholder and
+ *                            the <YOUR_WORKER_DOMAIN> route pattern (its host).
  *
  * Usage:
  *   export CLOUDFLARE_API_TOKEN=...      # however you store secrets
@@ -62,10 +69,26 @@ const sourceConfig = existsSync("wrangler.deploy.jsonc")
 console.log(`cf:deploy using config: ${sourceConfig}`);
 
 const original = readFileSync(sourceConfig, "utf8");
-const substituted = original.split(PLACEHOLDER).join(accountId);
+let substituted = original.split(PLACEHOLDER).join(accountId);
 if (substituted.includes(PLACEHOLDER)) {
   console.error(`Failed to substitute ${PLACEHOLDER} in ${sourceConfig}.`);
   process.exit(1);
+}
+
+// The committed reference wrangler.jsonc keeps the PUBLIC_URL + custom-domain
+// route as placeholders so a forker fills their own domain. Substitute them from
+// $PUBLIC_URL (the route pattern is its host); only required when the placeholder
+// is present, so the wrangler.deploy.jsonc path (real values) is a no-op and the
+// live deploy gains no new env requirement.
+const PUBLIC_URL_PLACEHOLDER = "<YOUR_PUBLIC_URL>";
+if (substituted.includes(PUBLIC_URL_PLACEHOLDER)) {
+  const publicUrl = process.env.PUBLIC_URL;
+  if (!publicUrl) {
+    console.error("PUBLIC_URL is not set (base wrangler.jsonc uses <YOUR_PUBLIC_URL>).");
+    process.exit(1);
+  }
+  substituted = substituted.split(PUBLIC_URL_PLACEHOLDER).join(publicUrl);
+  substituted = substituted.split("<YOUR_WORKER_DOMAIN>").join(new URL(publicUrl).host);
 }
 
 // Write the substituted config to a temp file so the committed/gitignored source
