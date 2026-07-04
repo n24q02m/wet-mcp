@@ -242,7 +242,25 @@ def _extract_passage(content: str, query_terms: list[str], max_chars: int = 500)
     best_score = 0
 
     if max_possible_score > 0:
-        for i in range(0, len(content_lower) - 100, 50):
+        term_positions: list[int] = []
+        for term in present_terms:
+            pos = content_lower.find(term)
+            while pos != -1:
+                term_positions.append(pos)
+                pos = content_lower.find(term, pos + len(term))
+
+        # Evaluate windows only near found terms instead of the entire document
+        candidates = set()
+        for pos in term_positions:
+            bucket = (pos // 50) * 50
+            # Add windows around this term
+            candidates.add(max(0, bucket - max_chars + 50))
+            candidates.add(max(0, bucket - max_chars // 2))
+            candidates.add(max(0, bucket - 100))
+            candidates.add(max(0, bucket - 50))
+            candidates.add(bucket)
+
+        for i in sorted(candidates):
             window = content_lower[i : i + max_chars]
             score = sum(1 for term in present_terms if term in window)
             if score > best_score:
