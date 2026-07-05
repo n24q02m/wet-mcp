@@ -2073,9 +2073,12 @@ def _strip_nav_heading_blocks(lines: Sequence[str]) -> list[str]:
     # Build heading map: line_index -> (level, text)
     headings: dict[int, tuple[int, str]] = {}
     for i, line in enumerate(lines):
-        m = _ANY_HEADING_RE.match(line.lstrip())
-        if m:
-            headings[i] = (len(m.group(1)), m.group(2))
+        # ⚡ Bolt Optimization: Fast-path string check before invoking regex engine
+        stripped = line.lstrip()
+        if stripped.startswith("#"):
+            m = _ANY_HEADING_RE.match(stripped)
+            if m:
+                headings[i] = (len(m.group(1)), m.group(2))
 
     if len(headings) < 5:
         return list(lines)
@@ -2097,9 +2100,17 @@ def _strip_nav_heading_blocks(lines: Sequence[str]) -> list[str]:
                 break
             # Content between this heading and previous must be minimal
             prev_idx = run[-1]
-            between = "\n".join(lines[k] for k in range(prev_idx + 1, idx)).strip()
-            if len(between) > 50:
+            # ⚡ Bolt Optimization: Avoid joining strings to check length, instead calculate length iteratively
+            content_length = 0
+            is_over_length = False
+            for k in range(prev_idx + 1, idx):
+                content_length += len(lines[k].strip())
+                if content_length > 50:
+                    is_over_length = True
+                    break
+            if is_over_length:
                 break
+
             run.append(idx)
             j += 1
 
