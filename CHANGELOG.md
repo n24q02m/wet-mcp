@@ -2,6 +2,52 @@
 
 <!-- version list -->
 
+## v3.4.1-beta.1 (2026-07-05)
+
+### Bug Fixes
+
+- Explain Workers Paid plan requirement in README deploy prerequisites
+  ([#1479](https://github.com/n24q02m/wet-mcp/pull/1479),
+  [`848690f`](https://github.com/n24q02m/wet-mcp/commit/848690f083e3a34ee43060989663727de80344e3))
+
+- Skip heading regex for non-# lines in markdown chunking
+  ([`80590bf`](https://github.com/n24q02m/wet-mcp/commit/80590bfff3ee56a72034d33d6707a403f0e6a3c5))
+
+- Substitute PUBLIC_URL and drop routes in cf-deploy.mjs fallback config
+  ([#1479](https://github.com/n24q02m/wet-mcp/pull/1479),
+  [`848690f`](https://github.com/n24q02m/wet-mcp/commit/848690f083e3a34ee43060989663727de80344e3))
+
+- Substitute YOUR_WORKER_DOMAIN route pattern from PUBLIC_URL host in cf-deploy.mjs
+  ([#1479](https://github.com/n24q02m/wet-mcp/pull/1479),
+  [`848690f`](https://github.com/n24q02m/wet-mcp/commit/848690f083e3a34ee43060989663727de80344e3))
+
+- Target passage windows near matched query terms
+  ([`5d04261`](https://github.com/n24q02m/wet-mcp/commit/5d04261960f8f880971afc95cdd64ab821f446df))
+
+- Use placeholders for PUBLIC_URL and routes in wrangler.jsonc (BYO-generic)
+  ([#1479](https://github.com/n24q02m/wet-mcp/pull/1479),
+  [`848690f`](https://github.com/n24q02m/wet-mcp/commit/848690f083e3a34ee43060989663727de80344e3))
+
+- **deps**: Lock file maintenance
+  ([`99d6e2b`](https://github.com/n24q02m/wet-mcp/commit/99d6e2bb4432222b2dfa1e4343fb0fcf2f4707f6))
+
+- **deps**: Update docker/login-action digest to af1e73f
+  ([`b7e1489`](https://github.com/n24q02m/wet-mcp/commit/b7e1489b88b49ccbb853a31a8de3f1e5df880e56))
+
+- **deps**: Update non-major dependencies ([#1472](https://github.com/n24q02m/wet-mcp/pull/1472),
+  [`b50cef8`](https://github.com/n24q02m/wet-mcp/commit/b50cef81ffd06b010f359430084e7fa42edd50ba))
+
+### Chores
+
+- **deps**: Update docker/build-push-action digest to 53b7df9
+  ([#1471](https://github.com/n24q02m/wet-mcp/pull/1471),
+  [`ae2934b`](https://github.com/n24q02m/wet-mcp/commit/ae2934bfd3bdbddecf873709360e713f6cde7a47))
+
+- **deps**: Update docker/setup-buildx-action digest to bb05f3f
+  ([#1481](https://github.com/n24q02m/wet-mcp/pull/1481),
+  [`3352942`](https://github.com/n24q02m/wet-mcp/commit/335294293812c5f9e688effbddb037ede4b740d3))
+
+
 ## v3.4.0 (2026-07-02)
 
 ### Bug Fixes
