@@ -210,8 +210,12 @@ def _detect_gh_token() -> str | None:
         return None
 
     try:
+        gh_path = shutil.which("gh")
+        if not gh_path:
+            return None
+
         result = subprocess.run(
-            ["gh", "auth", "token"],
+            [gh_path, "auth", "token"],
             capture_output=True,
             text=True,
             timeout=5,
