@@ -6,3 +6,7 @@
 **Vulnerability:** Raw `PRAGMA table_info({table})` and `PRAGMA index_list({table})` using f-strings allows for SQL injection if the table identifier is unsanitized user input. SQLite DDL does not allow standard SQL bound parameters for table names.
 **Learning:** SQLite introduced table-valued functions for introspection (`pragma_table_info(?)` and `pragma_index_list(?)`) which do support safe parameterization using bound variables.
 **Prevention:** Always use parameterized `SELECT name FROM pragma_table_info(?)` or `SELECT name FROM pragma_index_list(?)` instead of using raw dynamic `PRAGMA` queries using string concatenation or f-strings. Note that when migrating from raw `PRAGMA` to `SELECT name FROM pragma_...`, the target column is returned at index 0 rather than index 1 (or by "name" dict lookup).
+## 2026-07-08 - Subprocess Partial Executable Path (S607)
+**Vulnerability:** Calls to `subprocess.run` passing a partial binary name like `"gh"` instead of its absolute path.
+**Learning:** This can lead to path hijacking where an attacker places a malicious executable named `"gh"` earlier in the system's PATH. The `subprocess` module relies on standard OS lookup behavior which trusts the PATH implicitly.
+**Prevention:** Always use `shutil.which()` to resolve the absolute path of an executable before launching it via the `subprocess` module, ensuring exactly the intended binary runs.
