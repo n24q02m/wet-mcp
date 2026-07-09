@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.4.2-beta.1 (2026-07-09)
+
+### Bug Fixes
+
+- Set WetContainer pingEndpoint to localhost/ so CF container health passes and it sleeps on idle
+  ([#1500](https://github.com/n24q02m/wet-mcp/pull/1500),
+  [`dd06178`](https://github.com/n24q02m/wet-mcp/commit/dd0617851a3335a4bb214a2ab991a95233f5ab45))
+
+
 ## v3.4.1 (2026-07-05)
 
 
