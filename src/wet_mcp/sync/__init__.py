@@ -58,7 +58,7 @@ for _name in _DELEGATE_NAMES:
     globals()[_name] = getattr(_gdrive_module, _name)
 
 
-class _SyncModuleProxy(type(sys.modules[__name__])):
+class _SyncModuleProxy(type(sys.modules[__name__])):  # ty: ignore[unsupported-base]
     """Module subclass that mirrors writes -> gdrive AND reads <- gdrive.
 
     Tests do ``patch("wet_mcp.sync._foo", mock)`` which calls
