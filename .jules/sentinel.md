@@ -1,8 +1,5 @@
-## 2024-05-24 - Path Traversal in Token Storage
-**Vulnerability:** The `token_store.py` module constructed file paths by directly concatenating user-controlled inputs (`provider`, `sub`) via `pathlib.Path` without validation. This allowed path traversal (e.g., using `../` or absolute paths) to read or write arbitrary files on the system with the application's permissions.
-**Learning:** Even when using higher-level path abstractions like `pathlib`, string concatenation or `/` division with unvalidated user input is unsafe because the underlying OS resolution still respects traversal sequences.
-**Prevention:** Always explicitly validate path components for dangerous characters (like `/`, `\`, and `..`) using an explicit string validation helper before passing them to file I/O operations or path constructors.
-## 2026-06-20 - Unsafe Dynamic SQL in SQLite PRAGMA calls
-**Vulnerability:** Raw `PRAGMA table_info({table})` and `PRAGMA index_list({table})` using f-strings allows for SQL injection if the table identifier is unsanitized user input. SQLite DDL does not allow standard SQL bound parameters for table names.
-**Learning:** SQLite introduced table-valued functions for introspection (`pragma_table_info(?)` and `pragma_index_list(?)`) which do support safe parameterization using bound variables.
-**Prevention:** Always use parameterized `SELECT name FROM pragma_table_info(?)` or `SELECT name FROM pragma_index_list(?)` instead of using raw dynamic `PRAGMA` queries using string concatenation or f-strings. Note that when migrating from raw `PRAGMA` to `SELECT name FROM pragma_...`, the target column is returned at index 0 rather than index 1 (or by "name" dict lookup).
+## 2025-02-14 - Prevent Path Hijacking with Subprocess
+
+**Vulnerability:** The code in `src/wet_mcp/server.py` ran an external process using a partial executable name `subprocess.run(["gh", "auth", "token"])`, which relies on `PATH` resolution during execution and exposes the application to path hijacking. This was flagged by Bandit and Ruff (S607).
+**Learning:** Checking for existence via `shutil.which()` and then relying on `subprocess.run()`'s internal path resolution is prone to race conditions and potential security issues, since they could resolve to different executables.
+**Prevention:** Always use the absolute path of the executable by storing the result of `shutil.which()` and passing it into `subprocess.run()` (e.g. `path = shutil.which("gh"); subprocess.run([path, ...])`).
