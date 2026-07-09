@@ -2254,9 +2254,10 @@ def chunk_markdown(
     current_title = ""
     heading_path = ""
     current_lines: list[str] = []
+    current_length = 0
 
     def _flush():
-        nonlocal current_lines
+        nonlocal current_lines, current_length
         text = "\n".join(current_lines).strip()
         if len(text) >= min_chunk_size:
             # Split oversized chunks by double newline, preserving code blocks
@@ -2282,6 +2283,7 @@ def chunk_markdown(
                     }
                 )
         current_lines = []
+        current_length = 0
 
     h1 = ""
     h2 = ""
@@ -2305,12 +2307,14 @@ def chunk_markdown(
 
             elif level <= 4:
                 # Flush if current chunk is big enough
-                if len("\n".join(current_lines)) > max_chunk_size // 2:
+                if current_length > max_chunk_size // 2:
                     _flush()
                 current_title = heading_text
                 heading_path = " > ".join(filter(None, [h1, h2, heading_text]))
 
         current_lines.append(line)
+        # ⚡ Bolt Optimization: Incremental length tracking avoids O(N) allocation of "\n".join()
+        current_length += len(line) + (1 if len(current_lines) > 1 else 0)
 
     # Flush remaining
     _flush()
