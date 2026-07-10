@@ -122,8 +122,10 @@ describe('single-DO collapse (2026-06-30): every request routes to "default"', (
     const { calls, env } = envWithDoSpy()
     // header.payload.sig where payload has no `sub`
     const jwt = `h.${btoa(JSON.stringify({ aud: 'x' }))}.s`
+    // POST: this exercises DO-routing/sub-extraction, not GET-stream semantics
+    // (a bare GET now declines 405 before DO routing, see 'edge auth gate' below).
     await worker.fetch(
-      new Request('https://wet.n24q02m.com/mcp', { headers: { authorization: `Bearer ${jwt}` } }),
+      new Request('https://wet.n24q02m.com/mcp', { method: 'POST', headers: { authorization: `Bearer ${jwt}` } }),
       env as never,
     )
     expect(calls).toEqual(['default'])
@@ -132,8 +134,9 @@ describe('single-DO collapse (2026-06-30): every request routes to "default"', (
   it('Bearer token with sub -> still routes to the "default" DO (stateless container, sub externalised to D1/Vectorize/KV)', async () => {
     const { calls, env } = envWithDoSpy()
     const jwt = `h.${btoa(JSON.stringify({ sub: 'user-123' }))}.s`
+    // POST: see rationale above.
     await worker.fetch(
-      new Request('https://wet.n24q02m.com/mcp', { headers: { authorization: `Bearer ${jwt}` } }),
+      new Request('https://wet.n24q02m.com/mcp', { method: 'POST', headers: { authorization: `Bearer ${jwt}` } }),
       env as never,
     )
     expect(calls).toEqual(['default'])
@@ -185,6 +188,34 @@ describe('edge auth gate (/mcp)', () => {
     )
     expect(res.status).toBe(200)
     expect(fetchCalls.length).toBe(1)
+  })
+
+  it('GET /mcp with Authorization: Bearer x -> 405, Allow: POST, DELETE, stub never called', async () => {
+    const { fetchCalls, env } = envWithFetchSpy()
+    const res = await worker.fetch(
+      new Request('https://wet.n24q02m.com/mcp', { method: 'GET', headers: { authorization: 'Bearer x' } }),
+      env as never,
+    )
+    expect(res.status).toBe(405)
+    expect(res.headers.get('Allow')).toBe('POST, DELETE')
+    expect(fetchCalls.length).toBe(0)
+  })
+
+  it('GET /mcp/sub with Authorization: Bearer x -> 405', async () => {
+    const { fetchCalls, env } = envWithFetchSpy()
+    const res = await worker.fetch(
+      new Request('https://wet.n24q02m.com/mcp/sub', { method: 'GET', headers: { authorization: 'Bearer x' } }),
+      env as never,
+    )
+    expect(res.status).toBe(405)
+    expect(fetchCalls.length).toBe(0)
+  })
+
+  it('GET /mcp with no Authorization -> still 401 (bearer gate runs before the 405 decline)', async () => {
+    const { fetchCalls, env } = envWithFetchSpy()
+    const res = await worker.fetch(new Request('https://wet.n24q02m.com/mcp', { method: 'GET' }), env as never)
+    expect(res.status).toBe(401)
+    expect(fetchCalls.length).toBe(0)
   })
 
   it('GET /authorize with no Authorization -> passes through, stub called', async () => {
