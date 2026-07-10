@@ -63,7 +63,7 @@ def test_sqlite_vec_extension(mock_connect: Any):
 
 def test_clear_version_chunks():
     database = db.DocsDB(Path("/tmp/test2.db"))
-    database.clear_version_chunks = MagicMock(return_value=1)  # ty: ignore[invalid-assignment]
+    database.clear_version_chunks = MagicMock(return_value=1)
     database.clear_version_chunks("test")
 
 
