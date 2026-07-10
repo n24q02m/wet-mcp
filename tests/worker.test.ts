@@ -27,15 +27,18 @@ function fakeEnv() {
 const kvH = OUTBOUND_BY_HOST['kv.internal']!
 const d1H = OUTBOUND_BY_HOST['d1.internal']!
 const vectorizeH = OUTBOUND_BY_HOST['vectorize.internal']!
+// Handlers also take an OutboundHandlerContext third arg (containerId/className);
+// unused by these handlers, only needed to satisfy the call signature in tests.
+const ctx = { containerId: 'test', className: 'WetContainer' } as never
 
 describe('outbound handlers', () => {
   it('KV get 404 then put then get 200', async () => {
     const env = fakeEnv()
-    let res = await kvH(new Request('http://kv.internal/wet%2Fconfig'), env as never)
+    let res = await kvH(new Request('http://kv.internal/wet%2Fconfig'), env as never, ctx)
     expect(res.status).toBe(404)
-    res = await kvH(new Request('http://kv.internal/wet%2Fconfig', { method: 'PUT', body: 'blob' }), env as never)
+    res = await kvH(new Request('http://kv.internal/wet%2Fconfig', { method: 'PUT', body: 'blob' }), env as never, ctx)
     expect(res.status).toBe(200)
-    res = await kvH(new Request('http://kv.internal/wet%2Fconfig'), env as never)
+    res = await kvH(new Request('http://kv.internal/wet%2Fconfig'), env as never, ctx)
     expect(await res.text()).toBe('blob')
   })
 
@@ -44,6 +47,7 @@ describe('outbound handlers', () => {
     const res = await d1H(
       new Request('http://d1.internal/query', { method: 'POST', body: JSON.stringify({ sql: 'SELECT 1', params: [] }) }),
       env as never,
+      ctx,
     )
     const body = (await res.json()) as { results: unknown[] }
     expect(body.results.length).toBe(1)
@@ -54,6 +58,7 @@ describe('outbound handlers', () => {
     const res = await vectorizeH(
       new Request('http://vectorize.internal/query', { method: 'POST', body: JSON.stringify({ vector: [0.1], topK: 1 }) }),
       env as never,
+      ctx,
     )
     const body = (await res.json()) as { matches: unknown[] }
     expect(body.matches.length).toBe(1)
@@ -61,7 +66,7 @@ describe('outbound handlers', () => {
 
   it('KV readiness probe: GET __ready -> {ready:true}', async () => {
     const env = fakeEnv()
-    const res = await kvH(new Request('http://kv.internal/__ready'), env as never)
+    const res = await kvH(new Request('http://kv.internal/__ready'), env as never, ctx)
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ready: true })
   })
@@ -69,7 +74,7 @@ describe('outbound handlers', () => {
   it('KV readiness probe does not shadow a real missing key', async () => {
     const env = fakeEnv()
     // a real key that happens to be absent still 404s (the probe is the reserved __ready only)
-    const res = await kvH(new Request('http://kv.internal/wet%2Fsubs%2Fu1%2Fconfig'), env as never)
+    const res = await kvH(new Request('http://kv.internal/wet%2Fsubs%2Fu1%2Fconfig'), env as never, ctx)
     expect(res.status).toBe(404)
   })
 })
@@ -85,7 +90,7 @@ describe('public fetch entrypoint does NOT expose outbound handlers (security)',
   })
 })
 
-describe('single-user DO contract (E.2)', () => {
+describe('single-DO collapse (2026-06-30): every request routes to "default"', () => {
   function envWithDoSpy() {
     const calls: string[] = []
     return {
@@ -102,9 +107,13 @@ describe('single-user DO contract (E.2)', () => {
     }
   }
 
-  it('no Bearer token -> routes to the "default" DO', async () => {
+  // A bare, no-Bearer /mcp request is now rejected at the edge auth gate before DO
+  // routing ever runs (see 'edge auth gate (/mcp)' below) -- exercise the "always
+  // 'default'" DO-routing invariant on a non-gated path instead (/authorize is one
+  // of the paths the edge gate deliberately leaves untouched).
+  it('no Bearer token, non-/mcp path -> routes to the "default" DO', async () => {
     const { calls, env } = envWithDoSpy()
-    const res = await worker.fetch(new Request('https://wet.n24q02m.com/mcp'), env as never)
+    const res = await worker.fetch(new Request('https://wet.n24q02m.com/authorize'), env as never)
     expect(res.status).toBe(200)
     expect(calls).toEqual(['default'])
   })
@@ -120,13 +129,68 @@ describe('single-user DO contract (E.2)', () => {
     expect(calls).toEqual(['default'])
   })
 
-  it('Bearer token with sub -> routes to that sub DO (per-user isolation)', async () => {
+  it('Bearer token with sub -> still routes to the "default" DO (stateless container, sub externalised to D1/Vectorize/KV)', async () => {
     const { calls, env } = envWithDoSpy()
     const jwt = `h.${btoa(JSON.stringify({ sub: 'user-123' }))}.s`
     await worker.fetch(
       new Request('https://wet.n24q02m.com/mcp', { headers: { authorization: `Bearer ${jwt}` } }),
       env as never,
     )
-    expect(calls).toEqual(['user-123'])
+    expect(calls).toEqual(['default'])
+  })
+})
+
+describe('edge auth gate (/mcp)', () => {
+  function envWithFetchSpy() {
+    const fetchCalls: Request[] = []
+    return {
+      fetchCalls,
+      env: {
+        WET: {
+          idFromName: (n: string) => ({ name: n }),
+          get: (_id: unknown) => ({
+            fetch: async (r: Request) => {
+              fetchCalls.push(r)
+              return new Response('routed', { status: 200 })
+            },
+          }),
+        },
+      },
+    }
+  }
+
+  it('POST /mcp with no Authorization -> 401, stub never called', async () => {
+    const { fetchCalls, env } = envWithFetchSpy()
+    const res = await worker.fetch(new Request('https://wet.n24q02m.com/mcp', { method: 'POST' }), env as never)
+    expect(res.status).toBe(401)
+    expect(res.headers.get('WWW-Authenticate')).toMatch(
+      /^Bearer resource_metadata="https:\/\/[^"]+\/\.well-known\/oauth-protected-resource"$/,
+    )
+    expect(await res.text()).toBe('')
+    expect(fetchCalls.length).toBe(0)
+  })
+
+  it('OPTIONS /mcp with no Authorization -> 401, stub never called', async () => {
+    const { fetchCalls, env } = envWithFetchSpy()
+    const res = await worker.fetch(new Request('https://wet.n24q02m.com/mcp', { method: 'OPTIONS' }), env as never)
+    expect(res.status).toBe(401)
+    expect(fetchCalls.length).toBe(0)
+  })
+
+  it('POST /mcp with Authorization: Bearer anything -> stub called exactly once', async () => {
+    const { fetchCalls, env } = envWithFetchSpy()
+    const res = await worker.fetch(
+      new Request('https://wet.n24q02m.com/mcp', { method: 'POST', headers: { authorization: 'Bearer anything' } }),
+      env as never,
+    )
+    expect(res.status).toBe(200)
+    expect(fetchCalls.length).toBe(1)
+  })
+
+  it('GET /authorize with no Authorization -> passes through, stub called', async () => {
+    const { fetchCalls, env } = envWithFetchSpy()
+    const res = await worker.fetch(new Request('https://wet.n24q02m.com/authorize?foo=1'), env as never)
+    expect(res.status).toBe(200)
+    expect(fetchCalls.length).toBe(1)
   })
 })
