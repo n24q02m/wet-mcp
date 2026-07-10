@@ -198,20 +198,20 @@ export default {
     // reaches them via @cloudflare/containers' ContainerProxy + the
     // WetContainer.outboundByHost registry below; unit tests call the handlers
     // directly via the OUTBOUND_BY_HOST export.
+    // Edge auth gate. mcp-core's OAuth AS runs INSIDE the container, so before this
+    // gate every anonymous /mcp request started the container and reset its 5m idle
+    // timer -- an unauthenticated caller could pin it awake and bill GiB-s around the
+    // clock. Verified 2026-07-09: a python-httpx client POSTed /mcp with no
+    // Authorization header every ~20s for 12h+. The check is STRUCTURAL: it rejects
+    // requests carrying no bearer credential at all and reproduces the container's own
+    // 401 (empty body + RFC 9728 WWW-Authenticate). Token VALIDITY is never judged
+    // here -- the container remains the sole authority, so no mcp-core auth logic is
+    // duplicated at the edge.
+    const url = new URL(request.url)
+    if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
+      if (!BEARER.test(request.headers.get('authorization') ?? '')) return unauthenticated(request)
+    }
     if (env.WET) {
-      // Edge auth gate. mcp-core's OAuth AS runs INSIDE the container, so before this
-      // gate every anonymous /mcp request started the container and reset its 5m idle
-      // timer -- an unauthenticated caller could pin it awake and bill GiB-s around the
-      // clock. Verified 2026-07-09: a python-httpx client POSTed /mcp with no
-      // Authorization header every ~20s for 12h+. The check is STRUCTURAL: it rejects
-      // requests carrying no bearer credential at all and reproduces the container's own
-      // 401 (empty body + RFC 9728 WWW-Authenticate). Token VALIDITY is never judged
-      // here -- the container remains the sole authority, so no mcp-core auth logic is
-      // duplicated at the edge.
-      const url = new URL(request.url)
-      if (url.pathname === '/mcp' || url.pathname.startsWith('/mcp/')) {
-        if (!BEARER.test(request.headers.get('authorization') ?? '')) return unauthenticated(request)
-      }
       const userId = await extractUserId()
       const stub = env.WET.get(env.WET.idFromName(userId))
       return stub.fetch(request)
