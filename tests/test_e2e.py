@@ -94,7 +94,7 @@ async def session(request, tmp_path):
     errlog_kwargs = {"errlog": capture} if capture else {}
 
     try:
-        async with stdio_client(params, **errlog_kwargs) as (read_stream, write_stream):  # ty: ignore[invalid-argument-type]
+        async with stdio_client(params, **errlog_kwargs) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as s:
                 await s.initialize()
 
