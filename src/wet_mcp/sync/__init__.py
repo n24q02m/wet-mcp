@@ -33,6 +33,7 @@ Backend selection (XOR semantics):
 from __future__ import annotations
 
 import sys
+from types import ModuleType
 
 from wet_mcp.sync import gdrive as _gdrive_module
 from wet_mcp.sync.base import SyncBackend
@@ -58,7 +59,7 @@ for _name in _DELEGATE_NAMES:
     globals()[_name] = getattr(_gdrive_module, _name)
 
 
-class _SyncModuleProxy(type(sys.modules[__name__])):
+class _SyncModuleProxy(ModuleType):
     """Module subclass that mirrors writes -> gdrive AND reads <- gdrive.
 
     Tests do ``patch("wet_mcp.sync._foo", mock)`` which calls
