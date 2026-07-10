@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v3.5.0-beta.1 (2026-07-10)
+
+### Bug Fixes
+
+- Reject unauthenticated /mcp at the Worker edge
+  ([#1504](https://github.com/n24q02m/wet-mcp/pull/1504),
+  [`2f553d9`](https://github.com/n24q02m/wet-mcp/commit/2f553d91b57704153dc053e0dab88977b29418f4))
+
+- Resolve ty diagnostics blocking the type check
+  ([#1505](https://github.com/n24q02m/wet-mcp/pull/1505),
+  [`c5a62c4`](https://github.com/n24q02m/wet-mcp/commit/c5a62c4fa0d8cfa57bdb53b1026041b7922fc00c))
+
+### Features
+
+- Add opencode github agent (responds to /oc)
+  ([`55f27bc`](https://github.com/n24q02m/wet-mcp/commit/55f27bce46240cde3a45fe4373dd35a5464d15fe))
+
+- Add review-learnings store the automated reviewer must obey
+  ([`3ed6d71`](https://github.com/n24q02m/wet-mcp/commit/3ed6d71bd08b0562dd2d03afcef6cd6d124518b9))
+
+- Auto-respond only to issues and PRs opened by outside people
+  ([`a5604aa`](https://github.com/n24q02m/wet-mcp/commit/a5604aa0cbbf9d817a43ce999f2c849b1861569a))
+
+- Reviewer must obey .github/review-learnings.md
+  ([`3e79220`](https://github.com/n24q02m/wet-mcp/commit/3e79220d889a39794173ae28ae5e2558e7a4a1c3))
+
+
 ## v3.4.2-beta.1 (2026-07-09)
 
 ### Bug Fixes
