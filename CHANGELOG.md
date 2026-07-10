@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.5.0-beta.2 (2026-07-10)
+
+### Bug Fixes
+
+- Decline standing GET /mcp SSE stream at the edge
+  ([#1507](https://github.com/n24q02m/wet-mcp/pull/1507),
+  [`fa3ce66`](https://github.com/n24q02m/wet-mcp/commit/fa3ce6680ea7e160209322bf31e4d4f210d69320))
+
+- Fail the release when the computed version already exists on PyPI
+  ([#1506](https://github.com/n24q02m/wet-mcp/pull/1506),
+  [`2cd61fa`](https://github.com/n24q02m/wet-mcp/commit/2cd61fafea22333fd75306d82d52ed72271f19a3))
+
+
 ## v3.5.0-beta.1 (2026-07-10)
 
 ### Bug Fixes
