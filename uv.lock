@@ -1430,7 +1430,7 @@ wheels = [
 
 [[package]]
 name = "langsmith"
-version = "0.9.7"
+version = "0.10.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -1448,9 +1448,9 @@ dependencies = [
     { name = "xxhash" },
     { name = "zstandard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d4/8b/a56b97a3b8a94f850fe2ec42351d4c508cc6bd7ca96644906c311e32ec5b/langsmith-0.9.7.tar.gz", hash = "sha256:40f8a66a466a7abd991a9df1b50de0a9d30c48ee0d3da46ce00516b68e41c9d7", size = 4711142, upload-time = "2026-07-02T20:11:09.619Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/eb/8e/49a69c6793bf3fc5af62481e7e9b678fce59d1b384323d3ce87959a653e3/langsmith-0.10.2.tar.gz", hash = "sha256:9aa685383fbdec07a0df51dafc333ab0d4b6b995771172a232c3364714eb17a6", size = 4707343, upload-time = "2026-07-10T13:21:54.931Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/95/0abb8647123c9ebbb31162bcdba3183f5f3d3bb2f752ef3d777ab715e88c/langsmith-0.9.7-py3-none-any.whl", hash = "sha256:a5ff9179b77eb0c3a0129294d30924eab13e51e2720f374372dbbc014c892911", size = 671052, upload-time = "2026-07-02T20:11:07.702Z" },
+    { url = "https://files.pythonhosted.org/packages/ee/17/cc8eaf4e82e4bb22009bdde20085ff91719dce643d355fed94d523300130/langsmith-0.10.2-py3-none-any.whl", hash = "sha256:c2a3929055758ac1831582f0939fafc0973cc08432365bbad335c336338ec37c", size = 652545, upload-time = "2026-07-10T13:21:52.13Z" },
 ]
 
 [[package]]
@@ -2902,8 +2902,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
@@ -3453,7 +3453,7 @@ requires-dist = [
     { name = "httpx" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.26.0" },
-    { name = "langsmith", specifier = ">=0.9.7" },
+    { name = "langsmith", specifier = ">=0.10.2" },
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },

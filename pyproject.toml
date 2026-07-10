@@ -93,7 +93,7 @@ dependencies = [
     # langchain-core -> langsmith (used for tracing, not prompt pull, so
     # the vulnerable Client.pull_prompt path is not exercised by wet-mcp
     # — pinned as defense-in-depth). First patched in langsmith 0.8.0.
-    "langsmith>=0.9.7",
+    "langsmith>=0.10.2",
 ]
 
 [dependency-groups]
