@@ -2,6 +2,73 @@
 
 <!-- version list -->
 
+## v3.5.0-beta.3 (2026-07-11)
+
+### Bug Fixes
+
+- Bump mcp-core floor to 1.19.0b2 ([#1516](https://github.com/n24q02m/wet-mcp/pull/1516),
+  [`b22d5b0`](https://github.com/n24q02m/wet-mcp/commit/b22d5b0bd774d6642112e0cf22a18030a87c8abe))
+
+- Bump n24q02m-mcp-core, qwen3-embed, n24q02m-web-core to tracked versions
+  ([#1510](https://github.com/n24q02m/wet-mcp/pull/1510),
+  [`b3be771`](https://github.com/n24q02m/wet-mcp/commit/b3be77125eb8ca3e47e992f92777004324d6d49c))
+
+- Clear stored gdrive token when minted by different client
+  ([#1516](https://github.com/n24q02m/wet-mcp/pull/1516),
+  [`b22d5b0`](https://github.com/n24q02m/wet-mcp/commit/b22d5b0bd774d6642112e0cf22a18030a87c8abe))
+
+- Document public-by-design identifiers for secret scanners
+  ([#1508](https://github.com/n24q02m/wet-mcp/pull/1508),
+  [`4414993`](https://github.com/n24q02m/wet-mcp/commit/4414993fd9d006f48a857af05d850f10baf34272))
+
+- Enforce fix(deps) semantic commit prefix in renovate config
+  ([`3a06a09`](https://github.com/n24q02m/wet-mcp/commit/3a06a099ba5a723a891a33c59f58323595ddec80))
+
+- Make renovate automerge effective (isolated groups, digest+lockfile automerge, 7-day cooldown)
+  ([`0521efc`](https://github.com/n24q02m/wet-mcp/commit/0521efc0ea067bab0ec6d1f868bdea335dfc0212))
+
+- Optimize _strip_nav_heading_blocks hot path
+  ([`153b70c`](https://github.com/n24q02m/wet-mcp/commit/153b70c4e459d9d1de9e5fb3d9f18d28a3e1770e))
+
+- Optimize whitespace normalization in _smart_chunks
+  ([`e9f9110`](https://github.com/n24q02m/wet-mcp/commit/e9f91104b6e82847168bc474869520d2a9324a46))
+
+- Track chunk length incrementally in chunk_markdown
+  ([`729bf0c`](https://github.com/n24q02m/wet-mcp/commit/729bf0c57580841079aa2be29c3f7a763f7019af))
+
+- Update stale mcp-core pin comment ([#1516](https://github.com/n24q02m/wet-mcp/pull/1516),
+  [`b22d5b0`](https://github.com/n24q02m/wet-mcp/commit/b22d5b0bd774d6642112e0cf22a18030a87c8abe))
+
+- Use resolved gh path in subprocess call (S607)
+  ([`879ca76`](https://github.com/n24q02m/wet-mcp/commit/879ca76f6401c6d350470db5ea6b3ffd46634994))
+
+- Use tuple endswith/startswith for document type detection
+  ([`23b5b55`](https://github.com/n24q02m/wet-mcp/commit/23b5b55c963d44bdf66aebdf7157aafe1051e9cf))
+
+- **deps**: Update minor dependencies ([#1513](https://github.com/n24q02m/wet-mcp/pull/1513),
+  [`82febfe`](https://github.com/n24q02m/wet-mcp/commit/82febfec962aa5106b61d19cc74ff4af556e6d1a))
+
+### Chores
+
+- **deps**: Update dependency @cloudflare/workers-types to v5
+  ([#1492](https://github.com/n24q02m/wet-mcp/pull/1492),
+  [`8161c6d`](https://github.com/n24q02m/wet-mcp/commit/8161c6d812c0ee038db54e3c4b1be14b7bd6afe8))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest docker digest to 0f36cb9
+  ([#1512](https://github.com/n24q02m/wet-mcp/pull/1512),
+  [`ebba49a`](https://github.com/n24q02m/wet-mcp/commit/ebba49a709dd4bcb7d15b61739c8ba381dd99a1e))
+
+### Features
+
+- Adopt bundled client BYO resolution chain for Google Drive
+  ([#1516](https://github.com/n24q02m/wet-mcp/pull/1516),
+  [`b22d5b0`](https://github.com/n24q02m/wet-mcp/commit/b22d5b0bd774d6642112e0cf22a18030a87c8abe))
+
+- Resolve google client via bundled client BYO chain
+  ([#1516](https://github.com/n24q02m/wet-mcp/pull/1516),
+  [`b22d5b0`](https://github.com/n24q02m/wet-mcp/commit/b22d5b0bd774d6642112e0cf22a18030a87c8abe))
+
+
 ## v3.5.0-beta.2 (2026-07-10)
 
 ### Bug Fixes
