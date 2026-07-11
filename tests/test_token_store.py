@@ -7,6 +7,7 @@ import pytest
 from wet_mcp.token_store import (
     _get_token_dir,
     _get_token_dir_for_sub,
+    delete_token,
     get_token_path,
     get_token_path_for_sub,
     load_token,
@@ -80,6 +81,23 @@ def test_save_and_load_token(token_dir, tmp_path):
 
     # Verify the encrypted token file landed under the LocalFs layout.
     assert (tmp_path / ".wet-mcp" / "tokens" / "drive.json").exists()
+
+
+def test_delete_token(token_dir, tmp_path):
+    """delete_token clears a stored token so load_token returns None afterward."""
+    token = {"access_token": "abc123", "token_type": "Bearer"}
+    save_token("drive", token)
+    assert load_token("drive") == token
+
+    delete_token("drive")
+
+    assert load_token("drive") is None
+
+
+def test_delete_token_missing_is_noop(token_dir):
+    """delete_token on a provider with no stored token does not raise."""
+    delete_token("drive")
+    assert load_token("drive") is None
 
 
 def test_load_corrupt_blob_returns_none(token_dir, tmp_path):

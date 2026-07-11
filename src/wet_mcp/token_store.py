@@ -99,6 +99,13 @@ def save_token(provider: str, token: dict, backend=None) -> None:
     logger.info(f"Token saved (encrypted): wet/tokens/{provider}")
 
 
+def delete_token(provider: str, backend=None) -> None:
+    """Delete a provider's stored OAuth token (e.g. after a client_id mismatch)."""
+    _validate_safe_name(provider)
+    _token_store(provider, None, backend).clear()
+    logger.info(f"Token cleared: wet/tokens/{provider}")
+
+
 def save_token_for_sub(sub: str, provider: str, token: dict, backend=None) -> None:
     """Save a per-JWT-sub OAuth token, encrypted via PerPluginStore."""
     _validate_safe_name(sub)

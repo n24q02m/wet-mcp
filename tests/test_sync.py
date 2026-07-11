@@ -60,6 +60,7 @@ class TestTokenManagement:
         }
 
         with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
             patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
             patch("wet_mcp.sync._save_token") as mock_save,
         ):
@@ -90,7 +91,10 @@ class TestTokenManagement:
         mock_response.status_code = 400
         mock_response.text = "invalid_grant"
 
-        with patch("wet_mcp.sync.httpx.AsyncClient") as mock_client:
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+        ):
             mock_instance = AsyncMock()
             mock_instance.post = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
@@ -104,8 +108,38 @@ class TestTokenManagement:
         """Returns None when token has no refresh_token."""
         from wet_mcp.sync import _refresh_token
 
-        result = await _refresh_token({"access_token": "old"})
+        # client_id matches the effective client so this exercises the
+        # missing-refresh_token branch, not the client-mismatch guard.
+        token = {
+            "access_token": "old",
+            "client_id": sync.settings.google_drive_client_id,
+        }
+        result = await _refresh_token(token)
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_refresh_clears_token_on_client_mismatch(self):
+        """A token minted by a different client_id is cleared, not refreshed."""
+        from wet_mcp.sync import _refresh_token
+
+        token = {
+            "access_token": "old",
+            "refresh_token": "refresh123",
+            "client_id": "other-client",
+        }
+
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "current-client"),
+            patch("wet_mcp.sync._clear_token") as mock_clear,
+            patch("wet_mcp.sync.logger.warning") as mock_warn,
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+        ):
+            result = await _refresh_token(token)
+
+            assert result is None
+            mock_clear.assert_called_once()
+            mock_warn.assert_called_once()
+            mock_client.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_get_valid_token_no_token(self):

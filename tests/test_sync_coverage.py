@@ -46,6 +46,7 @@ class TestRefreshToken:
         }
 
         with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
             patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
             patch("wet_mcp.sync._save_token") as mock_save,
         ):
@@ -78,6 +79,7 @@ class TestRefreshToken:
         }
 
         with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
             patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
             patch("wet_mcp.sync._save_token"),
         ):
@@ -100,7 +102,10 @@ class TestRefreshToken:
         mock_response.status_code = 400
         mock_response.text = "invalid_grant"
 
-        with patch("wet_mcp.sync.httpx.AsyncClient") as mock_client:
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "c"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+        ):
             mock_instance = AsyncMock()
             mock_instance.post = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)

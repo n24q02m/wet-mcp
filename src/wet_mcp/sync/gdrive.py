@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 from loguru import logger
+from mcp_core.auth import token_client_mismatch
 
 from wet_mcp.config import settings
 
@@ -75,6 +76,13 @@ def _save_token(token: dict) -> None:
     save_token(_TOKEN_PROVIDER, token)
 
 
+def _clear_token() -> None:
+    """Delete the stored Google Drive OAuth token from local storage."""
+    from wet_mcp.token_store import delete_token
+
+    delete_token(_TOKEN_PROVIDER)
+
+
 def _has_token_available() -> bool:
     """Check if a Google Drive token is available."""
     return _load_token() is not None
@@ -85,12 +93,22 @@ async def _refresh_token(token: dict) -> dict | None:
 
     Returns updated token dict, or None if refresh failed.
     """
+    if token_client_mismatch(token, settings.google_drive_client_id):
+        logger.warning(
+            "Stored Google Drive token was minted by a different client_id; "
+            "clearing it -- re-run setup_sync to authorize with the current client"
+        )
+        _clear_token()
+        return None
+
     refresh_token = token.get("refresh_token")
     client_id = token.get("client_id", settings.google_drive_client_id)
     client_secret = settings.google_drive_client_secret
 
-    if not refresh_token or not client_id:
-        logger.warning("Cannot refresh token: missing refresh_token or client_id")
+    if not refresh_token or not client_id or not client_secret:
+        logger.warning(
+            "Cannot refresh token: missing refresh_token, client_id, or client_secret"
+        )
         return None
 
     try:

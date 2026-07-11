@@ -1234,7 +1234,10 @@ class TestRefreshTokenExtraEdges:
             "client_id": "client123",
         }
 
-        with patch("wet_mcp.sync.httpx.AsyncClient") as mock_httpx:
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_httpx,
+        ):
             mock_httpx.return_value.__aenter__ = AsyncMock(
                 side_effect=Exception("connection refused")
             )
