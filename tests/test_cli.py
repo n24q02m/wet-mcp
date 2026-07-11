@@ -8,8 +8,6 @@ or model calls -- run_setup_sync/run_warmup/make_docs_db are mocked.
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 
 class TestServeDispatch:
     """Bare/flag argv route to the server unchanged."""
@@ -42,23 +40,33 @@ class TestServeDispatch:
 class TestAuthSubcommand:
     """`wet-mcp auth google` -- BYO client resolution + run_setup_sync."""
 
-    def test_half_pair_flags_raise(self):
+    def test_half_pair_flags_returns_clean_error(self, capsys):
         from wet_mcp import cli
 
         with patch.object(
             sys, "argv", ["wet-mcp", "auth", "google", "--client-secret", "shh"]
         ):
-            with pytest.raises(ValueError, match="set both together"):
-                cli.main()
+            rc = cli.main()
 
-    def test_happy_path_sets_env_and_prints_json(self, capsys):
+        assert rc == 2
+        err = capsys.readouterr().err
+        assert "set both together" in err
+        assert "shh" not in err  # never print the secret value
+
+    def test_happy_path_threads_byo_pair_to_setup_google_auth(self, capsys):
+        """auth google --client-id/--client-secret must reach setup_google_auth.
+
+        wet_mcp.config.settings is a module-level singleton resolved at
+        import time, so a prior regression wrote the BYO pair to os.environ
+        (a no-op -- the singleton was already frozen) instead of threading
+        it through run_setup_sync's params. This does NOT blanket-mock
+        run_setup_sync: it lets the real function run (including its
+        missing-credentials check) and only mocks the network-touching
+        setup_google_auth, so the assertion below proves the pair actually
+        reaches that call rather than being silently dropped.
+        """
         from wet_mcp import cli
 
-        result = {
-            "status": "ok",
-            "provider": "google_drive",
-            "message": "Google Drive sync setup complete. Token saved locally.",
-        }
         with (
             patch.object(
                 sys,
@@ -74,21 +82,18 @@ class TestAuthSubcommand:
                 ],
             ),
             patch(
-                "wet_mcp.setup_tool.run_setup_sync",
-                new=AsyncMock(return_value=result),
-            ) as mock_setup,
-            patch.dict("os.environ", {}, clear=False),
+                "wet_mcp.sync.setup_google_auth",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_setup_google_auth,
         ):
             rc = cli.main()
-            import os
 
-            assert os.environ["GOOGLE_DRIVE_CLIENT_ID"] == "my-id"
-            assert os.environ["GOOGLE_DRIVE_CLIENT_SECRET"] == "my-secret"
-
-        mock_setup.assert_awaited_once_with()
+        mock_setup_google_auth.assert_awaited_once_with(
+            client_id="my-id", client_secret="my-secret"
+        )
         assert rc == 0
-        out = capsys.readouterr().out
-        assert '"status": "ok"' in out
+        assert '"status": "ok"' in capsys.readouterr().out
 
     def test_no_flags_skips_byo_resolution(self, capsys):
         from wet_mcp import cli
@@ -105,6 +110,23 @@ class TestAuthSubcommand:
 
         mock_setup.assert_awaited_once_with()
         assert rc == 1
+
+
+class TestUnknownSubcommand:
+    """build_cli's own unrecognized-subcommand handling -- rc 2, no server start."""
+
+    def test_unknown_subcommand_returns_rc_2(self, capsys):
+        from wet_mcp import cli
+
+        with (
+            patch.object(sys, "argv", ["wet-mcp", "bogus"]),
+            patch("wet_mcp.server.main") as mock_server_main,
+        ):
+            rc = cli.main()
+
+        mock_server_main.assert_not_called()
+        assert rc == 2
+        assert "unknown subcommand" in capsys.readouterr().err
 
 
 class TestWarmupSubcommand:

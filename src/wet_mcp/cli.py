@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
+import sys
 
 from mcp_core import build_cli
 
@@ -34,20 +34,34 @@ def _configure_auth(p: argparse.ArgumentParser) -> None:
 
 
 def _handle_auth(args: argparse.Namespace) -> int:
+    from wet_mcp.setup_tool import run_setup_sync
+
     # Single-user / local machine only: writes the token via the local store.
+    # The BYO pair is threaded through run_setup_sync's client_id/client_secret
+    # params rather than os.environ -- wet_mcp.config.settings is a module-level
+    # singleton built at import time, so an env write here would never reach it.
     if args.client_id or args.client_secret:
         from mcp_core.auth import resolve_bundled_client
 
         from wet_mcp.config import _GOOGLE_CLIENT_SPEC
 
-        resolved = resolve_bundled_client(
-            _GOOGLE_CLIENT_SPEC, cli_id=args.client_id, cli_secret=args.client_secret
+        try:
+            resolved = resolve_bundled_client(
+                _GOOGLE_CLIENT_SPEC,
+                cli_id=args.client_id,
+                cli_secret=args.client_secret,
+            )
+        except ValueError as exc:
+            print(f"wet-mcp: {exc}", file=sys.stderr)
+            return 2
+        result = asyncio.run(
+            run_setup_sync(
+                client_id=resolved.client_id, client_secret=resolved.client_secret
+            )
         )
-        os.environ[_GOOGLE_CLIENT_SPEC.env_id] = resolved.client_id
-        os.environ[_GOOGLE_CLIENT_SPEC.env_secret] = resolved.client_secret
-    from wet_mcp.setup_tool import run_setup_sync
+    else:
+        result = asyncio.run(run_setup_sync())
 
-    result = asyncio.run(run_setup_sync())
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("status") == "ok" else 1
 
