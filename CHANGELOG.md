@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v3.5.0-beta.4 (2026-07-11)
+
+### Bug Fixes
+
+- Bump mcp-core floor to 1.19.0b4 ([#1517](https://github.com/n24q02m/wet-mcp/pull/1517),
+  [`0dab3d2`](https://github.com/n24q02m/wet-mcp/commit/0dab3d2eca9eb5d7d9073ac1d64508e34acce14f))
+
+- Thread byo client pair explicitly to google auth flow
+  ([#1517](https://github.com/n24q02m/wet-mcp/pull/1517),
+  [`0dab3d2`](https://github.com/n24q02m/wet-mcp/commit/0dab3d2eca9eb5d7d9073ac1d64508e34acce14f))
+
+### Features
+
+- Mount shared cli builder with auth/warmup/docs subcommands
+  ([#1517](https://github.com/n24q02m/wet-mcp/pull/1517),
+  [`0dab3d2`](https://github.com/n24q02m/wet-mcp/commit/0dab3d2eca9eb5d7d9073ac1d64508e34acce14f))
+
+
 ## v3.5.0-beta.3 (2026-07-11)
 
 ### Bug Fixes
