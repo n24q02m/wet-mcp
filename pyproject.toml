@@ -54,9 +54,10 @@ dependencies = [
     "jsonschema>=4.26.0",
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
-    # Beta pin: 1.19.0b2 ships the mcp_core.auth BYO resolver
-    # (resolve_bundled_client + token_client_mismatch) this repo consumes.
-    "n24q02m-mcp-core[llm]>=1.19.0b2,<2",
+    # Beta pin: 1.19.0b4 ships mcp_core.cli's argument-spec extra
+    # subcommand support ((configure, handler) tuples) this repo's
+    # cli.py auth/docs subcommands consume.
+    "n24q02m-mcp-core[llm]>=1.19.0b4,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.5",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance
@@ -105,7 +106,7 @@ dev = [
 ]
 
 [project.scripts]
-wet-mcp = "wet_mcp:main"
+wet-mcp = "wet_mcp.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/n24q02m/wet-mcp"

@@ -248,27 +248,37 @@ async def run_warmup() -> dict:
     }
 
 
-async def run_setup_sync(remote_type: str = "drive") -> dict:
+async def run_setup_sync(
+    remote_type: str = "drive",
+    client_id: str | None = None,
+    client_secret: str | None = None,
+) -> dict:
     """Run Google Drive sync setup (OAuth Device Code flow).
 
+    ``client_id``/``client_secret`` optionally override the upstream OAuth
+    client identity for this call (BYO client, e.g. from the CLI's ``auth
+    google --client-id/--client-secret`` flags) without mutating the
+    ``wet_mcp.config.settings`` singleton -- both default to ``None``,
+    which falls back to ``settings.google_drive_client_id/secret`` exactly
+    as before.
+
     Returns a structured dict with setup results. When the upstream Google
-    Drive env vars (``GOOGLE_DRIVE_CLIENT_ID`` / ``..._CLIENT_SECRET``) are
-    missing this returns an explicit ``missing_env`` error so stdio users
-    understand which env var to set, instead of a generic
-    "authentication failed" message.
+    Drive credentials (BYO pair, or ``GOOGLE_DRIVE_CLIENT_ID`` /
+    ``..._CLIENT_SECRET`` env vars) are missing this returns an explicit
+    ``missing_env`` error so stdio users understand which env var to set,
+    instead of a generic "authentication failed" message.
     """
     try:
         from wet_mcp.config import settings
 
-        if (
-            not settings.google_drive_client_id
-            or not settings.google_drive_client_secret
-        ):
+        effective_id = client_id or settings.google_drive_client_id
+        effective_secret = client_secret or settings.google_drive_client_secret
+        if not effective_id or not effective_secret:
             missing = [
                 name
                 for name, value in (
-                    ("GOOGLE_DRIVE_CLIENT_ID", settings.google_drive_client_id),
-                    ("GOOGLE_DRIVE_CLIENT_SECRET", settings.google_drive_client_secret),
+                    ("GOOGLE_DRIVE_CLIENT_ID", effective_id),
+                    ("GOOGLE_DRIVE_CLIENT_SECRET", effective_secret),
                 )
                 if not value
             ]
@@ -287,7 +297,9 @@ async def run_setup_sync(remote_type: str = "drive") -> dict:
 
         from wet_mcp.sync import setup_google_auth
 
-        success = await setup_google_auth()
+        success = await setup_google_auth(
+            client_id=client_id, client_secret=client_secret
+        )
         if success:
             return {
                 "status": "ok",

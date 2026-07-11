@@ -605,18 +605,25 @@ async def check_health() -> bool:
 async def setup_google_auth(
     relay_url: str | None = None,
     session_id: str | None = None,
+    client_id: str | None = None,
+    client_secret: str | None = None,
 ) -> bool:
     """Interactive Google OAuth setup via Device Code flow.
 
     If relay_url + session_id provided, send device code via relay messaging.
     Otherwise print to stderr.
 
+    ``client_id``/``client_secret`` optionally override the OAuth client
+    identity used for the device-code request, token poll, and saved token
+    payload; both default to ``None``, which falls back to
+    ``settings.google_drive_client_id/secret`` exactly as before.
+
     Returns True on success, False on failure.
     """
     import sys
 
-    client_id = settings.google_drive_client_id
-    client_secret = settings.google_drive_client_secret
+    client_id = client_id or settings.google_drive_client_id
+    client_secret = client_secret or settings.google_drive_client_secret
     if not client_id or not client_secret:
         logger.error("GOOGLE_DRIVE_CLIENT_ID or CLIENT_SECRET not configured")
         return False
