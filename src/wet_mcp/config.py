@@ -5,9 +5,10 @@ import os
 from pathlib import Path
 
 from loguru import logger
+from mcp_core.auth import BundledClientSpec, resolve_bundled_client
 from mcp_core.chains import resolve_backend
 from mcp_core.llm.providers import key_env_for_model
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings
 
 
@@ -39,6 +40,25 @@ def _resolve_local_model(onnx_name: str, gguf_name: str) -> str:
     if _detect_gpu() and _has_gguf_support():
         return gguf_name
     return onnx_name
+
+
+# Google Drive OAuth client identity (BYO resolver chain: CLI > env pair >
+# bundled default, unless USE_BUNDLED_GOOGLE_CLIENT explicitly disables it).
+# The Desktop/Installed OAuth client_secret is public by design per
+# https://developers.google.com/identity/protocols/oauth2#installed -- hardcoding
+# it here is safe and gives users zero-config sync after relay submit.
+_BUNDLED_GOOGLE_CLIENT_ID = (
+    "147668446467-olf2cf6e49rshqv9quvhq639110oc6hc.apps.googleusercontent.com"
+)
+_BUNDLED_GOOGLE_CLIENT_SECRET = "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"  # gitleaks:allow
+_GOOGLE_CLIENT_SPEC = BundledClientSpec(
+    provider="google-drive",
+    env_id="GOOGLE_DRIVE_CLIENT_ID",
+    env_secret="GOOGLE_DRIVE_CLIENT_SECRET",
+    bundled_id=_BUNDLED_GOOGLE_CLIENT_ID,
+    bundled_secret=_BUNDLED_GOOGLE_CLIENT_SECRET,
+    use_bundled_env="USE_BUNDLED_GOOGLE_CLIENT",
+)
 
 
 class Settings(BaseSettings):
@@ -229,10 +249,14 @@ class Settings(BaseSettings):
     sync_enabled: bool = True
     sync_folder: str = "wet-mcp"  # Google Drive folder name
     sync_interval: int = 300  # seconds, 0 = manual only
-    google_drive_client_id: str = (
-        "147668446467-olf2cf6e49rshqv9quvhq639110oc6hc.apps.googleusercontent.com"
+    google_drive_client_id: str = Field(
+        default_factory=lambda: resolve_bundled_client(_GOOGLE_CLIENT_SPEC).client_id
     )
-    google_drive_client_secret: str = "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"
+    google_drive_client_secret: str = Field(
+        default_factory=lambda: (
+            resolve_bundled_client(_GOOGLE_CLIENT_SPEC).client_secret
+        )
+    )
 
     # S3-compatible sync (operator deploy mode).
     # When SYNC_S3_BUCKET is non-empty the active backend resolves to "s3"

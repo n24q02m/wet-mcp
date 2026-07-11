@@ -1,6 +1,7 @@
 import os
 from unittest import mock
 
+import pytest
 from pydantic import SecretStr
 
 from wet_mcp.config import Settings
@@ -702,3 +703,54 @@ def test_llm_chain_for_creds():
     assert s.llm_chain_for_creds(creds) == ["gemini/gemini-3-flash-preview"]
     # Default filtered - none
     assert s.llm_chain_for_creds({}) == []
+
+
+# -----------------------------------------------------------------------
+# Google Drive BYO client resolver (bundled default + env pair + kill-switch)
+# -----------------------------------------------------------------------
+
+_GOOGLE_CLIENT_ENV_VARS = (
+    "GOOGLE_DRIVE_CLIENT_ID",
+    "GOOGLE_DRIVE_CLIENT_SECRET",
+    "USE_BUNDLED_GOOGLE_CLIENT",
+)
+
+
+def test_google_drive_default_ships_desktop_oauth_client(monkeypatch):
+    """No env, no kill-switch -> resolves to the bundled Desktop OAuth client."""
+    for v in _GOOGLE_CLIENT_ENV_VARS:
+        monkeypatch.delenv(v, raising=False)
+    s = Settings()
+    assert s.google_drive_client_id.endswith(".apps.googleusercontent.com")
+    assert s.google_drive_client_secret.startswith("GOCSPX-")
+
+
+def test_google_drive_env_pair_beats_bundled(monkeypatch):
+    """A full BYO env pair overrides the bundled default."""
+    for v in _GOOGLE_CLIENT_ENV_VARS:
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("GOOGLE_DRIVE_CLIENT_ID", "my-id")
+    monkeypatch.setenv("GOOGLE_DRIVE_CLIENT_SECRET", "my-secret")
+    s = Settings()
+    assert (s.google_drive_client_id, s.google_drive_client_secret) == (
+        "my-id",
+        "my-secret",
+    )
+
+
+def test_google_drive_env_half_pair_fails_loud(monkeypatch):
+    """Setting only one half of the BYO pair raises instead of silently falling back."""
+    for v in _GOOGLE_CLIENT_ENV_VARS:
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("GOOGLE_DRIVE_CLIENT_ID", "only-id")
+    with pytest.raises(Exception, match="together"):
+        Settings()
+
+
+def test_google_drive_kill_switch_fails_loud_without_override(monkeypatch):
+    """USE_BUNDLED_GOOGLE_CLIENT=false with no BYO pair raises instead of using bundled."""
+    for v in _GOOGLE_CLIENT_ENV_VARS:
+        monkeypatch.delenv(v, raising=False)
+    monkeypatch.setenv("USE_BUNDLED_GOOGLE_CLIENT", "false")
+    with pytest.raises(Exception, match="disables the bundled client"):
+        Settings()

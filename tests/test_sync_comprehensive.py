@@ -69,6 +69,7 @@ class TestTokenManagement:
         }
 
         with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "client123"),
             patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
             patch("wet_mcp.sync._save_token"),
         ):
@@ -95,7 +96,10 @@ class TestTokenManagement:
         mock_response.status_code = 401
         mock_response.text = "unauthorized"
 
-        with patch("wet_mcp.sync.httpx.AsyncClient") as mock_client:
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "c"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+        ):
             mock_instance = AsyncMock()
             mock_instance.post = AsyncMock(return_value=mock_response)
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
@@ -108,7 +112,13 @@ class TestTokenManagement:
     async def test_refresh_token_no_refresh(self):
         from wet_mcp.sync import _refresh_token
 
-        result = await _refresh_token({"access_token": "old"})
+        # client_id matches the effective client so this exercises the
+        # missing-refresh_token branch, not the client-mismatch guard.
+        token = {
+            "access_token": "old",
+            "client_id": wet_mcp.sync.settings.google_drive_client_id,
+        }
+        result = await _refresh_token(token)
         assert result is None
 
     @pytest.mark.asyncio
@@ -121,7 +131,10 @@ class TestTokenManagement:
             "client_id": "c",
         }
 
-        with patch("wet_mcp.sync.httpx.AsyncClient") as mock_client:
+        with (
+            patch("wet_mcp.sync.settings.google_drive_client_id", "c"),
+            patch("wet_mcp.sync.httpx.AsyncClient") as mock_client,
+        ):
             mock_instance = AsyncMock()
             mock_instance.post = AsyncMock(side_effect=Exception("Network error"))
             mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_instance)
