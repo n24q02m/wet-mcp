@@ -62,7 +62,7 @@ dependencies = [
     # 1.18.0b13) used by the search chain + disable-local toggles + the
     # mcp_core.llm.key_rotation primitive (split_keys / rotate_keys, 1.18.0b14)
     # for search-backend multi-key rotation. Beta pin until 1.18.0 stable.
-    "n24q02m-mcp-core[llm]>=1.18.2,<2",
+    "n24q02m-mcp-core[llm]>=1.19.0b2,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.5",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance
