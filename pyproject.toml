@@ -105,7 +105,7 @@ dev = [
 ]
 
 [project.scripts]
-wet-mcp = "wet_mcp:main"
+wet-mcp = "wet_mcp.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/n24q02m/wet-mcp"

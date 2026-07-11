@@ -1,29 +1,27 @@
 """Tests for wet_mcp.__main__ — CLI entry point and setup_tool functions."""
 
-import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 
 
 class TestCli:
-    """CLI dispatcher starts MCP server."""
+    """__main__._cli is a thin wrapper delegating to wet_mcp.cli.main.
 
-    @patch("wet_mcp.__main__.main")
-    def test_default_runs_server(self, mock_main):
+    Subcommand dispatch (bare/--http/auth/warmup/docs) is exercised in
+    tests/test_cli.py against the real mcp_core build_cli builder; this
+    only verifies the delegation wiring for `python -m wet_mcp`.
+    """
+
+    @patch("wet_mcp.__main__._cli_main")
+    def test_delegates_to_cli_main(self, mock_cli_main):
         from wet_mcp.__main__ import _cli
 
-        _cli()
-        mock_main.assert_called_once()
+        mock_cli_main.return_value = 0
+        rc = _cli()
 
-    @patch("wet_mcp.__main__.main")
-    def test_cli_always_runs_server(self, mock_main):
-        """_cli() always starts MCP server (no subcommands)."""
-        from wet_mcp.__main__ import _cli
-
-        with patch.object(sys, "argv", ["wet-mcp", "anything"]):
-            _cli()
-        mock_main.assert_called_once()
+        mock_cli_main.assert_called_once_with()
+        assert rc == 0
 
 
 class TestClearModelCache:
