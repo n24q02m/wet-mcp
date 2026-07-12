@@ -13,6 +13,7 @@ import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from structured import payload, text
 
 from wet_mcp import server
 
@@ -509,14 +510,14 @@ async def test_search_cache_hit(_mock_web_cache):
     # Search dispatcher consumes get_with_age -> (content, age) | None.
     _mock_web_cache.get_with_age.return_value = ("cached search result", 0)
     result = await server.search("search", query="test")
-    assert "cached search result" in result
+    assert "cached search result" in text(result)
 
 
 async def test_research_cache_hit(_mock_web_cache):
     """Lines 539-540: research returns cached result."""
     _mock_web_cache.get.return_value = "cached research result"
     result = await server.search("research", query="test")
-    assert "cached research result" in result
+    assert "cached research result" in text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -532,7 +533,7 @@ async def test_search_searxng_timeout():
         side_effect=TimeoutError,
     ):
         result = await server.search("search", query="test")
-        assert "timed out" in result
+        assert "timed out" in text(result)
 
 
 async def test_search_searxng_startup_failed():
@@ -543,7 +544,7 @@ async def test_search_searxng_startup_failed():
         side_effect=Exception("container died"),
     ):
         result = await server.search("search", query="test")
-        assert "startup failed" in result
+        assert "startup failed" in text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +555,7 @@ async def test_search_searxng_startup_failed():
 async def test_search_research_missing_query():
     """Line 535: research action requires query."""
     result = await server.search("research", query=None)
-    assert "Error: query is required" in result
+    assert "Error: query is required" in text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -565,13 +566,13 @@ async def test_search_research_missing_query():
 async def test_search_docs_missing_library():
     """Line 551: docs action requires library."""
     result = await server.search("docs", query="test")
-    assert "library is required" in result
+    assert "library is required" in text(result)
 
 
 async def test_search_docs_missing_query():
     """Line 553: docs action requires query."""
     result = await server.search("docs", library="react")
-    assert "query is required" in result
+    assert "query is required" in text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -581,23 +582,23 @@ async def test_search_docs_missing_query():
 
 async def test_extract_cache_hit(_mock_web_cache):
     """Line 615: extract returns cached result."""
-    _mock_web_cache.get.return_value = "cached extract"
+    _mock_web_cache.get.return_value = json.dumps({"cached": "extract"})
     result = await server.extract("extract", urls=["http://x.com"])
-    assert "cached extract" in result
+    assert payload(result)["cached"] == "extract"
 
 
 async def test_crawl_cache_hit(_mock_web_cache):
     """Line 636: crawl returns cached result."""
-    _mock_web_cache.get.return_value = "cached crawl"
+    _mock_web_cache.get.return_value = json.dumps({"cached": "crawl"})
     result = await server.extract("crawl", urls=["http://x.com"])
-    assert "cached crawl" in result
+    assert payload(result)["cached"] == "crawl"
 
 
 async def test_map_cache_hit(_mock_web_cache):
     """Line 663: map returns cached result."""
-    _mock_web_cache.get.return_value = "cached map"
+    _mock_web_cache.get.return_value = json.dumps({"cached": "map"})
     result = await server.extract("map", urls=["http://x.com"])
-    assert "cached map" in result
+    assert payload(result)["cached"] == "map"
 
 
 # ---------------------------------------------------------------------------
@@ -608,7 +609,7 @@ async def test_map_cache_hit(_mock_web_cache):
 async def test_config_set_sync_interval():
     """Lines 885-886: set sync_interval via config."""
     result = await server.config("set", key="sync_interval", value="600")
-    data = json.loads(result)
+    data = payload(result)
     assert data["status"] == "updated"
     assert data["key"] == "sync_interval"
 
@@ -616,7 +617,7 @@ async def test_config_set_sync_interval():
 async def test_config_set_generic_key():
     """Lines 887-888: set generic key (e.g. sync_folder) via setattr."""
     result = await server.config("set", key="sync_folder", value="my-folder")
-    data = json.loads(result)
+    data = payload(result)
     assert data["status"] == "updated"
     assert data["key"] == "sync_folder"
 
@@ -629,7 +630,7 @@ async def test_config_set_generic_key():
 async def test_config_docs_reindex_missing_key():
     """Line 906: docs_reindex without key."""
     result = await server.config("docs_reindex")
-    data = json.loads(result)
+    data = payload(result)
     assert "error" in data
     assert "key" in data["error"]
 
@@ -638,7 +639,7 @@ async def test_config_docs_reindex_db_not_init():
     """Line 908: docs_reindex when docs DB is None."""
     server._docs_db = None
     result = await server.config("docs_reindex", key="react")
-    data = json.loads(result)
+    data = payload(result)
     assert "error" in data
     assert "not initialized" in data["error"]
 
@@ -1172,33 +1173,33 @@ async def test_media_download_invalid_output_dir(_mock_settings):
     result = await server.media(
         "download", media_urls=["http://x.com/img.jpg"], output_dir="/etc/malicious"
     )
-    assert "Security Alert" in result
+    assert "Security Alert" in text(result)
 
 
 async def test_media_download_missing_urls():
     """Line 718: download without media_urls."""
     result = await server.media("download")
-    assert "media_urls is required" in result
+    assert "media_urls is required" in text(result)
 
 
 async def test_media_list_missing_url():
     """Line 710: list without url."""
     result = await server.media("list")
-    assert "url is required" in result
+    assert "url is required" in text(result)
 
 
 async def test_media_analyze_missing_url():
     """Phase 3 Task 5 BREAKING: analyze removed -- routes to unknown-action
     regardless of url presence."""
     result = await server.media("analyze")
-    assert "Unknown action 'analyze'" in result
-    assert "imagine-mcp" in result
+    assert "Unknown action 'analyze'" in text(result)
+    assert "imagine-mcp" in text(result)
 
 
 async def test_media_invalid_action():
     """Line 752: unknown media action."""
     result = await server.media("invalid")
-    assert "Unknown action" in result
+    assert "Unknown action" in text(result)
 
 
 # ---------------------------------------------------------------------------

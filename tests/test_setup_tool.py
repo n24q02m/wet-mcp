@@ -2,6 +2,8 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from structured import text
+
 
 class TestRunWarmup:
     """Tests for run_warmup() returning structured dict."""
@@ -214,7 +216,7 @@ class TestSetupMcpTool:
             from wet_mcp.server import config
 
             result = await config(action="warmup")
-            assert '"status": "ok"' in result
+            assert '"status": "ok"' in text(result)
 
     async def test_config_tool_setup_sync_action(self):
         """config tool with action='setup_sync' calls run_setup_sync."""
@@ -230,15 +232,15 @@ class TestSetupMcpTool:
             from wet_mcp.server import config
 
             result = await config(action="setup_sync", remote_type="drive")
-            assert '"status": "ok"' in result
+            assert '"status": "ok"' in text(result)
 
     async def test_config_tool_invalid_action(self):
         """config tool with invalid action returns error string."""
         from wet_mcp.server import config
 
         result = await config(action="invalid_xyz_action")
-        assert '"error"' in result
-        assert "Unknown action" in result
+        assert '"error"' in text(result)
+        assert "Unknown action" in text(result)
 
     async def test_config_tool_setup_sync_default_remote(self):
         """setup_sync action without remote_type uses 'drive'."""
@@ -270,8 +272,8 @@ class TestSetupMcpTool:
             from wet_mcp.server import config
 
             result = await config(action="setup_status")
-            assert "unknown action" not in result.lower()
-            assert "state" in result
+            assert "unknown action" not in text(result).lower()
+            assert "state" in text(result)
 
     async def test_config_tool_dispatches_setup_reset_action(self):
         """setup_reset action (formerly on setup tool) should work via config tool."""
@@ -279,6 +281,6 @@ class TestSetupMcpTool:
             from wet_mcp.server import config
 
             result = await config(action="setup_reset")
-            assert "unknown action" not in result.lower()
-            assert '"status": "ok"' in result
+            assert "unknown action" not in text(result).lower()
+            assert '"status": "ok"' in text(result)
             mock_reset.assert_called_once()

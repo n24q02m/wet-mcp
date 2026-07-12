@@ -4,6 +4,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from structured import payload, text
 
 from wet_mcp.server import (
     _maybe_register_custom_embed,
@@ -196,9 +197,9 @@ async def test_search_success():
 
         result = await search(action="search", query="test query")
 
-        assert "Search Results" in result
-        assert "<untrusted_search_content>" in result
-        assert "[SECURITY:" in result
+        assert "Search Results" in text(result)
+        assert "<untrusted_search_content>" in text(result)
+        assert "[SECURITY:" in text(result)
         mock_ensure.assert_called_once()
         mock_search.assert_called_once_with(
             searxng_url="http://localhost:8080",
@@ -216,7 +217,7 @@ async def test_search_success():
 async def test_search_missing_query():
     """Test search action missing query."""
     result = await search(action="search", query=None)
-    assert "Error: query is required" in result
+    assert "Error: query is required" in text(result)
 
 
 @pytest.mark.asyncio
@@ -227,9 +228,9 @@ async def test_extract_success():
 
         result = await extract(action="extract", urls=["https://example.com"])
 
-        assert "Extracted Content" in result
-        assert "<untrusted_extract_content>" in result
-        assert "[SECURITY:" in result
+        assert "Extracted Content" in text(result)
+        assert "<untrusted_extract_content>" in text(result)
+        assert "[SECURITY:" in text(result)
         mock_extract.assert_called_once_with(
             urls=["https://example.com"],
             format="markdown",
@@ -250,8 +251,8 @@ async def test_extract_with_options():
             stealth=False,
         )
 
-        assert "Extracted Content" in result
-        assert "<untrusted_extract_content>" in result
+        assert "Extracted Content" in text(result)
+        assert "<untrusted_extract_content>" in text(result)
         mock_extract.assert_called_once_with(
             urls=["https://example.com"],
             format="json",
@@ -263,7 +264,7 @@ async def test_extract_with_options():
 async def test_extract_missing_urls():
     """Test extract action missing urls."""
     result = await extract(action="extract", urls=None)
-    assert "Error: urls is required" in result
+    assert "Error: urls is required" in text(result)
 
 
 @pytest.mark.asyncio
@@ -281,8 +282,8 @@ async def test_crawl_success():
             stealth=False,
         )
 
-        assert "Crawl Results" in result
-        assert "<untrusted_extract_content>" in result
+        assert "Crawl Results" in text(result)
+        assert "<untrusted_extract_content>" in text(result)
         mock_crawl.assert_called_once_with(
             urls=["https://example.com"],
             depth=3,
@@ -300,8 +301,8 @@ async def test_crawl_defaults():
 
         result = await extract(action="crawl", urls=["https://example.com"])
 
-        assert "Crawl Results" in result
-        assert "<untrusted_extract_content>" in result
+        assert "Crawl Results" in text(result)
+        assert "<untrusted_extract_content>" in text(result)
         mock_crawl.assert_called_once_with(
             urls=["https://example.com"],
             depth=2,
@@ -315,7 +316,7 @@ async def test_crawl_defaults():
 async def test_crawl_missing_urls():
     """Test crawl action missing urls."""
     result = await extract(action="crawl", urls=None)
-    assert "Error: urls is required" in result
+    assert "Error: urls is required" in text(result)
 
 
 @pytest.mark.asyncio
@@ -328,8 +329,8 @@ async def test_map_success():
             action="map", urls=["https://example.com"], depth=3, max_pages=50
         )
 
-        assert "Sitemap Content" in result
-        assert "<untrusted_extract_content>" in result
+        assert "Sitemap Content" in text(result)
+        assert "<untrusted_extract_content>" in text(result)
         mock_sitemap.assert_called_once_with(
             urls=["https://example.com"],
             depth=3,
@@ -345,8 +346,8 @@ async def test_map_defaults():
 
         result = await extract(action="map", urls=["https://example.com"])
 
-        assert "Sitemap Content" in result
-        assert "<untrusted_extract_content>" in result
+        assert "Sitemap Content" in text(result)
+        assert "<untrusted_extract_content>" in text(result)
         mock_sitemap.assert_called_once_with(
             urls=["https://example.com"],
             depth=2,
@@ -358,21 +359,21 @@ async def test_map_defaults():
 async def test_map_missing_urls():
     """Test map action missing urls."""
     result = await extract(action="map", urls=None)
-    assert "Error: urls is required" in result
+    assert "Error: urls is required" in text(result)
 
 
 @pytest.mark.asyncio
 async def test_search_invalid_action():
     """Test invalid action on search tool."""
     result = await search(action="invalid_action")
-    assert "Error: Unknown action" in result
+    assert "Error: Unknown action" in text(result)
 
 
 @pytest.mark.asyncio
 async def test_extract_invalid_action():
     """Test invalid action on extract tool."""
     result = await extract(action="invalid_action")
-    assert "Error: Unknown action" in result
+    assert "Error: Unknown action" in text(result)
 
 
 @pytest.mark.asyncio
@@ -439,11 +440,8 @@ async def test_search_applies_reranking():
         assert call_args[0][0] == "test"  # query
         assert call_args[1]["top_n"] == 3  # top_n
 
-        # Verify reranked results are used (unwrap XPIA tags)
-        # Format: <tag>\n{content}\n</tag>\n\n[SECURITY:...]
-        start = result.index("\n") + 1
-        end = result.index("\n</untrusted_search_content>")
-        data = json.loads(result[start:end])
+        # Verify reranked results are used
+        data = payload(result)
         assert data["total"] == 2  # only 2 reranked results
         assert data["results"][0]["url"] == "https://example2.com/page"
 
@@ -480,17 +478,14 @@ async def test_search_reranking_failure_falls_back():
         patch("wet_mcp.server._web_cache", None),
     ):
         result = await search(action="search", query="test", max_results=3)
-        # Extract JSON from XPIA-wrapped result
-        start = result.index("\n") + 1
-        end = result.index("\n</untrusted_search_content>")
-        data = json.loads(result[start:end])
+        data = payload(result)
         assert data["total"] == 1  # original result preserved
 
 
 async def test_extract_convert_requires_paths():
     result = await extract(action="convert")
-    assert "Error" in result
-    assert "paths" in result
+    assert "Error" in text(result)
+    assert "paths" in text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -512,8 +507,8 @@ async def test_extract_structured_action():
             prompt="Extract the name",
         )
 
-        assert '{"name": "Test"}' in result
-        assert "<untrusted_extract_content>" in result
+        assert payload(result)["name"] == "Test"
+        assert "<untrusted_extract_content>" in text(result)
         mock_fn.assert_called_once_with(
             urls=["https://example.com"],
             schema={"type": "object", "properties": {"name": {"type": "string"}}},
@@ -528,8 +523,8 @@ async def test_extract_structured_requires_urls():
         action="extract_structured",
         schema={"type": "object"},
     )
-    assert "Error" in result
-    assert "urls" in result
+    assert "Error" in text(result)
+    assert "urls" in text(result)
 
 
 async def test_extract_structured_requires_schema():
@@ -538,14 +533,14 @@ async def test_extract_structured_requires_schema():
         action="extract_structured",
         urls=["https://example.com"],
     )
-    assert "Error" in result
-    assert "schema" in result
+    assert "Error" in text(result)
+    assert "schema" in text(result)
 
 
 async def test_extract_batch_requires_urls():
     """Test batch action requires urls."""
     result = await extract(action="batch", urls=None)
-    assert "Error: urls is required for batch action" in result
+    assert "Error: urls is required for batch action" in text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -569,8 +564,8 @@ async def test_search_similar_action():
     ):
         result = await search(action="similar", query="https://example.com")
 
-        assert '{"results": []}' in result
-        assert "<untrusted_search_content>" in result
+        assert payload(result)["results"] == []
+        assert "<untrusted_search_content>" in text(result)
         mock_fn.assert_called_once_with(
             url="https://example.com",
             max_results=10,
@@ -581,15 +576,15 @@ async def test_search_similar_action():
 async def test_search_similar_requires_url():
     """Test similar action requires query to be a URL."""
     result = await search(action="similar", query="not a url")
-    assert "Error" in result
-    assert "URL" in result
+    assert "Error" in text(result)
+    assert "URL" in text(result)
 
 
 async def test_search_similar_requires_query():
     """Test similar action requires query."""
     result = await search(action="similar", query=None)
-    assert "Error" in result
-    assert "query" in result
+    assert "Error" in text(result)
+    assert "query" in text(result)
 
 
 # ---------------------------------------------------------------------------
@@ -625,7 +620,7 @@ async def test_search_expand_flag():
     ):
         result = await search(action="search", query="python web scraping", expand=True)
 
-        assert "Search Results" in result
+        assert "Search Results" in text(result)
         # Verify expanded query was passed to searxng_search
         call_args = mock_search.call_args
         assert "OR" in call_args.kwargs.get("query", call_args[1].get("query", ""))
@@ -688,4 +683,4 @@ async def test_search_enrich_flag():
 
         mock_enrich.assert_called_once()
         # Verify enriched content is in output
-        assert "Enriched content" in result
+        assert "Enriched content" in text(result)

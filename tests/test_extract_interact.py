@@ -5,6 +5,8 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from mcp.types import CallToolResult
+from structured import text
 
 from wet_mcp.sources import _browser_sessions as bs
 from wet_mcp.sources import interact_orchestrator as io
@@ -187,10 +189,10 @@ async def test_extract_interact_action_routes_to_orchestrator(_fake_browser):
         url="https://example.com",
         actions=[{"type": "click", "selector": "#x"}],
     )
-    assert isinstance(result, str)
+    assert isinstance(result, CallToolResult)
     # Result is wrapped by _wrap_tool but JSON body stays embedded.
-    assert "<untrusted_extract_content>" in result
-    assert "snapshot_markdown" in result
+    assert "<untrusted_extract_content>" in text(result)
+    assert "snapshot_markdown" in text(result)
 
 
 @pytest.mark.asyncio
@@ -200,8 +202,8 @@ async def test_extract_interact_action_missing_url_returns_error():
     result = await extract(
         action="interact", actions=[{"type": "click", "selector": "#x"}]
     )
-    assert isinstance(result, str)
-    assert "url is required" in result
+    assert isinstance(result, CallToolResult)
+    assert "url is required" in text(result)
 
 
 @pytest.mark.asyncio
@@ -209,8 +211,8 @@ async def test_extract_interact_action_missing_actions_returns_error():
     from wet_mcp.server import extract
 
     result = await extract(action="interact", url="https://x")
-    assert isinstance(result, str)
-    assert "actions is required" in result
+    assert isinstance(result, CallToolResult)
+    assert "actions is required" in text(result)
 
 
 @pytest.mark.asyncio
@@ -218,5 +220,5 @@ async def test_extract_unknown_action_lists_interact_in_help():
     from wet_mcp.server import extract
 
     result = await extract(action="bogus_99")
-    assert isinstance(result, str)
-    assert "interact" in result
+    assert isinstance(result, CallToolResult)
+    assert "interact" in text(result)

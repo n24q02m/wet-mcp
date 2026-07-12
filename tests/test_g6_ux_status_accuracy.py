@@ -9,11 +9,11 @@ and always includes providers_configured in the response.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+from structured import payload
 
 
 def _call_config_setup_status_sync() -> dict[str, Any]:
@@ -23,7 +23,7 @@ def _call_config_setup_status_sync() -> dict[str, Any]:
     from wet_mcp.server import config
 
     raw = asyncio.run(config(action="setup_status"))
-    return json.loads(raw)
+    return payload(raw)
 
 
 class TestSetupStatusLiveDerivedState:

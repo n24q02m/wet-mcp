@@ -18,6 +18,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from mcp.types import CallToolResult
+from structured import payload, text
 
 from wet_mcp.server import media
 
@@ -25,10 +27,10 @@ from wet_mcp.server import media
 @pytest.mark.asyncio
 async def test_media_analyze_returns_unknown_action_error() -> None:
     result = await media(action="analyze", url="/tmp/x.jpg", prompt="hi")
-    assert isinstance(result, str)
-    assert result.startswith("Error: Unknown action 'analyze'")
-    assert "removed in wet v2.0.0" in result
-    assert "imagine-mcp" in result
+    assert isinstance(result, CallToolResult)
+    assert payload(result)["error"].startswith("Error: Unknown action 'analyze'")
+    assert "removed in wet v2.0.0" in text(result)
+    assert "imagine-mcp" in text(result)
 
 
 @pytest.mark.asyncio
@@ -38,7 +40,7 @@ async def test_media_analyze_does_not_invoke_analyze_media() -> None:
     with patch("wet_mcp.llm.analyze_media", mocked):
         result = await media(action="analyze", url="/tmp/x.jpg")
         mocked.assert_not_called()
-        assert "Unknown action" in result
+        assert "Unknown action" in text(result)
 
 
 @pytest.mark.asyncio
@@ -87,7 +89,7 @@ async def test_media_list_still_works_after_removal() -> None:
         return_value='{"images": [{"src": "https://x/y.jpg"}]}',
     ):
         result = await media(action="list", url="https://example.com/gallery")
-        assert "images" in result
+        assert "images" in text(result)
 
 
 @pytest.mark.asyncio
@@ -109,16 +111,16 @@ async def test_media_download_still_works_after_removal(tmp_path) -> None:
             media_urls=["https://example.com/img.jpg"],
             output_dir=str(download_dir),
         )
-        assert "y.jpg" in result
+        assert "y.jpg" in text(result)
 
 
 @pytest.mark.asyncio
 async def test_media_unknown_action_default_message() -> None:
     """Non-analyze unknown actions get the standard suggestion message."""
     result = await media(action="bogus_99")
-    assert isinstance(result, str)
-    assert "Unknown action 'bogus_99'" in result
-    assert "list" in result and "download" in result
+    assert isinstance(result, CallToolResult)
+    assert "Unknown action 'bogus_99'" in text(result)
+    assert "list" in text(result) and "download" in text(result)
 
 
 # Sanity import.

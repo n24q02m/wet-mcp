@@ -14,6 +14,7 @@ import sys
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from structured import payload, text
 
 import wet_mcp.transport_check as tc
 
@@ -204,9 +205,11 @@ async def test_search_actions_rejected_in_uvx_mode(monkeypatch, action):
 
     result = await srv.search(action=action, **kwargs)
 
-    assert result.startswith(f"Error: action '{action}' requires SearXNG")
-    assert "Method 3 stdio Docker" in result
-    assert "Method 2 HTTP Docker" in result
+    assert payload(result)["error"].startswith(
+        f"Error: action '{action}' requires SearXNG"
+    )
+    assert "Method 3 stdio Docker" in text(result)
+    assert "Method 2 HTTP Docker" in text(result)
 
 
 @pytest.mark.asyncio
@@ -226,7 +229,7 @@ async def test_search_action_proceeds_when_not_uvx(monkeypatch):
 
         result = await srv.search(action="search", query="hello world")
 
-        assert "Search Results" in result
+        assert "Search Results" in text(result)
         mock_ensure.assert_called_once()
 
 
@@ -240,7 +243,7 @@ async def test_extract_action_works_regardless_of_uvx(monkeypatch):
 
         result = await srv.extract(action="extract", urls=["https://example.com"])
 
-        assert "Extracted Content" in result
+        assert "Extracted Content" in text(result)
         mock_extract.assert_called_once()
 
 

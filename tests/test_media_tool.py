@@ -2,6 +2,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from structured import payload, text
 
 from wet_mcp.server import media
 
@@ -28,16 +29,16 @@ async def test_media_list_success(mock_settings):
         mock_list_media.assert_called_once_with(
             url="http://example.com", media_type="images", max_items=5
         )
-        assert '{"images": []}' in result
-        assert "<untrusted_media_content>" in result
-        assert "[SECURITY:" in result
+        assert payload(result)["images"] == []
+        assert "<untrusted_media_content>" in text(result)
+        assert "[SECURITY:" in text(result)
 
 
 @pytest.mark.asyncio
 async def test_media_list_missing_url():
     """Test media list action fails without url."""
     result = await media(action="list")
-    assert "Error: url is required for list action" in result
+    assert "Error: url is required for list action" in text(result)
 
 
 @pytest.mark.asyncio
@@ -59,8 +60,8 @@ async def test_media_download_success(mock_settings):
             media_urls=["http://example.com/img.jpg"],
             output_dir=str(Path(sub_dir).expanduser().resolve()),
         )
-        assert '["file1.jpg"]' in result
-        assert "<untrusted_media_content>" in result
+        assert payload(result)["results"] == ["file1.jpg"]
+        assert "<untrusted_media_content>" in text(result)
 
 
 @pytest.mark.asyncio
@@ -71,7 +72,7 @@ async def test_media_download_outside_download_dir(mock_settings):
         media_urls=["http://example.com/img.jpg"],
         output_dir="/etc/evil",
     )
-    assert "Security Alert" in result
+    assert "Security Alert" in text(result)
 
 
 @pytest.mark.asyncio
@@ -89,15 +90,15 @@ async def test_media_download_default_dir(mock_settings):
             media_urls=["http://example.com/img.jpg"],
             output_dir=expected_dir,
         )
-        assert '["file1.jpg"]' in result
-        assert "<untrusted_media_content>" in result
+        assert payload(result)["results"] == ["file1.jpg"]
+        assert "<untrusted_media_content>" in text(result)
 
 
 @pytest.mark.asyncio
 async def test_media_download_missing_urls():
     """Test media download action fails without media_urls."""
     result = await media(action="download")
-    assert "Error: media_urls is required for download action" in result
+    assert "Error: media_urls is required for download action" in text(result)
 
 
 @pytest.mark.asyncio
@@ -111,17 +112,17 @@ async def test_media_analyze_returns_unknown_action_post_removal(mock_settings):
         )
 
         mock_analyze_media.assert_not_called()
-        assert "Unknown action 'analyze'" in result
-        assert "removed in wet v2.0.0" in result
-        assert "imagine-mcp" in result
+        assert "Unknown action 'analyze'" in text(result)
+        assert "removed in wet v2.0.0" in text(result)
+        assert "imagine-mcp" in text(result)
 
 
 @pytest.mark.asyncio
 async def test_media_analyze_no_url_still_unknown_action():
     """Removal: analyze without url still routes through unknown-action."""
     result = await media(action="analyze")
-    assert "Unknown action 'analyze'" in result
-    assert "imagine-mcp" in result
+    assert "Unknown action 'analyze'" in text(result)
+    assert "imagine-mcp" in text(result)
 
 
 @pytest.mark.asyncio
@@ -172,7 +173,7 @@ async def test_media_download_adds_extension_from_content_type(mock_settings, tm
 async def test_media_unknown_action():
     """Test media action with unknown action."""
     result = await media(action="unknown_action")
-    assert "Error:" in result and "unknown_action" in result
+    assert "Error:" in text(result) and "unknown_action" in text(result)
     # Phase 3 v2.0.0 BREAKING: analyze removed from valid_actions list.
-    assert "list" in result and "download" in result
-    assert "analyze" not in result
+    assert "list" in text(result) and "download" in text(result)
+    assert "analyze" not in text(result)

@@ -18,6 +18,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from structured import payload, text
 
 # =====================================================================
 # relay_setup.py -- ensure_config branches
@@ -1318,7 +1319,7 @@ class TestServerConfigTool:
         with patch("wet_mcp.server.settings") as mock_settings:
             mock_settings.log_level = "INFO"
             result = await config(action="set", key="log_level", value="debug")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "updated"
             assert data["key"] == "log_level"
 
@@ -1329,7 +1330,7 @@ class TestServerConfigTool:
         with patch("wet_mcp.server.settings") as mock_settings:
             mock_settings.tool_timeout = 300
             result = await config(action="set", key="tool_timeout", value="600")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "updated"
 
     async def test_config_set_boolean(self):
@@ -1339,7 +1340,7 @@ class TestServerConfigTool:
         with patch("wet_mcp.server.settings") as mock_settings:
             mock_settings.wet_cache = False
             result = await config(action="set", key="wet_cache", value="true")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "updated"
 
     async def test_config_set_string_setting(self):
@@ -1349,7 +1350,7 @@ class TestServerConfigTool:
         with patch("wet_mcp.server.settings") as mock_settings:
             mock_settings.sync_folder = ""
             result = await config(action="set", key="sync_folder", value="my-folder")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "updated"
 
     async def test_config_set_invalid_key(self):
@@ -1357,7 +1358,7 @@ class TestServerConfigTool:
         from wet_mcp.server import config
 
         result = await config(action="set", key="invalid_key", value="val")
-        data = json.loads(result)
+        data = payload(result)
         assert "error" in data
         assert "Invalid key" in data["error"]
 
@@ -1366,7 +1367,7 @@ class TestServerConfigTool:
         from wet_mcp.server import config
 
         result = await config(action="set", key=None, value=None)
-        data = json.loads(result)
+        data = payload(result)
         assert "error" in data
 
     async def test_config_cache_clear_enabled(self):
@@ -1379,7 +1380,7 @@ class TestServerConfigTool:
         server._web_cache = mock_cache
         try:
             result = await config(action="cache_clear")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "cache cleared"
         finally:
             server._web_cache = old_cache
@@ -1393,7 +1394,7 @@ class TestServerConfigTool:
         server._web_cache = None
         try:
             result = await config(action="cache_clear")
-            data = json.loads(result)
+            data = payload(result)
             assert "error" in data
         finally:
             server._web_cache = old_cache
@@ -1409,7 +1410,7 @@ class TestServerConfigTool:
         server._docs_db = mock_db
         try:
             result = await config(action="docs_reindex", key="nonexistent")
-            data = json.loads(result)
+            data = payload(result)
             assert "error" in data
         finally:
             server._docs_db = old_db
@@ -1426,7 +1427,7 @@ class TestServerConfigTool:
         server._docs_db = mock_db
         try:
             result = await config(action="docs_reindex", key="react")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "cleared"
             mock_db.clear_version_chunks.assert_called_once_with(10)
         finally:
@@ -1441,7 +1442,7 @@ class TestServerConfigTool:
         server._docs_db = None
         try:
             result = await config(action="docs_reindex", key="react")
-            data = json.loads(result)
+            data = payload(result)
             assert "error" in data
         finally:
             server._docs_db = old_db
@@ -1451,7 +1452,7 @@ class TestServerConfigTool:
         from wet_mcp.server import config
 
         result = await config(action="docs_reindex")
-        data = json.loads(result)
+        data = payload(result)
         assert "error" in data
 
     async def test_config_warmup_action(self):
@@ -1464,7 +1465,7 @@ class TestServerConfigTool:
             from wet_mcp.server import config
 
             result = await config(action="warmup")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "ok"
 
     async def test_config_setup_sync_action(self):
@@ -1477,7 +1478,7 @@ class TestServerConfigTool:
             from wet_mcp.server import config
 
             result = await config(action="setup_sync", remote_type="drive")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "ok"
 
     async def test_config_invalid_action(self):
@@ -1485,7 +1486,7 @@ class TestServerConfigTool:
         from wet_mcp.server import config
 
         result = await config(action="invalid_action")
-        data = json.loads(result)
+        data = payload(result)
         assert "error" in data
         assert "Unknown action" in data["error"]
 
@@ -1516,7 +1517,7 @@ class TestServerConfigTool:
             mock_settings.tool_timeout = 300
 
             result = await config(action="status")
-            data = json.loads(result)
+            data = payload(result)
             assert "database" in data
             assert "embedding" in data
             assert "sync" in data
@@ -1544,7 +1545,7 @@ class TestServerSetupTool:
             return_value={"status": "ok", "mode": "local", "steps": []},
         ):
             result = await config(action="warmup")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "ok"
 
     async def test_setup_sync(self):
@@ -1557,7 +1558,7 @@ class TestServerSetupTool:
             return_value={"status": "ok", "provider": "google_drive"},
         ):
             result = await config(action="setup_sync")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "ok"
 
     async def test_setup_invalid_action(self):
@@ -1565,7 +1566,7 @@ class TestServerSetupTool:
         from wet_mcp.server import config
 
         result = await config(action="invalid_action_xyz")
-        data = json.loads(result)
+        data = payload(result)
         assert "error" in data
         assert "Unknown action" in data["error"]
 
@@ -1620,30 +1621,30 @@ class TestServerMediaTool:
         from wet_mcp.server import media
 
         result = await media(action="list")
-        assert "Error: url is required" in result
+        assert "Error: url is required" in text(result)
 
     async def test_media_download_missing_urls(self):
         """Download action requires media_urls."""
         from wet_mcp.server import media
 
         result = await media(action="download")
-        assert "Error: media_urls is required" in result
+        assert "Error: media_urls is required" in text(result)
 
     async def test_media_analyze_returns_unknown_action_post_removal(self):
         """Phase 3 BREAKING: analyze removed in v2.0.0 -- unknown-action route."""
         from wet_mcp.server import media
 
         result = await media(action="analyze")
-        assert "Unknown action 'analyze'" in result
-        assert "imagine-mcp" in result
-        assert "removed in wet v2.0.0" in result
+        assert "Unknown action 'analyze'" in text(result)
+        assert "imagine-mcp" in text(result)
+        assert "removed in wet v2.0.0" in text(result)
 
     async def test_media_invalid_action(self):
         """Invalid media action."""
         from wet_mcp.server import media
 
         result = await media(action="invalid")
-        assert "Error: Unknown action" in result
+        assert "Error: Unknown action" in text(result)
 
     async def test_media_download_security(self):
         """Download output_dir must be within download_dir."""
@@ -1656,7 +1657,7 @@ class TestServerMediaTool:
                 media_urls=["https://example.com/img.jpg"],
                 output_dir="/etc/evil",
             )
-            assert "Security Alert" in result
+            assert "Security Alert" in text(result)
 
     async def test_media_list_success(self):
         """List action calls list_media."""
@@ -1668,7 +1669,7 @@ class TestServerMediaTool:
             return_value='{"media": []}',
         ):
             result = await media(action="list", url="https://example.com")
-            assert "media" in result
+            assert "media" in text(result)
 
     async def test_media_analyze_does_not_call_analyze_media(self):
         """Removed analyze must not invoke the underlying llm primitive."""
@@ -1682,7 +1683,7 @@ class TestServerMediaTool:
             result = await media(
                 action="analyze", url="/tmp/img.jpg", prompt="Describe"
             )
-            assert "Unknown action 'analyze'" in result
+            assert "Unknown action 'analyze'" in text(result)
             mocked.assert_not_called()
 
 
@@ -1694,7 +1695,7 @@ class TestServerResearchAction:
         from wet_mcp.server import search
 
         result = await search(action="research")
-        assert "Error: query is required" in result
+        assert "Error: query is required" in text(result)
 
     async def test_research_success(self):
         """Research action delegates to _do_research."""
@@ -1741,35 +1742,35 @@ class TestServerResearchAction:
             ),
         ):
             result = await search(action="research", query="attention mechanism")
-            assert "arxiv" in result
+            assert "arxiv" in text(result)
 
     async def test_docs_missing_library(self):
         """Docs requires library."""
         from wet_mcp.server import search
 
         result = await search(action="docs", query="routing")
-        assert "Error: library is required" in result
+        assert "Error: library is required" in text(result)
 
     async def test_docs_missing_query(self):
         """Docs requires query."""
         from wet_mcp.server import search
 
         result = await search(action="docs", library="fastapi")
-        assert "Error: query is required" in result
+        assert "Error: query is required" in text(result)
 
     async def test_search_typo_suggestion(self):
         """Typo in action gets suggestion."""
         from wet_mcp.server import search
 
         result = await search(action="serch")
-        assert "Did you mean" in result
+        assert "Did you mean" in text(result)
 
     async def test_extract_typo_suggestion(self):
         """Typo in extract action gets suggestion."""
         from wet_mcp.server import extract
 
         result = await extract(action="exract")
-        assert "Did you mean" in result
+        assert "Did you mean" in text(result)
 
 
 class TestServerHelpers:

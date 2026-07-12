@@ -4,6 +4,7 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+from structured import payload
 
 from wet_mcp.credential_state import (
     CLOUD_KEYS,
@@ -227,14 +228,12 @@ class TestServerSetupToolNewActions:
 
     async def test_status_action(self, monkeypatch):
         """setup_status action returns current state."""
-        import json
-
         from wet_mcp.server import config
 
         set_state(CredentialState.CONFIGURED)
         monkeypatch.setenv("GEMINI_API_KEY", "test")
         result = await config(action="setup_status")
-        data = json.loads(result)
+        data = payload(result)
         assert data["state"] == "configured"
         assert "GEMINI_API_KEY" in data["cloud_keys_in_env"]
 
@@ -245,32 +244,26 @@ class TestServerSetupToolNewActions:
         fuzzy-match suggestion list that no longer contains
         ``setup_open_relay``.
         """
-        import json
-
         from wet_mcp.server import config
 
         result = await config(action="setup_open_relay")
-        data = json.loads(result)
+        data = payload(result)
         assert "error" in data
         assert "setup_open_relay" not in data["valid_actions"]
 
     async def test_skip_action(self):
         """setup_skip action sets LOCAL mode."""
-        import json
-
         from wet_mcp.server import config
 
         with patch("mcp_core.set_local_mode") as mock_set:
             result = await config(action="setup_skip")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "ok"
             assert get_state() == CredentialState.LOCAL
             mock_set.assert_called_once_with("wet-mcp")
 
     async def test_reset_action(self):
         """setup_reset action clears state."""
-        import json
-
         from wet_mcp.server import config
 
         set_state(CredentialState.CONFIGURED)
@@ -279,25 +272,21 @@ class TestServerSetupToolNewActions:
             patch("mcp_core.storage.per_plugin_store.PerPluginStore.clear"),
         ):
             result = await config(action="setup_reset")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "ok"
             assert get_state() == CredentialState.AWAITING_SETUP
 
     async def test_invalid_action_suggests(self):
         """Invalid action includes fuzzy match suggestion."""
-        import json
-
         from wet_mcp.server import config
 
         result = await config(action="setup_statu")
-        data = json.loads(result)
+        data = payload(result)
         assert "error" in data
         assert "setup_status" in data["error"]  # fuzzy match suggestion
 
     async def test_complete_action_refreshes_state(self, monkeypatch):
         """setup_complete action re-resolves credentials and transitions to CONFIGURED."""
-        import json
-
         from wet_mcp.server import config
 
         set_state(CredentialState.AWAITING_SETUP)
@@ -305,7 +294,7 @@ class TestServerSetupToolNewActions:
         with patch("wet_mcp.server.settings") as mock_settings:
             mock_settings.setup_providers = MagicMock()
             result = await config(action="setup_complete")
-            data = json.loads(result)
+            data = payload(result)
             assert data["status"] == "ok"
             assert data["state"] == "configured"
             assert data["message"] == "Credential state refreshed."
@@ -362,8 +351,6 @@ class TestRequireCredentials:
 
     def test_returns_error_json_when_awaiting_setup(self):
         """Returns error JSON when state is AWAITING_SETUP."""
-        import json
-
         import wet_mcp.credential_state as mod
         from wet_mcp.server import _require_credentials
 
@@ -371,7 +358,7 @@ class TestRequireCredentials:
         mod._setup_url = "https://relay.example.com/setup/abc"
         result = _require_credentials()
         assert result is not None
-        data = json.loads(result)
+        data = payload(result)
         assert data["error"] == "Credentials not configured"
         assert data["state"] == "awaiting_setup"
         assert data["setup_url"] == "https://relay.example.com/setup/abc"
@@ -391,15 +378,13 @@ class TestRequireCredentials:
 
     def test_returns_error_json_with_null_url_when_no_relay_session(self):
         """Returns error JSON with null setup_url when relay not yet started."""
-        import json
-
         from wet_mcp.server import _require_credentials
 
         set_state(CredentialState.AWAITING_SETUP)
         # _setup_url is already None (reset by _reset_module_state fixture)
         result = _require_credentials()
         assert result is not None
-        data = json.loads(result)
+        data = payload(result)
         assert data["setup_url"] is None
 
 
