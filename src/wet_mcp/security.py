@@ -100,10 +100,17 @@ def build_external_tool_result(
       tags, exactly as before structured output existed.
     * ``structuredContent`` — the same object, plus the envelope markers.
 
-    Errors raised by the server itself (``{"error": "Error: ..."}``) hold no
-    external content, so they are neither wrapped nor marked — the dict-level
-    counterpart of ``wrap_external_content``'s ``startswith("Error")``
-    pass-through.
+    Error payloads (``{"error": "Error: ..."}``) are handled asymmetrically.
+    The boundary cannot prove an error string is free of embedded external
+    content: ``interact`` / ``agent`` build their error from an exception repr
+    (``f"Error: ... {exc}"``), and a Playwright/locator ``exc`` routinely
+    quotes matched page DOM text — attacker-influenced. So the
+    ``structuredContent`` envelope marker is applied UNCONDITIONALLY as
+    defense-in-depth. The text block, however, stays UNWRAPPED: a
+    server-synthesized validation error (``"query is required"``) is not
+    external content, and labelling it ``<untrusted_{tool}_content>`` would be
+    misleading. Over-marking a trusted error is harmless; under-marking an
+    exception-repr error is the vuln.
     """
     error = payload.get("error")
     if isinstance(error, str) and error.startswith("Error"):
@@ -114,7 +121,7 @@ def build_external_tool_result(
                     text=json.dumps(payload, ensure_ascii=False, indent=2),
                 )
             ],
-            structuredContent=payload,
+            structuredContent=mark_external_payload(payload),
         )
 
     marked = mark_external_payload(payload)
