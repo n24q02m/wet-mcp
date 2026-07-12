@@ -8,6 +8,20 @@ pytest_plugins = ["conftest_e2e", "conftest_cf"]
 
 
 @pytest.fixture(autouse=True)
+def _never_open_a_real_browser(monkeypatch):
+    """Keep the GDrive device-code path from hijacking the developer's browser.
+
+    ``credential_state._trigger_gdrive_device_code`` calls ``try_open_browser``
+    on the verification URL. Newer mcp-core honours ``MCP_NO_BROWSER``, but the
+    import is lazy and older installs lack that guard, so patch the symbol too.
+    Tests that assert on the launch patch ``mcp_core.try_open_browser``
+    themselves, which shadows this fixture.
+    """
+    monkeypatch.setenv("MCP_NO_BROWSER", "1")
+    monkeypatch.setattr("mcp_core.try_open_browser", lambda url: False, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _stub_phase2_lifespan_hooks():
     """Phase 2 wires migrations + Tier 1 warmup into the FastMCP lifespan.
 

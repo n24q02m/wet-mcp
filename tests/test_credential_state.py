@@ -1053,3 +1053,17 @@ class TestLlmProviderDetection:
             assert has_llm_provider() is True
         with patch.dict(os.environ, {}, clear=True):
             assert has_llm_provider() is False
+
+
+def test_conftest_blocks_real_browser_launch():
+    """The autouse fixture must neutralise try_open_browser for the whole suite.
+
+    Regression guard: the GDrive device-code path used to open a real tab in the
+    developer's browser on every unmocked test run.
+    """
+    import os
+
+    import mcp_core
+
+    assert os.environ.get("MCP_NO_BROWSER") == "1"
+    assert mcp_core.try_open_browser("https://example.com/device") is False
