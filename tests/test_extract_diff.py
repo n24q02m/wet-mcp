@@ -105,6 +105,10 @@ async def test_diff_second_fetch_changed(real_cache):
     assert "+line THREE" in data["diff"]
     assert data["old_fetched_at"] is not None
     assert data["new_fetched_at"] is not None
+    # Diff output is external content -- XPIA marker must be present on both
+    # response channels (structuredContent envelope + text-block boundary tag).
+    assert data["_untrusted_source"] == "web"
+    assert "<untrusted_extract_content>" in text(result)
 
 
 @pytest.mark.asyncio
