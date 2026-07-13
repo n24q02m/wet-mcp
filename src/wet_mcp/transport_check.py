@@ -121,18 +121,24 @@ def reset_cache() -> None:
     _UVX_TOOL_VENV_CACHE = None
 
 
-# Error message returned by tools when SearXNG-dependent actions are
-# invoked from inside a uvx tool venv. Per spec
-# ``2026-05-01-stdio-pure-http-multiuser.md`` §4.1.1.
+# Error message returned by tools when no configured search backend can run
+# under a stdio uvx tool venv (no cloud key, no external SearXNG). Per spec
+# ``2026-05-01-stdio-pure-http-multiuser.md`` §4.1.1, extended by
+# ``2026-07-13-e0-1-uvx-guard-conditional-fix.md`` to only fire when the
+# configured ``SEARCH_BACKENDS`` chain has no uvx-runnable option.
 UVX_SEARXNG_BLOCKED_ERROR = (
-    "Error: action '{action}' requires SearXNG which is not available in "
-    "stdio uvx mode.\n"
-    "Options:\n"
-    "  1. Run via Docker (Method 3 stdio Docker): "
-    "docker run -i --rm -e ENV n24q02m/wet-mcp:latest\n"
-    "  2. Run via HTTP mode (Method 2 HTTP Docker recommended): "
-    "docker run -p 8080:8080 n24q02m/wet-mcp:latest --http\n"
-    "See https://github.com/n24q02m/wet-mcp#setup for details."
+    "Error: action '{action}' needs a search backend, and the local SearXNG "
+    "cannot\n"
+    "auto-start under uvx (no pip in a uv tool venv).\n"
+    "Pick ONE:\n"
+    "  1. Set a cloud key (no Docker needed):\n"
+    "       TAVILY_API_KEY=...   (or BRAVE_API_KEY / EXA_API_KEY)\n"
+    "     then set SEARCH_BACKENDS=tavily  (or brave / exa)\n"
+    "  2. Point at an already-running SearXNG:\n"
+    "       SEARXNG_URL=https://your-searxng.example\n"
+    "  3. Run via Docker (bundles SearXNG):\n"
+    "       docker run -i --rm n24q02m/wet-mcp:latest\n"
+    "See https://github.com/n24q02m/wet-mcp#setup"
 )
 
 

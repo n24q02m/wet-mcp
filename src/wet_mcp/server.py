@@ -884,7 +884,14 @@ async def search(  # noqa: PLR0913
     # upstream via ``httpx`` directly and remain available.
     # docs_resolve and docs_lock_project do not need SearXNG (pure DB ops);
     # docs_query falls back to local FTS even without SearXNG, so allow it.
-    if action in ("search", "research", "docs", "similar") and is_uvx_tool_venv():
+    # Only block when NO configured backend can run under uvx: a cloud key
+    # (tavily/brave/exa) or an external SEARXNG_URL both work without the
+    # local SearXNG auto-spawn that uvx tool venvs cannot start.
+    if (
+        action in ("search", "research", "docs", "similar")
+        and is_uvx_tool_venv()
+        and not search_backends.has_uvx_runnable_backend()
+    ):
         return {"error": uvx_searxng_blocked_error(action)}
 
     match action:
