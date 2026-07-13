@@ -3,6 +3,7 @@ import unittest.mock
 
 import httpx
 import pytest
+from structured import text
 
 from wet_mcp.sources.search_backends import (
     BraveBackend,
@@ -68,7 +69,7 @@ async def test_server_search_routes_through_chain(monkeypatch):
         from wet_mcp.server import search
 
         result = await search(action="search", query="python tutorial", max_results=5)
-        assert "results" in result
+        assert "results" in text(result)
         fake_chain.assert_awaited()
 
 
@@ -101,8 +102,8 @@ async def test_server_search_tavily_missing_key_degrades_gracefully(monkeypatch)
     # The search action wraps results in untrusted-content guards, so assert on
     # substrings rather than parsing.
     result = await search(action="search", query="python tutorial")
-    assert "missing API keys" in result
-    assert "tavily" in result
+    assert "missing API keys" in text(result)
+    assert "tavily" in text(result)
 
 
 # ---------------------------------------------------------------------------

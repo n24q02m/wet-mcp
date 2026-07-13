@@ -5,6 +5,7 @@ import sys
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from structured import payload, text
 
 from wet_mcp import server
 
@@ -233,7 +234,7 @@ async def test_search_tool_search():
             '"total": 1, "query": "test"}'
         )
         res = await server.search("search", query="test")
-        assert "search_result" in res
+        assert "search_result" in text(res)
 
 
 @pytest.mark.asyncio
@@ -241,7 +242,7 @@ async def test_search_tool_research():
     with patch("wet_mcp.server._do_research", new_callable=AsyncMock) as mock_research:
         mock_research.return_value = "research_result"
         res = await server.search("research", query="test")
-        assert "research_result" in res
+        assert "research_result" in text(res)
 
 
 @pytest.mark.asyncio
@@ -249,13 +250,13 @@ async def test_search_tool_docs():
     with patch("wet_mcp.server._do_docs_search", new_callable=AsyncMock) as mock_docs:
         mock_docs.return_value = "docs_result"
         res = await server.search("docs", query="test", library="test")
-        assert "docs_result" in res
+        assert "docs_result" in text(res)
 
 
 @pytest.mark.asyncio
 async def test_search_tool_invalid():
     res = await server.search("invalid")
-    assert "Unknown action" in res
+    assert "Unknown action" in text(res)
 
 
 @pytest.mark.asyncio
@@ -263,7 +264,7 @@ async def test_extract_tool_extract():
     with patch("wet_mcp.server._extract", new_callable=AsyncMock) as mock_ext:
         mock_ext.return_value = "ext_result"
         res = await server.extract("extract", urls=["http://test"])
-        assert "ext_result" in res
+        assert "ext_result" in text(res)
 
 
 @pytest.mark.asyncio
@@ -271,7 +272,7 @@ async def test_extract_tool_crawl():
     with patch("wet_mcp.server._crawl", new_callable=AsyncMock) as mock_crawl:
         mock_crawl.return_value = "crawl_result"
         res = await server.extract("crawl", urls=["http://test"])
-        assert "crawl_result" in res
+        assert "crawl_result" in text(res)
 
 
 @pytest.mark.asyncio
@@ -279,7 +280,7 @@ async def test_extract_tool_map():
     with patch("wet_mcp.server._sitemap", new_callable=AsyncMock) as mock_map:
         mock_map.return_value = "map_result"
         res = await server.extract("map", urls=["http://test"])
-        assert "map_result" in res
+        assert "map_result" in text(res)
 
 
 @pytest.mark.asyncio
@@ -294,18 +295,18 @@ async def test_media_tool():
     ):
         mock_list.return_value = "list_result"
         res = await server.media("list", url="http://test")
-        assert "list_result" in res
+        assert "list_result" in text(res)
 
         mock_down.return_value = "down_result"
         res = await server.media("download", media_urls=["http://test"])
-        assert "down_result" in res
+        assert "down_result" in text(res)
 
         # Phase 3 Task 5 BREAKING: analyze removed in v2.0.0 -- routes
         # through unknown-action with migration hint, never invokes LLM.
         mock_analyze.return_value = "analyze_result"
         res = await server.media("analyze", url="http://test")
-        assert "Unknown action 'analyze'" in res
-        assert "removed in wet v2.0.0" in res
+        assert "Unknown action 'analyze'" in text(res)
+        assert "removed in wet v2.0.0" in text(res)
         mock_analyze.assert_not_called()
 
 
@@ -323,10 +324,10 @@ async def test_help_tool():
 @pytest.mark.asyncio
 async def test_config_tool():
     res = await server.config("status")
-    assert "settings" in json.loads(res)
+    assert "settings" in payload(res)
 
     res = await server.config("set", "tool_timeout", "20")
-    assert "updated" in json.loads(res)["status"]
+    assert "updated" in payload(res)["status"]
 
 
 @pytest.mark.asyncio
@@ -372,7 +373,7 @@ async def test_do_docs_search_cached():
         mock_rerank.return_value = [{"content": "res"}]
 
         res = await server._do_docs_search("test", "test")
-        assert "cached_index" in json.loads(res)["source"]
+        assert "cached_index" in payload(res)["source"]
 
 
 @pytest.mark.asyncio
@@ -405,7 +406,7 @@ async def test_do_docs_search_new():
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock),
     ):
         res = await server._do_docs_search("newlib", "query")
-        data = json.loads(res)
+        data = payload(res)
         assert data["status"] == "indexing_in_progress"
         assert data["library"] == "newlib"
 
@@ -512,7 +513,7 @@ async def test_fetch_and_chunk_docs_crawl_fallback_to_gh():
 async def test_do_docs_search_db_not_init():
     with patch("wet_mcp.server._docs_db", None):
         res = await server._do_docs_search("test", "test")
-        assert "Docs database not initialized" in res
+        assert "Docs database not initialized" in text(res)
 
 
 @pytest.mark.asyncio
@@ -543,7 +544,7 @@ async def test_do_docs_search_force_reindex():
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock),
     ):
         res = await server._do_docs_search("test", "test")
-        assert "indexing_in_progress" in res
+        assert "indexing_in_progress" in text(res)
 
 
 @pytest.mark.asyncio
@@ -551,7 +552,7 @@ async def test_do_docs_search_discovery_timeout():
     server._docs_db.get_library.return_value = None
     with patch("wet_mcp.server.asyncio.wait_for", side_effect=TimeoutError):
         res = await server._do_docs_search("test", "test")
-        assert "Could not find documentation URL" in res
+        assert "Could not find documentation URL" in text(res)
 
 
 @pytest.mark.asyncio
@@ -573,7 +574,7 @@ async def test_do_docs_search_no_docs_but_repo():
         patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock),
     ):
         res = await server._do_docs_search("test", "test")
-        assert "indexing_in_progress" in res
+        assert "indexing_in_progress" in text(res)
 
 
 @pytest.mark.asyncio
@@ -593,7 +594,7 @@ async def test_do_docs_search_fallback_searxng():
         mock_search.return_value = json.dumps({"results": [{"url": "http://docs.alt"}]})
 
         res = await server._do_docs_search("test", "test")
-        assert "indexing_in_progress" in res
+        assert "indexing_in_progress" in text(res)
 
 
 @pytest.mark.asyncio
@@ -609,7 +610,7 @@ async def test_do_docs_search_fetch_timeout():
         mock_discover.return_value = {"homepage": "http://docs"}
 
         res = await server._do_docs_search("test", "test")
-        assert "indexing_in_progress" in res
+        assert "indexing_in_progress" in text(res)
 
 
 @pytest.mark.asyncio
@@ -656,7 +657,7 @@ def test_main():
 async def test_config_cache_clear(mock_web_cache):
     """Test cache_clear action clears the web cache."""
     res = await server.config("cache_clear")
-    data = json.loads(res)
+    data = payload(res)
     assert data["status"] == "cache cleared"
     mock_web_cache.clear.assert_called_once()
 
@@ -666,7 +667,7 @@ async def test_config_cache_clear_disabled():
     """Test cache_clear when cache is None."""
     server._web_cache = None
     res = await server.config("cache_clear")
-    data = json.loads(res)
+    data = payload(res)
     assert "error" in data
     assert "not enabled" in data["error"]
 
@@ -678,7 +679,7 @@ async def test_config_docs_reindex(mock_docs_db):
     mock_docs_db.get_best_version.return_value = {"id": 10, "chunk_count": 5}
 
     res = await server.config("docs_reindex", key="react")
-    data = json.loads(res)
+    data = payload(res)
     assert data["status"] == "cleared"
     assert data["library"] == "react"
     mock_docs_db.clear_version_chunks.assert_called_once_with(10)
@@ -690,7 +691,7 @@ async def test_config_docs_reindex_not_found(mock_docs_db):
     mock_docs_db.get_library.return_value = None
 
     res = await server.config("docs_reindex", key="unknown-lib")
-    data = json.loads(res)
+    data = payload(res)
     assert "error" in data
     assert "not found" in data["error"]
 
@@ -699,7 +700,7 @@ async def test_config_docs_reindex_not_found(mock_docs_db):
 async def test_config_set_invalid_key():
     """Test setting an invalid config key."""
     res = await server.config("set", key="nonexistent_key", value="123")
-    data = json.loads(res)
+    data = payload(res)
     assert "error" in data
     assert "Invalid key" in data["error"]
     assert "valid_keys" in data
@@ -709,7 +710,7 @@ async def test_config_set_invalid_key():
 async def test_config_set_missing_value():
     """Test set action without value."""
     res = await server.config("set", key="log_level")
-    data = json.loads(res)
+    data = payload(res)
     assert "error" in data
     assert "key and value are required" in data["error"]
 
@@ -718,7 +719,7 @@ async def test_config_set_missing_value():
 async def test_config_unknown_action():
     """Test calling config with an invalid action."""
     res = await server.config("foobar")
-    data = json.loads(res)
+    data = payload(res)
     assert "error" in data
     assert "Unknown action" in data["error"]
     assert "valid_actions" in data
@@ -729,7 +730,7 @@ async def test_config_unknown_action():
 async def test_config_models_action_removed():
     """The 'models' catalog-listing action no longer exists."""
     res = await server.config("models")
-    data = json.loads(res)
+    data = payload(res)
     assert "Unknown action 'models'" in data["error"]
     assert "models" not in data["valid_actions"]
 
@@ -739,7 +740,7 @@ async def test_config_set_log_level():
     """Test changing log level via config set."""
     with patch("wet_mcp.server.logger") as mock_logger:
         res = await server.config("set", key="log_level", value="warning")
-        data = json.loads(res)
+        data = payload(res)
         assert data["status"] == "updated"
         assert data["key"] == "log_level"
         mock_logger.remove.assert_called_once()
@@ -750,7 +751,7 @@ async def test_config_set_log_level():
 async def test_config_set_wet_cache(mock_settings):
     """Test toggling cache via config set."""
     res = await server.config("set", key="wet_cache", value="false")
-    data = json.loads(res)
+    data = payload(res)
     assert data["status"] == "updated"
     assert data["key"] == "wet_cache"
 
@@ -759,7 +760,7 @@ async def test_config_set_wet_cache(mock_settings):
 async def test_config_set_sync_enabled(mock_settings):
     """Test toggling sync_enabled via config set."""
     res = await server.config("set", key="sync_enabled", value="true")
-    data = json.loads(res)
+    data = payload(res)
     assert data["status"] == "updated"
     assert data["key"] == "sync_enabled"
 
@@ -1283,7 +1284,7 @@ async def test_search_tool_cache_hit(mock_web_cache):
     # Search dispatcher consumes get_with_age -> (content, age) | None.
     mock_web_cache.get_with_age.return_value = ("cached_search_result", 0)
     res = await server.search("search", query="test")
-    assert "cached_search_result" in res
+    assert "cached_search_result" in text(res)
 
 
 @pytest.mark.asyncio
@@ -1295,7 +1296,7 @@ async def test_search_tool_searxng_timeout():
         side_effect=TimeoutError,
     ):
         res = await server.search("search", query="test")
-        assert "timed out" in res
+        assert "timed out" in text(res)
 
 
 @pytest.mark.asyncio
@@ -1307,7 +1308,7 @@ async def test_search_tool_searxng_exception():
         side_effect=Exception("docker not found"),
     ):
         res = await server.search("search", query="test")
-        assert "startup failed" in res
+        assert "startup failed" in text(res)
 
 
 @pytest.mark.asyncio
@@ -1315,28 +1316,28 @@ async def test_search_tool_research_cache_hit(mock_web_cache):
     """Test research returns cached result (lines 538-540)."""
     mock_web_cache.get.return_value = "cached_research_result"
     res = await server.search("research", query="test")
-    assert "cached_research_result" in res
+    assert "cached_research_result" in text(res)
 
 
 @pytest.mark.asyncio
 async def test_search_tool_research_missing_query():
     """Test research missing query (line 535)."""
     res = await server.search("research", query=None)
-    assert "Error: query is required" in res
+    assert "Error: query is required" in text(res)
 
 
 @pytest.mark.asyncio
 async def test_search_tool_docs_missing_library():
     """Test docs action missing library (line 551)."""
     res = await server.search("docs", query="test", library=None)
-    assert "Error: library is required" in res
+    assert "Error: library is required" in text(res)
 
 
 @pytest.mark.asyncio
 async def test_search_tool_docs_missing_query():
     """Test docs action missing query (line 553)."""
     res = await server.search("docs", library="react", query=None)
-    assert "Error: query is required" in res
+    assert "Error: query is required" in text(res)
 
 
 # ---------------------------------------------------------------------------
@@ -1349,7 +1350,7 @@ async def test_extract_tool_extract_cache_hit(mock_web_cache):
     """Test extract returns cached result (lines 613-615)."""
     mock_web_cache.get.return_value = "cached_extract_result"
     res = await server.extract("extract", urls=["http://test"])
-    assert "cached_extract_result" in res
+    assert "cached_extract_result" in text(res)
 
 
 @pytest.mark.asyncio
@@ -1357,7 +1358,7 @@ async def test_extract_tool_crawl_cache_hit(mock_web_cache):
     """Test crawl returns cached result (lines 634-636)."""
     mock_web_cache.get.return_value = "cached_crawl_result"
     res = await server.extract("crawl", urls=["http://test"])
-    assert "cached_crawl_result" in res
+    assert "cached_crawl_result" in text(res)
 
 
 @pytest.mark.asyncio
@@ -1365,7 +1366,7 @@ async def test_extract_tool_map_cache_hit(mock_web_cache):
     """Test map returns cached result (lines 661-663)."""
     mock_web_cache.get.return_value = "cached_map_result"
     res = await server.extract("map", urls=["http://test"])
-    assert "cached_map_result" in res
+    assert "cached_map_result" in text(res)
 
 
 # ---------------------------------------------------------------------------
@@ -1377,14 +1378,14 @@ async def test_extract_tool_map_cache_hit(mock_web_cache):
 async def test_media_tool_list_missing_url():
     """Test media list missing url (line 710)."""
     res = await server.media("list", url=None)
-    assert "Error: url is required" in res
+    assert "Error: url is required" in text(res)
 
 
 @pytest.mark.asyncio
 async def test_media_tool_download_missing_urls():
     """Test media download missing media_urls (line 718)."""
     res = await server.media("download", media_urls=None)
-    assert "Error: media_urls is required" in res
+    assert "Error: media_urls is required" in text(res)
 
 
 @pytest.mark.asyncio
@@ -1398,7 +1399,7 @@ async def test_media_tool_download_security_check():
             media_urls=["http://test/img.png"],
             output_dir="/etc/passwd",
         )
-        assert "Security Alert" in res
+        assert "Security Alert" in text(res)
 
 
 @pytest.mark.asyncio
@@ -1406,15 +1407,15 @@ async def test_media_tool_analyze_missing_url():
     """Phase 3 Task 5 BREAKING: analyze removed -- routes to unknown-action
     regardless of url presence."""
     res = await server.media("analyze", url=None)
-    assert "Unknown action 'analyze'" in res
-    assert "imagine-mcp" in res
+    assert "Unknown action 'analyze'" in text(res)
+    assert "imagine-mcp" in text(res)
 
 
 @pytest.mark.asyncio
 async def test_media_tool_invalid_action():
     """Test media invalid action (lines 751-752)."""
     res = await server.media("invalid")
-    assert "Unknown action" in res
+    assert "Unknown action" in text(res)
 
 
 # ---------------------------------------------------------------------------
@@ -1426,7 +1427,7 @@ async def test_media_tool_invalid_action():
 async def test_config_set_sync_interval(mock_settings):
     """Test setting sync_interval (lines 885-886)."""
     res = await server.config("set", key="sync_interval", value="30")
-    data = json.loads(res)
+    data = payload(res)
     assert data["status"] == "updated"
     assert data["key"] == "sync_interval"
 
@@ -1435,7 +1436,7 @@ async def test_config_set_sync_interval(mock_settings):
 async def test_config_set_generic_key(mock_settings):
     """Test setting a generic key via setattr (lines 887-888)."""
     res = await server.config("set", key="sync_folder", value="my-sync-folder")
-    data = json.loads(res)
+    data = payload(res)
     assert data["status"] == "updated"
     assert data["key"] == "sync_folder"
 
@@ -1444,7 +1445,7 @@ async def test_config_set_generic_key(mock_settings):
 async def test_config_docs_reindex_missing_key():
     """Test docs_reindex without key (line 906)."""
     res = await server.config("docs_reindex", key=None)
-    data = json.loads(res)
+    data = payload(res)
     assert "error" in data
     assert "required" in data["error"]
 
@@ -1454,7 +1455,7 @@ async def test_config_docs_reindex_db_not_init():
     """Test docs_reindex when docs db is not initialized (line 908)."""
     server._docs_db = None
     res = await server.config("docs_reindex", key="react")
-    data = json.loads(res)
+    data = payload(res)
     assert "error" in data
     assert "not initialized" in data["error"]
 
@@ -2128,7 +2129,7 @@ async def test_do_docs_search_fallback_exception():
         ),
     ):
         res = await server._do_docs_search("testlib", "query")
-        data = json.loads(res)
+        data = payload(res)
         assert data["status"] == "indexing_in_progress"
         assert data["temporary_results"] == []
 

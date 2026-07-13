@@ -16,6 +16,7 @@ if sys.platform == "win32":
 from contextlib import asynccontextmanager
 from importlib.resources import files
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -26,7 +27,7 @@ from wet_mcp.cache import WebCache
 from wet_mcp.config import settings
 from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
-from wet_mcp.security import wrap_external_content
+from wet_mcp.security import build_external_tool_result
 from wet_mcp.sources import search_backends
 from wet_mcp.sources.crawler import (
     crawl as _crawl,
@@ -103,8 +104,8 @@ def make_docs_db():
     )
 
 
-def _require_credentials() -> str | None:
-    """Check if credentials are configured. Returns error JSON if not, None if OK.
+def _require_credentials() -> dict[str, Any] | None:
+    """Check if credentials are configured. Returns an error payload if not, None if OK.
 
     Branching:
 
@@ -135,19 +136,17 @@ def _require_credentials() -> str | None:
     if sub is not None:
         creds = credentials_for_current_request()
         if not creds:
-            return json.dumps(
-                {
-                    "error": "Credentials not configured",
-                    "state": "awaiting_setup",
-                    "sub": sub,
-                    "instructions": (
-                        "Open the wet-mcp relay form (see the OAuth setup "
-                        "URL in your client) and submit at least one of "
-                        "JINA_AI_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY "
-                        "/ COHERE_API_KEY for this user."
-                    ),
-                }
-            )
+            return {
+                "error": "Credentials not configured",
+                "state": "awaiting_setup",
+                "sub": sub,
+                "instructions": (
+                    "Open the wet-mcp relay form (see the OAuth setup "
+                    "URL in your client) and submit at least one of "
+                    "JINA_AI_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY "
+                    "/ COHERE_API_KEY for this user."
+                ),
+            }
         # Credentials verified for this sub. They stay request-scoped:
         # the cloud dispatch resolves the per-sub key per call via
         # credential_state.api_key_for_model. Do NOT write them into
@@ -157,21 +156,19 @@ def _require_credentials() -> str | None:
     state = get_state()
     if state == CredentialState.AWAITING_SETUP:
         url = get_setup_url()
-        return json.dumps(
-            {
-                "error": "Credentials not configured",
-                "state": "awaiting_setup",
-                "setup_url": url,
-                "instructions": (
-                    "API keys required. Set one of "
-                    "JINA_AI_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY / "
-                    "COHERE_API_KEY in the environment, or run wet-mcp in "
-                    "HTTP mode (--http / MCP_TRANSPORT=http) to configure "
-                    "via browser, or call config(action='setup_skip') to "
-                    "opt into local-only mode."
-                ),
-            }
-        )
+        return {
+            "error": "Credentials not configured",
+            "state": "awaiting_setup",
+            "setup_url": url,
+            "instructions": (
+                "API keys required. Set one of "
+                "JINA_AI_API_KEY / GEMINI_API_KEY / OPENAI_API_KEY / "
+                "COHERE_API_KEY in the environment, or run wet-mcp in "
+                "HTTP mode (--http / MCP_TRANSPORT=http) to configure "
+                "via browser, or call config(action='setup_skip') to "
+                "opt into local-only mode."
+            ),
+        }
     return None
 
 
@@ -722,19 +719,46 @@ register_open_relay_tool(mcp, "wet-mcp", os.environ.get("PUBLIC_URL"))
 _CANCEL_GRACE_PERIOD = 5.0
 
 
+def _payload(result: str | dict[str, Any] | list[Any]) -> dict[str, Any]:
+    """Adapt a helper's result into a structured tool payload.
+
+    The ``sources.*`` helpers and ``_with_timeout`` still speak the JSON-string
+    / ``"Error: ..."`` contract because the web cache stores that text verbatim
+    in a TEXT column. The tool boundary is where it turns into structured
+    output: an object passes through, an array gets an object envelope
+    (``structuredContent`` must be an object) and an error string becomes
+    ``{"error": ...}``.
+    """
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, list):
+        return {"results": result}
+    if result.startswith("Error"):
+        return {"error": result}
+    try:
+        data = json.loads(result)
+    except json.JSONDecodeError:
+        return {"error": result}
+    return data if isinstance(data, dict) else {"results": data}
+
+
 def _wrap_tool(tool_name: str):
     """Decorator to wrap tool results with XPIA safety markers.
 
-    Encapsulates untrusted external content in XML boundary tags and appends
-    a security warning instructing the LLM to treat the content as data only.
-    Error responses are passed through unwrapped.
+    The decorated tool returns a plain ``dict``; this turns it into a
+    ``CallToolResult`` so BOTH response channels defend against XPIA: the text
+    block keeps its ``<untrusted_{tool}_content>`` boundary tags and the
+    ``structuredContent`` carries the envelope markers (a client reading
+    structured output never sees the text block). FastMCP still derives the
+    tool's ``outputSchema`` from the wrapped function's ``-> dict`` annotation,
+    which ``functools.wraps`` keeps reachable via ``__wrapped__``.
     """
 
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             result = await func(*args, **kwargs)
-            return wrap_external_content(tool_name, result)
+            return build_external_tool_result(tool_name, result)
 
         return wrapper
 
@@ -750,8 +774,10 @@ _EMBED_TIMEOUT = 60  # _embed_batch() — ONNX for all chunks
 _FALLBACK_TIMEOUT = 60  # SearXNG fallback fetch
 
 
-async def _with_timeout(coro, action: str) -> str:
-    """Wrap coroutine with hard timeout.
+async def _with_timeout(coro, action: str) -> Any:
+    """Wrap coroutine with hard timeout. Passes the coroutine's result through
+    (a JSON string from ``sources.*``, or a dict from a dict-returning helper);
+    a timeout yields the usual ``"Error: ..."`` string.
 
     Uses ``asyncio.wait`` instead of ``asyncio.wait_for`` because
     Playwright / Crawl4AI may suppress ``CancelledError`` internally,
@@ -820,7 +846,7 @@ async def search(  # noqa: PLR0913
     exclude_domains: list[str] | None = None,
     expand: bool = False,
     enrich: bool = False,
-) -> str:
+) -> dict[str, Any]:
     """Find information across web, academic sources, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
 
     Actions:
@@ -859,12 +885,14 @@ async def search(  # noqa: PLR0913
     # docs_resolve and docs_lock_project do not need SearXNG (pure DB ops);
     # docs_query falls back to local FTS even without SearXNG, so allow it.
     if action in ("search", "research", "docs", "similar") and is_uvx_tool_venv():
-        return uvx_searxng_blocked_error(action)
+        return {"error": uvx_searxng_blocked_error(action)}
 
     match action:
         case "search":
             if not query:
-                return 'Error: query is required for search action. Example: search(action="search", query="python async patterns")'
+                return {
+                    "error": 'Error: query is required for search action. Example: search(action="search", query="python async patterns")'
+                }
             from wet_mcp.sources._search_polish import (
                 normalize_query,
                 search_ttl_seconds,
@@ -897,10 +925,10 @@ async def search(  # noqa: PLR0913
                                 cache_age_seconds=cache_age,
                                 ttl_seconds=ttl,
                             )
-                            return json.dumps(cached_data, ensure_ascii=False, indent=2)
+                            return cached_data
                     except json.JSONDecodeError:
                         pass
-                    return cached_content
+                    return _payload(cached_content)
             # Optional query expansion (LLM-driven, opt-in)
             search_query = normalized_query or query
             if expand:
@@ -922,9 +950,11 @@ async def search(  # noqa: PLR0913
                         ensure_searxng(), timeout=_SEARXNG_TIMEOUT
                     )
                 except TimeoutError:
-                    return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
+                    return {
+                        "error": f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
+                    }
                 except (SystemExit, Exception) as exc:
-                    return f"Error: SearXNG startup failed: {exc}"
+                    return {"error": f"Error: SearXNG startup failed: {exc}"}
 
             result = await _with_timeout(
                 search_backends.run_search_chain(
@@ -1002,11 +1032,13 @@ async def search(  # noqa: PLR0913
                 await asyncio.to_thread(
                     _web_cache.set, "search", cache_params, result, ttl
                 )
-            return result
+            return _payload(result)
 
         case "research":
             if not query:
-                return 'Error: query is required for research action. Example: search(action="research", query="transformer attention mechanism")'
+                return {
+                    "error": 'Error: query is required for research action. Example: search(action="research", query="transformer attention mechanism")'
+                }
             cache_params = {
                 "query": query,
                 "max_results": max_results,
@@ -1020,7 +1052,7 @@ async def search(  # noqa: PLR0913
                     _web_cache.get, "research", cache_params
                 )
                 if cached:
-                    return cached
+                    return _payload(cached)
             result = await _with_timeout(
                 _do_research(
                     query=query,
@@ -1036,65 +1068,79 @@ async def search(  # noqa: PLR0913
                 await asyncio.to_thread(
                     _web_cache.set, "research", cache_params, result
                 )
-            return result
+            return _payload(result)
 
         case "docs":
             if not library:
-                return 'Error: library is required for docs action. Example: search(action="docs", query="routing", library="fastapi")'
+                return {
+                    "error": 'Error: library is required for docs action. Example: search(action="docs", query="routing", library="fastapi")'
+                }
             if not query:
-                return 'Error: query is required for docs action. Example: search(action="docs", query="how to create routes", library="fastapi")'
-            return await _with_timeout(
-                _do_docs_search(
-                    library=library,
-                    query=query,
-                    language=language,
-                    version=version,
-                    limit=limit,
-                ),
-                "docs",
+                return {
+                    "error": 'Error: query is required for docs action. Example: search(action="docs", query="how to create routes", library="fastapi")'
+                }
+            return _payload(
+                await _with_timeout(
+                    _do_docs_search(
+                        library=library,
+                        query=query,
+                        language=language,
+                        version=version,
+                        limit=limit,
+                    ),
+                    "docs",
+                )
             )
 
         case "similar":
             if not query:
-                return 'Error: query (URL) is required for similar action. Example: search(action="similar", query="https://example.com/article")'
+                return {
+                    "error": 'Error: query (URL) is required for similar action. Example: search(action="similar", query="https://example.com/article")'
+                }
             if not query.startswith(("http://", "https://")):
-                return 'Error: query must be a full URL starting with http:// or https://. Example: search(action="similar", query="https://example.com/article"). If you want to search by keywords instead, use action="search".'
+                return {
+                    "error": 'Error: query must be a full URL starting with http:// or https://. Example: search(action="similar", query="https://example.com/article"). If you want to search by keywords instead, use action="search".'
+                }
             try:
                 searxng_url = await asyncio.wait_for(
                     ensure_searxng(), timeout=_SEARXNG_TIMEOUT
                 )
             except (TimeoutError, SystemExit, Exception) as exc:
-                return f"Error: SearXNG startup failed: {exc}"
+                return {"error": f"Error: SearXNG startup failed: {exc}"}
             from wet_mcp.sources.search_strategies import find_similar
 
-            return await _with_timeout(
-                find_similar(
-                    url=query, max_results=max_results, searxng_url=searxng_url
-                ),
-                "similar",
+            return _payload(
+                await _with_timeout(
+                    find_similar(
+                        url=query, max_results=max_results, searxng_url=searxng_url
+                    ),
+                    "similar",
+                )
             )
 
         case "docs_resolve":
             if not query:
-                return 'Error: query (library name) is required for docs_resolve. Example: search(action="docs_resolve", query="react")'
+                return {
+                    "error": 'Error: query (library name) is required for docs_resolve. Example: search(action="docs_resolve", query="react")'
+                }
             if not _docs_db:
-                return "Error: Docs database not initialized"
+                return {"error": "Error: Docs database not initialized"}
             from wet_mcp.sources.docs import resolve_library
 
             results = await asyncio.to_thread(resolve_library, _docs_db, query, limit)
-            return json.dumps(
-                {"query": query, "results": results, "total": len(results)},
-                ensure_ascii=False,
-                indent=2,
-            )
+            return {"query": query, "results": results, "total": len(results)}
 
         case "docs_query":
             if not query:
-                return 'Error: query is required for docs_query. Example: search(action="docs_query", library="react", query="useState")'
+                return {
+                    "error": 'Error: query is required for docs_query. Example: search(action="docs_query", library="react", query="useState")'
+                }
             if not library:
-                return 'Error: library is required for docs_query. Example: search(action="docs_query", library="react", query="useState")'
+                return {
+                    "error": 'Error: library is required for docs_query. Example: search(action="docs_query", library="react", query="useState")'
+                }
             if not _docs_db:
-                return "Error: Docs database not initialized"
+                return {"error": "Error: Docs database not initialized"}
             from wet_mcp.sources.docs import (
                 DocsQueryOptions,
                 ingest_tier2,
@@ -1109,19 +1155,15 @@ async def search(  # noqa: PLR0913
             if not resolved:
                 # Tier 2 lazy ingest: fire-and-forget, return progress hint.
                 asyncio.create_task(ingest_tier2(_docs_db, library))
-                return json.dumps(
-                    {
-                        "status": "indexing_in_progress",
-                        "library": library,
-                        "message": (
-                            "Library not yet indexed. Tier 2 ingestion has "
-                            "started in the background; retry shortly."
-                        ),
-                        "results": [],
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
+                return {
+                    "status": "indexing_in_progress",
+                    "library": library,
+                    "message": (
+                        "Library not yet indexed. Tier 2 ingestion has "
+                        "started in the background; retry shortly."
+                    ),
+                    "results": [],
+                }
 
             lib_id = resolved[0]["library_id"]
             effective_version = version
@@ -1155,26 +1197,24 @@ async def search(  # noqa: PLR0913
                     limit=limit,
                 ),
             )
-            return json.dumps(
-                {
-                    "library": resolved[0],
-                    "query": query,
-                    "version": effective_version or "latest",
-                    "topic": topic,
-                    "project_path": project_path,
-                    "lock_pin": lock_pin,
-                    "results": results,
-                    "total": len(results),
-                },
-                ensure_ascii=False,
-                indent=2,
-            )
+            return {
+                "library": resolved[0],
+                "query": query,
+                "version": effective_version or "latest",
+                "topic": topic,
+                "project_path": project_path,
+                "lock_pin": lock_pin,
+                "results": results,
+                "total": len(results),
+            }
 
         case "docs_lock_project":
             if not project_path:
-                return 'Error: project_path is required for docs_lock_project. Example: search(action="docs_lock_project", project_path="/repo/my-app")'
+                return {
+                    "error": 'Error: project_path is required for docs_lock_project. Example: search(action="docs_lock_project", project_path="/repo/my-app")'
+                }
             if not _docs_db:
-                return "Error: Docs database not initialized"
+                return {"error": "Error: Docs database not initialized"}
             from wet_mcp.sources.project_lock import lock_project
 
             try:
@@ -1182,8 +1222,8 @@ async def search(  # noqa: PLR0913
                     lock_project, _docs_db, Path(project_path)
                 )
             except FileNotFoundError as exc:
-                return f"Error: project_path does not exist: {exc}"
-            return json.dumps(lock, ensure_ascii=False, indent=2)
+                return {"error": f"Error: project_path does not exist: {exc}"}
+            return lock
 
         case _:
             import difflib
@@ -1203,16 +1243,18 @@ async def search(  # noqa: PLR0913
                 else []
             )
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-            return (
-                f"Error: Unknown action '{action}'.{suggestion} "
-                "Valid actions: search (web search), research (academic), "
-                "docs (library documentation, auto-indexing), "
-                "docs_resolve (library name → ranked library_id), "
-                "docs_query (version-aware docs query with token cap), "
-                "docs_lock_project (Cabinets project isolation), "
-                "similar (find related pages). "
-                "If you want to read content from a URL, use the `extract` tool instead."
-            )
+            return {
+                "error": (
+                    f"Error: Unknown action '{action}'.{suggestion} "
+                    "Valid actions: search (web search), research (academic), "
+                    "docs (library documentation, auto-indexing), "
+                    "docs_resolve (library name → ranked library_id), "
+                    "docs_query (version-aware docs query with token cap), "
+                    "docs_lock_project (Cabinets project isolation), "
+                    "similar (find related pages). "
+                    "If you want to read content from a URL, use the `extract` tool instead."
+                )
+            }
 
 
 # ---------------------------------------------------------------------------
@@ -1245,7 +1287,7 @@ async def extract(  # noqa: PLR0913
     session: str | None = None,
     screenshot: bool = False,
     url: str | None = None,
-) -> str:
+) -> dict[str, Any]:
     """Read and return full page content from URLs or local files. Use this when you have a specific URL and need its content. For finding URLs first, use the `search` tool instead.
 
     Actions:
@@ -1292,7 +1334,9 @@ async def extract(  # noqa: PLR0913
     match action:
         case "extract":
             if not urls:
-                return 'Error: urls is required for extract action. Example: extract(action="extract", urls=["https://example.com/page"])'
+                return {
+                    "error": 'Error: urls is required for extract action. Example: extract(action="extract", urls=["https://example.com/page"])'
+                }
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {"urls": sorted(urls), "format": format, "stealth": stealth}
             if _web_cache:
@@ -1300,28 +1344,34 @@ async def extract(  # noqa: PLR0913
                     _web_cache.get, "extract", cache_params
                 )
                 if cached:
-                    return cached
+                    return _payload(cached)
             result = await _with_timeout(
                 _extract(urls=urls, format=format, stealth=stealth),
                 "extract",
             )
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "extract", cache_params, result)
-            return result
+            return _payload(result)
 
         case "batch":
             if not urls:
-                return 'Error: urls is required for batch action. Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])'
+                return {
+                    "error": 'Error: urls is required for batch action. Example: extract(action="batch", urls=["https://a.com/1", "https://b.com/2"])'
+                }
             from wet_mcp.sources.crawler import batch_extract
 
-            return await _with_timeout(
-                batch_extract(urls=urls, format=format, stealth=stealth),
-                "batch",
+            return _payload(
+                await _with_timeout(
+                    batch_extract(urls=urls, format=format, stealth=stealth),
+                    "batch",
+                )
             )
 
         case "crawl":
             if not urls:
-                return 'Error: urls is required for crawl action. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)'
+                return {
+                    "error": 'Error: urls is required for crawl action. Example: extract(action="crawl", urls=["https://docs.example.com"], depth=2)'
+                }
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -1331,7 +1381,7 @@ async def extract(  # noqa: PLR0913
             if _web_cache:
                 cached = await asyncio.to_thread(_web_cache.get, "crawl", cache_params)
                 if cached:
-                    return cached
+                    return _payload(cached)
             result = await _with_timeout(
                 _crawl(
                     urls=urls,
@@ -1344,11 +1394,13 @@ async def extract(  # noqa: PLR0913
             )
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "crawl", cache_params, result)
-            return result
+            return _payload(result)
 
         case "map":
             if not urls:
-                return 'Error: urls is required for map action. Example: extract(action="map", urls=["https://example.com"])'
+                return {
+                    "error": 'Error: urls is required for map action. Example: extract(action="map", urls=["https://example.com"])'
+                }
             urls = urls[:_MAX_EXTRACT_URLS]
             cache_params = {
                 "urls": sorted(urls),
@@ -1358,76 +1410,90 @@ async def extract(  # noqa: PLR0913
             if _web_cache:
                 cached = await asyncio.to_thread(_web_cache.get, "map", cache_params)
                 if cached:
-                    return cached
+                    return _payload(cached)
             result = await _with_timeout(
                 _sitemap(urls=urls, depth=depth, max_pages=max_pages),
                 "map",
             )
             if _web_cache and not result.startswith("Error"):
                 await asyncio.to_thread(_web_cache.set, "map", cache_params, result)
-            return result
+            return _payload(result)
 
         case "convert":
             if not paths:
-                return 'Error: paths is required for convert action. Example: extract(action="convert", paths=["/home/user/report.pdf"])'
+                return {
+                    "error": 'Error: paths is required for convert action. Example: extract(action="convert", paths=["/home/user/report.pdf"])'
+                }
             from wet_mcp.sources.crawler import convert_local_files
 
-            return await _with_timeout(
-                convert_local_files(paths=paths),
-                "convert",
+            return _payload(
+                await _with_timeout(
+                    convert_local_files(paths=paths),
+                    "convert",
+                )
             )
 
         case "extract_structured":
             if not urls:
-                return 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
+                return {
+                    "error": 'Error: urls is required for extract_structured action. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})'
+                }
             if not schema:
-                return 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
+                return {
+                    "error": 'Error: schema (JSON Schema dict) is required for extract_structured action. Provide a JSON Schema defining the data structure to extract. Example: schema={"type": "object", "properties": {"title": {"type": "string"}, "items": {"type": "array", "items": {"type": "object"}}}}'
+                }
             from wet_mcp.sources.structured import extract_structured
 
-            return await _with_timeout(
-                extract_structured(
-                    urls=urls, schema=schema, prompt=prompt, stealth=stealth
-                ),
-                "extract_structured",
+            return _payload(
+                await _with_timeout(
+                    extract_structured(
+                        urls=urls, schema=schema, prompt=prompt, stealth=stealth
+                    ),
+                    "extract_structured",
+                )
             )
 
         case "agent":
             if not query:
-                return 'Error: query is required for agent action. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)'
+                return {
+                    "error": 'Error: query is required for agent action. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)'
+                }
             from wet_mcp.sources.agent_orchestrator import run_agent
 
-            result = await _with_timeout(
-                run_agent(
-                    query=query,
-                    max_urls=max_urls,
-                    synthesis_model=synthesis_model,
-                    token_budget=token_budget,
-                ),
-                "agent",
+            return _payload(
+                await _with_timeout(
+                    run_agent(
+                        query=query,
+                        max_urls=max_urls,
+                        synthesis_model=synthesis_model,
+                        token_budget=token_budget,
+                    ),
+                    "agent",
+                )
             )
-            if isinstance(result, str):
-                return result
-            return json.dumps(result, ensure_ascii=False, indent=2)
 
         case "interact":
             if not url:
-                return 'Error: url is required for interact action. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "click", "selector": "#submit"}])'
+                return {
+                    "error": 'Error: url is required for interact action. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "click", "selector": "#submit"}])'
+                }
             if not actions:
-                return 'Error: actions is required for interact action. Provide a list of {type, selector?, description?, value?} ops. Example: actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}]'
+                return {
+                    "error": 'Error: actions is required for interact action. Provide a list of {type, selector?, description?, value?} ops. Example: actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}]'
+                }
             from wet_mcp.sources.interact_orchestrator import run_interact
 
-            result = await _with_timeout(
-                run_interact(
-                    url=url,
-                    actions=actions,
-                    session=session,
-                    screenshot=screenshot,
-                ),
-                "interact",
+            return _payload(
+                await _with_timeout(
+                    run_interact(
+                        url=url,
+                        actions=actions,
+                        session=session,
+                        screenshot=screenshot,
+                    ),
+                    "interact",
+                )
             )
-            if isinstance(result, str):
-                return result
-            return json.dumps(result, ensure_ascii=False, indent=2)
 
         case _:
             import difflib
@@ -1448,13 +1514,15 @@ async def extract(  # noqa: PLR0913
                 else []
             )
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-            return (
-                f"Error: Unknown action '{action}'.{suggestion} "
-                "Valid actions: extract (read URL content), batch (bulk extract), crawl (follow links), "
-                "map (site structure), convert (local files to markdown), extract_structured (schema-based), "
-                "agent (multi-step research orchestration), interact (drive a page with click/fill/submit). "
-                "If you want to search for information, use the `search` tool instead."
-            )
+            return {
+                "error": (
+                    f"Error: Unknown action '{action}'.{suggestion} "
+                    "Valid actions: extract (read URL content), batch (bulk extract), crawl (follow links), "
+                    "map (site structure), convert (local files to markdown), extract_structured (schema-based), "
+                    "agent (multi-step research orchestration), interact (drive a page with click/fill/submit). "
+                    "If you want to search for information, use the `search` tool instead."
+                )
+            }
 
 
 @mcp.tool(
@@ -1472,7 +1540,7 @@ async def media(  # noqa: PLR0913
     output_dir: str | None = None,
     max_items: int = 10,
     prompt: str = "Describe this image in detail.",
-) -> str:
+) -> dict[str, Any]:
     """Discover and download media files (images, videos, audio) from web pages.
 
     Actions:
@@ -1503,15 +1571,21 @@ async def media(  # noqa: PLR0913
     match action:
         case "list":
             if not url:
-                return 'Error: url is required for list action. Example: media(action="list", url="https://example.com/gallery", media_type="images")'
-            return await _with_timeout(
-                list_media(url=url, media_type=media_type, max_items=max_items),
-                "media.list",
+                return {
+                    "error": 'Error: url is required for list action. Example: media(action="list", url="https://example.com/gallery", media_type="images")'
+                }
+            return _payload(
+                await _with_timeout(
+                    list_media(url=url, media_type=media_type, max_items=max_items),
+                    "media.list",
+                )
             )
 
         case "download":
             if not media_urls:
-                return 'Error: media_urls is required for download action. Example: media(action="download", media_urls=["https://example.com/image.jpg"]). Use media(action="list", url="...") first to discover media URLs.'
+                return {
+                    "error": 'Error: media_urls is required for download action. Example: media(action="download", media_urls=["https://example.com/image.jpg"]). Use media(action="list", url="...") first to discover media URLs.'
+                }
 
             # Security: validate output_dir is within the configured
             # download directory to prevent arbitrary file writes.
@@ -1520,17 +1594,21 @@ async def media(  # noqa: PLR0913
                 Path(output_dir or settings.download_dir).expanduser().resolve()
             )
             if not target_dir.is_relative_to(resolved_download_dir):
-                return (
-                    "Error: Security Alert — output_dir must be within "
-                    f"the configured download directory ({resolved_download_dir})"
-                )
+                return {
+                    "error": (
+                        "Error: Security Alert — output_dir must be within "
+                        f"the configured download directory ({resolved_download_dir})"
+                    )
+                }
 
-            return await _with_timeout(
-                download_media(
-                    media_urls=media_urls,
-                    output_dir=str(target_dir),
-                ),
-                "media.download",
+            return _payload(
+                await _with_timeout(
+                    download_media(
+                        media_urls=media_urls,
+                        output_dir=str(target_dir),
+                    ),
+                    "media.download",
+                )
             )
 
         case _:
@@ -1550,18 +1628,22 @@ async def media(  # noqa: PLR0913
             )
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
             if action == "analyze":
-                return (
-                    "Error: Unknown action 'analyze'. The analyze action was "
-                    "removed in wet v2.0.0. Use imagine-mcp's understand "
-                    "action for vision/audio/video analysis. "
-                    "Valid wet media actions: list (discover media on page), "
+                return {
+                    "error": (
+                        "Error: Unknown action 'analyze'. The analyze action was "
+                        "removed in wet v2.0.0. Use imagine-mcp's understand "
+                        "action for vision/audio/video analysis. "
+                        "Valid wet media actions: list (discover media on page), "
+                        "download (save to local)."
+                    )
+                }
+            return {
+                "error": (
+                    f"Error: Unknown action '{action}'.{suggestion} "
+                    "Valid actions: list (discover media on page), "
                     "download (save to local)."
                 )
-            return (
-                f"Error: Unknown action '{action}'.{suggestion} "
-                "Valid actions: list (discover media on page), "
-                "download (save to local)."
-            )
+            }
 
 
 @mcp.tool(
@@ -1603,7 +1685,7 @@ async def help(tool_name: str = "search") -> str:
         return f"Error loading documentation: {e}"
 
 
-async def _handle_config_status() -> str:
+async def _handle_config_status() -> dict[str, Any]:
     from wet_mcp.embedder import get_backend
     from wet_mcp.reranker import get_reranker
 
@@ -1640,12 +1722,12 @@ async def _handle_config_status() -> str:
             "tool_timeout": settings.tool_timeout,
         },
     }
-    return json.dumps(status, indent=2, default=str)
+    return status
 
 
-def _handle_config_set(key: str | None, value: str | None) -> str:
+def _handle_config_set(key: str | None, value: str | None) -> dict[str, Any]:
     if not key or value is None:
-        return json.dumps({"error": "key and value are required for set"})
+        return {"error": "key and value are required for set"}
     valid_keys = {
         "log_level",
         "tool_timeout",
@@ -1663,12 +1745,10 @@ def _handle_config_set(key: str | None, value: str | None) -> str:
             else []
         )
         suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-        return json.dumps(
-            {
-                "error": f"Invalid key: {key}.{suggestion}",
-                "valid_keys": sorted(valid_keys),
-            }
-        )
+        return {
+            "error": f"Invalid key: {key}.{suggestion}",
+            "valid_keys": sorted(valid_keys),
+        }
     if key == "log_level":
         settings.log_level = value.upper()
         logger.remove()
@@ -1679,58 +1759,51 @@ def _handle_config_set(key: str | None, value: str | None) -> str:
         setattr(settings, key, value.lower() in ("true", "1", "yes"))
     else:
         setattr(settings, key, value)
-    return json.dumps(
-        {
-            "status": "updated",
-            "key": key,
-            "value": getattr(settings, key),
-        },
-        default=str,
-    )
+    return {
+        "status": "updated",
+        "key": key,
+        "value": getattr(settings, key),
+    }
 
 
-async def _handle_config_cache_clear() -> str:
+async def _handle_config_cache_clear() -> dict[str, Any]:
     if _web_cache:
         await asyncio.to_thread(_web_cache.clear)
-        return json.dumps({"status": "cache cleared"})
-    return json.dumps({"error": "Cache is not enabled"})
+        return {"status": "cache cleared"}
+    return {"error": "Cache is not enabled"}
 
 
-def _handle_config_docs_reindex(key: str | None) -> str:
+def _handle_config_docs_reindex(key: str | None) -> dict[str, Any]:
     if not key:
-        return json.dumps({"error": "key (library name) is required"})
+        return {"error": "key (library name) is required"}
     if not _docs_db:
-        return json.dumps({"error": "Docs database not initialized"})
+        return {"error": "Docs database not initialized"}
     lib = _docs_db.get_library(key)
     if lib:
         ver = _docs_db.get_best_version(lib["id"])
         if ver:
             _docs_db.clear_version_chunks(ver["id"])
-        return json.dumps(
-            {
-                "status": "cleared",
-                "library": key,
-                "hint": "Next docs search will re-index",
-            }
-        )
-    return json.dumps({"error": f"Library '{key}' not found in index"})
+        return {
+            "status": "cleared",
+            "library": key,
+            "hint": "Next docs search will re-index",
+        }
+    return {"error": f"Library '{key}' not found in index"}
 
 
-async def _handle_config_warmup() -> str:
+async def _handle_config_warmup() -> dict[str, Any]:
     from wet_mcp.setup_tool import run_warmup
 
-    result = await run_warmup()
-    return json.dumps(result, indent=2, default=str)
+    return await run_warmup()
 
 
-async def _handle_config_setup_sync(remote_type: str | None) -> str:
+async def _handle_config_setup_sync(remote_type: str | None) -> dict[str, Any]:
     from wet_mcp.setup_tool import run_setup_sync
 
-    result = await run_setup_sync(remote_type or "drive")
-    return json.dumps(result, indent=2, default=str)
+    return await run_setup_sync(remote_type or "drive")
 
 
-def _handle_config_setup_status() -> str:
+def _handle_config_setup_status() -> dict[str, Any]:
     from mcp_core.storage.per_plugin_store import PerPluginStore
 
     from wet_mcp import credential_state as _cs
@@ -1745,44 +1818,38 @@ def _handle_config_setup_status() -> str:
         _derived_state = "local"
     else:
         _derived_state = "awaiting_setup"
-    return json.dumps(
-        {
-            "state": _derived_state,
-            "setup_url": _cs.get_setup_url(),
-            "cloud_keys_in_env": _env_keys,
-            "providers_configured": _providers,
-        }
-    )
+    return {
+        "state": _derived_state,
+        "setup_url": _cs.get_setup_url(),
+        "cloud_keys_in_env": _env_keys,
+        "providers_configured": _providers,
+    }
 
 
-def _handle_config_setup_skip() -> str:
+def _handle_config_setup_skip() -> dict[str, Any]:
     from mcp_core import set_local_mode
 
     from wet_mcp.credential_state import CredentialState, set_state
 
     set_local_mode("wet-mcp")
     set_state(CredentialState.LOCAL)
-    return json.dumps(
-        {
-            "status": "ok",
-            "message": "Local mode set. Relay will not trigger on restart.",
-        }
-    )
+    return {
+        "status": "ok",
+        "message": "Local mode set. Relay will not trigger on restart.",
+    }
 
 
-def _handle_config_setup_reset() -> str:
+def _handle_config_setup_reset() -> dict[str, Any]:
     from wet_mcp.credential_state import reset_state
 
     reset_state()
-    return json.dumps(
-        {
-            "status": "ok",
-            "message": "Credentials cleared. Next tool call will offer setup.",
-        }
-    )
+    return {
+        "status": "ok",
+        "message": "Credentials cleared. Next tool call will offer setup.",
+    }
 
 
-async def _handle_config_setup_complete() -> str:
+async def _handle_config_setup_complete() -> dict[str, Any]:
     from wet_mcp.credential_state import (
         CredentialState,
         resolve_credential_state,
@@ -1800,13 +1867,11 @@ async def _handle_config_setup_complete() -> str:
         await _init_embedding_backend(mode)
         await _init_reranker_backend(mode)
 
-    return json.dumps(
-        {
-            "status": "ok",
-            "state": state.value,
-            "message": "Credential state refreshed.",
-        }
-    )
+    return {
+        "status": "ok",
+        "state": state.value,
+        "message": "Credential state refreshed.",
+    }
 
 
 @mcp.tool(
@@ -1830,7 +1895,7 @@ async def config(
     value: str | None = None,
     remote_type: str | None = None,
     force: bool = False,
-) -> str:
+) -> dict[str, Any]:
     """Server configuration and management.
 
     Actions:
@@ -1897,12 +1962,10 @@ async def config(
                 else []
             )
             suggestion = f" Did you mean '{closest[0]}'?" if closest else ""
-            return json.dumps(
-                {
-                    "error": f"Unknown action '{action}'.{suggestion}",
-                    "valid_actions": valid_actions,
-                }
-            )
+            return {
+                "error": f"Unknown action '{action}'.{suggestion}",
+                "valid_actions": valid_actions,
+            }
 
 
 # ---------------------------------------------------------------------------
@@ -2264,12 +2327,11 @@ async def _search_cached_index(
     query: str,
     version: str | None,
     limit: int,
-) -> str | None:
-    """Search an already-indexed library and return JSON results.
+) -> dict[str, Any] | None:
+    """Search an already-indexed library and return the results.
 
-    Returns a JSON string with cached search results if the library is
-    indexed and has matching chunks, or None if the library needs
-    (re-)indexing.
+    Returns the search-result payload if the library is indexed and has
+    matching chunks, or None if the library needs (re-)indexing.
     """
     from wet_mcp.sources.docs import DISCOVERY_VERSION
 
@@ -2338,17 +2400,13 @@ async def _search_cached_index(
 
     # Rerank if available, otherwise truncate to limit
     results = await _rerank_results(query, results, limit)
-    return json.dumps(
-        {
-            "library": library,
-            "version": ver.get("version", "latest"),
-            "results": results,
-            "total": len(results),
-            "source": "cached_index",
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
+    return {
+        "library": library,
+        "version": ver.get("version", "latest"),
+        "results": results,
+        "total": len(results),
+        "source": "cached_index",
+    }
 
 
 async def _discover_docs_url(
@@ -2429,10 +2487,10 @@ async def _do_docs_search(
     language: str | None = None,
     version: str | None = None,
     limit: int = 10,
-) -> str:
+) -> dict[str, Any]:
     """Search library documentation. Auto-discovers and indexes if needed."""
     if not _docs_db:
-        return "Error: Docs database not initialized"
+        return {"error": "Error: Docs database not initialized"}
 
     # Build library identity — include language for DB disambiguation
     # e.g., "redis" (no lang) vs "redis:python" vs "redis:javascript"
@@ -2458,13 +2516,10 @@ async def _do_docs_search(
             docs_url = repo_url
             logger.info(f"No docs URL for '{library}', using GitHub repo: {repo_url}")
         else:
-            return json.dumps(
-                {
-                    "error": f"Could not find documentation URL for '{library}'",
-                    "hint": "Try providing the docs URL directly via extract action",
-                },
-                ensure_ascii=False,
-            )
+            return {
+                "error": f"Could not find documentation URL for '{library}'",
+                "hint": "Try providing the docs URL directly via extract action",
+            }
 
     # Apply version to docs URL if applicable (e.g. ReadTheDocs, docs.rs)
     from wet_mcp.sources.docs import _apply_version_to_url
@@ -2510,17 +2565,13 @@ async def _do_docs_search(
         limit=limit,
     )
 
-    return json.dumps(
-        {
-            "status": "indexing_in_progress",
-            "message": f"Library '{library}' is currently being downloaded and indexed in the background (this may take 3-5 minutes). In the meantime, here are temporary web search results.",
-            "temporary_results": fallback_data.get("results", []),
-            "library": library,
-            "docs_url": docs_url,
-        },
-        ensure_ascii=False,
-        indent=2,
-    )
+    return {
+        "status": "indexing_in_progress",
+        "message": f"Library '{library}' is currently being downloaded and indexed in the background (this may take 3-5 minutes). In the meantime, here are temporary web search results.",
+        "temporary_results": fallback_data.get("results", []),
+        "library": library,
+        "docs_url": docs_url,
+    }
 
 
 async def _do_immediate_fallback_search(
