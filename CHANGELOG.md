@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v3.5.0-beta.7 (2026-07-13)
+
+### Bug Fixes
+
+- Resolve the x-search XAI key per-sub, not from os.environ
+  ([#1527](https://github.com/n24q02m/wet-mcp/pull/1527),
+  [`2cb3900`](https://github.com/n24q02m/wet-mcp/commit/2cb39002f502185990d69c2a644209cc79316a40))
+
+### Features
+
+- Add X/Twitter search to the search tool (action="x") via xAI
+  ([#1527](https://github.com/n24q02m/wet-mcp/pull/1527),
+  [`2cb3900`](https://github.com/n24q02m/wet-mcp/commit/2cb39002f502185990d69c2a644209cc79316a40))
+
+
 ## v3.5.0-beta.6 (2026-07-13)
 
 ### Bug Fixes
