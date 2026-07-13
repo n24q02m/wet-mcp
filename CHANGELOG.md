@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.5.0-beta.6 (2026-07-13)
+
+### Bug Fixes
+
+- Make uvx search guard conditional on backend availability
+  ([#1526](https://github.com/n24q02m/wet-mcp/pull/1526),
+  [`236277f`](https://github.com/n24q02m/wet-mcp/commit/236277f6d8f2d7e64988497787a0192ce52af7b3))
+
+
 ## v3.5.0-beta.5 (2026-07-13)
 
 ### Bug Fixes
