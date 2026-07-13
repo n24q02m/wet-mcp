@@ -265,6 +265,54 @@ class TestStats:
 # -----------------------------------------------------------------------
 
 
+class TestSnapshots:
+    def test_latest_snapshots_returns_newest_first(self, cache):
+        """record 3 snapshots -> latest_snapshots(n=2) returns the 2 newest, newest first."""
+        cache.record_snapshot("https://example.com", "v1")
+        cache.record_snapshot("https://example.com", "v2")
+        cache.record_snapshot("https://example.com", "v3")
+
+        latest = cache.latest_snapshots("https://example.com", n=2)
+        assert len(latest) == 2
+        assert latest[0]["content"] == "v3"
+        assert latest[1]["content"] == "v2"
+
+    def test_retention_keeps_last_five(self, cache):
+        """record 7 snapshots for one URL -> only the 5 most recent survive."""
+        for i in range(7):
+            cache.record_snapshot("https://example.com", f"v{i}")
+
+        remaining = cache.latest_snapshots("https://example.com", n=10)
+        assert len(remaining) == 5
+        assert [row["content"] for row in remaining] == [
+            "v6",
+            "v5",
+            "v4",
+            "v3",
+            "v2",
+        ]
+
+    def test_retention_is_per_url(self, cache):
+        """Snapshots for different URLs don't count against each other's retention."""
+        for i in range(7):
+            cache.record_snapshot("https://a.com", f"a{i}")
+        cache.record_snapshot("https://b.com", "b0")
+
+        assert len(cache.latest_snapshots("https://a.com", n=10)) == 5
+        assert len(cache.latest_snapshots("https://b.com", n=10)) == 1
+
+    def test_latest_snapshots_empty_url(self, cache):
+        """No snapshots recorded yet -> empty list."""
+        assert cache.latest_snapshots("https://never-seen.com") == []
+
+    def test_latest_snapshots_single_snapshot(self, cache):
+        """Only one snapshot recorded -> list of length 1."""
+        cache.record_snapshot("https://example.com", "only")
+        latest = cache.latest_snapshots("https://example.com", n=2)
+        assert len(latest) == 1
+        assert latest[0]["content"] == "only"
+
+
 class TestCacheEdgeCases:
     def test_close_and_reopen(self, tmp_path):
         """Cache persists after close and reopen."""

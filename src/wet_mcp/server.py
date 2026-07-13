@@ -1,6 +1,7 @@
 """WET MCP Server - Main server definition."""
 
 import asyncio
+import difflib
 import functools
 import io
 import json
@@ -742,6 +743,68 @@ def _payload(result: str | dict[str, Any] | list[Any]) -> dict[str, Any]:
     return data if isinstance(data, dict) else {"results": data}
 
 
+# Cap on diff text landed in a tool payload (token guard), matching the
+# ``token_budget`` convention used elsewhere in this file.
+_DIFF_MAX_CHARS = 20_000
+
+
+def _unified_diff_truncated(old_content: str, new_content: str, url: str) -> str:
+    """Line-based unified diff (stdlib) between two snapshot bodies.
+
+    Truncated at ``_DIFF_MAX_CHARS`` with a note appended, so a large page
+    rewrite can't blow the tool's output budget.
+    """
+    diff_lines = difflib.unified_diff(
+        old_content.splitlines(),
+        new_content.splitlines(),
+        fromfile=f"{url} (old)",
+        tofile=f"{url} (new)",
+        lineterm="",
+        n=3,
+    )
+    diff_text = "\n".join(diff_lines)
+    if len(diff_text) > _DIFF_MAX_CHARS:
+        diff_text = (
+            diff_text[:_DIFF_MAX_CHARS] + "\n... (diff truncated at 20000 chars)"
+        )
+    return diff_text
+
+
+def _build_diff_result(url: str, snapshots: list[dict[str, Any]]) -> dict[str, Any]:
+    """Turn up to 2 ``latest_snapshots`` rows (newest first) into a diff payload."""
+    if not snapshots:
+        return {
+            "url": url,
+            "error": f"Error: no snapshot history for {url}. Extract it once "
+            "(refetch=True, the default) to start tracking changes.",
+        }
+    newest = snapshots[0]
+    if len(snapshots) == 1:
+        return {
+            "url": url,
+            "change_status": "new",
+            "diff": "",
+            "old_fetched_at": None,
+            "new_fetched_at": newest["fetched_at"],
+        }
+    old = snapshots[1]
+    if old["content"] == newest["content"]:
+        return {
+            "url": url,
+            "change_status": "same",
+            "diff": "",
+            "old_fetched_at": old["fetched_at"],
+            "new_fetched_at": newest["fetched_at"],
+        }
+    return {
+        "url": url,
+        "change_status": "changed",
+        "diff": _unified_diff_truncated(old["content"], newest["content"], url),
+        "old_fetched_at": old["fetched_at"],
+        "new_fetched_at": newest["fetched_at"],
+    }
+
+
 def _wrap_tool(tool_name: str):
     """Decorator to wrap tool results with XPIA safety markers.
 
@@ -1343,6 +1406,7 @@ async def extract(  # noqa: PLR0913
     session: str | None = None,
     screenshot: bool = False,
     url: str | None = None,
+    refetch: bool = True,
 ) -> dict[str, Any]:
     """Read and return full page content from URLs or local files. Use this when you have a specific URL and need its content. For finding URLs first, use the `search` tool instead.
 
@@ -1355,9 +1419,10 @@ async def extract(  # noqa: PLR0913
     - extract_structured: Extract structured data using JSON Schema + LLM. Example: extract(action="extract_structured", urls=["https://example.com/pricing"], schema={"type": "object", "properties": {"price": {"type": "string"}}})
     - agent: Multi-step research orchestration -- search the web, extract top results, synthesize a cited Markdown answer. Example: extract(action="agent", query="latest pydantic 2 changes", max_urls=5)
     - interact: Drive a page with click/fill/submit via patchright. Example: extract(action="interact", url="https://example.com/login", actions=[{"type": "fill", "selector": "#email", "value": "x@y.com"}, {"type": "submit", "selector": "form"}])
+    - diff: Track content changes across fetches of the same URL(s). Example: extract(action="diff", urls=["https://example.com/pricing"])
 
     Key parameters:
-    - urls (required for extract/batch/crawl/map/extract_structured): List of URLs
+    - urls (required for extract/batch/crawl/map/extract_structured/diff): List of URLs
     - paths (required for convert): List of local file paths
     - query (required for agent): Research question to answer
     - url (required for interact): Page URL to drive
@@ -1372,6 +1437,8 @@ async def extract(  # noqa: PLR0913
     - max_pages: Max pages for crawl/map (default: 20, max: 100)
     - stealth: Enable anti-bot bypass for protected sites (default: false)
     - schema: JSON Schema dict for extract_structured
+    - refetch (diff): Fetch a fresh copy before comparing (default: true). Set
+      false to compare already-recorded snapshots without a new network fetch.
 
     Use `help` tool with tool_name="extract" for full parameter documentation.
     """
@@ -1551,14 +1618,57 @@ async def extract(  # noqa: PLR0913
                 )
             )
 
-        case _:
-            import difflib
+        case "diff":
+            if not urls:
+                return {
+                    "error": 'Error: urls is required for diff action. Example: extract(action="diff", urls=["https://example.com"])'
+                }
+            if not _web_cache:
+                return {
+                    "error": "Error: diff action requires the web cache to be "
+                    "enabled (set WET_CACHE=true)."
+                }
+            urls = urls[:_MAX_EXTRACT_URLS]
+            diff_items: list[dict[str, Any]] = []
+            for target_url in urls:
+                if refetch:
+                    fresh = await _with_timeout(
+                        _extract(urls=[target_url], format=format, stealth=stealth),
+                        "diff",
+                    )
+                    if fresh.startswith("Error"):
+                        diff_items.append({"url": target_url, "error": fresh})
+                        continue
+                    try:
+                        parsed = json.loads(fresh)
+                    except json.JSONDecodeError:
+                        diff_items.append(
+                            {
+                                "url": target_url,
+                                "error": f"Error: failed to parse extract result for diff: {fresh}",
+                            }
+                        )
+                        continue
+                    item = parsed[0] if parsed else {}
+                    if item.get("error"):
+                        diff_items.append({"url": target_url, "error": item["error"]})
+                        continue
+                    await asyncio.to_thread(
+                        _web_cache.record_snapshot, target_url, item.get("markdown", "")
+                    )
+                snapshots = await asyncio.to_thread(
+                    _web_cache.latest_snapshots, target_url, 2
+                )
+                diff_items.append(_build_diff_result(target_url, snapshots))
+            return _payload(diff_items[0] if len(diff_items) == 1 else diff_items)
 
+        case _:
             valid_actions = [
                 "agent",
                 "batch",
                 "convert",
                 "crawl",
+                "diff",
                 "extract",
                 "extract_structured",
                 "interact",
@@ -1575,7 +1685,8 @@ async def extract(  # noqa: PLR0913
                     f"Error: Unknown action '{action}'.{suggestion} "
                     "Valid actions: extract (read URL content), batch (bulk extract), crawl (follow links), "
                     "map (site structure), convert (local files to markdown), extract_structured (schema-based), "
-                    "agent (multi-step research orchestration), interact (drive a page with click/fill/submit). "
+                    "agent (multi-step research orchestration), interact (drive a page with click/fill/submit), "
+                    "diff (track changes between fetches). "
                     "If you want to search for information, use the `search` tool instead."
                 )
             }
