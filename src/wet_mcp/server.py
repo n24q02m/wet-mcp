@@ -27,7 +27,7 @@ from wet_mcp.cache import WebCache
 from wet_mcp.config import settings
 from wet_mcp.db import DocsDB
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
-from wet_mcp.security import build_external_tool_result
+from wet_mcp.security import UNTRUSTED_SOURCE, build_external_tool_result
 from wet_mcp.sources import search_backends
 from wet_mcp.sources.crawler import (
     crawl as _crawl,
@@ -758,7 +758,17 @@ def _wrap_tool(tool_name: str):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             result = await func(*args, **kwargs)
-            return build_external_tool_result(tool_name, result)
+            # A per-action handler may tag its dict with an internal ``_source``
+            # hint (trusted: set by handler code, while external content only
+            # ever lands in VALUES, never as a top-level key) so a fan-out tool
+            # like ``search`` labels the XPIA envelope with the real upstream
+            # (e.g. "x" for X posts) instead of the default "web".
+            source = (
+                result.pop("_source", UNTRUSTED_SOURCE)
+                if isinstance(result, dict)
+                else UNTRUSTED_SOURCE
+            )
+            return build_external_tool_result(tool_name, result, source=source)
 
         return wrapper
 
@@ -846,12 +856,18 @@ async def search(  # noqa: PLR0913
     exclude_domains: list[str] | None = None,
     expand: bool = False,
     enrich: bool = False,
+    handles: list[str] | None = None,
+    exclude_handles: list[str] | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    video: bool = False,
 ) -> dict[str, Any]:
-    """Find information across web, academic sources, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
+    """Find information across web, academic sources, X/Twitter, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
 
     Actions:
     - search: Web search via SearXNG. Example: search(action="search", query="python async patterns")
     - research: Academic/scientific search (Google Scholar, arXiv, PubMed). Example: search(action="research", query="transformer attention mechanism")
+    - x: X/Twitter search via xAI. Returns a SYNTHESIZED answer with citations (NOT a link list for extract() -- X blocks direct extraction). Bills ~$0.032/query (grok-4.3). Requires XAI_API_KEY. Example: search(action="x", query="latest reactions to the GPT-5 launch", handles=["OpenAI"], time_range="week")
     - docs: Search library documentation with auto-indexing. Example: search(action="docs", query="how to create routes", library="fastapi")
     - docs_resolve: Free-form library name to ranked library_id list. Example: search(action="docs_resolve", query="react")
     - docs_query: Version-aware library docs query honoring project lock + token cap. Example: search(action="docs_query", library="react", version="latest", topic="useState", query="how to set initial state")
@@ -867,12 +883,20 @@ async def search(  # noqa: PLR0913
     - max_results: Number of results (default: 10)
     - time_range: Recency filter -- day, week, month, year
     - include_domains / exclude_domains: Domain filters
+    - handles / exclude_handles (x only): Restrict to / exclude up to 20 X handles (mutually exclusive), e.g. handles=["nasa"]
+    - from_date / to_date (x only): ISO8601 date bounds; override time_range for precise windows
+    - video (x only): Enable video understanding of linked X media (default: false)
 
     Use `help` tool with tool_name="search" for full parameter documentation.
     """
-    blocked = _require_credentials()
-    if blocked:
-        return blocked
+    # The x action authenticates against XAI_API_KEY (read inside run_x_search),
+    # not the embedding/rerank provider keys the generic gate checks -- so it
+    # skips _require_credentials and surfaces its own "XAI_API_KEY not set"
+    # error, which is far more actionable than the generic setup prompt.
+    if action != "x":
+        blocked = _require_credentials()
+        if blocked:
+            return blocked
 
     # Stdio uvx tool venv lacks pip, so the web-core SearXNG runner cannot
     # install/start a local SearXNG instance, and its hardcoded
@@ -1040,6 +1064,29 @@ async def search(  # noqa: PLR0913
                     _web_cache.set, "search", cache_params, result, ttl
                 )
             return _payload(result)
+
+        case "x":
+            if not query:
+                return {
+                    "error": 'Error: query is required for x action. Example: search(action="x", query="latest reactions to the GPT-5 launch")'
+                }
+            from wet_mcp.sources.x_search import run_x_search
+
+            return _payload(
+                await _with_timeout(
+                    run_x_search(
+                        query=query,
+                        handles=handles,
+                        exclude_handles=exclude_handles,
+                        time_range=time_range,
+                        from_date=from_date,
+                        to_date=to_date,
+                        max_results=max_results,
+                        video=video,
+                    ),
+                    "x",
+                )
+            )
 
         case "research":
             if not query:
@@ -1243,6 +1290,7 @@ async def search(  # noqa: PLR0913
                 "research",
                 "search",
                 "similar",
+                "x",
             ]
             closest = (
                 difflib.get_close_matches(action, valid_actions, n=1)
@@ -1254,6 +1302,7 @@ async def search(  # noqa: PLR0913
                 "error": (
                     f"Error: Unknown action '{action}'.{suggestion} "
                     "Valid actions: search (web search), research (academic), "
+                    "x (X/Twitter search via xAI, returns synthesized answer + citations), "
                     "docs (library documentation, auto-indexing), "
                     "docs_resolve (library name → ranked library_id), "
                     "docs_query (version-aware docs query with token cap), "
@@ -1695,6 +1744,7 @@ async def help(tool_name: str = "search") -> str:
 async def _handle_config_status() -> dict[str, Any]:
     from wet_mcp.embedder import get_backend
     from wet_mcp.reranker import get_reranker
+    from wet_mcp.sources.x_search import x_search_status
 
     embed_backend = get_backend()
     reranker = get_reranker()
@@ -1728,6 +1778,10 @@ async def _handle_config_status() -> dict[str, Any]:
             "log_level": settings.log_level,
             "tool_timeout": settings.tool_timeout,
         },
+        # X/Twitter search (search action="x") bills real money per query, so
+        # surface whether the key is set and which model (cheap vs expensive)
+        # will be charged before the operator spends anything.
+        "x_search": x_search_status(),
     }
     return status
 

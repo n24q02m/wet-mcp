@@ -91,6 +91,7 @@ def mark_external_payload(
 def build_external_tool_result(
     tool_name: str,
     payload: dict[str, Any],
+    source: str = UNTRUSTED_SOURCE,
 ) -> CallToolResult:
     """Build the MCP result of a tool that returns untrusted external content.
 
@@ -99,6 +100,11 @@ def build_external_tool_result(
     * ``content`` — JSON text inside ``<untrusted_{tool}_content>`` boundary
       tags, exactly as before structured output existed.
     * ``structuredContent`` — the same object, plus the envelope markers.
+
+    ``source`` labels which upstream the content came from (``"web"`` by
+    default, ``"x"`` for X/Twitter posts). A single tool that fans out to
+    several upstreams (``search`` handles both SearXNG and xAI) passes the
+    per-action source through so the envelope marker names the real origin.
 
     Error payloads (``{"error": "Error: ..."}``) are handled asymmetrically.
     The boundary cannot prove an error string is free of embedded external
@@ -121,10 +127,10 @@ def build_external_tool_result(
                     text=json.dumps(payload, ensure_ascii=False, indent=2),
                 )
             ],
-            structuredContent=mark_external_payload(payload),
+            structuredContent=mark_external_payload(payload, source),
         )
 
-    marked = mark_external_payload(payload)
+    marked = mark_external_payload(payload, source)
     return CallToolResult(
         content=[
             TextContent(
