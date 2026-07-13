@@ -6,10 +6,17 @@ because the bundled web-core SearXNG runner cannot install or start
 SearXNG inside a pip-less uvx tool venv. Other actions (``extract`` /
 ``crawl`` / ``map`` / ``media``) hit upstream HTTP directly and remain
 available.
+
+Per spec ``2026-07-13-e0-1-uvx-guard-conditional-fix.md``, the gate is
+conditional on ``search_backends.has_uvx_runnable_backend()``: it only
+rejects when NO configured backend can run under uvx (no cloud key, no
+external SearXNG). A cloud key (tavily/brave/exa) or an external
+``SEARXNG_URL`` lets the four actions through.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from unittest.mock import AsyncMock, patch
 
@@ -193,8 +200,21 @@ def _force_uvx(monkeypatch, value: bool):
 @pytest.mark.parametrize("action", ["search", "research", "docs", "similar"])
 @pytest.mark.asyncio
 async def test_search_actions_rejected_in_uvx_mode(monkeypatch, action):
-    """All four SearXNG-dependent actions return the spec error in uvx."""
+    """All four SearXNG-dependent actions return the spec error in uvx when no
+    backend can run there (no cloud key, no external SearXNG -- chain falls
+    back to the local-only ``searxng`` backend)."""
     srv = _force_uvx(monkeypatch, True)
+    # Clear ambient env so the chain resolves to the local-only default
+    # regardless of what's set in the developer's shell.
+    for var in (
+        "SEARCH_BACKENDS",
+        "SEARCH_BACKEND",
+        "TAVILY_API_KEY",
+        "BRAVE_API_KEY",
+        "EXA_API_KEY",
+        "SEARXNG_URL",
+    ):
+        monkeypatch.delenv(var, raising=False)
 
     # ``docs`` requires ``library``; ``similar`` requires a URL query. Pass
     # values that would normally make it past input validation so we know
@@ -206,10 +226,11 @@ async def test_search_actions_rejected_in_uvx_mode(monkeypatch, action):
     result = await srv.search(action=action, **kwargs)
 
     assert payload(result)["error"].startswith(
-        f"Error: action '{action}' requires SearXNG"
+        f"Error: action '{action}' needs a search backend"
     )
-    assert "Method 3 stdio Docker" in text(result)
-    assert "Method 2 HTTP Docker" in text(result)
+    assert "TAVILY_API_KEY" in text(result)
+    assert "SEARXNG_URL=" in text(result)
+    assert "docker run -i --rm n24q02m/wet-mcp:latest" in text(result)
 
 
 @pytest.mark.asyncio
@@ -234,6 +255,84 @@ async def test_search_action_proceeds_when_not_uvx(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_search_proceeds_in_uvx_with_cloud_key(monkeypatch):
+    """uvx=True + a cloud key + SEARCH_BACKENDS listing it -> the guard no
+    longer blocks 'search'/'research'/'similar'; each reaches its own
+    downstream logic instead of the uvx-blocked error."""
+    srv = _force_uvx(monkeypatch, True)
+    monkeypatch.setenv("TAVILY_API_KEY", "tvly-key")
+    monkeypatch.setenv("SEARCH_BACKENDS", "tavily")
+
+    fake_result = json.dumps(
+        {
+            "results": [{"url": "https://e", "title": "T", "snippet": "s"}],
+            "total": 1,
+            "query": "hello",
+        }
+    )
+
+    # search: chain is tavily-only (no "searxng" leg), so it skips
+    # ensure_searxng and hits run_search_chain directly.
+    with patch.object(
+        srv.search_backends, "run_search_chain", new_callable=AsyncMock
+    ) as mock_chain:
+        mock_chain.return_value = fake_result
+        result = await srv.search(action="search", query="hello")
+    assert "needs a search backend" not in text(result)
+    mock_chain.assert_called_once()
+
+    # research: routes through _do_research, mocked directly.
+    with patch.object(srv, "_do_research", new_callable=AsyncMock) as mock_research:
+        mock_research.return_value = fake_result
+        result = await srv.search(action="research", query="hello")
+    assert "needs a search backend" not in text(result)
+    mock_research.assert_called_once()
+
+    # similar: architecturally SearXNG-only (search_strategies.find_similar
+    # doesn't go through the pluggable chain); the guard just needs to let
+    # it through -- downstream ensure_searxng/find_similar are mocked so the
+    # test stays fast and deterministic.
+    with (
+        patch.object(srv, "ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch(
+            "wet_mcp.sources.search_strategies.find_similar", new_callable=AsyncMock
+        ) as mock_similar,
+    ):
+        mock_ensure.return_value = "http://localhost:41592"
+        mock_similar.return_value = fake_result
+        result = await srv.search(action="similar", query="https://example.com/article")
+    assert "needs a search backend" not in text(result)
+    mock_similar.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_search_proceeds_in_uvx_with_external_searxng(monkeypatch):
+    """uvx=True + an external SEARXNG_URL (not the local default) -> the
+    guard lets 'search' through; the chain defaults to searxng-only so it
+    still calls ensure_searxng, same as the non-uvx flow."""
+    srv = _force_uvx(monkeypatch, True)
+    monkeypatch.delenv("SEARCH_BACKENDS", raising=False)
+    monkeypatch.delenv("SEARCH_BACKEND", raising=False)
+    monkeypatch.setenv("SEARXNG_URL", "https://searxng.example.com")
+
+    with (
+        patch.object(srv, "ensure_searxng", new_callable=AsyncMock) as mock_ensure,
+        patch("wet_mcp.sources.searxng.search", new_callable=AsyncMock) as mock_search,
+    ):
+        mock_ensure.return_value = "https://searxng.example.com"
+        mock_search.return_value = (
+            '{"results": [{"url": "https://e", "title": "T", "snippet": "Search Results"}], '
+            '"total": 1, "query": "hello world"}'
+        )
+
+        result = await srv.search(action="search", query="hello world")
+
+        assert "needs a search backend" not in text(result)
+        assert "Search Results" in text(result)
+        mock_ensure.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_extract_action_works_regardless_of_uvx(monkeypatch):
     """``extract`` action stays available in uvx mode (no SearXNG dep)."""
     srv = _force_uvx(monkeypatch, True)
@@ -248,8 +347,43 @@ async def test_extract_action_works_regardless_of_uvx(monkeypatch):
 
 
 def test_uvx_searxng_blocked_error():
-    """uvx_searxng_blocked_error() formats the message correctly."""
+    """uvx_searxng_blocked_error() formats the message correctly, listing all
+    three copy-paste-able options (cloud key / external SearXNG / Docker)."""
     result = tc.uvx_searxng_blocked_error("search")
-    assert "Error: action 'search' requires SearXNG" in result
-    assert "stdio uvx mode" in result
+    assert "Error: action 'search' needs a search backend" in result
+    assert "TAVILY_API_KEY" in result
+    assert "SEARXNG_URL=" in result
+    assert "docker run -i --rm n24q02m/wet-mcp:latest" in result
     assert "https://github.com/n24q02m/wet-mcp#setup" in result
+
+
+# ---------------------------------------------------------------------------
+# has_uvx_runnable_backend() -- block/allow matrix
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "chain,env,expected",
+    [
+        ([], {}, False),
+        (["searxng"], {}, False),
+        (["searxng"], {"SEARXNG_URL": "https://searxng.example.com"}, True),
+        (["tavily"], {}, False),
+        (["tavily"], {"TAVILY_API_KEY": "tvly-key"}, True),
+        (["brave"], {"BRAVE_API_KEY": "brave-key"}, True),
+        (["exa"], {"EXA_API_KEY": "exa-key"}, True),
+        (["searxng", "tavily"], {"TAVILY_API_KEY": "tvly-key"}, True),
+    ],
+)
+def test_has_uvx_runnable_backend(monkeypatch, chain, env, expected):
+    """Block/allow matrix from the E0.1 spec: cloud keys and an external
+    SearXNG URL make a chain uvx-runnable; the local-only default does not."""
+    import wet_mcp.sources.search_backends as sb
+
+    for var in ("TAVILY_API_KEY", "BRAVE_API_KEY", "EXA_API_KEY", "SEARXNG_URL"):
+        monkeypatch.delenv(var, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(sb, "chain_backend_names", lambda: chain)
+
+    assert sb.has_uvx_runnable_backend() is expected

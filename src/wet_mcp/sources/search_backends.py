@@ -316,6 +316,43 @@ def search_backend_from_env() -> SearchBackend:
     return _make_backend(name)
 
 
+# The local SearXNG auto-spawn URL (mirrors the ``searxng_url`` default in
+# config.py). A uvx tool venv has no pip, so it cannot auto-start this
+# instance; any other URL means an already-running external SearXNG reachable
+# over HTTP, which uvx can use.
+_DEFAULT_LOCAL_SEARXNG_URL = "http://localhost:41592"
+
+
+def has_uvx_runnable_backend() -> bool:
+    """Whether the configured ``SEARCH_BACKENDS`` chain has >=1 backend that
+    can run under uvx (a tool venv with no pip, so the local SearXNG cannot
+    auto-spawn).
+
+    ``tavily``/``brave``/``exa`` are runnable whenever their API key is
+    present -- they call out via ``httpx`` directly, no SearXNG needed (same
+    live-env-first key lookup ``_make_backend`` uses). ``searxng`` is
+    runnable under uvx only when ``SEARXNG_URL`` points at an already-running
+    external instance; the default local URL implies the auto-spawn, which
+    uvx tool venvs cannot start.
+    """
+    for name in chain_backend_names():
+        if name == "tavily" and split_keys(
+            os.getenv("TAVILY_API_KEY", settings.tavily_api_key)
+        ):
+            return True
+        if name == "brave" and split_keys(
+            os.getenv("BRAVE_API_KEY", settings.brave_api_key)
+        ):
+            return True
+        if name == "exa" and split_keys(os.getenv("EXA_API_KEY", settings.exa_api_key)):
+            return True
+        if name == "searxng":
+            url = os.getenv("SEARXNG_URL", settings.searxng_url)
+            if url != _DEFAULT_LOCAL_SEARXNG_URL:
+                return True
+    return False
+
+
 def chain_backend_names() -> list[str]:
     """The ordered backend names in the chain (no construction, no keys needed).
 
@@ -428,6 +465,7 @@ __all__ = [
     "SearxngBackend",
     "TavilyBackend",
     "chain_backend_names",
+    "has_uvx_runnable_backend",
     "run_search_chain",
     "search_backend_from_env",
     "search_backends_from_env",
