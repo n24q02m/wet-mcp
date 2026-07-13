@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v3.5.0-beta.5 (2026-07-13)
+
+### Bug Fixes
+
+- Mark untrusted source in structured content of error results
+  ([#1525](https://github.com/n24q02m/wet-mcp/pull/1525),
+  [`c352fd5`](https://github.com/n24q02m/wet-mcp/commit/c352fd51f06e507e4da9c5b4413ddb0df5bd0775))
+
+- Never open a real browser during tests ([#1522](https://github.com/n24q02m/wet-mcp/pull/1522),
+  [`2062eb1`](https://github.com/n24q02m/wet-mcp/commit/2062eb1648d8dcbd20d97aaa050281821ed9d1f3))
+
+### Features
+
+- Return structured content from domain tools
+  ([#1525](https://github.com/n24q02m/wet-mcp/pull/1525),
+  [`c352fd5`](https://github.com/n24q02m/wet-mcp/commit/c352fd51f06e507e4da9c5b4413ddb0df5bd0775))
+
+- Return structured content from domain tools (S13 W3.1 + XPIA envelope)
+  ([#1525](https://github.com/n24q02m/wet-mcp/pull/1525),
+  [`c352fd5`](https://github.com/n24q02m/wet-mcp/commit/c352fd51f06e507e4da9c5b4413ddb0df5bd0775))
+
+
 ## v3.5.0-beta.4 (2026-07-11)
 
 ### Bug Fixes
