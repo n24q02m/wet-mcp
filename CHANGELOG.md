@@ -2,6 +2,34 @@
 
 <!-- version list -->
 
+## v3.5.0-beta.8 (2026-07-13)
+
+### Bug Fixes
+
+- Assert XPIA marker on extract diff output ([#1531](https://github.com/n24q02m/wet-mcp/pull/1531),
+  [`04834e3`](https://github.com/n24q02m/wet-mcp/commit/04834e39eb97b59ee2eb01123e6e7b1dda2e4d05))
+
+- Correct mention gate expression (balanced parens + precedence)
+  ([#1530](https://github.com/n24q02m/wet-mcp/pull/1530),
+  [`86e280f`](https://github.com/n24q02m/wet-mcp/commit/86e280f55c879007c6af150d9a547ff7371db2e4))
+
+- Gate oc mention job on comment author write access
+  ([#1530](https://github.com/n24q02m/wet-mcp/pull/1530),
+  [`86e280f`](https://github.com/n24q02m/wet-mcp/commit/86e280f55c879007c6af150d9a547ff7371db2e4))
+
+- Run opencode bot on hosted runners ([#1528](https://github.com/n24q02m/wet-mcp/pull/1528),
+  [`24e4313`](https://github.com/n24q02m/wet-mcp/commit/24e4313aef9564d197b0705e639bee9aef478bf1))
+
+- **deps**: Lock file maintenance ([#1523](https://github.com/n24q02m/wet-mcp/pull/1523),
+  [`e10da4e`](https://github.com/n24q02m/wet-mcp/commit/e10da4ef362fe919ea09f18d2c5cfbb4165f6ed3))
+
+### Features
+
+- Track page changes with snapshot retention and extract diff
+  ([#1531](https://github.com/n24q02m/wet-mcp/pull/1531),
+  [`04834e3`](https://github.com/n24q02m/wet-mcp/commit/04834e39eb97b59ee2eb01123e6e7b1dda2e4d05))
+
+
 ## v3.5.0-beta.7 (2026-07-13)
 
 ### Bug Fixes
