@@ -27,6 +27,9 @@ _DEFAULT_TTLS: dict[str, int] = {
 # Purge expired entries every N operations
 _PURGE_INTERVAL = 50
 
+# Snapshots kept per URL for change tracking (extract action="diff")
+_SNAPSHOT_RETENTION = 5
+
 
 def _cache_key(action: str, params: dict) -> str:
     """Generate a deterministic cache key from action + params."""
@@ -75,6 +78,21 @@ class WebCache:
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_web_cache_action
             ON web_cache(action)
+        """)
+        # Append-only, unlike ``web_cache``'s INSERT OR REPLACE — a fresh
+        # extract must not overwrite the prior fetch, or there is nothing
+        # left to diff against.
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT NOT NULL,
+                fetched_at REAL NOT NULL,
+                content TEXT NOT NULL
+            )
+        """)
+        self._conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_snapshots_url_fetched
+            ON snapshots(url, fetched_at DESC)
         """)
         self._conn.commit()
 
@@ -148,6 +166,51 @@ class WebCache:
         if self._op_count >= _PURGE_INTERVAL:
             self._purge_expired()
             self._op_count = 0
+
+    def record_snapshot(self, url: str, content: str) -> None:
+        """Append a content snapshot for ``url``, pruning to the last N.
+
+        Unlike ``set()``, this never overwrites — each call adds a new row so
+        ``latest_snapshots`` has history to diff against. Retention keeps at
+        most ``_SNAPSHOT_RETENTION`` rows per URL.
+        """
+        now = time.time()
+        self._conn.execute(
+            "INSERT INTO snapshots (url, fetched_at, content) VALUES (?, ?, ?)",
+            (url, now, content),
+        )
+        self._conn.execute(
+            """
+            DELETE FROM snapshots
+            WHERE url = ? AND id NOT IN (
+                SELECT id FROM snapshots
+                WHERE url = ?
+                ORDER BY fetched_at DESC, id DESC
+                LIMIT ?
+            )
+            """,
+            (url, url, _SNAPSHOT_RETENTION),
+        )
+        self._conn.commit()
+        logger.debug(f"Snapshot recorded for {url}")
+
+    def latest_snapshots(self, url: str, n: int = 2) -> list[dict]:
+        """Return up to ``n`` most recent snapshots for ``url``, newest first.
+
+        Each item is ``{"fetched_at": float, "content": str}``.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT fetched_at, content FROM snapshots
+            WHERE url = ?
+            ORDER BY fetched_at DESC, id DESC
+            LIMIT ?
+            """,
+            (url, n),
+        ).fetchall()
+        return [
+            {"fetched_at": row["fetched_at"], "content": row["content"]} for row in rows
+        ]
 
     def _purge_expired(self) -> None:
         """Remove expired cache entries."""
