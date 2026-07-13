@@ -275,6 +275,48 @@ async def test_run_x_search_empty_annotations_yields_no_citations(xai_key):
     assert result["usage"]["tool_calls"] == 1
 
 
+# --- multi-user: sub-aware key resolution (finding #5 cost/abuse guard) -----
+
+
+async def test_multi_user_sub_uses_own_xai_key():
+    """A sub whose per-sub bucket holds an XAI key: x proceeds with THAT key,
+    not the process env / operator key."""
+    fake = _fake_response(
+        "ans", [("https://x.com/a/status/1", "1", 0, 2)], 3000, 400, 1
+    )
+    with (
+        patch(
+            "wet_mcp.credential_state.credentials_for_current_request",
+            return_value={"XAI_API_KEY": "sub-owned-key"},
+        ),
+        patch(
+            "litellm.aresponses", new_callable=AsyncMock, return_value=fake
+        ) as mock_call,
+    ):
+        result = await run_x_search(query="q")
+
+    assert "error" not in result, result
+    assert mock_call.call_args.kwargs["api_key"] == "sub-owned-key"
+
+
+async def test_multi_user_empty_vault_sub_errors_and_makes_no_api_call():
+    """A sub with an EMPTY vault must NOT spend the operator's key: it gets the
+    clean "not set" error and litellm is never called. This is the guard against
+    a zero-setup sub burning the operator's shared XAI budget on the live
+    multi-user endpoint."""
+    with (
+        patch(
+            "wet_mcp.credential_state.credentials_for_current_request",
+            return_value={},
+        ),
+        patch("litellm.aresponses", new_callable=AsyncMock) as mock_call,
+    ):
+        result = await run_x_search(query="q")
+
+    assert result == {"error": "Error: XAI_API_KEY not set. Get one at console.x.ai"}
+    mock_call.assert_not_called()
+
+
 # --- server tool wiring: XPIA envelope carries _untrusted_source: "x" ------
 
 

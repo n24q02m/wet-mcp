@@ -48,9 +48,14 @@ def x_search_status() -> dict[str, Any]:
     Consumed by ``config(action="status")`` so the operator can see, before
     spending money, that the key is present and whether they are on the cheap
     ($0.032/query) or the expensive ($0.12/query) model.
+
+    Sub-aware: reads the per-request credential bucket, so in multi-user HTTP
+    mode it reflects whether THIS user has an XAI key, not the process env.
     """
+    from wet_mcp.credential_state import credentials_for_current_request
+
     return {
-        "xai_api_key_set": bool(os.getenv("XAI_API_KEY")),
+        "xai_api_key_set": bool(credentials_for_current_request().get("XAI_API_KEY")),
         "model": resolve_model(),
     }
 
@@ -189,7 +194,13 @@ async def run_x_search(
     ``_untrusted_source: "x"`` (X posts are external content written by
     strangers — a classic prompt-injection vector).
     """
-    api_key = os.getenv("XAI_API_KEY")
+    # Resolve the key per-request (sub-aware): stdio / single-user falls back to
+    # os.environ, but multi-user HTTP reads the caller's per-sub bucket -- so a
+    # sub uses their OWN XAI key and a sub with none gets the "not set" error
+    # instead of silently spending the operator's shared key.
+    from wet_mcp.credential_state import credentials_for_current_request
+
+    api_key = credentials_for_current_request().get("XAI_API_KEY")
     if not api_key:
         return {"error": "Error: XAI_API_KEY not set. Get one at console.x.ai"}
 
