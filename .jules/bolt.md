@@ -15,3 +15,6 @@
 ## 2023-11-20 - Fast String Suffix/Prefix matching with tuples
 **Learning:** Python generator expressions inside `any()` for checking multiple prefixes/suffixes (e.g. `any(path.endswith(ext) for ext in EXTENSIONS)`) are slow due to Python-level iteration overhead.
 **Action:** Always prefer passing a tuple of strings directly to `str.startswith()` and `str.endswith()` (e.g., `path.endswith(tuple(EXTENSIONS))`). This pushes the iteration down into optimized C code, yielding roughly ~5-7x speedup for prefix/suffix matching. Ensure the tuple is defined at the module level if used repeatedly.
+## 2024-03-24 - Replace generator expressions in sum() with inline for loops
+**Learning:** Using `sum(1 for x in y if z)` introduces generator creation and iteration overhead inside tight loops. Replacing it with inline `for` loops and a counter variable provides a measurable speedup without significantly degrading readability.
+**Action:** For simple counting operations on hot paths, prefer an inline `for` loop over `sum()` with generator expressions.
