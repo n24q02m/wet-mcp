@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.5.0 (2026-07-14)
+
+### Features
+
+- Add smithery.yaml for stdio deployment ([#1533](https://github.com/n24q02m/wet-mcp/pull/1533),
+  [`6fa3803`](https://github.com/n24q02m/wet-mcp/commit/6fa3803b20f15e5d4ed48af10cb018a77946b4a7))
+
+
 ## v3.5.0-beta.8 (2026-07-13)
 
 ### Bug Fixes
