@@ -63,10 +63,12 @@ mcp-name: io.github.n24q02m/wet-mcp
 - [Configuration](#configuration)
 - [Documentation](#documentation)
 - [Tools](#tools)
+- [CLI](#cli)
 - [Comparison](#comparison)
 - [Security](#security)
 - [Build from Source](#build-from-source)
 - [Deploy to Cloudflare](#deploy-to-cloudflare)
+- [Smithery](#smithery)
 - [Trust Model](#trust-model)
 - [License](#license)
 
@@ -103,7 +105,15 @@ docker run -d --name wet-mcp-http -p 8084:8080 \
   -v wet-data:/data -e MCP_TRANSPORT=http \
   -e PUBLIC_URL=https://wet.example.com \
   n24q02m/wet-mcp:latest
+
+# Method 4 (hosted): connect to the maintainer-run instance
+claude mcp add --transport http wet https://wet.n24q02m.com/mcp
 ```
+
+The hosted endpoint `https://wet.n24q02m.com/mcp` speaks Streamable HTTP and is
+OAuth-gated -- your client is prompted to authenticate in the browser on first
+connect (no API key to paste). Self-host the same HTTP mode via Method 3 or the
+[Deploy to Cloudflare](#deploy-to-cloudflare) section.
 
 Full setup matrices live at the canonical docs site
 [mcp.n24q02m.com/servers/wet-mcp/setup/](https://mcp.n24q02m.com/servers/wet-mcp/setup/)
@@ -238,9 +248,24 @@ In-repo references (Spec F single source of truth: setup docs live in
 > [imagine-mcp](https://github.com/n24q02m/imagine-mcp). `media.analyze`
 > was removed in wet v2.0.0 -- use `imagine-mcp.understand` instead.
 
-## Comparison
+## CLI
 
-How wet-mcp stacks up against direct competitors in each pillar:
+The `wet-mcp` console script starts the server and also exposes a few one-shot
+operator subcommands. A bare invocation (or any leading-dash flag) starts the
+server; a leading positional argument is dispatched as a subcommand.
+
+```bash
+wet-mcp                        # start the server over stdio (default transport)
+wet-mcp --http                 # start the server over Streamable HTTP (self-host mode)
+
+wet-mcp auth google            # authorize the Google credential provider for Drive sync
+wet-mcp warmup                 # pre-download local models + run auto-setup (SearXNG, browser) to avoid first-run delays
+wet-mcp docs reindex <library> # drop the cached docs index for <library>; the next docs search re-indexes it
+```
+
+`auth google` accepts an optional bring-your-own OAuth client via `--client-id`
+and `--client-secret` (single-user / local machine only; the token is written to
+the local store). Each subcommand prints a JSON result and exits.
 
 | Capability | wet-mcp | Brave Search | Tavily | Firecrawl | Context7 |
 |---|---|---|---|---|---|
@@ -313,6 +338,14 @@ Storage maps to Cloudflare via `MCP_STORAGE_BACKEND=cf-kv` (credentials/tokens, 
 `DOCS_DB_BACKEND=cf-d1` (docs + BM25 full-text), and Vectorize (embeddings). Web search uses
 a SearXNG instance (`SEARCH_BACKEND=searxng`, `SEARXNG_URL`) or Tavily (`SEARCH_BACKEND=tavily`);
 embed/rerank are forced cloud via `EMBEDDING_MODELS`/`RERANK_MODELS`.
+
+## Smithery
+
+wet-mcp ships a [`smithery.yaml`](smithery.yaml) so it can be installed and run
+through [Smithery](https://smithery.ai). The manifest declares a stdio start
+command (`uvx --python 3.13 wet-mcp`) with an empty config schema -- no config is
+required to start, and providers and credentials are configured at runtime via
+the server's own config flow (see [Configuration](#configuration)).
 
 ## Trust Model
 
