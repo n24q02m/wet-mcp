@@ -2020,6 +2020,13 @@ _MKDOCS_UI_RE = re.compile(
     r")\s*$",
     re.IGNORECASE,
 )
+
+# Combined noise filtering pattern
+_COMBINED_NOISE_RE = re.compile(
+    _NAV_RE.pattern + r"|" + _FOOTER_RE.pattern + r"|" + _MKDOCS_UI_RE.pattern,
+    re.IGNORECASE,
+)
+
 # Minimum consecutive nav-link lines to consider it a navigation block
 _NAV_BLOCK_MIN_LINES = 8
 
@@ -2214,11 +2221,8 @@ def _clean_doc_content(content: str) -> str:
         if not stripped:
             cleaned.append(line)
             continue
-        if _NAV_RE.match(stripped):
-            continue
-        if _FOOTER_RE.match(stripped):
-            continue
-        if _MKDOCS_UI_RE.match(stripped):
+        # ⚡ Bolt Optimization: Combine regex matches into a single check to reduce overhead
+        if _COMBINED_NOISE_RE.match(stripped):
             continue
         cleaned.append(line)
 
