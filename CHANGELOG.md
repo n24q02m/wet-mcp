@@ -2,6 +2,32 @@
 
 <!-- version list -->
 
+## v3.6.0-beta.1 (2026-07-16)
+
+### Bug Fixes
+
+- Bump mcp-core floor to 1.19.0 stable ([#1538](https://github.com/n24q02m/wet-mcp/pull/1538),
+  [`6006e86`](https://github.com/n24q02m/wet-mcp/commit/6006e86f594f021b5b85466daa079e222bbe5137))
+
+- Default LLM chain to OpenRouter MiniMax M3 via CF AI Gateway
+  ([#1539](https://github.com/n24q02m/wet-mcp/pull/1539),
+  [`e086d01`](https://github.com/n24q02m/wet-mcp/commit/e086d0147d4e202759ce2163a7856aebe76996f7))
+
+- Forward CF AI Gateway litellm envs into container
+  ([#1539](https://github.com/n24q02m/wet-mcp/pull/1539),
+  [`e086d01`](https://github.com/n24q02m/wet-mcp/commit/e086d0147d4e202759ce2163a7856aebe76996f7))
+
+- Sync self-host wrangler.jsonc example LLM_MODELS with OpenRouter default
+  ([#1539](https://github.com/n24q02m/wet-mcp/pull/1539),
+  [`e086d01`](https://github.com/n24q02m/wet-mcp/commit/e086d0147d4e202759ce2163a7856aebe76996f7))
+
+### Features
+
+- Document CLI, smithery, and self-host endpoint in README
+  ([#1536](https://github.com/n24q02m/wet-mcp/pull/1536),
+  [`02d7a61`](https://github.com/n24q02m/wet-mcp/commit/02d7a61dca204e1d076afef80b1a4b876dfe6f4f))
+
+
 ## v3.5.0 (2026-07-14)
 
 ### Features
