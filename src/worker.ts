@@ -86,6 +86,8 @@ const CONTAINER_ENV_KEYS = [
   'BROWSERLESS_URL', 'BROWSERLESS_TOKEN', 'CAPSOLVER_API_KEY',
   'DISABLE_LOCAL_EMBED', 'DISABLE_LOCAL_RERANK',
   'DISABLE_LOCAL_SEARCH', 'DISABLE_LOCAL_BROWSER',
+  // CF AI Gateway (llm-main) litellm routing
+  'OPENROUTER_API_BASE', 'OPENROUTER_API_KEY', 'JINA_AI_API_BASE',
 ] as const
 
 function pickContainerEnv(env: Env): Record<string, string> {

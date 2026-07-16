@@ -45,7 +45,7 @@
     "MCP_VECTORIZE_IDX": "${CF_VECTORIZE_ID}",
     "EMBEDDING_MODELS": "jina_ai/jina-embeddings-v5-text-small",
     "RERANK_MODELS": "jina_ai/jina-reranker-v3",
-    "LLM_MODELS": "vertex_express/gemini-3.5-flash,xai/grok-4.3",
+    "LLM_MODELS": "openrouter/minimax/minimax-m3",
     "SEARCH_BACKEND": "searxng",
     "WET_AUTO_SEARXNG": "false"
   },
