@@ -259,6 +259,7 @@ wet-mcp                        # start the server over stdio (default transport)
 wet-mcp --http                 # start the server over Streamable HTTP (self-host mode)
 
 wet-mcp auth google            # authorize the Google credential provider for Drive sync
+wet-mcp logout                 # clear the local Google Drive sync token
 wet-mcp warmup                 # pre-download local models + run auto-setup (SearXNG, browser) to avoid first-run delays
 wet-mcp docs reindex <library> # drop the cached docs index for <library>; the next docs search re-indexes it
 ```

@@ -275,6 +275,58 @@ class TestSetupMcpTool:
             assert "unknown action" not in text(result).lower()
             assert "state" in text(result)
 
+    async def test_config_tool_dispatches_setup_start_action_already_configured(self):
+        """setup_start returns already_configured when configured and not forced."""
+        from wet_mcp.credential_state import CredentialState
+
+        with patch(
+            "wet_mcp.credential_state.get_state",
+            return_value=CredentialState.CONFIGURED,
+        ):
+            from wet_mcp.server import config
+
+            result = await config(action="setup_start")
+            assert "unknown action" not in text(result).lower()
+            assert "already_configured" in text(result)
+
+    async def test_config_tool_dispatches_setup_start_action_returns_setup_url(self):
+        """setup_start returns the relay URL when a setup form is active."""
+        from wet_mcp.credential_state import CredentialState
+
+        with (
+            patch(
+                "wet_mcp.credential_state.get_state",
+                return_value=CredentialState.AWAITING_SETUP,
+            ),
+            patch(
+                "wet_mcp.credential_state.get_setup_url",
+                return_value="http://127.0.0.1:8080/authorize",
+            ),
+        ):
+            from wet_mcp.server import config
+
+            result = await config(action="setup_start")
+            assert "unknown action" not in text(result).lower()
+            assert "setup_started" in text(result)
+            assert "http://127.0.0.1:8080/authorize" in text(result)
+
+    async def test_config_tool_dispatches_setup_start_action_stdio_unsupported(self):
+        """setup_start reports stdio_unsupported when no relay URL is active."""
+        from wet_mcp.credential_state import CredentialState
+
+        with (
+            patch(
+                "wet_mcp.credential_state.get_state",
+                return_value=CredentialState.AWAITING_SETUP,
+            ),
+            patch("wet_mcp.credential_state.get_setup_url", return_value=None),
+        ):
+            from wet_mcp.server import config
+
+            result = await config(action="setup_start", force=True)
+            assert "unknown action" not in text(result).lower()
+            assert "stdio_unsupported" in text(result)
+
     async def test_config_tool_dispatches_setup_reset_action(self):
         """setup_reset action (formerly on setup tool) should work via config tool."""
         with patch("wet_mcp.credential_state.reset_state") as mock_reset:

@@ -1998,6 +1998,31 @@ def _handle_config_setup_status() -> dict[str, Any]:
     }
 
 
+def _handle_config_setup_start(force: bool) -> dict[str, Any]:
+    from wet_mcp import credential_state as _cs
+
+    if _cs.get_state() == _cs.CredentialState.CONFIGURED and not force:
+        return {
+            "status": "already_configured",
+            "message": "Already configured. Use force=true to reconfigure.",
+        }
+    url = _cs.get_setup_url()
+    if url:
+        return {
+            "status": "setup_started",
+            "setup_url": url,
+            "message": "Open this URL to configure cloud provider keys.",
+        }
+    return {
+        "status": "stdio_unsupported",
+        "message": (
+            "Browser-based setup is HTTP-mode only. For stdio mode, set "
+            "cloud provider keys directly as env vars (JINA_AI_API_KEY, "
+            "GEMINI_API_KEY, OPENAI_API_KEY, COHERE_API_KEY, ...)."
+        ),
+    }
+
+
 def _handle_config_setup_skip() -> dict[str, Any]:
     from mcp_core import set_local_mode
 
@@ -2050,7 +2075,7 @@ async def _handle_config_setup_complete() -> dict[str, Any]:
     description=(
         "Server config and management. Actions: "
         "status|set|cache_clear|docs_reindex|warmup|setup_sync|"
-        "setup_status|setup_skip|setup_reset|setup_complete. "
+        "setup_status|setup_start|setup_skip|setup_reset|setup_complete. "
         "Use help tool with tool_name='config' for full docs."
     ),
     annotations=ToolAnnotations(
@@ -2078,6 +2103,7 @@ async def config(
     - warmup: Pre-download models and run first-time setup
     - setup_sync: Configure Google Drive sync (OAuth Device Code flow)
     - setup_status: Show current credential state and configured keys
+    - setup_start: Trigger relay setup / show setup URL (force=true to reconfigure)
     - setup_skip: Use local ONNX models (explicit opt-in, no cloud features)
     - setup_reset: Clear all credentials and reset state
     - setup_complete: Re-resolve credentials from environment
@@ -2104,6 +2130,9 @@ async def config(
         case "setup_status":
             return _handle_config_setup_status()
 
+        case "setup_start":
+            return _handle_config_setup_start(force)
+
         case "setup_skip":
             return _handle_config_setup_skip()
 
@@ -2123,6 +2152,7 @@ async def config(
                 "setup_complete",
                 "setup_reset",
                 "setup_skip",
+                "setup_start",
                 "setup_status",
                 "setup_sync",
                 "status",

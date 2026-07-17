@@ -161,6 +161,40 @@ class TestWarmupSubcommand:
         assert rc == 1
 
 
+class TestLogoutSubcommand:
+    """`wet-mcp logout` -- clears the local Google Drive sync token."""
+
+    def test_clears_saved_token(self, capsys):
+        from wet_mcp import cli
+
+        with (
+            patch.object(sys, "argv", ["wet-mcp", "logout"]),
+            patch(
+                "wet_mcp.token_store.load_token", return_value={"refresh_token": "x"}
+            ),
+            patch("wet_mcp.token_store.delete_token") as mock_delete,
+        ):
+            rc = cli.main()
+
+        mock_delete.assert_called_once_with("google_drive")
+        assert rc == 0
+        assert "cleared" in capsys.readouterr().out.lower()
+
+    def test_nothing_to_clear(self, capsys):
+        from wet_mcp import cli
+
+        with (
+            patch.object(sys, "argv", ["wet-mcp", "logout"]),
+            patch("wet_mcp.token_store.load_token", return_value=None),
+            patch("wet_mcp.token_store.delete_token") as mock_delete,
+        ):
+            rc = cli.main()
+
+        mock_delete.assert_not_called()
+        assert rc == 0
+        assert "nothing to log out" in capsys.readouterr().out.lower()
+
+
 class TestDocsReindexSubcommand:
     """`wet-mcp docs reindex <library>` -- standalone DocsDB, not the global."""
 

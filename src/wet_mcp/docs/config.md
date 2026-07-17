@@ -90,6 +90,26 @@ Show current credential state and configured keys.
 
 Returns: credential state (`awaiting_setup`, `configured`, `local`), setup URL, detected cloud keys.
 
+### setup_start
+
+Trigger relay setup / show the current setup URL for configuring cloud provider keys via browser. Does not spawn a separate relay session.
+
+```json
+{"action": "setup_start"}
+```
+
+With `force=true` to reconfigure even when already configured:
+
+```json
+{"action": "setup_start", "force": true}
+```
+
+| Parameter | Required | Default | Description |
+|:----------|:---------|:--------|:------------|
+| `force` | No | `false` | Re-trigger setup even if already configured |
+
+Returns `status: "already_configured"` (unless forced), `status: "setup_started"` with `setup_url` in HTTP mode, or `status: "stdio_unsupported"` with env-var guidance in stdio mode.
+
 ### setup_skip
 
 Opt into local-only mode (uses local ONNX models, no cloud API keys required).
