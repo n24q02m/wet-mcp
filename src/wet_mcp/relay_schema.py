@@ -32,6 +32,22 @@ def _key_field(key: str, label: str, ph: str, url: str) -> dict[str, Any]:
     }
 
 
+def _api_base_field(key: str, label: str, help_text: str) -> dict[str, Any]:
+    # Always-visible (not derived): the renderer only reveals a derived field
+    # when a model chip derives that exact provider ENV key, and no model
+    # derives *_API_BASE, so a derived endpoint field would stay hidden. The
+    # optional badge comes from required:false. Value is SSRF-vetted per-sub in
+    # mcp_core.llm dispatch before any request.
+    return {
+        "key": key,
+        "label": label,
+        "type": "url",
+        "placeholder": "https://gateway.example/…",
+        "helpText": help_text,
+        "required": False,
+    }
+
+
 RELAY_SCHEMA: dict[str, Any] = {
     "server": "wet-mcp",
     "displayName": "Web Extended Toolkit",
@@ -51,6 +67,11 @@ RELAY_SCHEMA: dict[str, Any] = {
             "hasLocal": True,
             "placeholder": "add embedding model…",
         },
+        _api_base_field(
+            "EMBEDDING_API_BASE",
+            "Embedding endpoint",
+            "Custom endpoint / CF AI Gateway. Cohere: {gw}/cohere/v2/embed",
+        ),
         {
             "key": "RERANK_MODELS",
             "label": "Rerank models",
@@ -59,6 +80,11 @@ RELAY_SCHEMA: dict[str, Any] = {
             "hasLocal": True,
             "placeholder": "add rerank model…",
         },
+        _api_base_field(
+            "RERANK_API_BASE",
+            "Rerank endpoint",
+            "Custom endpoint / CF AI Gateway. Cohere: {gw}/cohere (litellm appends /v1/rerank)",
+        ),
         {
             "key": "LLM_MODELS",
             "label": "LLM models",
@@ -67,6 +93,11 @@ RELAY_SCHEMA: dict[str, Any] = {
             "hasLocal": False,
             "placeholder": "add LLM model…",
         },
+        _api_base_field(
+            "LLM_API_BASE",
+            "LLM endpoint",
+            "Custom endpoint / CF AI Gateway for LLM calls.",
+        ),
         {
             "key": "SEARCH_BACKENDS",
             "label": "Search providers",
