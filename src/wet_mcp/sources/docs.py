@@ -2160,7 +2160,13 @@ def _is_blocked_content(content: str) -> bool:
         return False
     lower = content.lower()
     # Count how many blocked markers appear
-    hits = sum(1 for marker in _BLOCKED_MARKERS if marker in lower)
+    # Bolt optimization: inline for-loop to eliminate generator overhead
+    hits = 0
+    for marker in _BLOCKED_MARKERS:
+        if marker in lower:
+            hits += 1
+            if hits >= 2:
+                break
     # A single "Ray ID" in a long page isn't enough; require 2+ markers
     # or a single strong marker in a short page (< 2000 chars).
     if hits >= 2:
