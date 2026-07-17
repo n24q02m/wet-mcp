@@ -120,14 +120,15 @@ async def acompletion(
     if response_format is not None:
         call_kwargs["response_format"] = response_format
 
-    from wet_mcp.credential_state import api_key_for_model
+    from wet_mcp.credential_state import api_base_for_task, api_key_for_model
 
-    resolved_api_base = api_base or os.getenv("LLM_API_BASE") or None
-    # Resolve the provider key from the request-scoped per-sub bucket (HTTP
-    # multi-user) or the process env (single-user); an explicit api_key wins.
-    # Resolved per model so a fallback to a different provider gets its own
-    # key. Avoids relying on os.environ (cross-user bleed). Empty string ->
-    # None so litellm's own provider env fallback still applies single-user.
+    resolved_api_base = api_base or api_base_for_task("LLM_API_BASE")
+    # Resolve the provider key AND custom endpoint from the request-scoped
+    # per-sub bucket (HTTP multi-user) or the process env (single-user); an
+    # explicit arg wins. Key is resolved per model so a fallback to a different
+    # provider gets its own key. Avoids relying on os.environ (cross-user
+    # bleed). Empty string -> None so litellm's own provider env fallback still
+    # applies single-user. api_base is SSRF-vetted downstream in dispatch.
     resolved_api_key = api_key or api_key_for_model(model) or None
 
     try:

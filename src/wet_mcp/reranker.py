@@ -13,7 +13,6 @@ for better precision. Pipeline: retrieve top-30 -> rerank -> return top-N.
 
 from __future__ import annotations
 
-import os
 from typing import Any, Protocol
 
 from loguru import logger
@@ -81,18 +80,19 @@ class CloudReranker:
         # Lazy import: litellm costs ~1-2s on first import.
         from mcp_core.llm import rerank as core_rerank
 
-        from wet_mcp.credential_state import api_key_for_model
+        from wet_mcp.credential_state import api_base_for_task, api_key_for_model
 
         litellm_model = self._litellm_model()
-        # Resolve the provider key from the request-scoped per-sub bucket
-        # (HTTP multi-user) or the process env (single-user); explicit
-        # api_key wins. Avoids os.environ cross-user bleed.
+        # Resolve the provider key AND custom endpoint from the request-scoped
+        # per-sub bucket (HTTP multi-user) or the process env (single-user);
+        # explicit api_key wins. Avoids os.environ cross-user bleed. SSRF-vetted
+        # downstream in mcp_core.llm dispatch.
         response = core_rerank(
             model=litellm_model,
             query=query,
             documents=documents,
             top_n=top_n,
-            api_base=os.getenv("RERANK_API_BASE") or None,
+            api_base=api_base_for_task("RERANK_API_BASE"),
             api_key=self.api_key or api_key_for_model(litellm_model),
         )
 

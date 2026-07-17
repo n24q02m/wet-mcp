@@ -60,6 +60,12 @@ CLOUD_KEYS = [
     "ANTHROPIC_API_KEY",
     "XAI_API_KEY",
     "GOOGLE_VERTEX_EXPRESS_API_KEY",
+    # Per-sub custom endpoints (SSRF-vetted in mcp_core.llm dispatch). Listed
+    # here so credentials_for_current_request() keeps them through the
+    # os.environ filter and the per-sub bucket carries them, same as the keys.
+    "EMBEDDING_API_BASE",
+    "RERANK_API_BASE",
+    "LLM_API_BASE",
 ]
 
 
@@ -394,6 +400,32 @@ def api_key_for_model(model: str) -> str | None:
     if not key_env:
         return None
     return read_for_sub(sub).get(key_env) or None
+
+
+def api_base_for_task(env_key: str) -> str | None:
+    """Resolve a ``*_API_BASE`` custom endpoint for the CURRENT request.
+
+    HTTP multi-user (``_current_sub`` set): return the endpoint from THAT
+    subject's per-sub bucket so the cloud dispatch (embedder / reranker / llm)
+    passes it EXPLICITLY per call — never reading the process-global
+    ``os.environ``, which would let one ``sub``'s gateway URL serve another
+    concurrent user. Because these endpoints only ever live in the sub bucket
+    (never the shared env), reading ``os.getenv`` here would make the per-sub
+    relay field a silent no-op in multi-user mode.
+
+    Single-user / stdio (no sub): read ``os.environ``. Unlike provider keys —
+    where :func:`api_key_for_model` returns ``None`` so litellm resolves the
+    ``<PROVIDER>_API_KEY`` env itself — litellm does not know wet's own
+    ``*_API_BASE`` names, so the single-user path must surface the env value or
+    the configured endpoint would be dropped.
+
+    The returned value is SSRF-vetted downstream by ``mcp_core.llm`` dispatch
+    (``_prep_api_base`` -> ``vet_api_base``) before any request is made.
+    """
+    sub = _current_sub.get()
+    if sub is None:
+        return os.getenv(env_key) or None
+    return read_for_sub(sub).get(env_key) or None
 
 
 def _await_backend_ready() -> None:
