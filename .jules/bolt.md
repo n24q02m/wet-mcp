@@ -15,6 +15,16 @@
 ## 2023-11-20 - Fast String Suffix/Prefix matching with tuples
 **Learning:** Python generator expressions inside `any()` for checking multiple prefixes/suffixes (e.g. `any(path.endswith(ext) for ext in EXTENSIONS)`) are slow due to Python-level iteration overhead.
 **Action:** Always prefer passing a tuple of strings directly to `str.startswith()` and `str.endswith()` (e.g., `path.endswith(tuple(EXTENSIONS))`). This pushes the iteration down into optimized C code, yielding roughly ~5-7x speedup for prefix/suffix matching. Ensure the tuple is defined at the module level if used repeatedly.
-## 2025-07-28 - Optimize regex iteration via combination
-**Learning:** Combining multiple pre-compiled regular expressions into a single pattern using the alternation operator (`|`) improves performance in tight text processing loops by reducing Python-level `.match()` call overhead and leveraging the C-based regex engine, without the risk of breaking functionality.
-**Action:** When filtering out noise with multiple regex patterns in a loop, combine them into one regex rather than iterating through each individual pattern check.
+## 2024-05-24 - Avoid micro-optimizing cold paths
+
+**Learning:** Replacing idiomatic Python generator expressions (like `sum(1 for ...)`) with manual `for` loops in cold paths (like project locking logic) sacrifices code readability for negligible performance gains, and is considered a negative micro-optimization.
+**Action:** When searching for performance improvements, verify that the targeted code is actually in a hot path or tight loop before applying optimizations that reduce readability.
+
+## 2024-05-24 - Use short-circuiting in threshold checks
+
+**Learning:** When checking for a threshold (e.g., detecting if a page is blocked by checking if `hits >= 2`), iterating over the full list of markers using `sum(1 for ...)` wastes cycles. An inline `for` loop with a `break` statement can short-circuit the evaluation as soon as the threshold is met.
+**Action:** Apply early exits (`break` or `return`) when counting matches if a fixed threshold defines success or failure.
+
+## 2024-05-27 - Use str.split() for multi-whitespace replacement
+**Learning:** `re.sub(r"\s+", " ", text).strip()` is generally slower than `" ".join(text.split())` for collapsing multiple whitespace characters into single spaces, as the latter avoids regex engine overhead and is executed entirely in optimized C code.
+**Action:** Use `" ".join(text.split())` instead of regex substitution when the goal is simply to replace continuous whitespace characters with a single space.
