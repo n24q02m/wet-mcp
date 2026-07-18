@@ -262,7 +262,12 @@ def _extract_passage(content: str, query_terms: list[str], max_chars: int = 500)
 
         for i in sorted(candidates):
             window = content_lower[i : i + max_chars]
-            score = sum(1 for term in present_terms if term in window)
+            # ⚡ Bolt Optimization: Use a simple loop instead of sum() with generator expression
+            # This avoids generator creation overhead in this tight scoring loop.
+            score = 0
+            for term in present_terms:
+                if term in window:
+                    score += 1
             if score > best_score:
                 best_score = score
                 best_pos = i
