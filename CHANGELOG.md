@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.6.0-beta.3 (2026-07-18)
+
+### Bug Fixes
+
+- Classify embed errors by semantics so dims-rejection recovers
+  ([#1550](https://github.com/n24q02m/wet-mcp/pull/1550),
+  [`f370f9e`](https://github.com/n24q02m/wet-mcp/commit/f370f9ef0e8db0b38bc92703031cbabcef369d8b))
+
+- Remove dead Modal embed/rerank references from wet test suite
+  ([#1549](https://github.com/n24q02m/wet-mcp/pull/1549),
+  [`04a867b`](https://github.com/n24q02m/wet-mcp/commit/04a867b237a406f892367fca89e27c444c7c0aa7))
+
+
 ## v3.6.0-beta.2 (2026-07-18)
 
 ### Bug Fixes
