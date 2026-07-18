@@ -438,15 +438,30 @@ async def test_embed_no_backend():
         assert res is None
 
 
-async def test_embed_exception():
-    """Lines 332-334: embedding raises exception."""
+async def test_embed_transient_exception_returns_none():
+    """A transient embedding error degrades this call to keyword-only (None)."""
+    from litellm.exceptions import RateLimitError
+
     with patch("wet_mcp.embedder.get_backend") as mock_get:
         mock_backend = MagicMock()
-        mock_backend.embed_single.side_effect = Exception("embed error")
+        mock_backend.embed_single.side_effect = RateLimitError(
+            message="rate limit exceeded", llm_provider="cohere", model="m"
+        )
         mock_get.return_value = mock_backend
 
         res = await server._embed("test")
         assert res is None
+
+
+async def test_embed_permanent_exception_raises():
+    """A permanent embedding error is surfaced loudly, not swallowed to None."""
+    with patch("wet_mcp.embedder.get_backend") as mock_get:
+        mock_backend = MagicMock()
+        mock_backend.embed_single.side_effect = Exception("model does not exist")
+        mock_get.return_value = mock_backend
+
+        with pytest.raises(Exception, match="does not exist"):
+            await server._embed("test")
 
 
 # ---------------------------------------------------------------------------
@@ -461,15 +476,30 @@ async def test_embed_batch_no_backend():
         assert res is None
 
 
-async def test_embed_batch_exception():
-    """Lines 346-348: batch embedding raises exception."""
+async def test_embed_batch_transient_exception_returns_none():
+    """A transient batch embedding error degrades this call to None."""
+    from litellm.exceptions import RateLimitError
+
     with patch("wet_mcp.embedder.get_backend") as mock_get:
         mock_backend = MagicMock()
-        mock_backend.embed_texts.side_effect = Exception("batch fail")
+        mock_backend.embed_texts.side_effect = RateLimitError(
+            message="rate limit exceeded", llm_provider="cohere", model="m"
+        )
         mock_get.return_value = mock_backend
 
         res = await server._embed_batch(["test"])
         assert res is None
+
+
+async def test_embed_batch_permanent_exception_raises():
+    """A permanent batch embedding error is surfaced loudly, not swallowed."""
+    with patch("wet_mcp.embedder.get_backend") as mock_get:
+        mock_backend = MagicMock()
+        mock_backend.embed_texts.side_effect = Exception("model does not exist")
+        mock_get.return_value = mock_backend
+
+        with pytest.raises(Exception, match="does not exist"):
+            await server._embed_batch(["test"])
 
 
 # ---------------------------------------------------------------------------

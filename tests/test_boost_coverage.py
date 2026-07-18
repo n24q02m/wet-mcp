@@ -1785,11 +1785,15 @@ class TestServerHelpers:
             assert result is None
 
     async def test_embed_failure(self):
-        """_embed returns None on error."""
+        """_embed returns None on a transient error (keyword-only degrade)."""
+        from litellm.exceptions import RateLimitError
+
         from wet_mcp.server import _embed
 
         mock_backend = MagicMock()
-        mock_backend.embed_single.side_effect = Exception("embed error")
+        mock_backend.embed_single.side_effect = RateLimitError(
+            message="rate limit exceeded", llm_provider="cohere", model="m"
+        )
         with patch("wet_mcp.embedder.get_backend", return_value=mock_backend):
             result = await _embed("test text")
             assert result is None
@@ -1803,11 +1807,15 @@ class TestServerHelpers:
             assert result is None
 
     async def test_embed_batch_failure(self):
-        """_embed_batch returns None on error."""
+        """_embed_batch returns None on a transient error (degrade this call)."""
+        from litellm.exceptions import RateLimitError
+
         from wet_mcp.server import _embed_batch
 
         mock_backend = MagicMock()
-        mock_backend.embed_texts.side_effect = Exception("batch error")
+        mock_backend.embed_texts.side_effect = RateLimitError(
+            message="rate limit exceeded", llm_provider="cohere", model="m"
+        )
         with patch("wet_mcp.embedder.get_backend", return_value=mock_backend):
             result = await _embed_batch(["text1"])
             assert result is None
