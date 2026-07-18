@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v3.6.0-beta.2 (2026-07-18)
+
+### Bug Fixes
+
+- Add orphan-tag integrity guard to release CI
+  ([#1541](https://github.com/n24q02m/wet-mcp/pull/1541),
+  [`45f91cc`](https://github.com/n24q02m/wet-mcp/commit/45f91ccbeb18c915b885bf7a3ccf770f53153b5a))
+
+- Adopt better-semantic-release for built-in release guards
+  ([`20eb3c4`](https://github.com/n24q02m/wet-mcp/commit/20eb3c4de88ed5c0705a887b83a3672915431d79))
+
+- Pin rangeStrategy on delayed packageRules to fix renovate artifacts failure
+  ([#1542](https://github.com/n24q02m/wet-mcp/pull/1542),
+  [`63bcde5`](https://github.com/n24q02m/wet-mcp/commit/63bcde55530587bee37f3377cd573a161cb4ab8a))
+
+- Short-circuit blocked marker check in docs.py
+  ([`1d9b8dd`](https://github.com/n24q02m/wet-mcp/commit/1d9b8dd3be1352e920315dd6dd3f3c20c7c6aecd))
+
+### Features
+
+- Add PR-title conventional-commit gate + no-bump release warning
+  ([#1544](https://github.com/n24q02m/wet-mcp/pull/1544),
+  [`d3a55cf`](https://github.com/n24q02m/wet-mcp/commit/d3a55cfbe65c085c470cc9541f92bdd67bfa024c))
+
+- Add setup_start config action and logout CLI subcommand
+  ([#1545](https://github.com/n24q02m/wet-mcp/pull/1545),
+  [`583cd96`](https://github.com/n24q02m/wet-mcp/commit/583cd963bc3a79c4d86610fe88ebcf6a9f8da6af))
+
+- Per-sub custom endpoint (api_base) in relay for gateway routing
+  ([#1547](https://github.com/n24q02m/wet-mcp/pull/1547),
+  [`1dd29a6`](https://github.com/n24q02m/wet-mcp/commit/1dd29a69d09b99630b8b6b1ac59ca0f2c7a9d4ce))
+
+
 ## v3.6.0-beta.1 (2026-07-16)
 
 ### Bug Fixes
