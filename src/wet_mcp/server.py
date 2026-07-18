@@ -620,7 +620,11 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
         is_query: If True, use query_embed for instruction-aware asymmetric
             retrieval (Qwen3). Document embeddings stay raw.
     """
-    from wet_mcp.embedder import Qwen3EmbedBackend, resolve_embed_backend_for_request
+    from wet_mcp.embedder import (
+        Qwen3EmbedBackend,
+        _is_retryable,
+        resolve_embed_backend_for_request,
+    )
 
     backend = resolve_embed_backend_for_request()
     if not backend:
@@ -630,13 +634,26 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
             return await backend.embed_single_query(text, _embedding_dims)
         return await backend.embed_single(text, _embedding_dims)
     except Exception as e:
-        logger.debug(f"Embedding failed: {e}")
-        return None
+        if _is_retryable(e):
+            # Transient (rate-limit / network; the backend already exhausted
+            # its retries). Degrade THIS call to keyword search -- the next
+            # may succeed.
+            logger.warning(f"Embedding transiently unavailable, degrading call: {e}")
+            return None
+        # Permanent config/capability error (bad key, unknown model, dims the
+        # backend could not work around): every embed will fail. Surface it
+        # loudly instead of silently returning None and hiding a broken
+        # semantic search behind a keyword-only fallback.
+        logger.error(
+            f"Embedding permanently failing: {e}. "
+            "Check EMBEDDING_MODELS and the provider API key."
+        )
+        raise
 
 
 async def _embed_batch(texts: list[str]) -> list[list[float]] | None:
     """Embed batch of texts if backend is available."""
-    from wet_mcp.embedder import resolve_embed_backend_for_request
+    from wet_mcp.embedder import _is_retryable, resolve_embed_backend_for_request
 
     backend = resolve_embed_backend_for_request()
     if not backend:
@@ -644,8 +661,22 @@ async def _embed_batch(texts: list[str]) -> list[list[float]] | None:
     try:
         return await backend.embed_texts(texts, _embedding_dims)
     except Exception as e:
-        logger.debug(f"Batch embedding failed: {e}")
-        return None
+        if _is_retryable(e):
+            # Transient (rate-limit / network; the backend already exhausted
+            # its retries). Degrade THIS batch to keyword-only -- a later
+            # index pass may succeed.
+            logger.warning(
+                f"Batch embedding transiently unavailable, degrading call: {e}"
+            )
+            return None
+        # Permanent config/capability error: every embed will fail. Surface it
+        # loudly instead of silently storing keyword-only chunks that masquerade
+        # as a working semantic index.
+        logger.error(
+            f"Batch embedding permanently failing: {e}. "
+            "Check EMBEDDING_MODELS and the provider API key."
+        )
+        raise
 
 
 async def _rerank_results(
