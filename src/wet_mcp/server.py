@@ -2890,10 +2890,11 @@ async def run_http_server(port: int = 0) -> None:
                 "requires the DCR secret as proof of intentional multi-user "
                 "deployment (prevents accidental single-user credential leak)."
             )
-        host = "0.0.0.0"
+        # nosec B104 (default 0.0.0.0 intentional for remote mode, overrideable via MCP_HOST)
+        host = os.environ.get("MCP_HOST", "0.0.0.0")  # nosec B104
         port = int(os.environ.get("MCP_PORT", "8080"))
     else:
-        host = "127.0.0.1"
+        host = os.environ.get("MCP_HOST", "127.0.0.1")
 
     # MCP_AUTH_DISABLE=1 skips Bearer JWT verification on /mcp -- for
     # deployments behind an external auth boundary (reverse proxy / API

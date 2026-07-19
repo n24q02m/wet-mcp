@@ -1,12 +1,4 @@
-## 2024-05-24 - Path Traversal in Token Storage
-**Vulnerability:** The `token_store.py` module constructed file paths by directly concatenating user-controlled inputs (`provider`, `sub`) via `pathlib.Path` without validation. This allowed path traversal (e.g., using `../` or absolute paths) to read or write arbitrary files on the system with the application's permissions.
-**Learning:** Even when using higher-level path abstractions like `pathlib`, string concatenation or `/` division with unvalidated user input is unsafe because the underlying OS resolution still respects traversal sequences.
-**Prevention:** Always explicitly validate path components for dangerous characters (like `/`, `\`, and `..`) using an explicit string validation helper before passing them to file I/O operations or path constructors.
-## 2026-06-20 - Unsafe Dynamic SQL in SQLite PRAGMA calls
-**Vulnerability:** Raw `PRAGMA table_info({table})` and `PRAGMA index_list({table})` using f-strings allows for SQL injection if the table identifier is unsanitized user input. SQLite DDL does not allow standard SQL bound parameters for table names.
-**Learning:** SQLite introduced table-valued functions for introspection (`pragma_table_info(?)` and `pragma_index_list(?)`) which do support safe parameterization using bound variables.
-**Prevention:** Always use parameterized `SELECT name FROM pragma_table_info(?)` or `SELECT name FROM pragma_index_list(?)` instead of using raw dynamic `PRAGMA` queries using string concatenation or f-strings. Note that when migrating from raw `PRAGMA` to `SELECT name FROM pragma_...`, the target column is returned at index 0 rather than index 1 (or by "name" dict lookup).
-## 2026-07-05 - Path Hijacking in subprocess.run
-**Vulnerability:** The `subprocess.run` call in `src/wet_mcp/server.py` used a partial executable name (`"gh"`) instead of an absolute path. This is susceptible to path hijacking (where an attacker controls the PATH environment variable to execute a malicious binary).
-**Learning:** Even though `shutil.which` was used to check for the existence of an executable, the result was discarded, and the partial name was still passed to `subprocess.run`.
-**Prevention:** Always use the absolute path returned by `shutil.which` (or hardcode the absolute path if known) when passing the executable name to `subprocess.run`.
+## 2026-07-19 - Configurable Host Binding
+**Vulnerability:** The server hardcoded a bind to `0.0.0.0` in remote multi-user mode, which is flagged by Bandit as a B104 issue because it binds to all interfaces without flexibility.
+**Learning:** While binding to all interfaces is often necessary in containerized/remote deployments, hardcoding it removes the user's ability to restrict the server to specific network interfaces (e.g., internal VPN or specific subnets) for defense-in-depth.
+**Prevention:** Always use environment variables (e.g., `os.environ.get("MCP_HOST", "0.0.0.0")`) for network bindings rather than hardcoded strings, and explicitly comment `# nosec B104` when the default is intentionally permissive.
