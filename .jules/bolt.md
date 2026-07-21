@@ -28,6 +28,7 @@
 ## 2024-05-27 - Use str.split() for multi-whitespace replacement
 **Learning:** `re.sub(r"\s+", " ", text).strip()` is generally slower than `" ".join(text.split())` for collapsing multiple whitespace characters into single spaces, as the latter avoids regex engine overhead and is executed entirely in optimized C code.
 **Action:** Use `" ".join(text.split())` instead of regex substitution when the goal is simply to replace continuous whitespace characters with a single space.
-## 2025-03-09 - Use frozenset for frequent membership tests
-**Learning:** Defining frequent collection items (e.g. `_DOC_DIRS`) as a tuple results in `O(N)` membership tests (using `in`), which slows down processing in filtering loops.
-**Action:** When a collection is static and frequently used for membership tests (`in`), use a `frozenset` instead of a tuple/list to change lookup complexity from `O(N)` to `O(1)`.
+
+## 2025-03-09 - Avoid generator expression overhead in `any()` for small collections
+**Learning:** Using `any(p in string for p in collection)` creates a generator expression and introduces Python-level iteration overhead, which is significantly slower than evaluating explicit `or` conditions when checking for a very small number of substrings.
+**Action:** When performing substring checks (`in`) against 2 or 3 known patterns, write out the explicit `or` conditions (e.g. `"a" in string or "b" in string`) to bypass generator creation and rely entirely on fast C-level execution.
