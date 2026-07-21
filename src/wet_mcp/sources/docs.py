@@ -2611,7 +2611,8 @@ def _rst_to_markdown(content: str) -> str:
 _GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
 
 # Common docs directory names in repos
-_DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
+# ⚡ Bolt Optimization: Use a frozenset for O(1) membership lookups in tight loops
+_DOC_DIRS = frozenset({"docs", "doc", "documentation", "guide", "guides", "wiki"})
 
 # Non-documentation files to skip (case-insensitive stem matching)
 _SKIP_FILES = frozenset(

@@ -28,3 +28,6 @@
 ## 2024-05-27 - Use str.split() for multi-whitespace replacement
 **Learning:** `re.sub(r"\s+", " ", text).strip()` is generally slower than `" ".join(text.split())` for collapsing multiple whitespace characters into single spaces, as the latter avoids regex engine overhead and is executed entirely in optimized C code.
 **Action:** Use `" ".join(text.split())` instead of regex substitution when the goal is simply to replace continuous whitespace characters with a single space.
+## 2025-03-09 - Use frozenset for frequent membership tests
+**Learning:** Defining frequent collection items (e.g. `_DOC_DIRS`) as a tuple results in `O(N)` membership tests (using `in`), which slows down processing in filtering loops.
+**Action:** When a collection is static and frequently used for membership tests (`in`), use a `frozenset` instead of a tuple/list to change lookup complexity from `O(N)` to `O(1)`.
