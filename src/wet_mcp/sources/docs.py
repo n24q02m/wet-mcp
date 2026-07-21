@@ -1611,7 +1611,11 @@ def _score_discovery_result(r: dict, name: str) -> int:
             # ReadTheDocs bonus: only when subdomain exactly matches lib name
             # Prevents e.g. "app-turbo.readthedocs.org" scoring for "turbo"
             # ⚡ Bolt Optimization: explicit `or` conditions are ~3.5x faster than `any` with generator expression
-            if "readthedocs" in parsed_hp.netloc or "rtfd.io" in parsed_hp.netloc:
+            if (
+                "readthedocs" in parsed_hp.netloc
+                or parsed_hp.netloc == "rtfd.io"
+                or parsed_hp.netloc.endswith(".rtfd.io")
+            ):
                 subdomain = parsed_hp.netloc.split(".")[0].lower().replace("-", "")
                 if subdomain == lib_norm:
                     score += 2

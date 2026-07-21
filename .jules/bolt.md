@@ -32,3 +32,7 @@
 ## 2025-03-09 - Avoid generator expression overhead in `any()` for small collections
 **Learning:** Using `any(p in string for p in collection)` creates a generator expression and introduces Python-level iteration overhead, which is significantly slower than evaluating explicit `or` conditions when checking for a very small number of substrings.
 **Action:** When performing substring checks (`in`) against 2 or 3 known patterns, write out the explicit `or` conditions (e.g. `"a" in string or "b" in string`) to bypass generator creation and rely entirely on fast C-level execution.
+
+## 2025-03-09 - Avoid incomplete hostname matches
+**Learning:** Using `in` operator to check for hostnames containing dots (like `"rtfd.io" in url`) triggers CodeQL `py/incomplete-hostname-match` rule because it can match malicious subdomains like `rtfd.io.evil.com`.
+**Action:** When matching domain suffixes containing dots, use exact matching and `endswith` checks (e.g. `domain == "rtfd.io" or domain.endswith(".rtfd.io")`) to pass SAST scans safely without sacrificing too much performance.
