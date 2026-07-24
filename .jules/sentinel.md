@@ -10,3 +10,7 @@
 **Vulnerability:** The `subprocess.run` call in `src/wet_mcp/server.py` used a partial executable name (`"gh"`) instead of an absolute path. This is susceptible to path hijacking (where an attacker controls the PATH environment variable to execute a malicious binary).
 **Learning:** Even though `shutil.which` was used to check for the existence of an executable, the result was discarded, and the partial name was still passed to `subprocess.run`.
 **Prevention:** Always use the absolute path returned by `shutil.which` (or hardcode the absolute path if known) when passing the executable name to `subprocess.run`.
+## 2024-07-22 - Hardcoded Bind Interface
+**Vulnerability:** The application was hardcoded to bind to `0.0.0.0` in multi-user mode. This could expose the service on all network interfaces unconditionally, which may not be desirable in environments where it should only be accessible through specific interfaces or VPNs.
+**Learning:** Security scanners like Bandit often flag hardcoded `0.0.0.0` bindings (B104) because it's safer to let administrators control the listen interface.
+**Prevention:** Allow configuration of the bind host via an environment variable (e.g., `MCP_HOST`) with `0.0.0.0` as the fallback default for backward compatibility. Add a `# nosec B104` pragma to suppress false positives where the default behavior is intentional and validated.
