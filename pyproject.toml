@@ -58,8 +58,11 @@ dependencies = [
     # support ((configure, handler) tuples) this repo's cli.py
     # auth/docs subcommands consume; 1.20.0b2 keys build_cli's credential
     # store by plugin slug (not console name) so `wet-mcp config status`
-    # reads the right per-plugin bucket (core #666).
-    "n24q02m-mcp-core[llm]>=1.20.0b2,<2",
+    # reads the right per-plugin bucket (core #666). 1.21.0 returns `iss` in the
+    # authorization response (RFC 9207) and stops minting an authorization code
+    # when the credential save fails (core #688, #689) — both land in the OAuth
+    # AS this server exposes at <PUBLIC_URL>/authorize.
+    "n24q02m-mcp-core[llm]>=1.21.0,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.5",
     # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance
