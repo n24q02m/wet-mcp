@@ -128,10 +128,7 @@ jobs:
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
-    if: >-
-      (github.event_name == 'pull_request' || github.event_name == 'push')
-      && github.actor != 'dependabot[bot]'
-      && github.actor != 'renovate[bot]'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     permissions:
       security-events: write
       contents: read
