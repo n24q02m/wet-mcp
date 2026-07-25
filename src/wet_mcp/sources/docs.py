@@ -2285,12 +2285,12 @@ def chunk_markdown(
     Chunks that are too large are further split by paragraphs,
     but never inside fenced code blocks.
     """
-    if not content or not content.strip():
+    if not content or content.isspace():
         return []
 
     # Clean noise (badges, navigation, footer) before chunking
     content = _clean_doc_content(content)
-    if not content.strip():
+    if not content or content.isspace():
         return []
 
     chunks: list[dict] = []
@@ -2387,7 +2387,7 @@ def _split_preserving_code(
         if line.lstrip().startswith("```"):
             in_code_block = not in_code_block
 
-        if not in_code_block and line.strip() == "" and current_segment:
+        if not in_code_block and (not line or line.isspace()) and current_segment:
             # Paragraph boundary — flush segment
             segments.append("\n".join(current_segment))
             current_segment = []
@@ -3473,7 +3473,7 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
     # Parse entries — only std:doc (pages) and std:label (sections)
     doc_urls: set[str] = set()
     for line in text.splitlines():
-        if not line.strip():
+        if not line or line.isspace():
             continue
         parts = line.split(" ", 4)
         if len(parts) < 4:
@@ -3837,7 +3837,7 @@ def resolve_library(db: Any, name: str, limit: int = 5) -> list[dict]:
     an empty list here is intentional for unknown libraries — callers can
     decide to trigger ingestion or surface "not found" to the user.
     """
-    if not name or not name.strip():
+    if not name or name.isspace():
         return []
     norm = name.lower().strip()
     if not norm:

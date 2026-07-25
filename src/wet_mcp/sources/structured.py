@@ -126,7 +126,7 @@ async def extract_structured(
             combined_parts.append(header + content)
 
     combined = "\n\n".join(combined_parts)
-    if not combined.strip():
+    if not combined or combined.isspace():
         return json.dumps({"error": "No content extracted from the provided URLs."})
 
     if len(combined) > _MAX_CONTENT_CHARS:

@@ -171,7 +171,7 @@ async def run_agent(
     callers see the message instead of an exception trace, matching the
     rest of the wet tool surface.
     """
-    if not query or not query.strip():
+    if not query or query.isspace():
         return "Error: query is required for extract(action=agent)."
 
     if detect_llm_provider() is None:
