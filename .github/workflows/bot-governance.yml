@@ -12,6 +12,10 @@ permissions:
 jobs:
   governance:
     name: Bot PR Rate Limit & Duplicate Check
+    # A pull_request run from a fork gets a read-only GITHUB_TOKEN whatever the
+    # permissions block above asks for, so every write below would fail. The bot
+    # tools this governs push their branches into this repository, never a fork.
+    if: github.event.pull_request.head.repo.fork == false
     runs-on: ubuntu-latest
     steps:
       - name: Detect and govern bot PRs
