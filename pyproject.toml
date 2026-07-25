@@ -196,4 +196,17 @@ fail_under = 92
 show_missing = true
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
+[tool.uv]
+# crawl4ai requires `unclecode-litellm==1.81.13`, a fork that ships the same
+# top-level `litellm` package as the upstream litellm this project already
+# depends on through mcp-core[llm]. Installing both writes two different
+# versions into one site-packages/litellm/, and which files survive is decided
+# by install order — CI has already failed on a run where the fork landed last:
+#   ImportError: cannot import name '_redact_string' from 'litellm._logging'
+# Drop the fork so exactly one litellm is installed. crawl4ai imports litellm
+# only inside its LLM helper functions, which this project never calls (it uses
+# AsyncWebCrawler/BrowserConfig/CrawlerRunConfig), and mcp_core.llm needs the
+# upstream 1.9x API (litellm.aresponses backs the x_search transport).
+override-dependencies = ["unclecode-litellm ; sys_platform == 'unreachable'"]
+
 [tool.uv.sources]
