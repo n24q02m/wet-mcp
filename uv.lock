@@ -6,6 +6,9 @@ resolution-markers = [
     "sys_platform != 'win32'",
 ]
 
+[manifest]
+overrides = [{ name = "unclecode-litellm", marker = "sys_platform == 'unreachable'" }]
+
 [[package]]
 name = "aiofile"
 version = "3.11.1"
@@ -497,7 +500,7 @@ dependencies = [
     { name = "rich" },
     { name = "shapely" },
     { name = "snowballstemmer" },
-    { name = "unclecode-litellm" },
+    { name = "unclecode-litellm", marker = "sys_platform == 'unreachable'" },
     { name = "xxhash" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ca/95/a307119201f09a5136be1e394282ee4d4d6e3816cbc3c73f370aaa4b5e56/crawl4ai-0.9.1.tar.gz", hash = "sha256:d04251f13ba180107324bb7bbe12029a63d95cc50248f05085743739f38404fc", size = 575249, upload-time = "2026-07-08T14:29:15.247Z" }
@@ -3232,18 +3235,18 @@ name = "unclecode-litellm"
 version = "1.81.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiohttp" },
-    { name = "click" },
-    { name = "fastuuid" },
-    { name = "httpx" },
-    { name = "importlib-metadata" },
-    { name = "jinja2" },
-    { name = "jsonschema" },
-    { name = "openai" },
-    { name = "pydantic" },
-    { name = "python-dotenv" },
-    { name = "tiktoken" },
-    { name = "tokenizers" },
+    { name = "aiohttp", marker = "sys_platform != 'win32'" },
+    { name = "click", marker = "sys_platform != 'win32'" },
+    { name = "fastuuid", marker = "sys_platform != 'win32'" },
+    { name = "httpx", marker = "sys_platform != 'win32'" },
+    { name = "importlib-metadata", marker = "sys_platform != 'win32'" },
+    { name = "jinja2", marker = "sys_platform != 'win32'" },
+    { name = "jsonschema", marker = "sys_platform != 'win32'" },
+    { name = "openai", marker = "sys_platform != 'win32'" },
+    { name = "pydantic", marker = "sys_platform != 'win32'" },
+    { name = "python-dotenv", marker = "sys_platform != 'win32'" },
+    { name = "tiktoken", marker = "sys_platform != 'win32'" },
+    { name = "tokenizers", marker = "sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ce/c4/93ed52c49c2347184f908c692ebb7c1f06303805910774c3282ac68033db/unclecode_litellm-1.81.13.tar.gz", hash = "sha256:db70e34e3e859c0a07f02cb02eaa644f8fa4b4ecc5e2f3be9a58bd7d1c3feedc", size = 16678208, upload-time = "2026-03-24T14:46:31.915Z" }
 wheels = [

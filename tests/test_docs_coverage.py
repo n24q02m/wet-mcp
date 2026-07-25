@@ -29,6 +29,7 @@ from wet_mcp.sources.docs import (
     _fetch_github_readme,
     _get_github_homepage,
     _github_headers,
+    _is_readthedocs_host,
     _is_toc_only,
     _normalize_docs_url,
     _parse_objects_inv,
@@ -3492,3 +3493,49 @@ def test_sort_urls_by_query_empty_cases():
 
     # Empty URLs returns empty list
     assert _sort_urls_by_query([], "query") == []
+
+
+# ============================================================================
+# _is_readthedocs_host
+# ============================================================================
+
+
+@pytest.mark.parametrize(
+    "netloc",
+    [
+        "readthedocs.io",
+        "readthedocs.org",
+        "rtfd.io",
+        "turbo.readthedocs.io",
+        "app-turbo.readthedocs.org",
+        "TURBO.ReadTheDocs.IO",
+        "turbo.readthedocs.io:8443",
+        "turbo.rtfd.io",
+        "turbo.readthedocs-hosted.com",
+    ],
+)
+def test_is_readthedocs_host_accepts_real_hosts(netloc):
+    """The ReadTheDocs hosts themselves and their subdomains."""
+    assert _is_readthedocs_host(netloc) is True
+
+
+@pytest.mark.parametrize(
+    "netloc",
+    [
+        # An attacker-controlled parent domain: a substring check matches these,
+        # and the first label would then pass the subdomain test and win the bonus.
+        "turbo.readthedocs.evil.com",
+        "turbo.rtfd.io.evil.com",
+        "readthedocs.evil.com",
+        # Lookalikes that merely contain the name.
+        "notreadthedocs.com",
+        "readthedocs.com.attacker.net",
+        "myrtfd.iodocs.net",
+        "turbo.readthedocs-hosted.com.evil.net",
+        "example.com",
+        "",
+    ],
+)
+def test_is_readthedocs_host_rejects_impostors(netloc):
+    """Anything that only *contains* the name is not a ReadTheDocs host."""
+    assert _is_readthedocs_host(netloc) is False

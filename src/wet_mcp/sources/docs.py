@@ -1584,6 +1584,28 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
 }
 
 
+_READTHEDOCS_HOSTS = (
+    "readthedocs.io",
+    "readthedocs.org",
+    "rtfd.io",
+    # Projects on ReadTheDocs for Business are served from this host instead;
+    # the substring check this replaces matched them, so keep them eligible.
+    "readthedocs-hosted.com",
+)
+
+
+def _is_readthedocs_host(netloc: str) -> bool:
+    """True when netloc is a ReadTheDocs host or a subdomain of one.
+
+    Matching on the host suffix rather than a substring: "readthedocs" appearing
+    anywhere in the netloc also matches an attacker-controlled parent domain such
+    as "turbo.readthedocs.evil.com", whose first label would then pass the
+    subdomain check below and collect the bonus.
+    """
+    host = netloc.lower().partition(":")[0].rstrip(".")
+    return any(host == h or host.endswith(f".{h}") for h in _READTHEDOCS_HOSTS)
+
+
 def _score_discovery_result(r: dict, name: str) -> int:
     """Score a discovery result for relevance to the library name."""
     score = 0
@@ -1610,7 +1632,7 @@ def _score_discovery_result(r: dict, name: str) -> int:
                     score += 3
             # ReadTheDocs bonus: only when subdomain exactly matches lib name
             # Prevents e.g. "app-turbo.readthedocs.org" scoring for "turbo"
-            if any(p in parsed_hp.netloc for p in ("readthedocs", "rtfd.io")):
+            if _is_readthedocs_host(parsed_hp.netloc):
                 subdomain = parsed_hp.netloc.split(".")[0].lower().replace("-", "")
                 if subdomain == lib_norm:
                     score += 2
