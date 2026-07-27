@@ -1,5 +1,7 @@
 # WET - Web Extended Toolkit MCP Server
 
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.n24q02m%2Fwet-mcp.svg)](https://mcptoplist.com/server/io.github.n24q02m%2Fwet-mcp)
+
 mcp-name: io.github.n24q02m/wet-mcp
 
 **Web search, content extraction, and library docs for AI agents -- 5-strategy scraping, runs without API keys.**
