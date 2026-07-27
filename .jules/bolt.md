@@ -62,3 +62,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2024-07-27 - Optimize whitespace checks in tight text parsing loops
+**Learning:** In hot text processing loops (like markdown and reStructuredText parsing), checking for empty or whitespace-only strings using `not string.strip()` or `string.strip() == ""` creates unnecessary string allocations and copies.
+**Action:** Always prefer the non-allocating alternative `not string or string.isspace()` when checking if a string is empty or contains only whitespace in performance-critical code paths.
