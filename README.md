@@ -110,13 +110,13 @@ docker run -d --name wet-mcp-http -p 8084:8080 \
   -e PUBLIC_URL=https://wet.example.com \
   n24q02m/wet-mcp:latest
 
-# Method 4 (hosted): connect to the maintainer-run instance
-claude mcp add --transport http wet https://wet.n24q02m.com/mcp
+# Method 4 (remote): point a client at an HTTP deployment
+claude mcp add --transport http wet https://<your-host>/mcp
 ```
 
-The hosted endpoint `https://wet.n24q02m.com/mcp` speaks Streamable HTTP and is
-OAuth-gated -- your client is prompted to authenticate in the browser on first
-connect (no API key to paste). Self-host the same HTTP mode via Method 3 or the
+The HTTP endpoint speaks Streamable HTTP and is OAuth-gated -- your client is
+prompted to authenticate in the browser on first connect (no API key to paste).
+Stand one up via Method 3 or the
 [Deploy to Cloudflare](#deploy-to-cloudflare) section.
 
 Full setup matrices live at the canonical docs site
