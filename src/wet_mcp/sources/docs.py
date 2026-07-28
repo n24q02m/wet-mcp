@@ -1921,7 +1921,8 @@ async def try_llms_txt(base_url: str) -> str | None:
                 if resp.status_code == 200:
                     content = resp.text
                     # Validate: should be substantial text, not an error page
-                    if len(content) > 200 and not content.strip().startswith(
+                    # ⚡ Bolt Optimization: Slice the first 100 characters before calling lstrip().startswith() to avoid massive string allocation
+                    if len(content) > 200 and not content[:100].lstrip().startswith(
                         "<!DOCTYPE"
                     ):
                         # llms.txt (non-full) is often just a TOC with links.
@@ -2496,7 +2497,7 @@ def _process_rst_directive(
         out.append(f"```{lang}")
         i += 1
         while i < len(lines) and (
-            not lines[i].strip() or lines[i].strip().startswith(":")
+            (not lines[i] or lines[i].isspace()) or lines[i].lstrip().startswith(":")
         ):
             i += 1
         if i < len(lines):
@@ -2518,19 +2519,23 @@ def _process_rst_directive(
         "deprecated",
     ):
         i += 1
-        while i < len(lines) and (not lines[i].strip() or lines[i].startswith("   ")):
+        while i < len(lines) and (
+            (not lines[i] or lines[i].isspace()) or lines[i].startswith("   ")
+        ):
             i += 1
     elif directive in ("note", "warning", "tip", "important", "seealso"):
         out.append(f"> **{directive.title()}:** {args}")
         i += 1
-        while i < len(lines) and (not lines[i].strip() or lines[i].startswith("   ")):
+        while i < len(lines) and (
+            (not lines[i] or lines[i].isspace()) or lines[i].startswith("   ")
+        ):
             body = lines[i].strip()
             if body:
                 out.append(f"> {body}")
             i += 1
     else:
         i += 1
-        while i < len(lines) and lines[i].strip().startswith(":"):
+        while i < len(lines) and lines[i].lstrip().startswith(":"):
             i += 1
 
     return i, in_code_block, code_indent
