@@ -62,3 +62,8 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-07-29 - O(N^2) complexity in sequential scanning loops
+**Commit:** pending
+**Learning:** In scanning loops that find runs of elements (like `_strip_nav_heading_blocks`), incrementing the outer loop pointer by just 1 (`i += 1`) when a run is rejected can cause severe quadratic behavior. The inner loop evaluates up to `k` elements, fails, and the outer loop shifts forward by 1, meaning the inner loop has to re-evaluate the same elements again.
+**Action:** When an inner loop aborts a run because the next element breaks a sequence constraint (e.g., mismatched level or excessive gap), fast-forward the outer pointer to the end of the evaluated sequence (`i = j`). Because the constraint was already broken for the whole sequence, no sub-sequence starting within it can succeed either.

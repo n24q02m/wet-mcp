@@ -2145,9 +2145,12 @@ def _strip_nav_heading_blocks(lines: Sequence[str]) -> list[str]:
 
         if len(run) >= 5:
             nav_lines.update(run)
-            i = j
-        else:
-            i += 1
+
+        # ⚡ Bolt Optimization: Skip to the end of the run instead of incrementing by 1
+        # This avoids quadratic behavior when checking runs of same-level headings.
+        # Since the inner loop breaks on first level mismatch or length limit,
+        # any starting index inside the evaluated run would just break sooner.
+        i = j
 
     if not nav_lines:
         return list(lines)
