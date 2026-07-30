@@ -2145,9 +2145,11 @@ def _strip_nav_heading_blocks(lines: Sequence[str]) -> list[str]:
 
         if len(run) >= 5:
             nav_lines.update(run)
-            i = j
-        else:
-            i += 1
+
+        # Unconditionally fast-forward the outer pointer to the index that broke
+        # the sequence. This eliminates redundant inner-loop iterations over
+        # headings already processed, reducing the constant factor in O(N) time.
+        i = j
 
     if not nav_lines:
         return list(lines)

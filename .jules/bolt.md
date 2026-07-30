@@ -62,3 +62,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-07-30 - Fast-forward outer loop pointers after inner loop sequence failures
+**Learning:** In sequential scanning or sliding window loops (like `_strip_nav_heading_blocks` in `src/wet_mcp/sources/docs.py`), incrementing the outer loop pointer by 1 (`i += 1`) after an inner loop sequence run fails causes redundant overlapping computation.
+**Action:** Unconditionally fast-forward the outer pointer to the index that broke the sequence (`i = j`). Any sub-sequence starting within the evaluated run will inevitably fail the same condition, so skipping ahead eliminates redundant inner-loop iterations and reduces the constant factor in O(N) time.
