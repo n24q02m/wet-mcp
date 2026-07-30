@@ -71,7 +71,7 @@ dependencies = [
     "fastmcp>=3.4.2,<4",
     # Google Drive sync
     "google-api-python-client>=2.198.0",
-    "google-auth>=2.55.1",
+    "google-auth>=2.56.2",
     # S3-compatible sync (AWS S3, Cloudflare R2, Backblaze B2, MinIO)
     "boto3>=1.43.40",
     # Production WSGI server for embedded SearXNG on Windows
