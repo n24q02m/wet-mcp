@@ -31,6 +31,7 @@ from loguru import logger
 from mcp_core.auth import token_client_mismatch
 
 from wet_mcp.config import settings
+from wet_mcp.sync.base import checkpoint_wal
 
 if TYPE_CHECKING:
     from wet_mcp.db import DocsDB
@@ -446,6 +447,11 @@ async def sync_push(db_path: Path, folder_name: str) -> bool:
 
     existing = await _find_file_in_folder(token, folder_id, db_path.name)
     existing_id = existing["id"] if existing else None
+
+    # This is the single funnel for GDrive uploads (``sync_full`` and
+    # ``GDriveBackend.push`` both land here) and ``_upload_file`` reads the
+    # main .db file only, so the WAL has to be folded in first.
+    await checkpoint_wal(db_path)
 
     success = await _upload_file(token, db_path, folder_id, existing_id)
     if success:
