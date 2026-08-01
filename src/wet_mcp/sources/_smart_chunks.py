@@ -61,7 +61,6 @@ def _html_to_markdown(html: str) -> str:
 def _strip_html(html: str) -> str:
     """Remove HTML tags + collapse whitespace as a clean-text fallback."""
     text = _HTML_TAG_RE.sub(" ", html)
-    # ⚡ Bolt Optimization: " ".join(text.split()) is ~5x faster than regex substitution
     return " ".join(text.split())
 
 
@@ -141,7 +140,6 @@ def _extract_title(html: str, headings: list[dict[str, str]]) -> str:
         r"<title[^>]*>(.*?)</title>", html, re.IGNORECASE | re.DOTALL
     )
     if title_match:
-        # ⚡ Bolt Optimization: " ".join(text.split()) is ~5x faster than regex substitution
         title = " ".join(title_match.group(1).split())
         if title:
             return title
@@ -179,7 +177,6 @@ def smart_chunks(
         source_format = "html"
     else:
         markdown = content
-        # ⚡ Bolt Optimization: " ".join(text.split()) is ~5x faster than regex substitution
         clean_text = " ".join(content.split())
         structured_data = []
         source_format = "markdown"

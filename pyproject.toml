@@ -65,9 +65,19 @@ dependencies = [
     "n24q02m-mcp-core[llm]>=1.21.0,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.5",
-    # Pin fastmcp (transitive via mcp-core) to prevent Renovate lockFileMaintenance
-    # downgrading to CVE-vulnerable 2.x (5 CVEs including critical SSRF).
-    # Must stay >=3.2.3,<4 until mcp-core bumps its own floor past 3.x.
+    # fastmcp arrives transitively via mcp-core; both bounds are pinned here,
+    # for different reasons.
+    # Floor: keeps a Renovate lockFileMaintenance refresh from resolving back
+    # to fastmcp 2.x, which carries 5 CVEs including a critical SSRF.
+    # Ceiling: fastmcp 4 moves the runtime onto fastmcp-slim and the protocol
+    # library from the MCP Python SDK v1 to v2 (`mcp>=2,<3`), where `mcp.types`
+    # is a re-export of the separate `mcp-types` package and its models rename
+    # every field to snake_case, keeping the camelCase spellings only as
+    # Pydantic aliases. mcp-core constrains just the floor (`fastmcp>=3.4.4`,
+    # no ceiling of its own), so without one here a lockfile refresh would take
+    # that major bump on its own. Lift it deliberately, alongside mcp-core,
+    # after re-checking the SDK surfaces this server touches directly — the
+    # ToolAnnotations built at each tool definition in server.py above all.
     "fastmcp>=3.4.4,<4",
     # Google Drive sync
     "google-api-python-client>=2.198.0",

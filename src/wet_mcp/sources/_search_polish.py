@@ -47,7 +47,6 @@ def normalize_query(q: str) -> str:
         return ""
     lowered = q.strip().lower()
     no_punct = _PUNCT_RE.sub(" ", lowered)
-    # ⚡ Bolt Optimization: " ".join(text.split()) avoids regex overhead and is significantly faster than re.sub(r"\s+", " ", text).strip()
     return " ".join(no_punct.split())
 
 

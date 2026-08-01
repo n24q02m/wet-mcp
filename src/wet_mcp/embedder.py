@@ -325,8 +325,10 @@ class CloudEmbeddingBackend:
             f"(max {self.MAX_BATCH_SIZE}/batch)"
         )
 
-        # ⚡ Bolt Optimization: Parallelize batch API calls to speed up large document embedding
-        # Use a semaphore to prevent unbounded concurrency and avoid API rate limits
+        # The batches go out to a remote embedding API, so they are issued
+        # together rather than one after another. The semaphore is what keeps a
+        # large document from opening one request per batch at once and hitting
+        # the provider's rate limit.
         sem = asyncio.Semaphore(8)
 
         async def _embed_with_sem(
