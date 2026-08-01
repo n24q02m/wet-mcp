@@ -3,8 +3,135 @@ from unittest import mock
 
 import pytest
 from pydantic import SecretStr
+from pydantic_settings.sources import EnvSettingsSource
 
 from wet_mcp.config import Settings
+from wet_mcp.credential_state import CLOUD_KEYS
+
+
+def _settings_env_names() -> set[str]:
+    """Every env var name that ``Settings`` itself reads.
+
+    Derived from the model instead of hand-listed. ``EnvSettingsSource`` is the
+    same resolver pydantic-settings runs at ``Settings.__init__``, so it already
+    accounts for ``env_prefix`` (empty in this repo) and ``case_sensitive``.
+    Adding or renaming a settings field therefore updates this set automatically
+    instead of silently drifting behind a hand-written list.
+    """
+    source = EnvSettingsSource(Settings)
+    return {
+        env_name.upper()
+        for field_name, field in Settings.model_fields.items()
+        for _, env_name, _ in source._extract_field_info(field, field_name)
+    }
+
+
+# Env vars that steer these tests but are NOT declared as ``Settings`` fields,
+# so they cannot be derived from the model and must be named by hand:
+#   * ``CLOUD_KEYS`` -- provider API keys read straight from ``os.environ`` by
+#     wet's litellm passthrough (embedder.py, reranker.py, llm.py) and by
+#     credential_state.resolve_credential_state(). Imported from
+#     ``credential_state`` rather than retyped so the two lists cannot diverge.
+#   * ``GOOGLE_API_KEY`` -- the GEMINI alias that ``Settings._key_available`` /
+#     ``resolve_provider_mode`` probe directly via ``os.getenv``; not itself a
+#     Settings field.
+#   * ``USE_BUNDLED_GOOGLE_CLIENT`` -- read inside
+#     ``mcp_core.auth.resolve_bundled_client`` while resolving the
+#     ``google_drive_client_*`` field defaults; the kill-switch var itself has
+#     no corresponding Settings field.
+#   * ``EMBEDDING_API_BASE`` / ``RERANK_API_BASE`` / ``LLM_API_BASE`` -- the
+#     per-task custom-endpoint overrides read directly via ``os.getenv`` in
+#     embedder.py / reranker.py / llm.py, never declared as Settings fields.
+_EXTRA_ENV_NAMES = {
+    *CLOUD_KEYS,
+    "GOOGLE_API_KEY",
+    "USE_BUNDLED_GOOGLE_CLIENT",
+    "EMBEDDING_API_BASE",
+    "RERANK_API_BASE",
+    "LLM_API_BASE",
+}
+# litellm's per-provider endpoint override lives beside each provider key
+# (JINA_AI_API_KEY -> JINA_AI_API_BASE). Real developer shells do export these
+# (a gateway URL), so derive the siblings instead of listing them one by one.
+_EXTRA_ENV_NAMES |= {
+    f"{key.removesuffix('_API_KEY')}_API_BASE"
+    for key in _EXTRA_ENV_NAMES
+    if key.endswith("_API_KEY")
+}
+
+
+def _clean_env_names() -> set[str]:
+    """Full set of env vars the ``clean_env`` fixture unsets."""
+    return _settings_env_names() | _EXTRA_ENV_NAMES
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    """Ensure environment isolation for configuration tests.
+
+    Clears every env var ``Settings`` declares (derived from the model, see
+    :func:`_settings_env_names`) plus the provider keys and endpoint overrides
+    that are read directly from ``os.environ`` (see :data:`_EXTRA_ENV_NAMES`).
+
+    This runs before each test body, so a developer shell exporting e.g.
+    ``EMBEDDING_MODELS`` / ``JINA_AI_API_KEY`` can no longer bake a leaked
+    value into a ``Settings()`` constructed later in the test. Clearing
+    *after* construction -- the old per-test
+    ``with mock.patch.dict(os.environ, {}, clear=True):`` pattern still used
+    below for isolating ``os.environ`` mutations made by ``setup_api_keys()``
+    -- is too late for that purpose, because pydantic-settings resolves env
+    vars once, synchronously, inside ``Settings.__init__``.
+    """
+    vars_to_clear = _clean_env_names()
+    # Thoroughly clear any variant of these keys in os.environ.
+    for k in list(os.environ.keys()):
+        if k.upper() in vars_to_clear:
+            monkeypatch.delenv(k, raising=False)
+    for v in vars_to_clear:
+        monkeypatch.delenv(v, raising=False)
+
+
+class TestCleanEnvCoverage:
+    """Guards against the clear-list drifting behind ``Settings`` again."""
+
+    def test_current_chain_vars_are_derived(self):
+        """The plural chain vars a hand-written list would be prone to miss."""
+        derived = _settings_env_names()
+        for name in ("EMBEDDING_MODELS", "RERANK_MODELS", "LLM_MODELS"):
+            assert name in derived, name
+
+    def test_deprecated_singular_vars_still_covered(self):
+        """The deprecated shims are still fields, so they stay in the set."""
+        derived = _settings_env_names()
+        assert {
+            "EMBEDDING_MODEL",
+            "RERANK_MODEL",
+            "EMBEDDING_BACKEND",
+            "RERANK_BACKEND",
+        } <= derived
+
+    def test_cloud_keys_are_cleared(self):
+        """Provider keys read directly from ``os.environ`` are all cleared."""
+        names = _clean_env_names()
+        assert set(CLOUD_KEYS) <= names
+
+    def test_endpoint_overrides_are_cleared(self):
+        """``*_API_BASE`` is read via os.getenv, never declared on Settings."""
+        names = _clean_env_names()
+        assert {"EMBEDDING_API_BASE", "RERANK_API_BASE", "LLM_API_BASE"} <= names
+        # litellm per-provider endpoint siblings.
+        assert {"JINA_AI_API_BASE", "GEMINI_API_BASE"} <= names
+
+    def test_google_alias_and_kill_switch_are_cleared(self):
+        """GOOGLE_API_KEY alias + the bundled-client kill-switch are covered."""
+        names = _clean_env_names()
+        assert {"GOOGLE_API_KEY", "USE_BUNDLED_GOOGLE_CLIENT"} <= names
+
+    def test_every_settings_field_is_represented(self):
+        """No field may be silently absent from the clear-list."""
+        names = _clean_env_names()
+        missing = [f for f in Settings.model_fields if f.upper() not in names]
+        assert missing == []
 
 
 def test_setup_api_keys_valid():
