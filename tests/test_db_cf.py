@@ -1,9 +1,12 @@
+import inspect
 from pathlib import Path
 
+import pytest
 from conftest_cf import FakeD1Http, FakeVectorizeHttp
 
 from wet_mcp.backends.d1 import D1Backend
 from wet_mcp.backends.vectorize import VectorizeBackend
+from wet_mcp.db import DocsDB
 from wet_mcp.db_cf import DocsDBCfBackend
 
 DDL = Path("migrations/0001_init_wet.sql").read_text(encoding="utf-8")
@@ -125,3 +128,184 @@ def test_cf_search_matches_sqlite_golden(cf_corpus, cf_golden_topk):
         assert overlap >= 2, (
             f"top-3 rank parity failed for {q!r}: {cf_top[:3]} vs {golden[:3]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Regression: cf-d1 index path died before a single row reached doc_chunks
+# ---------------------------------------------------------------------------
+
+
+def test_upsert_version_accepts_docs_url_kwarg():
+    """Both production index call sites pass ``docs_url=``: ``server.py`` (docs
+    auto-index) and ``sources/docs.py`` (tier-2 lazy index). ``DocsDB.upsert_version``
+    accepts it; ``DocsDBCfBackend.upsert_version`` did not, so under
+    ``DOCS_DB_BACKEND=cf-d1`` every index run raised TypeError *after*
+    ``upsert_library`` had already committed -- ``libraries`` kept growing while
+    ``doc_chunks`` stayed at 0.
+    """
+    db = _backend()
+    lib_id = db.upsert_library("alpha", docs_url="https://a")
+    ver_id = db.upsert_version(
+        library_id=lib_id, version="1.0", docs_url="https://a/docs"
+    )
+    row = db.get_best_version(lib_id, "1.0")
+    assert row["id"] == ver_id
+    assert row["docs_url"] == "https://a/docs"
+
+
+def test_upsert_version_updates_docs_url_on_existing_row():
+    """Mirror ``DocsDB.upsert_version``: an existing row is reused, a non-empty
+    ``docs_url`` is written back onto it, and a missing one leaves it untouched.
+    """
+    db = _backend()
+    lib_id = db.upsert_library("alpha", docs_url="https://a")
+
+    first = db.upsert_version(lib_id, "1.0")
+    assert db.get_best_version(lib_id, "1.0")["docs_url"] is None
+
+    again = db.upsert_version(lib_id, "1.0", docs_url="https://a/docs")
+    assert again == first
+    assert db.get_best_version(lib_id, "1.0")["docs_url"] == "https://a/docs"
+
+    db.upsert_version(lib_id, "1.0")
+    assert db.get_best_version(lib_id, "1.0")["docs_url"] == "https://a/docs"
+
+
+def test_upsert_version_defaults_to_latest():
+    """``DocsDB.upsert_version`` defaults ``version`` to ``"latest"``; the CF
+    backend made it required, so the two backends were not interchangeable."""
+    db = _backend()
+    lib_id = db.upsert_library("alpha", docs_url="https://a")
+    ver_id = db.upsert_version(lib_id)
+    assert db.get_best_version(lib_id, "latest")["id"] == ver_id
+
+
+def test_get_best_version_target_is_optional():
+    """``config(action="clear")`` and ``cli.py`` call ``get_best_version(lib_id)``
+    with no target. ``DocsDB`` defaults it to ``None``; the CF backend required a
+    second argument and named it ``version``, so the same call raised TypeError."""
+    db = _backend()
+    lib_id = db.upsert_library("alpha", docs_url="https://a")
+    ver_id = db.upsert_version(lib_id, "1.0")
+    assert db.get_best_version(lib_id)["id"] == ver_id
+    assert db.get_best_version(lib_id, target="1.0")["id"] == ver_id
+
+
+def test_add_chunks_persists_every_column_the_sqlite_backend_writes():
+    """``doc_chunks`` in ``migrations/0001_init_wet.sql`` carries ``section``,
+    ``topic``, ``content_hash`` and ``token_count``, and ``search()`` reads three of
+    them back into its results. The CF writer only ever INSERTed the nine base
+    columns, so those four were silently NULL on every cf-d1 row."""
+    db = _backend()
+    lib_id = db.upsert_library("alpha", docs_url="https://a")
+    ver_id = db.upsert_version(lib_id, "1.0", docs_url="https://a/docs")
+    db.add_chunks(
+        ver_id,
+        lib_id,
+        [
+            {
+                "id": "c1",
+                "url": "https://a/p1",
+                "title": "Routing",
+                "chunk_index": 0,
+                "content": "async function handler with error handling",
+                "heading_path": "Guide > Routing",
+                "section": "guide",
+                "topic": "routing",
+                "content_hash": "deadbeef",
+                "token_count": 7,
+            },
+        ],
+        embeddings=None,
+    )
+
+    stored = db._d1.fetchone("SELECT * FROM doc_chunks WHERE id = ?", ["c1"])
+    assert stored["section"] == "guide"
+    assert stored["topic"] == "routing"
+    assert stored["content_hash"] == "deadbeef"
+    assert stored["token_count"] == 7
+
+    result = db.search("function", limit=5)[0]
+    assert result["section"] == "guide"
+    assert result["topic"] == "routing"
+    assert result["token_count"] == 7
+
+
+def test_add_chunks_leaves_optional_columns_null_when_absent():
+    """The optional keys stay optional: a v1-shaped chunk still inserts cleanly."""
+    db = _backend()
+    lib_id = db.upsert_library("alpha", docs_url="https://a")
+    ver_id = db.upsert_version(lib_id, "1.0")
+    db.add_chunks(
+        ver_id,
+        lib_id,
+        [{"id": "c1", "content": "hello world", "url": "https://a/p1"}],
+        embeddings=None,
+    )
+    stored = db._d1.fetchone("SELECT * FROM doc_chunks WHERE id = ?", ["c1"])
+    assert stored["section"] is None
+    assert stored["topic"] is None
+    assert stored["content_hash"] is None
+    assert stored["token_count"] is None
+
+
+# ---------------------------------------------------------------------------
+# Signature parity gate: db_cf.py claims to mirror db.py, so prove it
+# ---------------------------------------------------------------------------
+
+MIRRORED_METHODS = sorted(
+    name
+    for name, _member in inspect.getmembers(DocsDBCfBackend, inspect.isfunction)
+    if not name.startswith("_") and callable(getattr(DocsDB, name, None))
+)
+
+
+def _required(param):
+    return param.default is inspect.Parameter.empty
+
+
+@pytest.mark.parametrize("method_name", MIRRORED_METHODS)
+def test_cf_backend_signature_mirrors_sqlite_backend(method_name):
+    """``db_cf.py``'s module docstring states its public interface mirrors
+    ``wet_mcp.db.DocsDB``, and ``server.py`` depends on that: it stores either
+    backend in the same ``_docs_db`` global and calls it with keyword arguments.
+    So every parameter ``DocsDB`` accepts must also be accepted by
+    ``DocsDBCfBackend``, in the same order and with the same required/optional
+    status.
+
+    This is the gate that was missing when ``db_cf.py`` was first added: the new
+    ``upsert_version`` silently dropped ``docs_url`` and no test compared the two
+    signatures, so the drift shipped and broke every cf-d1 index run.
+    """
+    sqlite_params = inspect.signature(getattr(DocsDB, method_name)).parameters
+    cf_params = inspect.signature(getattr(DocsDBCfBackend, method_name)).parameters
+    cf_takes_kwargs = any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in cf_params.values()
+    )
+
+    for name, sqlite_param in sqlite_params.items():
+        if sqlite_param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+        cf_param = cf_params.get(name)
+        if cf_param is None:
+            assert cf_takes_kwargs, (
+                f"DocsDBCfBackend.{method_name}() does not accept {name!r}, "
+                f"but DocsDB.{method_name}() does -- a call that works on the "
+                f"sqlite backend raises TypeError on cf-d1"
+            )
+            continue
+        assert _required(cf_param) == _required(sqlite_param), (
+            f"DocsDBCfBackend.{method_name}() makes {name!r} "
+            f"{'required' if _required(cf_param) else 'optional'} while "
+            f"DocsDB.{method_name}() makes it "
+            f"{'required' if _required(sqlite_param) else 'optional'}"
+        )
+
+    shared = [name for name in sqlite_params if name in cf_params]
+    assert [name for name in cf_params if name in sqlite_params] == shared, (
+        f"DocsDBCfBackend.{method_name}() reorders parameters relative to "
+        f"DocsDB.{method_name}(), so positional calls bind different values"
+    )

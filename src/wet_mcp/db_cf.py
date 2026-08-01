@@ -59,22 +59,42 @@ class DocsDBCfBackend:
     def get_library(self, name: str) -> dict | None:
         return self._d1.fetchone("SELECT * FROM libraries WHERE name = ?", [name])
 
-    def upsert_version(self, library_id: str, version: str) -> str:
+    def upsert_version(
+        self,
+        library_id: str,
+        version: str = "latest",
+        docs_url: str | None = None,
+    ) -> str:
+        """Create or get version. Returns version ID.
+
+        Signature and docs_url handling mirror wet_mcp.db.DocsDB.upsert_version:
+        both production index call sites pass ``docs_url=``, and an existing row
+        gets the new ``docs_url`` written back onto it (a missing one leaves the
+        stored value alone).
+        """
         existing = self.get_best_version(library_id, version)
         if existing:
-            return existing["id"]
+            ver_id = existing["id"]
+            if docs_url:
+                self._d1.execute(
+                    "UPDATE versions SET docs_url = ? WHERE id = ?",
+                    [docs_url, ver_id],
+                )
+            return ver_id
         ver_id = str(uuid.uuid4())
         self._d1.execute(
-            "INSERT INTO versions (id, library_id, version) VALUES (?,?,?)",
-            [ver_id, library_id, version],
+            "INSERT INTO versions (id, library_id, version, docs_url) VALUES (?,?,?,?)",
+            [ver_id, library_id, version, docs_url],
         )
         return ver_id
 
-    def get_best_version(self, library_id: str, version: str | None) -> dict | None:
-        if version:
+    def get_best_version(
+        self, library_id: str, target: str | None = None
+    ) -> dict | None:
+        if target:
             return self._d1.fetchone(
                 "SELECT * FROM versions WHERE library_id = ? AND version = ?",
-                [library_id, version],
+                [library_id, target],
             )
         return self._d1.fetchone(
             "SELECT * FROM versions WHERE library_id = ? ORDER BY indexed_at DESC LIMIT 1",
@@ -99,13 +119,20 @@ class DocsDBCfBackend:
                 c.get("chunk_index", 0),
                 c["content"],
                 c.get("heading_path"),
+                c.get("section"),
+                c.get("topic"),
+                c.get("content_hash"),
+                c.get("token_count"),
                 now,
             ]
             for c in chunks
         ]
+        # section/topic/content_hash/token_count exist in migrations/0001_init_wet.sql
+        # and search() reads them back, so persist them like DocsDB.add_chunks does.
         self._d1.executemany(
             "INSERT INTO doc_chunks (id, version_id, library_id, url, title, chunk_index,"
-            " content, heading_path, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            " content, heading_path, section, topic, content_hash, token_count,"
+            " created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             rows,
         )
         if embeddings:
