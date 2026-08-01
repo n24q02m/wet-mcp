@@ -63,7 +63,7 @@
   },
   "homepage": "https://github.com/n24q02m/wet-mcp",
   "repository": "https://github.com/n24q02m/wet-mcp",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "web-search",
     "content-extraction",
