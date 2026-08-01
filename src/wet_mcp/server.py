@@ -2760,7 +2760,12 @@ async def _do_docs_search(
         # When no docs URL found but we have a GitHub repo URL,
         # use it as the docs source — _fetch_and_chunk_docs will
         # try GitHub raw docs (Tier 1) which often has good docs/.
-        if repo_url and "github.com" in repo_url:
+        # The host check is a suffix match, not a substring one: `repo_url`
+        # came from publisher-controlled registry metadata and is about to
+        # become a URL this server fetches.
+        from wet_mcp.sources.docs import _is_github_url
+
+        if _is_github_url(repo_url):
             docs_url = repo_url
             logger.info(f"No docs URL for '{library}', using GitHub repo: {repo_url}")
         else:

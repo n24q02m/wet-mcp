@@ -138,15 +138,15 @@ async def _discover_from_pypi(name: str) -> dict | None:
             # Fallback: extract GitHub URL from any project_urls value
             # Many PyPI packages list GitHub under "Homepage", "Bug Tracker",
             # "Changelog", etc. without a dedicated "Repository" key.
-            if not repo_url or "github.com" not in repo_url:
+            if not _is_github_url(repo_url):
                 for _key, url_val in project_urls_lower.items():
-                    if url_val and "github.com" in url_val:
+                    if _is_github_url(url_val):
                         repo_url = url_val
                         break
             # Last resort: check top-level home_page field
-            if not repo_url or "github.com" not in repo_url:
+            if not _is_github_url(repo_url):
                 hp = info.get("home_page") or ""
-                if "github.com" in hp:
+                if _is_github_url(hp):
                     repo_url = hp
             return {
                 "name": info.get("name", name),
@@ -174,7 +174,7 @@ async def _discover_from_crates(name: str) -> dict | None:
             docs_url = crate.get("documentation") or ""
             hp_url = crate.get("homepage") or ""
             # Filter self-referencing crates.io URLs (listing page, not docs)
-            if hp_url and "crates.io" in hp_url:
+            if _is_crates_url(hp_url):
                 hp_url = ""
             # Prefer homepage over docs.rs auto-generated documentation
             if hp_url:
@@ -253,7 +253,7 @@ async def _discover_from_go(name: str) -> dict | None:
                 description = item.get("description") or ""
                 repo_url = item.get("html_url") or ""
                 # Use homepage if it's a real docs domain (not github.com itself)
-                if homepage and "github.com" not in homepage.lower():
+                if homepage and not _is_github_url(homepage):
                     docs_url = homepage
                 else:
                     docs_url = f"https://pkg.go.dev/github.com/{full_name}"
@@ -425,10 +425,10 @@ async def _discover_from_rubygems(name: str) -> dict | None:
             docs_url = data.get("documentation_uri") or data.get("homepage_uri") or ""
             repo_url = data.get("source_code_uri") or ""
             # Fallback: extract GitHub URL from any URI field
-            if not repo_url or "github.com" not in repo_url:
+            if not _is_github_url(repo_url):
                 for key in ("homepage_uri", "bug_tracker_uri", "changelog_uri"):
                     val = data.get(key) or ""
-                    if "github.com" in val:
+                    if _is_github_url(val):
                         repo_url = val
                         break
             return {
@@ -475,7 +475,7 @@ async def _discover_from_nuget(name: str) -> dict | None:
             project_url = latest.get("projectUrl") or ""
             repo_url = ""
             # Extract GitHub repo from project URL if available
-            if project_url and "github.com" in project_url:
+            if _is_github_url(project_url):
                 repo_url = project_url
             return {
                 "name": latest.get("id", name),
@@ -684,11 +684,7 @@ async def _discover_from_github_search(name: str, language: str) -> dict | None:
         homepage = item.get("homepage") or ""
         repo_url = item.get("html_url") or ""
         stars = item.get("stargazers_count", 0)
-        docs_url = (
-            homepage
-            if (homepage and "github.com" not in homepage.lower())
-            else repo_url
-        )
+        docs_url = homepage if (homepage and not _is_github_url(homepage)) else repo_url
         logger.info(
             f"GitHub search {match_type} {name} ({language}): "
             f"{repo_url} ({stars} stars)"
@@ -789,7 +785,7 @@ async def _get_github_homepage(url: str) -> str | None:
                 return None
             data = resp.json()
             gh_homepage = data.get("homepage", "")
-            if gh_homepage and "github.com" not in gh_homepage.lower():
+            if gh_homepage and not _is_github_url(gh_homepage):
                 # Filter registry listing pages (uninformative, not docs)
                 gh_lower = gh_homepage.lower()
                 if any(
@@ -1142,15 +1138,58 @@ def _normalize_language(language: str) -> str:
     return _LANGUAGE_ALIASES.get(lang, lang)
 
 
-def _is_github_url(url: str) -> bool:
-    """Check if a URL points to GitHub using robust domain verification."""
+def _url_host(url: str | None) -> str:
+    """Lowercase host of a registry-supplied URL, or "" when there is none.
+
+    The value is whatever a package publisher typed into npm / PyPI / crates.io
+    / RubyGems / NuGet metadata, so one field arrives in several shapes:
+    "https://github.com/o/r", "git+https://github.com/o/r.git",
+    "git@github.com:o/r.git" and a bare "github.com/o/r". ``urlparse`` only
+    fills ``netloc`` when a scheme is present, so the last two land entirely in
+    ``path``; recover the host from ``path`` rather than reporting "no host",
+    which would drop URLs the substring checks being replaced accepted and
+    packages in the wild still publish.
+    """
     if not url:
-        return False
+        return ""
     try:
-        netloc = urlparse(url).netloc.lower()
-        return netloc == "github.com" or netloc.endswith(".github.com")
-    except Exception:
-        return False
+        parsed = urlparse(url.strip())
+    except ValueError:
+        return ""
+    netloc = parsed.netloc or parsed.path.partition("/")[0]
+    host = netloc.rpartition("@")[2]  # drop any userinfo
+    host = host.partition(":")[0]  # drop the port, or the scp-style path
+    return host.lower().rstrip(".")
+
+
+def _is_github_url(url: str | None) -> bool:
+    """True when url points at github.com or a host GitHub owns beneath it.
+
+    The registry discovery helpers used to ask ``"github.com" in url``, which
+    also accepts "https://evil.example/?x=github.com" (needle in the query) and
+    "https://github.com.evil.example/a/b" (needle is the first label of someone
+    else's domain) -- CodeQL's ``py/incomplete-url-substring-sanitization``.
+    That mattered because a repo URL clearing this gate is stored as the
+    library's trusted ``github_url`` and, when discovery found no docs URL, is
+    promoted to ``docs_url`` and then fetched.
+
+    Subdomains stay eligible: every host under github.com is GitHub's, so
+    allowing them does not widen the trust boundary the way a substring does,
+    and "www.github.com" is a spelling real metadata uses.
+    """
+    host = _url_host(url)
+    return host == "github.com" or host.endswith(".github.com")
+
+
+def _is_crates_url(url: str | None) -> bool:
+    """True when url points at crates.io or a subdomain of it.
+
+    Used to drop a homepage that only points back at the crate's own listing
+    page. A substring match also drops an unrelated homepage that merely
+    mentions crates.io in a query string, losing docs that do exist.
+    """
+    host = _url_host(url)
+    return host == "crates.io" or host.endswith(".crates.io")
 
 
 # ---------------------------------------------------------------------------
@@ -3604,7 +3643,7 @@ async def fetch_docs_pages(
 
     # For GitHub URLs, restrict crawl to the same repo path
     docs_parsed = urlparse(docs_url)
-    _is_github = "github.com" in docs_parsed.netloc
+    _is_github = _is_github_url(docs_url)
     _gh_path_prefix = "/".join(docs_parsed.path.strip("/").split("/")[:2])
     _gh_skip_paths = {
         "features",
@@ -4062,7 +4101,7 @@ async def ingest_tier2(db: Any, library_name: str) -> dict:
         tier=existing.get("tier") or 2,
         package_managers=package_managers or None,
         homepage=homepage,
-        github_url=repo_url if repo_url and "github.com" in (repo_url or "") else None,
+        github_url=repo_url if _is_github_url(repo_url) else None,
         canonical_name=existing.get("canonical_name") or library_name,
     )
     ver_id = db.upsert_version(
