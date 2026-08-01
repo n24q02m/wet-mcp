@@ -36,7 +36,7 @@ import sys
 from types import ModuleType
 
 from wet_mcp.sync import gdrive as _gdrive_module
-from wet_mcp.sync.base import SyncBackend
+from wet_mcp.sync.base import SyncBackend, checkpoint_wal
 from wet_mcp.sync.gdrive import GDriveBackend
 
 # Mirror every public + private name exported by gdrive.py into this
@@ -244,6 +244,9 @@ async def _s3_auto_sync_loop(db) -> None:  # type: ignore[no-untyped-def]
     while True:
         try:
             await asyncio.sleep(interval)
+            # Flush WAL into docs.db first: the backend only ships the
+            # main file, so an un-checkpointed sidecar means an empty push.
+            await checkpoint_wal(db_path)
             await backend.push(db_path)
         except asyncio.CancelledError:
             logger.info("S3 auto-sync stopped")
