@@ -21,7 +21,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 [![codecov](https://codecov.io/gh/n24q02m/wet-mcp/graph/badge.svg?token=JK19TRLPEX)](https://codecov.io/gh/n24q02m/wet-mcp)
 [![PyPI](https://img.shields.io/pypi/v/wet-mcp?logo=pypi&logoColor=white)](https://pypi.org/project/wet-mcp/)
 [![Docker](https://img.shields.io/docker/v/n24q02m/wet-mcp?label=docker&logo=docker&logoColor=white&sort=semver)](https://hub.docker.com/r/n24q02m/wet-mcp)
-[![License: MIT](https://img.shields.io/github/license/n24q02m/wet-mcp)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/github/license/n24q02m/wet-mcp)](LICENSE)
 
 <!-- Badge Row 2: Tech -->
 [![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)](#)
@@ -363,4 +363,4 @@ This plugin implements **TC-Local** (machine-bound, single trust principal). See
 
 ## License
 
-MIT -- See [LICENSE](LICENSE).
+Apache-2.0 -- See [LICENSE](LICENSE).
