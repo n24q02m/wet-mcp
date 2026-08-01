@@ -313,7 +313,6 @@ async def _get_scraping_agent(stealth: bool = True) -> ScrapingAgent:
 def _is_document_url(url: str) -> bool:
     """Check if URL points to a document file (PDF, DOCX, etc.)."""
     path = urlparse(url).path.lower()
-    # ⚡ Bolt Optimization: path.endswith(tuple) is ~5x faster than any() with generator
     return path.endswith(_DOCUMENT_EXTENSIONS_TUPLE)
 
 
@@ -328,7 +327,6 @@ def _detect_document_content_type(content_type: str) -> bool:
         "application/vnd.ms-powerpoint",
         "application/vnd.ms-excel",
     )
-    # ⚡ Bolt Optimization: content_type.startswith(tuple) is ~7x faster than any() with generator
     return content_type.startswith(doc_types)
 
 

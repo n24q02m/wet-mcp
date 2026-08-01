@@ -2327,9 +2327,9 @@ async def _fetch_and_chunk_docs(
                 f"(min {_MIN_GH_CHUNKS}), falling through"
             )
 
-    # ⚡ Bolt Optimization: Bound concurrency for CPU-bound chunk_markdown
-    # Limit to 10 concurrent thread offloads to prevent thread pool exhaustion
-    # and main event loop starvation during large batch page processing.
+    # chunk_markdown is CPU-bound and runs off the loop in a worker thread. A
+    # large crawl would otherwise offload one page per thread at once, which
+    # exhausts the default executor and starves the event loop.
     sem = asyncio.Semaphore(10)
 
     async def _process_page(page: dict) -> list[dict]:

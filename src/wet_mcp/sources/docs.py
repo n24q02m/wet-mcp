@@ -2107,7 +2107,9 @@ def _strip_nav_heading_blocks(lines: Sequence[str]) -> list[str]:
     # Build heading map: line_index -> (level, text)
     headings: dict[int, tuple[int, str]] = {}
     for i, line in enumerate(lines):
-        # ⚡ Bolt Optimization: Fast-path string check before invoking regex engine
+        # The prefix test is redundant with the pattern and deliberate: most
+        # lines in a document are not headings, and this keeps the regex engine
+        # off them.
         stripped = line.lstrip()
         if stripped.startswith("#"):
             m = _ANY_HEADING_RE.match(stripped)
@@ -2134,7 +2136,9 @@ def _strip_nav_heading_blocks(lines: Sequence[str]) -> list[str]:
                 break
             # Content between this heading and previous must be minimal
             prev_idx = run[-1]
-            # ⚡ Bolt Optimization: Avoid joining strings to check length, instead calculate length iteratively
+            # Accumulate the length instead of joining the lines: the budget is
+            # 50 characters, so most gaps are decided within a line or two and
+            # the join would have built a string only to measure it.
             content_length = 0
             is_over_length = False
             for k in range(prev_idx + 1, idx):
@@ -2241,9 +2245,9 @@ def _clean_doc_content(content: str) -> str:
     # Remove TOC anchor links (- [Title](#section))
     content = _TOC_LINK_RE.sub("", content)
 
-    # ⚡ Bolt Optimization: optimize text processing by passing a `list[str]`
-    # through multiple helper functions instead of repeatedly splitting and
-    # re-joining strings via `splitlines()` and `\n.join()`.
+    # The line-oriented passes below hand a list[str] to one another and the
+    # text is rejoined once at the end. Each of them taking and returning a
+    # string would split and join the whole document again.
     lines = content.splitlines()
 
     # Remove navigation sidebar blocks (MkDocs Material, Sphinx, etc.)
@@ -2259,7 +2263,6 @@ def _clean_doc_content(content: str) -> str:
         if not stripped:
             cleaned.append(line)
             continue
-        # ⚡ Bolt Optimization: Combine regex matches into a single check to reduce overhead
         if _COMBINED_NOISE_RE.match(stripped):
             continue
         cleaned.append(line)
@@ -2271,8 +2274,8 @@ def _clean_doc_content(content: str) -> str:
 # Content chunking — split docs into searchable chunks
 # ---------------------------------------------------------------------------
 
-# Heading pattern for markdown
-# ⚡ Bolt Optimization: Removed `re.MULTILINE` as we match against individual lines.
+# Heading pattern for markdown. No re.MULTILINE: this is matched against one
+# line at a time, never against a whole document.
 _HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$")
 
 
@@ -2342,7 +2345,8 @@ def chunk_markdown(
     h2 = ""
 
     for line in content.split("\n"):
-        # ⚡ Bolt Optimization: Fast-path string check before invoking regex engine
+        # The prefix test is redundant with the pattern and deliberate: most
+        # lines are not headings, and this keeps the regex engine off them.
         heading_match = _HEADING_RE.match(line) if line.startswith("#") else None
         if heading_match:
             level = len(heading_match.group(1))
@@ -2392,8 +2396,6 @@ def _split_preserving_code(
     in_code_block = False
 
     for line in lines:
-        # ⚡ Bolt Optimization: Use lstrip().startswith() instead of regex match + strip()
-        # for ~1.75x faster execution and fewer string allocations in hot loops.
         if line.lstrip().startswith("```"):
             in_code_block = not in_code_block
 
@@ -2411,7 +2413,6 @@ def _split_preserving_code(
     buffer = ""
     for seg in segments:
         if buffer and len(buffer) + len(seg) + 2 > max_chunk_size:
-            # ⚡ Bolt Optimization: Cache buffer.strip() to avoid redundant string allocations
             buffer_stripped = buffer.strip()
             if buffer_stripped and len(buffer_stripped) >= min_chunk_size:
                 chunks.append(
@@ -2427,7 +2428,6 @@ def _split_preserving_code(
         else:
             buffer = f"{buffer}\n\n{seg}" if buffer else seg
 
-    # ⚡ Bolt Optimization: Cache buffer.strip() to avoid redundant string allocations
     buffer_stripped = buffer.strip()
     if buffer_stripped and len(buffer_stripped) >= min_chunk_size:
         chunks.append(
@@ -2477,8 +2477,9 @@ def _process_rst_heading(i: int, line: str, lines: list[str], out: list[str]) ->
 
     if i > 0 and out:
         prev_stripped = out[-1].strip()
-        # ⚡ Bolt Optimization: Use cached prev_stripped and an O(1) index check
-        # prev_stripped[0] in _RST_HEADING_CHARS over an O(N) generator `all(c in ...)`
+        # The previous line is an overline for this heading if it is one
+        # character repeated, and that character is an RST heading rule. A
+        # single-element set is how "one character repeated" is tested here.
         if (
             prev_stripped
             and len(set(prev_stripped)) == 1
@@ -2586,8 +2587,9 @@ def _rst_to_markdown(content: str) -> str:
         line_stripped = line.strip()
         if i + 1 < len(lines) and line_stripped:
             next_stripped = lines[i + 1].strip()
-            # ⚡ Bolt Optimization: Cache .strip() and use an O(1) check
-            # next_stripped[0] in _RST_HEADING_CHARS instead of an O(N) generator
+            # An RST underline is one character repeated to at least the width
+            # of the title, and that character is an RST heading rule. A
+            # single-element set is how "one character repeated" is tested here.
             if (
                 len(next_stripped) >= len(line_stripped)
                 and next_stripped
@@ -2958,8 +2960,6 @@ def _has_excessive_macros(content: str, threshold: float = 0.15) -> bool:
     lines = [ln for ln in content.splitlines() if ln.strip()]
     if len(lines) < 5:
         return False
-    # ⚡ Bolt Optimization: Use string find over regex for ~3-10x faster macro detection.
-    # Enforces the correct order ({{ before }}) without regex overhead.
     macro_lines = 0
     for ln in lines:
         start = ln.find("{{")
@@ -2975,7 +2975,6 @@ def _strip_template_macros(content: str) -> str:
     produce noise in raw markdown. Keeps the rest of the content intact.
     """
     lines = content.splitlines()
-    # ⚡ Bolt Optimization: Use string find over regex for ~3-10x faster macro removal.
     cleaned = []
     for ln in lines:
         start = ln.find("{{")
@@ -3211,9 +3210,9 @@ async def _try_github_raw_docs(
         fetch_original_bytes = 0
         fetch_stripped_bytes = 0
 
-        # ⚡ Bolt Optimization: Fetch GitHub raw files concurrently to prevent N+1
-        # sequential HTTP request bottlenecks. Reduces the fetch time for 50 files
-        # from >10s down to ~1-2s. Uses a semaphore to respect GitHub limits.
+        # Up to 50 files are fetched here, so they go out together rather than
+        # one after another; sequentially this is the slowest step in the tier.
+        # The semaphore keeps the fan-out inside GitHub's rate limit for raw.
         sem = asyncio.Semaphore(10)
 
         async def _fetch_single_file(fpath: str) -> dict | None:

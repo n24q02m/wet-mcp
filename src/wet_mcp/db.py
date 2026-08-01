@@ -120,8 +120,8 @@ def _build_fts_queries(query: str) -> list[str]:
     words (any language) and the PHRASE->AND->OR fallback ensures precision
     first, then recall.
     """
-    # ⚡ Bolt Optimization: str.split() without arguments automatically splits by
-    # arbitrary whitespace and discards empty strings, making .strip() redundant.
+    # split() with no argument splits on arbitrary whitespace and drops the
+    # empty strings, so the query needs no separate strip().
     words = query.split()
     safe = [w.replace('"', '""') for w in words]
 
@@ -150,12 +150,11 @@ def _chunk_quality_score(content: str) -> float:
     """
     score = 0.0
 
-    # ⚡ Bolt Optimization: Use str.count instead of re.findall for ~5x faster block counting
     code_blocks = content.count("```") // 2
     score += min(code_blocks, 3) * 2.0  # up to +6
 
-    # ⚡ Bolt Optimization: Single-pass loop handles definitions, docstrings, and link ratio
-    # to avoid multiple full-string scans and regex overhead.
+    # One pass collects all three line-level signals below. Scored separately
+    # they would each walk the whole chunk.
     defs = 0
     docstrings = 0
     lines_count = 0
@@ -170,9 +169,10 @@ def _chunk_quality_score(content: str) -> float:
         if defs < 4 and ln.lstrip().startswith(_DEF_KEYWORDS):
             defs += 1
 
-        # Docstrings/doc comments signal well-documented code
-        # ⚡ Bolt Optimization: Pre-filter: only run regex if a common marker exists.
-        # This eliminates re.finditer overhead for most lines.
+        # Docstrings/doc comments signal well-documented code.
+        # The substring tests are a filter, not part of the definition: most
+        # lines carry no docstring marker at all, and this keeps the regex off
+        # them.
         if docstrings < 3 and (
             '"""' in ln or "'''" in ln or "/**" in ln or "///" in ln or "#" in ln
         ):
@@ -202,8 +202,9 @@ def _chunk_quality_score(content: str) -> float:
         elif ratio > 0.3:
             score -= 2.0
 
-    # Directive-heavy content (leftover mkdocs/rst noise)
-    # ⚡ Bolt Optimization: Use finditer with early break instead of findall
+    # Directive-heavy content (leftover mkdocs/rst noise). Only the first four
+    # matches change the score, so counting stops there instead of collecting
+    # every match in the chunk.
     directives = 0
     for _ in _DIRECTIVE_RE.finditer(content):
         directives += 1
@@ -577,9 +578,8 @@ class DocsDB:
             CREATE INDEX IF NOT EXISTS idx_chunks_version
             ON doc_chunks(version_id)
         """)
-        # ⚡ Bolt Optimization: Composite index for adjacent chunk prefetching in RAG context retrieval.
-        # Reduces query time for cross-chunk context lookups by ~14x in large libraries
-        # by providing exact coverage for `WHERE version_id = ? AND url = ? AND chunk_index IN (...)`
+        # Covers the adjacent-chunk prefetch exactly, in its column order:
+        # WHERE version_id = ? AND url = ? AND chunk_index IN (...)
         self._conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_chunks_ver_url_idx
             ON doc_chunks(version_id, url, chunk_index)
@@ -1172,17 +1172,14 @@ class DocsDB:
         fts_chunks: dict[str, dict],
     ) -> list[tuple[str, float]]:
         """Combine FTS and vector scores using RRF or FTS-only scoring."""
-        # ⚡ Bolt Optimization: Use dictionary view union directly instead of casting to sets
-        # (e.g. `fts_scores.keys() | vec_scores.keys()`). This avoids allocating two intermediate
-        # set objects entirely.
         all_ids = fts_scores.keys() | vec_scores.keys()
         scored: list[tuple[str, float]] = []
 
         if vec_scores:
             # RRF fusion when both FTS and vector signals available
             k = 60
-            # ⚡ Bolt Optimization: Use __getitem__ instead of lambda x: dict[x] for faster sorting.
-            # Avoids O(N) Python-level function call overhead.
+            # __getitem__ is the dict's own lookup; a lambda here would add a
+            # Python-level call for every element sorted.
             fts_ranked = sorted(fts_scores, key=fts_scores.__getitem__, reverse=True)
             vec_ranked = sorted(vec_scores, key=vec_scores.__getitem__, reverse=True)
             fts_rank = {cid: i + 1 for i, cid in enumerate(fts_ranked)}
@@ -1312,8 +1309,8 @@ class DocsDB:
                     chunk_id = vr["id"]
                     vec_scores[chunk_id] = max(0.0, 1.0 - vr["distance"])
 
-                    # ⚡ Bolt Optimization: Use pre-fetched chunk data from the JOIN
-                    # instead of executing a SELECT query per row (fixes N+1 query problem).
+                    # The vector query already joins the chunk row, so reuse it
+                    # here. Looking it up again would be one SELECT per result.
                     if chunk_id not in fts_chunks:
                         chunk_data = dict(vr)
                         chunk_data.pop("distance", None)
@@ -1681,8 +1678,6 @@ class DocsDB:
         libraries, versions, chunks = [], [], []
 
         for line in lines:
-            # ⚡ Bolt Optimization: Use `not line or line.isspace()` for truthiness
-            # checking instead of `.strip()` to avoid allocating memory for new string slices.
             if not line or line.isspace():
                 continue
             obj = json.loads(line)
