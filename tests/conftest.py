@@ -8,6 +8,31 @@ pytest_plugins = ["conftest_e2e", "conftest_cf"]
 
 
 @pytest.fixture(autouse=True)
+def _isolate_per_plugin_home(tmp_path_factory, monkeypatch):
+    """Point ``Path.home()`` at a throwaway directory for every test.
+
+    ``mcp_core.storage.per_plugin_store`` derives every credential path from
+    ``Path.home()`` and exposes no override seam, so each test that reaches
+    ``store_for_sub`` writes the developer's real
+    ``~/.wet-mcp/subs/<sub>/config.json``. The sub names are fixed constants
+    (``user_a`` / ``user_b`` / ``empty_user``), which turns that shared path
+    into a cross-process mutex nobody holds: two pytest processes running at
+    once -- two agents on one machine, or a ``-n`` worker pair in CI -- write
+    the same blob and read back each other's values. A run has already been
+    seen asserting ``key_a`` and reading ``jina_a`` (stored by
+    ``test_multiuser_llm_gate_and_backend``), and reading ``None`` moments
+    after its own ``store_for_sub`` because the other process rewrote the file
+    in between.
+
+    ``Path.home()`` resolves ``HOME`` on POSIX and ``USERPROFILE`` on Windows,
+    so both are set; ``monkeypatch`` restores them when the test ends.
+    """
+    fake_home = tmp_path_factory.mktemp("wet_test_home")
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+
+
+@pytest.fixture(autouse=True)
 def _never_open_a_real_browser(monkeypatch):
     """Keep the GDrive device-code path from hijacking the developer's browser.
 
