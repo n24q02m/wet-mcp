@@ -62,10 +62,6 @@ tests/benchmark_results.jsonl
 wrangler.deploy.jsonc
 .wrangler-deploy-*.jsonc
 
-# AI Agent
-.jules/
-JULES.md
-
 # Code review knowledge graph
 .code-review-graph/
 
