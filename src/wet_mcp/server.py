@@ -1300,7 +1300,13 @@ async def search(  # noqa: PLR0913
             # canonical/alias name. We always look up by name first so the
             # caller can pass either form.
             resolved = await asyncio.to_thread(resolve_library, _docs_db, library, 1)
-            if not resolved:
+            # Ingest when the library is unknown OR known-but-empty. Tier 1
+            # warmup seeds 50 curated libraries metadata-only, so those names
+            # always resolve; gating on `not resolved` alone left exactly them
+            # stuck at zero chunks forever. `latest_version` is populated from
+            # get_best_version, i.e. it is None until a version reaches
+            # status='indexed'.
+            if not resolved or resolved[0].get("latest_version") is None:
                 # Tier 2 lazy ingest: fire-and-forget, return progress hint.
                 asyncio.create_task(ingest_tier2(_docs_db, library))
                 return {
@@ -2547,6 +2553,15 @@ async def _background_index_and_search(
             embeddings=embeddings,
         )
         _docs_db.mark_version_indexed(ver_id, page_count, len(all_chunks))
+        # last_indexed_at is now written only by mark_library_indexed; before
+        # the seed/index split upsert_library stamped it as a side effect,
+        # which hid the fact that this path never marked the library. Left
+        # out, a library indexed here would read as permanently stale.
+        # total_versions is deliberately not passed: this path takes a
+        # caller-supplied `version`, so one library can own several rows in
+        # `versions` (the table is UNIQUE(library_id, version)) and a
+        # hardcoded 1 would be wrong.
+        _docs_db.mark_library_indexed(lib_id)
         logger.info(
             f"Background indexing complete for '{library}'. Pages: {page_count}, Chunks: {len(all_chunks)}"
         )

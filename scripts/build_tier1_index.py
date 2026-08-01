@@ -7,10 +7,14 @@ Walks every entry in src/wet_mcp/data/tier1_libraries.json, calls
 README), and writes a ``tier1_index_metrics.json`` summary alongside
 ``docs.db``.
 
+Exits non-zero when fewer than ``--min-success-rate`` of the curated
+libraries end up with at least one chunk, so a run that indexes nothing
+fails its job instead of reporting success with an empty database.
+
 Usage:
 
     uv run python scripts/build_tier1_index.py
-    uv run python scripts/build_tier1_index.py --upload-snapshot
+    uv run python scripts/build_tier1_index.py --min-success-rate 0.5
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 
 async def _amain() -> int:
@@ -32,9 +37,13 @@ async def _amain() -> int:
         help="Path to docs.db (default ~/.wet-mcp/docs.db)",
     )
     parser.add_argument(
-        "--upload-snapshot",
-        action="store_true",
-        help="Upload tier1_index_metrics.json to GitHub Releases (CI-only).",
+        "--min-success-rate",
+        type=float,
+        default=0.8,
+        help=(
+            "Fraction of libraries that must yield at least one chunk for "
+            "the run to succeed (default 0.8). Use 0 to never fail."
+        ),
     )
     args = parser.parse_args()
 
@@ -54,7 +63,7 @@ async def _amain() -> int:
     libraries = payload.get("libraries", [])
     print(f"Eager-ingesting {len(libraries)} Tier 1 libraries...")
 
-    metrics = []
+    metrics: list[dict[str, Any]] = []
     started = time.time()
     for entry in libraries:
         name = entry["id"]
@@ -79,21 +88,44 @@ async def _amain() -> int:
             metrics.append({"library": name, "status": "error", "error": str(exc)})
             print(f"  {name}: ERROR {exc}")
 
+    indexed = [m for m in metrics if (m.get("chunk_count") or 0) > 0]
+    total_chunks = sum(m.get("chunk_count") or 0 for m in metrics)
+    total_pages = sum(m.get("page_count") or 0 for m in metrics)
+    success_rate = len(indexed) / len(libraries) if libraries else 0.0
+
     summary = {
         "timestamp": time.time(),
         "total_libraries": len(libraries),
+        "libraries_with_chunks": len(indexed),
+        "success_rate": round(success_rate, 4),
+        "min_success_rate": args.min_success_rate,
+        "total_pages": total_pages,
+        "total_chunks": total_chunks,
         "duration_seconds": round(time.time() - started, 2),
         "metrics": metrics,
     }
     out_path = args.db_path.parent / "tier1_index_metrics.json"
     out_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-    print(f"\nWrote metrics to {out_path}")
 
-    if args.upload_snapshot:
-        # Best-effort: only used by CI. Local users can ignore.
-        print("Snapshot upload requested (CI-only); see workflow for handler.")
+    print("\n" + "=" * 60)
+    print(
+        f"Tier 1 index: {len(indexed)}/{len(libraries)} libraries with chunks "
+        f"({success_rate:.0%}), {total_pages} pages, {total_chunks} chunks"
+    )
+    print(f"Metrics written to {out_path}")
+    print("=" * 60)
 
     db.close()
+
+    if success_rate < args.min_success_rate:
+        # A run that indexes nothing used to exit 0 and paint CI green for
+        # weeks while the database stayed empty.
+        print(
+            f"FAILED: success rate {success_rate:.0%} is below the "
+            f"{args.min_success_rate:.0%} threshold",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

@@ -195,6 +195,11 @@ Alembic migration chain:
   content_hash, token_count}` + `idx_doc_chunks_lib_ver_topic`.
 * `docs_003_project_context` — Cabinets `project_context` table with
   `project_path` PK + `locked_libraries` JSON + LRU index.
+* `docs_004_chunk_summaries` — `doc_chunks.summary` + its index.
+* `docs_005_metadata_seeded_at` — adds `libraries.metadata_seeded_at`
+  (Tier 1 warmup freshness anchor) and moves seed-only
+  `last_indexed_at` stamps into it, so "metadata seeded" and "chunks
+  landed" stop being the same column.
 
 `run_migrations_on_startup()` (in `wet_mcp.migrations`) is invoked by
 the FastMCP lifespan after `DocsDB.__init__`. The runner copies
@@ -206,10 +211,13 @@ Failures are logged and swallowed so server startup never blocks.
 ```text
 First docs_query for library X
     |
-    +-- (a) Tier 1 metadata seeded? (data/tier1_libraries.json -> upsert_library)
+    +-- (a) Does X resolve AND hold a status='indexed' version?
     |       |
     |       +-- yes: resolve library_id, run hybrid search
     |       +-- no:  trigger ingest_tier2 in background, return progress hint
+    |               (Tier 1 warmup seeds metadata only — curated names
+    |                always resolve, with latest_version = None until
+    |                chunks land, so resolution alone is not the gate)
     |
     +-- ingest_tier2 reuses discover_library + fetch_docs_pages
             (delegates to web_core.scraper.ScrapingAgent strategy chain)
@@ -217,9 +225,12 @@ First docs_query for library X
             -> mark_library_indexed updates last_indexed_at
 ```
 
-Tier 1 freshness window: 7 days. The `refresh-tier1` cron job in
+Tier 1 freshness window: 7 days. `maybe_warm` measures that window
+against `metadata_seeded_at`; `last_indexed_at` is written only by
+`mark_library_indexed`. The `refresh-tier1` cron job in
 `.github/workflows/ci.yml` re-runs `scripts/build_tier1_index.py`
-weekly to keep curated chunks fresh.
+weekly to keep curated chunks fresh; that script exits non-zero when
+fewer than `--min-success-rate` of the libraries produce chunks.
 
 ### Cabinets project isolation
 

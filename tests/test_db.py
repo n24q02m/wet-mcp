@@ -1840,3 +1840,133 @@ class TestEmbeddingModelIdentityGuard:
             assert vec_count == 0
         finally:
             db2.close()
+
+
+# ---------------------------------------------------------------------------
+# Seed-vs-indexed separation (metadata_seeded_at)
+# ---------------------------------------------------------------------------
+_PRE_FIX_LIBRARIES_DDL = """
+    CREATE TABLE libraries (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        docs_url TEXT,
+        registry TEXT,
+        description TEXT,
+        canonical_name TEXT,
+        homepage TEXT,
+        github_url TEXT,
+        package_managers TEXT,
+        tier INTEGER NOT NULL DEFAULT 2,
+        last_indexed_at REAL,
+        total_versions INTEGER NOT NULL DEFAULT 0,
+        discovery_version INTEGER DEFAULT 0,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    )
+"""
+
+_PRE_FIX_VERSIONS_DDL = """
+    CREATE TABLE versions (
+        id TEXT PRIMARY KEY,
+        library_id TEXT NOT NULL,
+        version TEXT NOT NULL DEFAULT 'latest',
+        docs_url TEXT,
+        indexed_at REAL,
+        page_count INTEGER DEFAULT 0,
+        chunk_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        release_date REAL,
+        source_url TEXT,
+        UNIQUE(library_id, version)
+    )
+"""
+
+
+def _make_pre_fix_db(db_path):
+    """Build a docs.db in the shape shipped before metadata_seeded_at existed.
+
+    ``seeded-lib`` reproduces the observed bug: a metadata-only Tier 1 seed
+    that upsert_library stamped as freshly indexed while holding zero
+    versions. ``indexed-lib`` is a genuinely indexed library.
+    """
+    import sqlite3 as _sqlite3
+
+    conn = _sqlite3.connect(str(db_path))
+    conn.execute(_PRE_FIX_LIBRARIES_DDL)
+    conn.execute(_PRE_FIX_VERSIONS_DDL)
+    conn.execute(
+        "INSERT INTO libraries (id, name, tier, last_indexed_at, created_at, "
+        "updated_at) VALUES ('seeded', 'react', 1, 1000.0, 1.0, 1.0)"
+    )
+    conn.execute(
+        "INSERT INTO libraries (id, name, tier, last_indexed_at, created_at, "
+        "updated_at) VALUES ('indexed', 'fastapi', 2, 2000.0, 1.0, 1.0)"
+    )
+    conn.execute(
+        "INSERT INTO versions (id, library_id, version, status, chunk_count) "
+        "VALUES ('v1', 'indexed', 'latest', 'indexed', 382)"
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_pre_fix_db_moves_seed_stamp_to_metadata_seeded_at(tmp_path):
+    """Opening a pre-fix DB relabels bogus last_indexed_at stamps.
+
+    Libraries with no indexed version were never indexed, so their stamp
+    belongs in metadata_seeded_at; libraries that do have one keep theirs.
+    """
+    db_path = tmp_path / "docs.db"
+    _make_pre_fix_db(db_path)
+
+    db = DocsDB(db_path, embedding_dims=0)
+    try:
+        seeded = db._conn.execute(
+            "SELECT last_indexed_at, metadata_seeded_at FROM libraries "
+            "WHERE id = 'seeded'"
+        ).fetchone()
+        assert seeded["last_indexed_at"] is None
+        assert seeded["metadata_seeded_at"] == 1000.0
+
+        indexed = db._conn.execute(
+            "SELECT last_indexed_at, metadata_seeded_at FROM libraries "
+            "WHERE id = 'indexed'"
+        ).fetchone()
+        assert indexed["last_indexed_at"] == 2000.0
+        assert indexed["metadata_seeded_at"] is None
+    finally:
+        db.close()
+
+
+def test_upsert_library_does_not_stamp_last_indexed_at(tmp_path):
+    """upsert_library writes metadata only; last_indexed_at stays untouched."""
+    db = DocsDB(tmp_path / "docs.db", embedding_dims=0)
+    try:
+        lib_id = db.upsert_library(name="react", tier=1)
+        row = db.get_library("react")
+        assert row["last_indexed_at"] is None
+
+        # A second upsert (metadata refresh) must not resurrect the stamp.
+        db.upsert_library(name="react", homepage="https://react.dev", tier=1)
+        assert db.get_library("react")["last_indexed_at"] is None
+
+        # mark_library_indexed remains the single writer of the column.
+        db.mark_library_indexed(lib_id, total_versions=1)
+        assert db.get_library("react")["last_indexed_at"] is not None
+    finally:
+        db.close()
+
+
+def test_mark_metadata_seeded_records_seed_time(tmp_path):
+    """mark_metadata_seeded stamps metadata_seeded_at without claiming index."""
+    db = DocsDB(tmp_path / "docs.db", embedding_dims=0)
+    try:
+        lib_id = db.upsert_library(name="react", tier=1)
+        assert db.get_library("react")["metadata_seeded_at"] is None
+
+        db.mark_metadata_seeded(lib_id)
+        row = db.get_library("react")
+        assert row["metadata_seeded_at"] is not None
+        assert row["last_indexed_at"] is None
+    finally:
+        db.close()

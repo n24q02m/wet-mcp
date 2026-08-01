@@ -101,19 +101,66 @@ def test_tier1_warmup_force_reseeds(db: DocsDB) -> None:
 
 
 def test_tier1_warmup_re_seeds_when_stale(db: DocsDB) -> None:
-    """Library with last_indexed_at older than 7 days is re-seeded."""
+    """Library with metadata_seeded_at older than 7 days is re-seeded."""
     maybe_warm(db)
 
-    # Manually back-date react's last_indexed_at by 10 days.
+    # Manually back-date react's metadata_seeded_at by 10 days.
     stale_ts = time.time() - (10 * 24 * 60 * 60)
     db._conn.execute(
-        "UPDATE libraries SET last_indexed_at = ? WHERE name = ?",
+        "UPDATE libraries SET metadata_seeded_at = ? WHERE name = ?",
         (stale_ts, "react"),
     )
     db._conn.commit()
 
     summary = maybe_warm(db)
     assert summary["seeded"] >= 1
+
+
+def test_tier1_warmup_does_not_stamp_last_indexed_at(db: DocsDB) -> None:
+    """Metadata-only seeding must not claim the libraries are indexed.
+
+    ``last_indexed_at`` belongs to ``mark_library_indexed`` — the only
+    writer that knows chunks actually landed. The warmup records its own
+    progress in ``metadata_seeded_at`` instead, so a seeded-but-unindexed
+    DB is distinguishable from an indexed one.
+    """
+    maybe_warm(db)
+
+    assert (
+        db._conn.execute(
+            "SELECT COUNT(*) FROM libraries WHERE last_indexed_at IS NOT NULL"
+        ).fetchone()[0]
+        == 0
+    )
+    assert (
+        db._conn.execute(
+            "SELECT COUNT(*) FROM libraries WHERE metadata_seeded_at IS NOT NULL"
+        ).fetchone()[0]
+        >= 50
+    )
+    # The seed writes no versions and no chunks — that is the point.
+    assert db._conn.execute("SELECT COUNT(*) FROM versions").fetchone()[0] == 0
+    assert db._conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()[0] == 0
+
+
+def test_tier1_warmup_freshness_gate_ignores_last_indexed_at(db: DocsDB) -> None:
+    """A fresh last_indexed_at must not satisfy the seed freshness gate.
+
+    Pre-fix the warmup's own ``upsert_library`` write stamped
+    ``last_indexed_at``, so the gate was satisfied by the very write it was
+    supposed to guard.
+    """
+    maybe_warm(db)
+
+    stale_ts = time.time() - (10 * 24 * 60 * 60)
+    db._conn.execute(
+        "UPDATE libraries SET metadata_seeded_at = ?, last_indexed_at = ? "
+        "WHERE name = ?",
+        (stale_ts, time.time(), "react"),
+    )
+    db._conn.commit()
+
+    assert maybe_warm(db)["seeded"] == 1
 
 
 def test_tier1_warmup_total_matches_fixture(db: DocsDB) -> None:

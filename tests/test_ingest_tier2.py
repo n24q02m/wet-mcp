@@ -174,3 +174,81 @@ async def test_ingest_tier2_uses_repo_url_when_no_docs_url(db: DocsDB) -> None:
     ):
         out = await ingest_tier2(db, "bar")
     assert out["status"] in {"ok", "no_chunks"}
+
+
+async def test_ingest_tier2_reads_homepage_when_discovery_has_no_docs_url(
+    db: DocsDB,
+) -> None:
+    """Registry adapters publish the probed docs URL under ``homepage``.
+
+    No adapter emits a ``docs_url`` key, so reading only that one made the
+    ingester fall through to ``repository`` — which npm reports as a
+    ``git+https://...git`` VCS URL that the crawler rejects as unsafe. Every
+    Tier 1 library therefore fetched zero pages.
+    """
+    fetch = AsyncMock(return_value=[])
+    with (
+        patch.object(
+            _docs_mod,
+            "discover_library",
+            new=AsyncMock(
+                return_value={
+                    "homepage": "https://expressjs.com/",
+                    "repository": "git+https://github.com/expressjs/express.git",
+                    "registry": "npm",
+                }
+            ),
+        ),
+        patch.object(_docs_mod, "fetch_docs_pages", new=fetch),
+    ):
+        await ingest_tier2(db, "express")
+
+    assert fetch.await_args.args[0] == "https://expressjs.com/"
+    assert db.get_library("express")["docs_url"] == "https://expressjs.com/"
+
+
+async def test_ingest_tier2_chunks_pages_with_the_real_chunker(db: DocsDB) -> None:
+    """Pages must survive chunk_markdown and land as rows.
+
+    ``chunk_markdown``'s third positional parameter is ``max_chunk_size``,
+    not a title; passing the page title there raised TypeError as soon as
+    a page actually reached the chunker.
+    """
+    body = "\n\n".join(
+        f"## Section {i}\n\nThe library exposes a helper for section {i}. "
+        f"Call it with the options object to configure behaviour."
+        for i in range(6)
+    )
+    pages = [{"url": "https://example.com/guide", "title": "Guide", "content": body}]
+    with (
+        patch.object(
+            _docs_mod,
+            "discover_library",
+            new=AsyncMock(return_value={"homepage": "https://example.com/"}),
+        ),
+        patch.object(_docs_mod, "fetch_docs_pages", new=AsyncMock(return_value=pages)),
+    ):
+        out = await ingest_tier2(db, "example-lib")
+
+    assert out["status"] == "ok"
+    assert out["chunk_count"] > 0
+    stored = db._conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()[0]
+    assert stored == out["chunk_count"]
+
+
+async def test_ingest_tier2_keeps_tier1_curation(db: DocsDB) -> None:
+    """A curated seed reaching this path keeps its tier and display label."""
+    db.upsert_library(name="react", canonical_name="React", tier=1)
+    with (
+        patch.object(
+            _docs_mod,
+            "discover_library",
+            new=AsyncMock(return_value={"homepage": "https://react.dev/"}),
+        ),
+        patch.object(_docs_mod, "fetch_docs_pages", new=AsyncMock(return_value=[])),
+    ):
+        await ingest_tier2(db, "react")
+
+    row = db.get_library("react")
+    assert row["tier"] == 1
+    assert row["canonical_name"] == "React"

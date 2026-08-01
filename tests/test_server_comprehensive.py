@@ -1650,6 +1650,75 @@ async def test_background_index_fetch_timeout():
 
 
 @pytest.mark.asyncio
+async def test_background_index_marks_library_indexed(tmp_path):
+    """The background index path must stamp libraries.last_indexed_at.
+
+    Before the seed/index split, ``upsert_library`` stamped that column as a
+    side effect of writing metadata, which hid the fact that this path never
+    calls ``mark_library_indexed``. Now that only ``mark_library_indexed``
+    writes it, a library indexed here would stay NULL forever and read as
+    permanently stale (``hooks/SessionStart_check_docs_freshness.sh``).
+    """
+    from wet_mcp.db import DocsDB
+
+    db = DocsDB(tmp_path / "docs.db", embedding_dims=0)
+    lib_id = db.upsert_library(name="testlib", docs_url="http://docs")
+    ver_id = db.upsert_version(
+        library_id=lib_id, version="latest", docs_url="http://docs"
+    )
+    before = db.get_library("testlib")
+    assert before is not None
+    assert before["last_indexed_at"] is None
+
+    chunks = [
+        {
+            "url": "http://docs",
+            "title": "Guide",
+            "content": f"chunk {i}",
+            "heading_path": "Guide",
+            "chunk_index": i,
+        }
+        for i in range(3)
+    ]
+    previous_db = server._docs_db
+    server._docs_db = db
+    try:
+        with (
+            patch(
+                "wet_mcp.sources.docs._normalize_docs_url", return_value="http://docs"
+            ),
+            patch(
+                "wet_mcp.server._fetch_and_chunk_docs",
+                new_callable=AsyncMock,
+                return_value=(chunks, 5),
+            ),
+            patch(
+                "wet_mcp.embedder.resolve_embed_backend_for_request",
+                return_value=None,
+            ),
+        ):
+            await server._background_index_and_search(
+                library="testlib",
+                lib_key="testlib",
+                language=None,
+                docs_url="http://docs",
+                repo_url="",
+                query="test",
+                version=None,
+                lib_id=lib_id,
+                ver_id=ver_id,
+            )
+
+        after = db.get_library("testlib")
+        assert after is not None
+        assert after["last_indexed_at"] is not None
+        assert db.get_best_version(lib_id, None) is not None
+    finally:
+        server._docs_db = previous_db
+        db.close()
+
+
+@pytest.mark.asyncio
 @_skip_win_iocp
 async def test_background_index_with_searxng_fallback():
     """Test background indexing SearXNG fallback (lines 1185-1207)."""
