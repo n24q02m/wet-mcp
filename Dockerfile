@@ -11,7 +11,7 @@
 # build with uv 0.9.30 + Python 3.13.11, which does not satisfy
 # requires-python = ">=3.13.13" from web-core 1.3.5.
 # Copy the uv binary from the standalone uv image (always latest).
-FROM python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7 AS builder
+FROM python:3.13-slim-bookworm@sha256:9d7f287598e1a5a978c015ee176d8216435aaf335ed69ac3c38dd1bbb10e8d64 AS builder
 COPY --from=ghcr.io/astral-sh/uv:latest@sha256:cf4eedcaa81655197f625739489effcbe71b61ceb1506f332c3facae5deceded /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
@@ -96,7 +96,7 @@ RUN mkdir -p /opt/playwright && if [ "$SLIM" != "1" ]; then uv run python -m pla
 # section D6. Build stdio: `docker buildx build --target stdio -t <repo>:stdio .`
 # Build http:  `docker buildx build --target http  -t <repo>:http .`
 # Build latest (= http): `docker buildx build --target http -t <repo>:latest .`
-FROM python:3.13-slim-bookworm@sha256:fcbd8dfc2605ba7c2eca646846c5e892b2931e41f6227985154a596f26ab8ed7 AS runtime
+FROM python:3.13-slim-bookworm@sha256:9d7f287598e1a5a978c015ee176d8216435aaf335ed69ac3c38dd1bbb10e8d64 AS runtime
 
 LABEL org.opencontainers.image.source="https://github.com/n24q02m/wet-mcp"
 LABEL io.modelcontextprotocol.server.name="io.github.n24q02m/wet-mcp"
