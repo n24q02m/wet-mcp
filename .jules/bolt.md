@@ -66,3 +66,15 @@ closed pull request.
 ## 2026-07-30 - Fast-forward outer loop pointers after inner loop sequence failures
 **Learning:** In sequential scanning or sliding window loops (like `_strip_nav_heading_blocks` in `src/wet_mcp/sources/docs.py`), incrementing the outer loop pointer by 1 (`i += 1`) after an inner loop sequence run fails causes redundant overlapping computation.
 **Action:** Unconditionally fast-forward the outer pointer to the index that broke the sequence (`i = j`). Any sub-sequence starting within the evaluated run will inevitably fail the same condition, so skipping ahead eliminates redundant inner-loop iterations and reduces the constant factor in O(N) time.
+
+## 2026-07-30 - O(N) optimizations
+**Learning:** An algorithm that bounds its inner loop to a constant maximum iterations (like a threshold check) is still O(N) linear time, even if it has a high constant factor. Fast-forwarding pointers removes this constant overhead, but does not change the Big-O complexity from O(N^2) to O(N).
+**Action:** When describing performance gains, accurately differentiate between reducing constant factors and changing asymptotic complexity. Benchmark realistically instead of relying only on theoretical models or worst-case synthetics.
+
+## 2026-07-30 - Soundness in optimization comments
+**Learning:** Comments explaining an optimization (like fast-forwarding an index) must explain *why* the optimization is algorithmically sound, not just what its effect is. For pointer fast-forwarding, explain that the loop exit condition does not depend on the starting index, therefore any inner subsequence will break at the exact same location.
+**Action:** When adding comments for algorithmic optimizations, document the mathematical or logical soundness that makes the transformation safe.
+
+## 2026-07-30 - PR Title validation
+**Learning:** A PR title must strictly adhere to Conventional Commits format to pass CI validation checks (e.g. `fix: ...` or `feat: ...`). Prefixing the title with `⚡ Bolt:` causes the semantic PR title checker to fail and blocks merging.
+**Action:** Always start PR titles strictly with valid Conventional Commits prefixes (e.g. `perf:`, `fix:`, `feat:`). Never include the `⚡ Bolt:` persona prefix in the PR title itself, keep it in the PR description instead.
