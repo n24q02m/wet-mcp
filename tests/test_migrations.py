@@ -271,7 +271,10 @@ def test_alembic_version_advances_through_chain(tmp_path: Path) -> None:
 
     if _has_revision("docs_004_chunk_summaries"):
         command.upgrade(cfg, "head")
-        assert _read_alembic_version(db_path) == "docs_004_chunk_summaries"
+        assert (
+            _read_alembic_version(db_path)
+            == ScriptDirectory.from_config(cfg).get_current_head()
+        )
 
 
 def test_004_adds_summary_columns(tmp_path: Path) -> None:
@@ -369,7 +372,10 @@ def test_full_v1_to_v2_round_trip(tmp_path: Path) -> None:
     run_migrations_on_startup(db_path)
 
     # Version stamp advanced to head.
-    assert _read_alembic_version(db_path) == "docs_004_chunk_summaries"
+    assert (
+        _read_alembic_version(db_path)
+        == ScriptDirectory.from_config(cfg).get_current_head()
+    )
 
     # Pre-existing rows are preserved across all forward migrations.
     conn = sqlite3.connect(str(db_path))
@@ -446,3 +452,86 @@ def test_db_add_chunks_writes_summary_columns_when_present(tmp_path: Path) -> No
     assert row is not None
     assert row["summary"] == "Short overview"
     assert row["summary_provider"] == "gemini-3-flash-preview"
+
+
+def test_005_moves_seed_stamp_into_metadata_seeded_at(tmp_path: Path) -> None:
+    """docs_005 adds metadata_seeded_at and relabels bogus index stamps.
+
+    Pre-fix ``upsert_library`` stamped ``last_indexed_at`` for metadata-only
+    Tier 1 seeds, so an upgraded DB must not keep claiming those libraries
+    are indexed. Rows that really do own an indexed version are untouched.
+    """
+    if not _has_revision("docs_005_metadata_seeded_at"):
+        pytest.skip("docs_005_metadata_seeded_at not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "docs_004_chunk_summaries")
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO libraries (id, name, tier, last_indexed_at, created_at, "
+        "updated_at) VALUES ('seeded', 'react', 1, 1000.0, 1.0, 1.0)"
+    )
+    conn.execute(
+        "INSERT INTO libraries (id, name, tier, last_indexed_at, created_at, "
+        "updated_at) VALUES ('indexed', 'fastapi', 2, 2000.0, 1.0, 1.0)"
+    )
+    conn.execute(
+        "INSERT INTO versions (id, library_id, version, status, chunk_count) "
+        "VALUES ('v1', 'indexed', 'latest', 'indexed', 382)"
+    )
+    conn.commit()
+    conn.close()
+
+    command.upgrade(cfg, "docs_005_metadata_seeded_at")
+
+    assert "metadata_seeded_at" in _table_columns(db_path, "libraries")
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    rows = {
+        r["id"]: r
+        for r in conn.execute(
+            "SELECT id, last_indexed_at, metadata_seeded_at FROM libraries"
+        ).fetchall()
+    }
+    conn.close()
+
+    assert rows["seeded"]["last_indexed_at"] is None
+    assert rows["seeded"]["metadata_seeded_at"] == 1000.0
+    assert rows["indexed"]["last_indexed_at"] == 2000.0
+    assert rows["indexed"]["metadata_seeded_at"] is None
+
+
+def test_005_is_idempotent(tmp_path: Path) -> None:
+    """Re-running docs_005 does not disturb an already-corrected DB."""
+    if not _has_revision("docs_005_metadata_seeded_at"):
+        pytest.skip("docs_005_metadata_seeded_at not yet created")
+
+    db_path = tmp_path / "docs.db"
+    cfg = _make_alembic_cfg(db_path)
+    command.upgrade(cfg, "docs_004_chunk_summaries")
+
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "INSERT INTO libraries (id, name, tier, last_indexed_at, created_at, "
+        "updated_at) VALUES ('seeded', 'react', 1, 1000.0, 1.0, 1.0)"
+    )
+    conn.commit()
+    conn.close()
+
+    command.upgrade(cfg, "docs_005_metadata_seeded_at")
+    # Rewind only the revision pointer (the column + corrected rows stay) and
+    # replay the migration: it must find nothing left to fix.
+    command.stamp(cfg, "docs_004_chunk_summaries")
+    command.upgrade(cfg, "docs_005_metadata_seeded_at")
+
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute(
+        "SELECT last_indexed_at, metadata_seeded_at FROM libraries WHERE id = 'seeded'"
+    ).fetchone()
+    conn.close()
+    assert row["last_indexed_at"] is None
+    assert row["metadata_seeded_at"] == 1000.0

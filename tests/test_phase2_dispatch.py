@@ -62,6 +62,39 @@ async def test_docs_query_unknown_library_triggers_indexing_hint(
     assert data["results"] == []
 
 
+async def test_docs_query_seeded_library_without_chunks_triggers_ingest(
+    docs_db, monkeypatch
+) -> None:
+    """A resolvable library holding zero indexed versions must still ingest.
+
+    Tier 1 warmup seeds 50 curated libraries metadata-only, so
+    ``resolve_library`` never returns ``[]`` for them. Gating ingestion on
+    ``not resolved`` therefore left exactly those libraries stuck at zero
+    chunks forever.
+    """
+    import asyncio
+
+    from wet_mcp.sources import docs as docs_mod
+
+    ingested: list[str] = []
+
+    async def _fake_ingest(db, library_name):
+        ingested.append(library_name)
+        return {"status": "ok"}
+
+    monkeypatch.setattr(docs_mod, "ingest_tier2", _fake_ingest)
+    docs_db.upsert_library(name="react", canonical_name="React", tier=1)
+
+    out = await _call_search(action="docs_query", library="react", query="useState")
+    data = payload(out)
+    assert data["status"] == "indexing_in_progress"
+    assert data["library"] == "react"
+    assert data["results"] == []
+
+    await asyncio.sleep(0)
+    assert ingested == ["react"]
+
+
 async def test_docs_query_known_library_returns_results(docs_db) -> None:
     lib_id = docs_db.upsert_library(name="react")
     ver_id = docs_db.upsert_version(library_id=lib_id, version="latest")

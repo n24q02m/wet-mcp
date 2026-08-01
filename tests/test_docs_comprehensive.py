@@ -609,3 +609,44 @@ def test_chunk_markdown_large():
     for c in chunks:
         assert c["url"] == "http://test"
         assert c["title"] in ("Title", "Section 1", "Section 2")
+
+
+@pytest.mark.asyncio
+async def test_fetch_docs_pages_reads_smart_chunks_shape():
+    """Web pages come back as smart-chunks, not the markitdown shape.
+
+    ``crawler.extract`` returns ``markdown`` / ``clean_text`` / ``metadata``
+    for scraped pages; only its document branch emits ``content`` + a
+    top-level ``title``. Reading the document keys alone silently dropped
+    every scraped page, so the Tier 1 index produced zero chunks.
+    """
+    with patch(
+        "wet_mcp.sources.crawler.extract", new_callable=AsyncMock
+    ) as mock_extract:
+        mock_extract.return_value = json.dumps(
+            [
+                {
+                    "url": "https://docs.test/",
+                    "markdown": "## Overview\n\nThe library does things.",
+                    "clean_text": "Overview The library does things.",
+                    "structured_data": [],
+                    "code_blocks": [],
+                    "metadata": {"title": "Overview", "headings": []},
+                }
+            ]
+        )
+        with (
+            patch(
+                "wet_mcp.sources.docs._try_sitemap", new_callable=AsyncMock
+            ) as mock_sitemap,
+            patch(
+                "wet_mcp.sources.docs._try_objects_inv", new_callable=AsyncMock
+            ) as mock_objects,
+        ):
+            mock_sitemap.return_value = []
+            mock_objects.return_value = []
+            res = await fetch_docs_pages("https://docs.test/")
+
+    assert len(res) == 1
+    assert res[0]["title"] == "Overview"
+    assert res[0]["content"].startswith("## Overview")

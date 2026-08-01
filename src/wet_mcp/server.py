@@ -1300,7 +1300,13 @@ async def search(  # noqa: PLR0913
             # canonical/alias name. We always look up by name first so the
             # caller can pass either form.
             resolved = await asyncio.to_thread(resolve_library, _docs_db, library, 1)
-            if not resolved:
+            # Ingest when the library is unknown OR known-but-empty. Tier 1
+            # warmup seeds 50 curated libraries metadata-only, so those names
+            # always resolve; gating on `not resolved` alone left exactly them
+            # stuck at zero chunks forever. `latest_version` is populated from
+            # get_best_version, i.e. it is None until a version reaches
+            # status='indexed'.
+            if not resolved or resolved[0].get("latest_version") is None:
                 # Tier 2 lazy ingest: fire-and-forget, return progress hint.
                 asyncio.create_task(ingest_tier2(_docs_db, library))
                 return {

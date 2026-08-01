@@ -12,8 +12,11 @@ to:
   via the web-core ``library_docs_strategy`` (Task 10) on a weekly cron.
 
 Freshness: a library is considered "warm" when its
-``last_indexed_at`` is within 7 days (spec section 3 Tier 1 freshness
-target). ``maybe_warm(force=True)`` re-seeds metadata regardless.
+``metadata_seeded_at`` is within 7 days (spec section 3 Tier 1 freshness
+target). ``maybe_warm(force=True)`` re-seeds metadata regardless. The gate
+deliberately does *not* read ``last_indexed_at``: that column means "chunks
+landed", which seeding never does, so keying off it made the warmup's own
+write satisfy its own freshness check.
 """
 
 from __future__ import annotations
@@ -63,14 +66,14 @@ def maybe_warm(db: Any, force: bool = False) -> dict:
         if (
             not force
             and existing
-            and existing.get("last_indexed_at")
-            and (now - existing["last_indexed_at"]) < _FRESHNESS_WINDOW_SECONDS
+            and existing.get("metadata_seeded_at")
+            and (now - existing["metadata_seeded_at"]) < _FRESHNESS_WINDOW_SECONDS
         ):
             skipped_fresh += 1
             continue
 
         try:
-            db.upsert_library(
+            lib_id = db.upsert_library(
                 name=name,
                 canonical_name=entry.get("canonical_name", name),
                 homepage=entry.get("homepage"),
@@ -78,6 +81,7 @@ def maybe_warm(db: Any, force: bool = False) -> dict:
                 package_managers=entry.get("package_managers"),
                 tier=1,
             )
+            db.mark_metadata_seeded(lib_id)
             seeded += 1
         except Exception as exc:  # pragma: no cover - defensive
             logger.warning(f"Tier 1 warmup failed for {name}: {exc}")

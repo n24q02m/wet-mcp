@@ -84,6 +84,7 @@ _LIBRARIES_COLUMNS = {
     "package_managers",
     "tier",
     "last_indexed_at",
+    "metadata_seeded_at",
     "total_versions",
     "discovery_version",
     "created_at",
@@ -240,6 +241,7 @@ class DocsDB:
         self._model_identity = model_identity
         self._reindex_on_model_change = reindex_on_model_change
         self._vec_enabled = False
+        self._seed_stamp_migration_pending = False
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False allows the connection to be used from
@@ -279,7 +281,39 @@ class DocsDB:
         self._create_vector_table()
         self._create_project_context_table()
         self._create_store_meta_table()
+        if self._seed_stamp_migration_pending:
+            # Deferred until the versions table exists — the relabel needs it.
+            self._migrate_seed_stamps_off_last_indexed_at()
+            self._seed_stamp_migration_pending = False
         self._conn.commit()
+
+    def _migrate_seed_stamps_off_last_indexed_at(self) -> None:
+        """Move seed-only ``last_indexed_at`` stamps into ``metadata_seeded_at``.
+
+        A library that owns no ``status = 'indexed'`` version was never
+        indexed, so its ``last_indexed_at`` can only have come from the old
+        ``upsert_library`` stamp (or the ``docs_002`` ``updated_at``
+        backfill). Leaving it in place would keep the Tier 1 freshness gate
+        satisfied forever on an empty database. Mirrors the
+        ``docs_005_metadata_seeded_at`` Alembic migration for DBs that reach
+        ``DocsDB`` first.
+        """
+        cur = self._conn.execute("""
+            UPDATE libraries
+               SET metadata_seeded_at = COALESCE(metadata_seeded_at, last_indexed_at),
+                   last_indexed_at = NULL
+             WHERE last_indexed_at IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM versions v
+                    WHERE v.library_id = libraries.id AND v.status = 'indexed'
+               )
+        """)
+        self._conn.commit()
+        if cur.rowcount:
+            logger.info(
+                f"Relabelled {cur.rowcount} metadata-only library seeds "
+                "(last_indexed_at -> metadata_seeded_at)"
+            )
 
     def _create_store_meta_table(self) -> None:
         # Key/value metadata for store-level invariants (B2: embedding-model
@@ -421,6 +455,7 @@ class DocsDB:
                 package_managers TEXT,
                 tier INTEGER NOT NULL DEFAULT 2,
                 last_indexed_at REAL,
+                metadata_seeded_at REAL,
                 total_versions INTEGER NOT NULL DEFAULT 0,
                 discovery_version INTEGER DEFAULT 0,
                 created_at REAL NOT NULL,
@@ -459,11 +494,20 @@ class DocsDB:
                 "ALTER TABLE libraries ADD COLUMN total_versions INTEGER NOT NULL DEFAULT 0",
                 "total_versions",
             ),
+            (
+                "ALTER TABLE libraries ADD COLUMN metadata_seeded_at REAL",
+                "metadata_seeded_at",
+            ),
         ):
             try:
                 self._conn.execute(sql)
                 self._conn.commit()
                 logger.debug(f"Migrated libraries table: added {col_name}")
+                if col_name == "metadata_seeded_at":
+                    # The column is new here, so this DB was written by a
+                    # build where upsert_library stamped last_indexed_at for
+                    # metadata-only seeds. Relabel those stamps once.
+                    self._seed_stamp_migration_pending = True
             except sqlite3.OperationalError:
                 pass  # Column already exists
 
@@ -676,9 +720,6 @@ class DocsDB:
         if tier is not None and "tier" in existing_cols:
             updates.append("tier = ?")
             params.append(int(tier))
-        if "last_indexed_at" in existing_cols:
-            updates.append("last_indexed_at = ?")
-            params.append(now)
 
         updates.append("discovery_version = ?")
         params.append(DISCOVERY_VERSION)
@@ -741,7 +782,6 @@ class DocsDB:
             ("github_url", github_url, False),
             ("package_managers", pkg_json, False),
             ("tier", tier, False),
-            ("last_indexed_at", now, True),
         ):
             if col_name in existing_cols and (value is not None or include_when_none):
                 cols.append(col_name)
@@ -773,7 +813,11 @@ class DocsDB:
     ) -> str:
         """Create or update a library. Returns library ID.
 
-        Automatically stamps the current ``DISCOVERY_VERSION``.
+        Automatically stamps the current ``DISCOVERY_VERSION``. It does
+        *not* touch ``last_indexed_at``: writing metadata says nothing about
+        whether chunks landed, and ``mark_library_indexed`` is the only
+        writer that knows. Metadata-only seeding records its own progress
+        via ``mark_metadata_seeded``.
 
         Phase 2 (spec §5.4) adds optional metadata: ``tier`` (1 curated /
         2 on-demand), ``package_managers`` (JSON list), ``homepage``,
@@ -867,6 +911,21 @@ class DocsDB:
         self._conn.execute(
             "UPDATE libraries SET " + ", ".join(sets) + " WHERE id = ?",
             params,
+        )
+        self._conn.commit()
+
+    def mark_metadata_seeded(self, library_id: str) -> None:
+        """Record a metadata-only seed pass (Tier 1 warmup freshness anchor).
+
+        Separate from ``last_indexed_at`` so a seeded-but-unindexed library
+        is distinguishable from an indexed one. Silently no-ops on legacy
+        databases that lack the column.
+        """
+        if "metadata_seeded_at" not in self._get_table_columns("libraries"):
+            return
+        self._conn.execute(
+            "UPDATE libraries SET metadata_seeded_at = ? WHERE id = ?",
+            (_now_ts(), library_id),
         )
         self._conn.commit()
 

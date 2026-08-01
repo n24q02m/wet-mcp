@@ -3517,6 +3517,35 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _page_from_extract_result(result: dict) -> dict | None:
+    """Project one ``crawler.extract`` result into a docs page dict.
+
+    ``extract`` has two result shapes: web pages come back as smart-chunks
+    (``markdown`` / ``clean_text`` / ``metadata``), documents come back from
+    the markitdown branch (``content`` / ``title``). This crawler only ever
+    read the markitdown keys, so every web page failed the truthiness check
+    and was discarded — which is why the Tier 1 index produced zero chunks
+    for every library. Returns ``None`` for errored or empty results.
+    """
+    if result.get("error"):
+        return None
+    content = (
+        result.get("markdown")
+        or result.get("clean_text")
+        or result.get("content")
+        or ""
+    )
+    if not content:
+        return None
+    metadata = result.get("metadata")
+    title = (metadata or {}).get("title") if isinstance(metadata, dict) else None
+    return {
+        "url": result.get("url", ""),
+        "title": title or result.get("title", ""),
+        "content": content,
+    }
+
+
 async def fetch_docs_pages(
     docs_url: str,
     query: str = "",
@@ -3654,18 +3683,14 @@ async def fetch_docs_pages(
     # Process root page results
     blocked_count = 0
     for r in root_results:
-        if r.get("content") and not r.get("error"):
-            if _is_blocked_content(r["content"]):
-                blocked_count += 1
-                continue
-            pages.append(
-                {
-                    "url": r["url"],
-                    "title": r.get("title", ""),
-                    "content": r["content"],
-                }
-            )
-            pending_urls.extend(_collect_links(r))
+        page = _page_from_extract_result(r)
+        if page is None:
+            continue
+        if _is_blocked_content(page["content"]):
+            blocked_count += 1
+            continue
+        pages.append(page)
+        pending_urls.extend(_collect_links(r))
 
     # Early exit: if root page was blocked, all other pages on the same
     # domain will also be blocked — skip expensive crawling and return
@@ -3732,19 +3757,15 @@ async def fetch_docs_pages(
             batch1_results = json.loads(batch1_str)
 
             for br in batch1_results:
-                if br.get("content") and not br.get("error"):
-                    if _is_blocked_content(br["content"]):
-                        blocked_count += 1
-                        continue
-                    pages.append(
-                        {
-                            "url": br["url"],
-                            "title": br.get("title", ""),
-                            "content": br["content"],
-                        }
-                    )
-                    # Depth-2: discover links from fetched pages
-                    pending_urls.extend(_collect_links(br))
+                page = _page_from_extract_result(br)
+                if page is None:
+                    continue
+                if _is_blocked_content(page["content"]):
+                    blocked_count += 1
+                    continue
+                pages.append(page)
+                # Depth-2: discover links from fetched pages
+                pending_urls.extend(_collect_links(br))
         except TimeoutError:
             logger.warning(
                 f"Round 1 crawl timed out after {batch_timeout}s "
@@ -3767,17 +3788,13 @@ async def fetch_docs_pages(
                 )
                 batch2_results = json.loads(batch2_str)
                 for br in batch2_results:
-                    if br.get("content") and not br.get("error"):
-                        if _is_blocked_content(br["content"]):
-                            blocked_count += 1
-                            continue
-                        pages.append(
-                            {
-                                "url": br["url"],
-                                "title": br.get("title", ""),
-                                "content": br["content"],
-                            }
-                        )
+                    page = _page_from_extract_result(br)
+                    if page is None:
+                        continue
+                    if _is_blocked_content(page["content"]):
+                        blocked_count += 1
+                        continue
+                    pages.append(page)
             except TimeoutError:
                 logger.warning(
                     f"Round 2 crawl timed out after {batch_timeout}s "
@@ -4007,7 +4024,13 @@ async def ingest_tier2(db: Any, library_name: str) -> dict:
     if not discovery:
         return {"status": "not_found", "library_name": library_name}
 
-    docs_url = discovery.get("docs_url")
+    # ``discover_library`` publishes the probed docs URL under ``homepage``
+    # (see ``_finalize_discovery_result``); no registry adapter ever emits a
+    # ``docs_url`` key. Reading only ``docs_url`` therefore always missed and
+    # fell through to ``repository``, which npm/PyPI report as a VCS URL
+    # (``git+https://...git``) that the crawler rejects as unsafe — every
+    # library ingested zero pages.
+    docs_url = discovery.get("docs_url") or discovery.get("homepage")
     repo_url = discovery.get("repository") or discovery.get("github_url")
     registry = discovery.get("registry")
     description = discovery.get("description")
@@ -4016,16 +4039,21 @@ async def ingest_tier2(db: Any, library_name: str) -> dict:
     if registry:
         package_managers = [registry]
 
+    # A curated Tier 1 seed can reach this path too: docs_query now fires
+    # ingestion for libraries that resolve but hold no indexed version. Keep
+    # its tier and display label instead of demoting the row to a Tier 2
+    # entry named after the caller's raw query string.
+    existing = db.get_library(library_name) or {}
     lib_id = db.upsert_library(
         name=library_name,
         docs_url=docs_url,
         registry=registry,
         description=description,
-        tier=2,
+        tier=existing.get("tier") or 2,
         package_managers=package_managers or None,
         homepage=homepage,
         github_url=repo_url if repo_url and "github.com" in (repo_url or "") else None,
-        canonical_name=library_name,
+        canonical_name=existing.get("canonical_name") or library_name,
     )
     ver_id = db.upsert_version(
         library_id=lib_id,
@@ -4054,11 +4082,10 @@ async def ingest_tier2(db: Any, library_name: str) -> dict:
     if pages:
         chunks: list[dict] = []
         for page in pages:
-            page_chunks = chunk_markdown(
-                page["content"],
-                page.get("url", ""),
-                page.get("title", ""),
-            )
+            # chunk_markdown's third parameter is max_chunk_size, not title —
+            # passing the page title there raised TypeError. It never fired
+            # because `pages` was always empty (see _page_from_extract_result).
+            page_chunks = chunk_markdown(page["content"], url=page.get("url", ""))
             chunks.extend(page_chunks)
         if chunks:
             db.add_chunks(version_id=ver_id, library_id=lib_id, chunks=chunks)
