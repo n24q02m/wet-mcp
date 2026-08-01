@@ -565,7 +565,15 @@ def test_sqlite_vec_unavailable_is_reported_at_warning(tmp_path):
 def test_embedding_serialization_failure_names_the_chunk(tmp_path):
     """A per-chunk skip is fine; an unattributed per-chunk skip is not."""
     db = DocsDB(tmp_path / "ser.db", embedding_dims=2)
-    db._vec_enabled = True
+    if not db._vec_enabled:
+        db.close()
+        pytest.skip(
+            "sqlite-vec did not load here (macOS CI runs a python whose "
+            "sqlite3 has no enable_load_extension), so doc_chunks_vec was "
+            "never created. This test needs the surviving vector to land, and "
+            "forcing _vec_enabled on without the table is a state the server "
+            "cannot reach."
+        )
     try:
         lib_id = db.upsert_library(name="serlib")
         ver_id = db.upsert_version(lib_id)

@@ -803,10 +803,18 @@ class TestProjectContext:
 class TestAddChunksEdgeCases:
     def test_add_chunks_serialization_error(self, tmp_path):
         """add_chunks handles embedding serialization failure (lines 817-818)."""
-        # Use embedding_dims > 0 and force _vec_enabled to ensure serialization loop is hit
-        # Use embedding_dims > 0 to ensure doc_chunks_vec table exists
+        # embedding_dims > 0 both reaches the serialization loop and creates
+        # doc_chunks_vec -- but only where sqlite-vec actually loads.
         db = DocsDB(tmp_path / "ser.db", embedding_dims=2)
-        db._vec_enabled = True
+        if not db._vec_enabled:
+            db.close()
+            pytest.skip(
+                "sqlite-vec did not load here (sqlite3 built without "
+                "enable_load_extension, e.g. macOS actions/setup-python), so "
+                "doc_chunks_vec was never created; the batch insert below now "
+                "aborts rather than swallowing, and forcing the flag on would "
+                "fabricate a state the server cannot reach"
+            )
         lib_id = db.upsert_library(name="serlib")
         ver_id = db.upsert_version(lib_id)
 

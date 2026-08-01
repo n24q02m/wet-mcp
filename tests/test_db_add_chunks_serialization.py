@@ -1,6 +1,8 @@
 import sqlite3
 from typing import Any, cast
 
+import pytest
+
 from wet_mcp.db import DocsDB
 
 
@@ -9,7 +11,15 @@ class TestAddChunksSerialization:
         """Verify add_chunks handles embedding serialization failure and continues."""
         # Initialize DocsDB with vector support enabled
         db = DocsDB(tmp_path / "extra_ser.db", embedding_dims=2)
-        db._vec_enabled = True
+        if not db._vec_enabled:
+            db.close()
+            pytest.skip(
+                "sqlite-vec did not load here (sqlite3 built without "
+                "enable_load_extension, e.g. macOS actions/setup-python), so "
+                "doc_chunks_vec was never created; the batch insert below now "
+                "aborts rather than swallowing, and forcing the flag on would "
+                "fabricate a state the server cannot reach"
+            )
 
         lib_id = db.upsert_library(name="extra_lib")
         ver_id = db.upsert_version(lib_id)
