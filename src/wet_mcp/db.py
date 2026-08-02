@@ -112,6 +112,14 @@ _DOC_CHUNKS_COLUMNS = {
 # Directive-heavy content (mkdocs leftover, rst directives)
 _DIRECTIVE_RE = re.compile(r"^(?:!!!|:::|\.\.)\s", re.MULTILINE)
 
+# Values written to ``versions.index_state`` by ``set_index_state``. They record
+# what the LAST indexing attempt did, which ``versions.status`` cannot: status
+# gates what ``get_best_version`` serves, so a version can be serving usable
+# chunks (status='indexed') while its newest re-index attempt is 'failed'.
+INDEX_STATE_RUNNING = "running"
+INDEX_STATE_DONE = "done"
+INDEX_STATE_FAILED = "failed"
+
 
 def _build_fts_queries(query: str) -> list[str]:
     """Build tiered FTS5 queries: PHRASE -> AND -> OR.
@@ -535,6 +543,9 @@ class DocsDB:
                 status TEXT DEFAULT 'pending',
                 release_date REAL,
                 source_url TEXT,
+                index_state TEXT,
+                index_error TEXT,
+                index_state_at REAL,
                 FOREIGN KEY (library_id) REFERENCES libraries(id) ON DELETE CASCADE,
                 UNIQUE(library_id, version)
             )
@@ -543,6 +554,9 @@ class DocsDB:
         for sql in (
             "ALTER TABLE versions ADD COLUMN release_date REAL",
             "ALTER TABLE versions ADD COLUMN source_url TEXT",
+            "ALTER TABLE versions ADD COLUMN index_state TEXT",
+            "ALTER TABLE versions ADD COLUMN index_error TEXT",
+            "ALTER TABLE versions ADD COLUMN index_state_at REAL",
         ):
             try:
                 self._conn.execute(sql)
@@ -991,6 +1005,93 @@ class DocsDB:
             (_now_ts(), page_count, chunk_count, version_id),
         )
         self._conn.commit()
+
+    def set_index_state(
+        self, version_id: str, state: str, error: str | None = None
+    ) -> None:
+        """Record the outcome of an indexing attempt on a version.
+
+        ``state`` is one of ``INDEX_STATE_RUNNING`` / ``INDEX_STATE_DONE`` /
+        ``INDEX_STATE_FAILED``. Writing it to the database is the point: the
+        background indexer's only previous record of a failure was a
+        ``logger.error`` inside the container, which reaches nobody, so
+        ``chunks: 0`` was indistinguishable from never-attempted,
+        still-running, failed and succeeded-with-no-content.
+
+        ``page_count`` / ``chunk_count`` are deliberately NOT written here.
+        They describe the last SUCCESSFUL index (``mark_version_indexed`` owns
+        them), and zeroing them on a failed attempt would erase the only
+        record that usable chunks are still stored for this version.
+        """
+        self._conn.execute(
+            """UPDATE versions
+               SET index_state = ?, index_error = ?, index_state_at = ?
+               WHERE id = ?""",
+            (state, error, _now_ts(), version_id),
+        )
+        self._conn.commit()
+
+    def get_index_state(self, version_id: str) -> dict | None:
+        """Return the indexing-attempt record for a version.
+
+        ``None`` means no attempt was ever recorded (or the version is gone),
+        which is a different answer from a recorded failure -- telling those
+        two apart is the whole reason this row exists.
+        """
+        row = self._conn.execute(
+            """SELECT id, library_id, version, index_state, index_error,
+                      index_state_at, page_count, chunk_count
+               FROM versions WHERE id = ?""",
+            (version_id,),
+        ).fetchone()
+        if row is None or row["index_state"] is None:
+            return None
+        return {
+            "version_id": row["id"],
+            "library_id": row["library_id"],
+            "version": row["version"],
+            "state": row["index_state"],
+            "error": row["index_error"],
+            "updated_at": row["index_state_at"],
+            "page_count": row["page_count"],
+            "chunk_count": row["chunk_count"],
+        }
+
+    def index_status(self, limit: int = 20) -> dict:
+        """Summarize recorded indexing attempts for ``config(action="status")``.
+
+        Returns a per-state tally plus the most recently touched attempts,
+        newest first, so an operator reading the status payload can tell a
+        store that indexed nothing from one that failed eight times and say
+        why.
+        """
+        counts = {
+            r["state"]: r["n"]
+            for r in self._conn.execute(
+                "SELECT index_state AS state, COUNT(*) AS n FROM versions "
+                "WHERE index_state IS NOT NULL GROUP BY index_state"
+            ).fetchall()
+        }
+        recent = [
+            {
+                "library": r["library"],
+                "version": r["version"],
+                "state": r["index_state"],
+                "error": r["index_error"],
+                "updated_at": r["index_state_at"],
+                "page_count": r["page_count"],
+                "chunk_count": r["chunk_count"],
+            }
+            for r in self._conn.execute(
+                "SELECT v.version, v.index_state, v.index_error, v.index_state_at,"
+                " v.page_count, v.chunk_count, l.name AS library"
+                " FROM versions v LEFT JOIN libraries l ON v.library_id = l.id"
+                " WHERE v.index_state IS NOT NULL"
+                " ORDER BY v.index_state_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        ]
+        return {"counts": counts, "recent": recent}
 
     def get_best_version(
         self, library_id: str, target: str | None = None

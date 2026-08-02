@@ -196,6 +196,74 @@ class DocsDBCfBackend:
             [time.time(), page_count, chunk_count, version_id],
         )
 
+    def set_index_state(
+        self, version_id: str, state: str, error: str | None = None
+    ) -> None:
+        """Record an indexing attempt's outcome on D1.
+
+        This is the CF half of the durability fix: a background indexer
+        running inside the Cloudflare container writes its logs to a stderr
+        nothing collects, so D1 is the only place a failure can be read from
+        outside the container. Four bound parameters, well inside D1's
+        per-statement parameter ceiling -- and fixed, not scaled by row count.
+        """
+        self._d1.execute(
+            "UPDATE versions SET index_state = ?, index_error = ?,"
+            " index_state_at = ? WHERE id = ?",
+            [state, error, time.time(), version_id],
+        )
+
+    def get_index_state(self, version_id: str) -> dict | None:
+        """Return the indexing-attempt record for a version, or None."""
+        row = self._d1.fetchone(
+            "SELECT id, library_id, version, index_state, index_error,"
+            " index_state_at, page_count, chunk_count FROM versions WHERE id = ?",
+            [version_id],
+        )
+        if row is None or row.get("index_state") is None:
+            return None
+        return {
+            "version_id": row["id"],
+            "library_id": row["library_id"],
+            "version": row["version"],
+            "state": row["index_state"],
+            "error": row["index_error"],
+            "updated_at": row["index_state_at"],
+            "page_count": row["page_count"],
+            "chunk_count": row["chunk_count"],
+        }
+
+    def index_status(self, limit: int = 20) -> dict:
+        """Summarize recorded indexing attempts. Mirrors DocsDB.index_status."""
+        counts = {
+            r["state"]: r["n"]
+            for r in self._d1.execute(
+                "SELECT index_state AS state, COUNT(*) AS n FROM versions"
+                " WHERE index_state IS NOT NULL GROUP BY index_state",
+                [],
+            )
+        }
+        recent = [
+            {
+                "library": r["library"],
+                "version": r["version"],
+                "state": r["index_state"],
+                "error": r["index_error"],
+                "updated_at": r["index_state_at"],
+                "page_count": r["page_count"],
+                "chunk_count": r["chunk_count"],
+            }
+            for r in self._d1.execute(
+                "SELECT v.version, v.index_state, v.index_error, v.index_state_at,"
+                " v.page_count, v.chunk_count, l.name AS library"
+                " FROM versions v LEFT JOIN libraries l ON v.library_id = l.id"
+                " WHERE v.index_state IS NOT NULL"
+                " ORDER BY v.index_state_at DESC LIMIT ?",
+                [limit],
+            )
+        ]
+        return {"counts": counts, "recent": recent}
+
     def mark_library_indexed(
         self, library_id: str, total_versions: int | None = None
     ) -> None:
