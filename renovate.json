@@ -20,7 +20,8 @@
       "before 5am"
     ],
     "automerge": true,
-    "automergeType": "pr"
+    "automergeType": "pr",
+    "commitMessageAction": "lock file maintenance"
   },
   "packageRules": [
     {
