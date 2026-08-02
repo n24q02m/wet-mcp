@@ -18,14 +18,14 @@ _skip_win_iocp = pytest.mark.skipif(
 )
 
 
-def _close_and_dummy_task(coro):
-    """Drop-in for ``asyncio.create_task`` in tests.
+def _close_and_dummy_task(coro, label=None):
+    """Drop-in for ``server._launch_background_task`` in tests.
 
-    The production ``_do_docs_search`` fires the background indexer with
-    ``asyncio.create_task(...)`` and discards the handle. In tests that
-    leaves an orphan Task pending in the event loop; closing the loop at
-    teardown then intermittently hangs on the macOS kqueue / Windows IOCP
-    selectors (caught by pytest-timeout and reddening release-commit CI).
+    The production ``_do_docs_search`` fires the background indexer through
+    ``_launch_background_task(...)``. In tests that leaves an orphan Task
+    pending in the event loop; closing the loop at teardown then
+    intermittently hangs on the macOS kqueue / Windows IOCP selectors
+    (caught by pytest-timeout and reddening release-commit CI).
 
     Closing the coroutine here makes the call a no-op with no scheduled
     Task, so teardown is deterministic on every platform. The return value
@@ -73,6 +73,10 @@ def mock_docs_db():
     server._docs_db.get_library.return_value = None
     server._docs_db.get_best_version.return_value = None
     server._docs_db.search.return_value = []
+    # No indexing attempt on record -> the launch path treats the version as
+    # never attempted, which is what these tests exercise. Left as a MagicMock
+    # it would land in the tool payload and break JSON serialization.
+    server._docs_db.get_index_state.return_value = None
     yield server._docs_db
     server._docs_db = None
 
@@ -390,11 +394,11 @@ async def test_do_docs_search_new():
             "wet_mcp.server._background_index_and_search",
             new_callable=AsyncMock,
         ),
-        # Patch create_task so the fire-and-forget background indexer is
+        # Patch the launcher so the fire-and-forget background indexer is
         # never scheduled as an orphan Task that survives into event-loop
         # teardown (closing the loop with a pending task hangs on the
         # Windows IOCP / macOS kqueue selectors -> pytest-timeout kill).
-        patch("wet_mcp.server.asyncio.create_task", _close_and_dummy_task),
+        patch("wet_mcp.server._launch_background_task", _close_and_dummy_task),
         # Mock the immediate fallback so the test makes no real network IO
         # (the un-mocked searxng_search hit httpx against a junk URL and
         # could hang on a slow/blocked CI runner).
@@ -535,7 +539,7 @@ async def test_do_docs_search_force_reindex():
         patch("wet_mcp.server._background_index_and_search", new_callable=AsyncMock),
         # See test_do_docs_search_new: prevent orphan background Task and
         # mock the immediate fallback so the test is fully hermetic.
-        patch("wet_mcp.server.asyncio.create_task", _close_and_dummy_task),
+        patch("wet_mcp.server._launch_background_task", _close_and_dummy_task),
         patch(
             "wet_mcp.server._do_immediate_fallback_search",
             new_callable=AsyncMock,

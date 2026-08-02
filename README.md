@@ -312,6 +312,8 @@ Run your own single-user wet instance serverless on Cloudflare (Containers + D1 
    ```
    wrangler d1 create wet-docs
    wrangler d1 execute wet-docs --file migrations/0001_init_wet.sql --remote
+   wrangler d1 execute wet-docs --file migrations/0002_project_context.sql --remote
+   wrangler d1 execute wet-docs --file migrations/0003_version_index_state.sql --remote
    wrangler vectorize create wet-docs-vectors --dimensions 768 --metric cosine
    wrangler kv namespace create wet-kv
    ```

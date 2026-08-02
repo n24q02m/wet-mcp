@@ -1,12 +1,14 @@
 """WET MCP Server - Main server definition."""
 
 import asyncio
+import datetime
 import difflib
 import functools
 import io
 import json
 import os
 import sys
+import time
 
 # Fix Windows console encoding for Unicode output
 if sys.platform == "win32":
@@ -26,7 +28,12 @@ from mcp.types import ToolAnnotations
 
 from wet_mcp.cache import WebCache
 from wet_mcp.config import settings
-from wet_mcp.db import DocsDB
+from wet_mcp.db import (
+    INDEX_STATE_DONE,
+    INDEX_STATE_FAILED,
+    INDEX_STATE_RUNNING,
+    DocsDB,
+)
 from wet_mcp.searxng_runner import ensure_searxng, stop_searxng
 from wet_mcp.security import UNTRUSTED_SOURCE, build_external_tool_result
 from wet_mcp.sources import search_backends
@@ -63,6 +70,47 @@ _RERANK_CANDIDATE_MULTIPLIER = 3
 _web_cache: WebCache | None = None
 _docs_db: DocsDB | None = None
 _embedding_dims: int = 0
+
+# Strong references to fire-and-forget background tasks. asyncio keeps only a
+# WEAK reference to a running task, so a task whose handle is discarded can be
+# garbage-collected mid-flight and simply stop. Holding it here until it
+# finishes is what makes "launched" mean "ran".
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _on_background_task_done(task: asyncio.Task, label: str) -> None:
+    """Release a finished background task and report what it did.
+
+    An exception nobody retrieves surfaces only as a GC-time "Task exception
+    was never retrieved" on stderr -- which, inside a Cloudflare container, is
+    a place no operator can read. Log it here, with the traceback, at the
+    moment it happens.
+
+    Formatted with ``traceback`` rather than ``logger.opt(exception=True)``
+    because the stderr sink runs with loguru's default ``diagnose=True``, which
+    would dump every local (chunk bodies, provider objects) into the log.
+    """
+    _background_tasks.discard(task)
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        import traceback
+
+        logger.error(
+            f"Background task '{label}' failed: {type(exc).__name__}: {exc}\n"
+            + "".join(
+                traceback.format_exception(type(exc), exc, exc.__traceback__)
+            ).rstrip()
+        )
+
+
+def _launch_background_task(coro, label: str) -> asyncio.Task:
+    """Start ``coro`` as a tracked task instead of an unreferenced one."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(functools.partial(_on_background_task_done, label=label))
+    return task
 
 
 def _missing_docs_db_methods(backend) -> list[str]:
@@ -368,7 +416,7 @@ async def _lifespan_startup() -> asyncio.Task | None:
         except Exception as e:
             logger.error(f"Background backend init failed: {e}")
 
-    asyncio.create_task(_init_backends_task())
+    _launch_background_task(_init_backends_task(), "init-backends")
 
     # 5. Initialize docs DB (sqlite or cf-d1) via the backend factory, then run
     #    Alembic migrations (auto-migrate-on-startup with backup-before-migrate
@@ -1384,7 +1432,9 @@ async def search(  # noqa: PLR0913
             # status='indexed'.
             if not resolved or resolved[0].get("latest_version") is None:
                 # Tier 2 lazy ingest: fire-and-forget, return progress hint.
-                asyncio.create_task(ingest_tier2(_docs_db, library))
+                _launch_background_task(
+                    ingest_tier2(_docs_db, library), f"ingest-tier2:{library}"
+                )
                 return {
                     "status": "indexing_in_progress",
                     "library": library,
@@ -1999,6 +2049,11 @@ async def _handle_config_status() -> dict[str, Any]:
             "backend": docs_backend,
             "path": (None if docs_backend == "cf-d1" else str(settings.get_db_path())),
             "docs_indexed": (_docs_db.stats() if _docs_db else {}),
+            # docs_indexed alone cannot say why a number is what it is: zero
+            # chunks reads the same whether nothing was ever indexed, an
+            # indexer is running now, or every attempt failed. This is the
+            # recorded outcome of those attempts, read back from the store.
+            "indexing": (_docs_db.index_status() if _docs_db else {}),
         },
         "embedding": {
             "backend": (type(embed_backend).__name__ if embed_backend else None),
@@ -2521,6 +2576,90 @@ async def _fetch_and_chunk_docs(
 # Docs search (library documentation with auto-indexing)
 # ---------------------------------------------------------------------------
 
+# A ``running`` record older than this counts as abandoned. The indexer lives
+# in a process that can vanish without unwinding (container evicted, OOM kill,
+# redeploy), and a ``running`` row nobody will ever finish would otherwise lock
+# its library out of indexing forever. The pipeline's own sub-timeouts
+# (_DISCOVERY_TIMEOUT + _FETCH_TIMEOUT + _SEARXNG_TIMEOUT + _FALLBACK_TIMEOUT +
+# _EMBED_TIMEOUT) sum to well under this, so a live run is never mistaken for
+# an abandoned one.
+_INDEX_RUNNING_STALE_AFTER = 900.0
+
+
+def _index_attempt_in_flight(state: dict[str, Any] | None) -> bool:
+    """True when another indexer is still working on this version."""
+    if not isinstance(state, dict) or state.get("state") != INDEX_STATE_RUNNING:
+        return False
+    started = state.get("updated_at")
+    if not isinstance(started, int | float):
+        # A ``running`` row with no timestamp cannot be aged out; treat it as
+        # live rather than relaunch on top of an indexer that may be running.
+        return True
+    return (time.time() - started) < _INDEX_RUNNING_STALE_AFTER
+
+
+def _format_index_timestamp(ts: Any) -> str:
+    """Epoch seconds as a readable UTC stamp for a user-facing message."""
+    if not isinstance(ts, int | float):
+        return "an unrecorded time"
+    return (
+        datetime.datetime.fromtimestamp(ts, tz=datetime.UTC)
+        .replace(microsecond=0)
+        .isoformat()
+    )
+
+
+def _docs_indexing_message(
+    library: str, state: dict[str, Any] | None, already_running: bool
+) -> str:
+    """Describe what actually happened to this library's index.
+
+    A docs search that finds no chunks used to answer with one unconditional
+    "indexing in progress, this may take 3-5 minutes" whether the version had
+    never been attempted, was still running, or had failed on every previous
+    try -- so a permanently broken library was reported as a slow one forever.
+    """
+    if already_running and isinstance(state, dict):
+        return (
+            f"Library '{library}' has been indexing since "
+            f"{_format_index_timestamp(state.get('updated_at'))} (started by an "
+            "earlier request); no second indexing run was launched. Retry "
+            "shortly. In the meantime, here are temporary web search results."
+        )
+    if isinstance(state, dict) and state.get("state") == INDEX_STATE_FAILED:
+        return (
+            f"The previous indexing attempt for '{library}' failed at "
+            f"{_format_index_timestamp(state.get('updated_at'))}: "
+            f"{state.get('error') or 'no reason was recorded'}. A fresh attempt "
+            "has started; here are temporary web search results."
+        )
+    return (
+        f"Library '{library}' is currently being downloaded and indexed in the "
+        "background (this may take 3-5 minutes). In the meantime, here are "
+        "temporary web search results."
+    )
+
+
+def _record_index_state(ver_id: str, state: str, error: str | None = None) -> None:
+    """Persist a background indexing outcome, without ever masking it.
+
+    This is the reporting channel of last resort, so it must not be able to
+    throw over the failure it is reporting: the caller is an `except` handler
+    holding the real error. A missing store means there is nothing to record
+    into and nothing was indexed either; a store that rejects the write leaves
+    only the log, which is the very situation this record exists to improve on,
+    so say so loudly rather than let it pass as recorded.
+    """
+    if _docs_db is None:
+        return
+    try:
+        _docs_db.set_index_state(ver_id, state, error)
+    except Exception as exc:
+        logger.error(
+            f"Could not record indexing state '{state}' for version {ver_id}: "
+            f"{type(exc).__name__}: {exc}"
+        )
+
 
 async def _background_index_and_search(
     library: str,
@@ -2623,9 +2762,13 @@ async def _background_index_and_search(
                 )
 
         if not all_chunks:
-            logger.error(
-                f"Background indexing failed: Could not extract content from {docs_url}"
-            )
+            reason = f"Could not extract content from {docs_url}"
+            logger.error(f"Background indexing failed: {reason}")
+            # The log line above never leaves the process. Record the outcome
+            # where the normal query path can read it, so a store reporting
+            # zero chunks can say WHY instead of looking identical to one that
+            # was never asked to index.
+            _record_index_state(ver_id, INDEX_STATE_FAILED, reason)
             return
 
         # Generate embeddings
@@ -2663,6 +2806,12 @@ async def _background_index_and_search(
                     )
                     embeddings = None
 
+        # Drop the previous content only now that its replacement is in hand.
+        # This clear used to run at launch time in _do_docs_search, so every
+        # docs search on an already-indexed library wiped it first and a failed
+        # re-index left nothing behind.
+        _docs_db.clear_version_chunks(ver_id)
+
         # Store chunks
         _docs_db.add_chunks(
             version_id=ver_id,
@@ -2680,24 +2829,28 @@ async def _background_index_and_search(
         # `versions` (the table is UNIQUE(library_id, version)) and a
         # hardcoded 1 would be wrong.
         _docs_db.mark_library_indexed(lib_id)
+        _record_index_state(ver_id, INDEX_STATE_DONE)
         logger.info(
             f"Background indexing complete for '{library}'. Pages: {page_count}, Chunks: {len(all_chunks)}"
         )
 
     except Exception as e:
-        # Fire-and-forget task: nothing ever inspects its result, so this is
-        # the only record that the library was never indexed. A bare `{e}` on
-        # a KeyError/TypeError prints just the attribute name, which is what
-        # made the Tier 1 breakage of #1590 unreadable -- keep the traceback.
-        # Formatted here rather than via ``logger.opt(exception=True)`` because
-        # the stderr sink runs with loguru's default ``diagnose=True``, which
-        # would dump every local (chunk bodies, provider objects) into the log.
+        # A bare `{e}` on a KeyError/TypeError prints just the attribute name,
+        # which is what made the Tier 1 breakage of #1590 unreadable -- keep
+        # the traceback. Formatted here rather than via
+        # ``logger.opt(exception=True)`` because the stderr sink runs with
+        # loguru's default ``diagnose=True``, which would dump every local
+        # (chunk bodies, provider objects) into the log.
         import traceback
 
         logger.error(
             f"Background indexing failed for '{library}' ({docs_url}): "
             f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
         )
+        # And record it durably: an unexpected exception must leave the same
+        # readable trace as the empty-chunks case, or the version stays
+        # 'running' forever and the log is again the only witness.
+        _record_index_state(ver_id, INDEX_STATE_FAILED, f"{type(e).__name__}: {e}")
 
 
 async def _search_cached_index(
@@ -2929,23 +3082,30 @@ async def _do_docs_search(
         docs_url=docs_url,
     )
 
-    # Clear old chunks for re-indexing
-    _docs_db.clear_version_chunks(ver_id)
-
-    # Step 3: Launch background indexer
-    asyncio.create_task(
-        _background_index_and_search(
-            library=library,
-            lib_key=lib_key,
-            language=language,
-            docs_url=docs_url,
-            repo_url=repo_url,
-            query=query,
-            version=version,
-            lib_id=lib_id,
-            ver_id=ver_id,
+    # Step 3: launch a background indexer, unless one is already working this
+    # version. The old-chunk clear that used to sit here has moved into the
+    # indexer, next to the write that replaces them: clearing before the
+    # replacement exists meant one failed re-index destroyed the library's
+    # only good copy, and left every later search restarting the same failing
+    # work against an empty store.
+    index_state = _docs_db.get_index_state(ver_id)
+    already_running = _index_attempt_in_flight(index_state)
+    if not already_running:
+        _docs_db.set_index_state(ver_id, INDEX_STATE_RUNNING)
+        _launch_background_task(
+            _background_index_and_search(
+                library=library,
+                lib_key=lib_key,
+                language=language,
+                docs_url=docs_url,
+                repo_url=repo_url,
+                query=query,
+                version=version,
+                lib_id=lib_id,
+                ver_id=ver_id,
+            ),
+            f"docs-index:{lib_key}",
         )
-    )
 
     fallback_data = await _do_immediate_fallback_search(
         docs_url=docs_url,
@@ -2957,7 +3117,12 @@ async def _do_docs_search(
 
     return {
         "status": "indexing_in_progress",
-        "message": f"Library '{library}' is currently being downloaded and indexed in the background (this may take 3-5 minutes). In the meantime, here are temporary web search results.",
+        "message": _docs_indexing_message(library, index_state, already_running),
+        # The last attempt on record, machine-readable next to the prose. Named
+        # for what it is: when one was already running this IS that run, and
+        # when a fresh one was just launched this is the attempt it follows
+        # (carrying the reason the previous one failed).
+        "last_index_attempt": index_state,
         "temporary_results": fallback_data.get("results", []),
         "library": library,
         "docs_url": docs_url,

@@ -81,6 +81,101 @@ def test_mark_metadata_seeded_is_distinct_from_indexed():
     assert row["last_indexed_at"] is None
 
 
+def test_index_state_roundtrips_through_d1():
+    """The whole point of the record: it is readable from outside the container.
+
+    A background indexer inside the Cloudflare container logs to a stderr
+    nothing collects, so D1 is the only surface where its outcome can be seen.
+    """
+    db = _backend()
+    _lib_id, ver_id = _seeded(db)
+
+    db.set_index_state(ver_id, "running")
+    assert db.get_index_state(ver_id)["state"] == "running"
+
+    db.set_index_state(ver_id, "failed", "Could not extract content from https://a")
+
+    state = db.get_index_state(ver_id)
+    assert state["state"] == "failed"
+    assert state["error"] == "Could not extract content from https://a"
+    assert state["updated_at"] > 0
+    assert state["version"] == "1.0"
+
+
+def test_index_state_is_absent_until_something_attempts_an_index():
+    """Never-attempted must not read as an outcome."""
+    db = _backend()
+    _lib_id, ver_id = _seeded(db)
+    assert db.get_index_state(ver_id) is None
+    assert db.get_index_state("no-such-version") is None
+
+
+def test_failed_state_does_not_disturb_the_counts():
+    """Recording a failure must not zero the chunks the version still serves."""
+    db = _backend()
+    _lib_id, ver_id = _seeded(db)
+    db.mark_version_indexed(ver_id, 12, 340)
+
+    db.set_index_state(ver_id, "failed", "docs host returned 503")
+
+    row = db._d1.fetchone("SELECT * FROM versions WHERE id = ?", [ver_id])
+    assert (row["page_count"], row["chunk_count"]) == (12, 340)
+    assert row["status"] == "indexed", "a failed retry must not unpublish good data"
+
+
+def test_index_status_summarizes_what_config_status_reports():
+    """config(action='status') reads this to say why chunks is zero."""
+    db = _backend()
+    lib_id, ver_id = _seeded(db)
+    other_ver = db.upsert_version(lib_id, "2.0", docs_url="https://a")
+    db.set_index_state(ver_id, "failed", "Could not extract content")
+    db.set_index_state(other_ver, "running")
+
+    status = db.index_status()
+
+    assert status["counts"] == {"failed": 1, "running": 1}
+    recent = {r["version"]: r for r in status["recent"]}
+    assert recent["1.0"]["error"] == "Could not extract content"
+    assert recent["1.0"]["library"] == "alpha"
+    assert recent["2.0"]["state"] == "running"
+
+
+def test_index_state_writes_use_a_fixed_parameter_count():
+    """Never scale a D1 statement by row count -- that is what PR #1601 fixed."""
+    import json as _json
+
+    captured = []
+
+    class RecordingHttp:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def request(self, method, url, data=None, headers=None):
+            if url.endswith(("/query", "/batch")):
+                captured.append(_json.loads(data.decode()))
+            return self._inner.request(method, url, data, headers)
+
+    d1 = D1Backend("http://d1.internal", http=RecordingHttp(FakeD1Http(DDL)))
+    vec = VectorizeBackend(
+        "http://vectorize.internal", idx="wet", http=FakeVectorizeHttp()
+    )
+    db = DocsDBCfBackend(d1, vec, embedding_dims=768)
+    lib_id = db.upsert_library("alpha", docs_url="https://a")
+    for i in range(20):
+        db.set_index_state(
+            db.upsert_version(lib_id, f"{i}.0", docs_url="https://a"), "running"
+        )
+
+    updates = [
+        s
+        for p in captured
+        for s in (p if isinstance(p, list) else [p])
+        if "UPDATE versions SET index_state" in s["sql"]
+    ]
+    assert len(updates) == 20
+    assert {len(s["params"]) for s in updates} == {4}
+
+
 def test_clear_version_chunks_removes_rows_and_vectors():
     """Chunks and their vectors go together, or search returns ghosts."""
     db = _backend()
