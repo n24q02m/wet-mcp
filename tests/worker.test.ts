@@ -17,6 +17,11 @@ function fakeEnv() {
     VECTORIZE: {
       upsert: async () => ({ mutationId: 'm1' }),
       query: async () => ({ matches: [{ id: 'a', score: 0.9 }] }),
+      deleted: [] as string[][],
+      async deleteByIds(ids: string[]) {
+        this.deleted.push(ids)
+        return { mutationId: 'm-del' }
+      },
     },
   }
 }
@@ -62,6 +67,18 @@ describe('outbound handlers', () => {
     )
     const body = (await res.json()) as { matches: unknown[] }
     expect(body.matches.length).toBe(1)
+  })
+
+  it('Vectorize deleteByIds forwards the ids to the binding', async () => {
+    const env = fakeEnv()
+    const res = await vectorizeH(
+      new Request('http://vectorize.internal/deleteByIds', { method: 'POST', body: JSON.stringify({ ids: ['c1', 'c2'] }) }),
+      env as never,
+      ctx,
+    )
+    expect(res.status).toBe(200)
+    expect(env.VECTORIZE.deleted).toEqual([['c1', 'c2']])
+    expect(await res.json()).toEqual({ mutationId: 'm-del' })
   })
 
   it('KV readiness probe: GET __ready -> {ready:true}', async () => {

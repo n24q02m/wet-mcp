@@ -99,6 +99,10 @@ class FakeVectorizeHttp:
                 rec = json.loads(line)
                 self.vectors[rec["id"]] = (rec["values"], rec.get("metadata", {}))
             return (200, json.dumps({"mutationId": "mut-test"}).encode())
+        if url.endswith("/deleteByIds"):
+            for cid in json.loads(data.decode())["ids"]:
+                self.vectors.pop(cid, None)
+            return (200, json.dumps({"mutationId": "mut-del"}).encode())
         if url.endswith("/query"):
             q = json.loads(data.decode())
             ranked = sorted(
