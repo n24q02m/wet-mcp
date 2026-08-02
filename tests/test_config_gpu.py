@@ -125,8 +125,12 @@ def test_resolve_local_model_no_gpu_no_gguf():
         assert _resolve_local_model("onnx", "gguf") == "onnx"
 
 
-def test_resolve_local_embedding_model_gpu():
+def test_resolve_local_embedding_model_gpu(monkeypatch):
     """Test resolve_local_embedding_model returns GGUF when GPU and GGUF available."""
+    # A dev shell exporting LOCAL_EMBEDDING_MODEL (BYO override) would otherwise
+    # get baked into Settings() below, short-circuiting resolve_local_embedding_model()
+    # before it ever reaches the GPU/GGUF branch this test targets.
+    monkeypatch.delenv("LOCAL_EMBEDDING_MODEL", raising=False)
     s = Settings()
     with (
         mock.patch("wet_mcp.config._detect_gpu", return_value=True),
@@ -137,8 +141,9 @@ def test_resolve_local_embedding_model_gpu():
         assert "Embedding" in result
 
 
-def test_resolve_local_embedding_model_no_gpu():
+def test_resolve_local_embedding_model_no_gpu(monkeypatch):
     """Test resolve_local_embedding_model returns ONNX when no GPU."""
+    monkeypatch.delenv("LOCAL_EMBEDDING_MODEL", raising=False)
     s = Settings()
     with (
         mock.patch("wet_mcp.config._detect_gpu", return_value=False),
@@ -149,8 +154,10 @@ def test_resolve_local_embedding_model_no_gpu():
         assert "Embedding" in result
 
 
-def test_resolve_local_rerank_model_gpu():
+def test_resolve_local_rerank_model_gpu(monkeypatch):
     """Test resolve_local_rerank_model returns GGUF when GPU and GGUF available."""
+    # Same leak vector as above, for the rerank BYO override.
+    monkeypatch.delenv("LOCAL_RERANK_MODEL", raising=False)
     s = Settings()
     with (
         mock.patch("wet_mcp.config._detect_gpu", return_value=True),
@@ -161,8 +168,9 @@ def test_resolve_local_rerank_model_gpu():
         assert "Reranker" in result
 
 
-def test_resolve_local_rerank_model_no_gpu():
+def test_resolve_local_rerank_model_no_gpu(monkeypatch):
     """Test resolve_local_rerank_model returns ONNX when no GPU."""
+    monkeypatch.delenv("LOCAL_RERANK_MODEL", raising=False)
     s = Settings()
     with (
         mock.patch("wet_mcp.config._detect_gpu", return_value=False),
