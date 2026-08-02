@@ -234,6 +234,18 @@ jobs:
     name: Refresh Tier 1 docs index (weekly)
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    # Sized from measurement, not from the 6-hour default. The twelve green
+    # runs before #1590 finished in 2-7 minutes, but they were green because
+    # the ingest pipeline discarded every page, so they measure setup and
+    # discovery only. The first run that actually ingested (30736692116) got
+    # through 28 of the 50 libraries in 7m33s with the headless leg erroring
+    # out instantly, which extrapolates to ~14 minutes for the full list. The
+    # browser install below turns those instant errors back into real renders:
+    # 190 URLs escalated to headless in that run, and at the 60s crawler_timeout
+    # ceiling with _MAX_CONCURRENT_OPS=6 that is ~32 minutes of worst-case
+    # rendering on top. 45 covers measured base plus that arithmetic ceiling
+    # while still cutting a genuine hang eight times shorter than the default.
+    timeout-minutes: 45
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
@@ -254,12 +266,40 @@ jobs:
       - name: Install dependencies
         run: uv sync --group dev
 
+      - name: Install chromium headless shell
+        # The canary crawls through the production strategy chain
+        # basic_http -> tls_spoof -> headless (crawler.py
+        # _build_scraping_agent), and the docs freshness target it guards is
+        # ">= 90% of Tier 1 within 7 days" (docs/BENCHMARKS.md), measured over
+        # that whole chain. Every other environment that runs this chain has a
+        # browser: the image installs one (Dockerfile, unless SLIM=1 drops the
+        # local legs on purpose) and so does the contributor setup
+        # (CONTRIBUTING.md). CI never did, which stayed invisible while the
+        # ingest pipeline was discarding pages anyway, and surfaced the week
+        # after #1590 unblocked it as 190 "All strategies failed ... last
+        # error: headless: BrowserType.launch: Executable doesn't exist"
+        # lines in run 30736692116.
+        #
+        # Only the headless shell is installed, not full chromium: the shell
+        # is the binary that run named (chromium_headless_shell-1228) because
+        # nothing here ever launches a headed browser, and it is the smaller
+        # download. --with-deps pulls the matching system libraries so this
+        # does not become a second silent missing-binary failure the first
+        # time the runner image drops one.
+        run: uv run playwright install --with-deps chromium-headless-shell
+
       - name: Build Tier 1 index
         run: uv run python scripts/build_tier1_index.py
 
       - name: Upload metrics artifact
-        # Runs even when the build step exits non-zero: a failing index run
-        # is exactly when the metrics file is worth reading.
+        # Covers the build step exiting non-zero, and -- now that the job has
+        # a timeout-minutes -- a hang that the runner cancels. It does NOT
+        # cover the runner being killed: `if: always()` is still evaluated by
+        # the runner, so in run 30736692116 this step was reported as skipped
+        # after "The runner has received a shutdown signal". For that case the
+        # only mitigation is upstream: build_tier1_index.py rewrites the
+        # metrics file after every library, so whatever the job manages to
+        # upload is a real partial record rather than nothing.
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
