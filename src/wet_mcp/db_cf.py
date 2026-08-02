@@ -8,8 +8,11 @@ URL diversity 2/url, adjacent prefetch) is REUSED from db.py, not reimplemented.
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
+
+from loguru import logger
 
 from wet_mcp.backends.d1 import D1Backend
 from wet_mcp.backends.vectorize import VectorizeBackend
@@ -153,6 +156,173 @@ class DocsDBCfBackend:
             # Upsert is eventual; block until index is ready so an immediate
             # search() doesn't return empty (mirrors spec risk mitigation).
             self._vec.wait_until_indexed()
+
+    def clear_version_chunks(self, version_id: str) -> int:
+        """Drop a version's chunks from D1 and their vectors from Vectorize.
+
+        Vectors go FIRST, and the delete is not error-suppressed. If Vectorize
+        refuses, the D1 rows stay as well, leaving the store merely stale --
+        the alternative ordering leaves vectors whose chunk row is gone, and
+        those come back from search() as hits with no content behind them.
+
+        Returns the number of chunks removed, counted from the ids actually
+        read (the D1 HTTP contract returns rows, not a rowcount).
+        """
+        rows = self._d1.execute(
+            "SELECT id FROM doc_chunks WHERE version_id = ?", [version_id]
+        )
+        ids = [r["id"] for r in rows]
+        if not ids:
+            return 0
+        self._vec.delete_by_ids(ids)
+        self._d1.execute("DELETE FROM doc_chunks WHERE version_id = ?", [version_id])
+        return len(ids)
+
+    # --- index bookkeeping ---
+
+    def mark_version_indexed(
+        self, version_id: str, page_count: int, chunk_count: int
+    ) -> None:
+        """Mark a version indexed with its counts.
+
+        The absence of exactly this method is what made cf-d1 lose data: the
+        indexer wrote chunks, raised AttributeError here inside a log-only
+        `except Exception`, and left the version at status='pending' so the
+        next request indexed it all over again.
+        """
+        self._d1.execute(
+            "UPDATE versions SET status = 'indexed', indexed_at = ?,"
+            " page_count = ?, chunk_count = ? WHERE id = ?",
+            [time.time(), page_count, chunk_count, version_id],
+        )
+
+    def mark_library_indexed(
+        self, library_id: str, total_versions: int | None = None
+    ) -> None:
+        """Update libraries.last_indexed_at, and total_versions when given.
+
+        DocsDB.mark_library_indexed probes pragma_table_info because a
+        pre-Alembic SQLite file may lack these columns. D1's schema is owned by
+        migrations/0001_init_wet.sql, which has both, so this writes fixed SQL
+        with no column names assembled at runtime.
+        """
+        if total_versions is None:
+            self._d1.execute(
+                "UPDATE libraries SET last_indexed_at = ? WHERE id = ?",
+                [time.time(), library_id],
+            )
+            return
+        self._d1.execute(
+            "UPDATE libraries SET last_indexed_at = ?, total_versions = ? WHERE id = ?",
+            [time.time(), int(total_versions), library_id],
+        )
+
+    def mark_metadata_seeded(self, library_id: str) -> None:
+        """Record a metadata-only seed pass (Tier 1 warmup freshness anchor).
+
+        Deliberately separate from last_indexed_at so a seeded-but-unindexed
+        library stays distinguishable from an indexed one. The column arrives
+        in migrations/0002_project_context.sql.
+        """
+        self._d1.execute(
+            "UPDATE libraries SET metadata_seeded_at = ? WHERE id = ?",
+            [time.time(), library_id],
+        )
+
+    # --- project context (Cabinets isolation) ---
+
+    def upsert_project_context(
+        self, project_path: str, locked_libraries: list[dict]
+    ) -> None:
+        """Persist a project's locked-library set, preserving created_at."""
+        now = time.time()
+        payload = json.dumps(locked_libraries, ensure_ascii=False)
+        existing = self._d1.fetchone(
+            "SELECT created_at FROM project_context WHERE project_path = ?",
+            [project_path],
+        )
+        if existing:
+            self._d1.execute(
+                "UPDATE project_context SET locked_libraries = ?, last_used_at = ?"
+                " WHERE project_path = ?",
+                [payload, now, project_path],
+            )
+            return
+        self._d1.execute(
+            "INSERT INTO project_context (project_path, locked_libraries,"
+            " created_at, last_used_at) VALUES (?,?,?,?)",
+            [project_path, payload, now, now],
+        )
+
+    def get_project_context(self, project_path: str) -> dict | None:
+        """Return the lock entry for a project, or None if not locked."""
+        row = self._d1.fetchone(
+            "SELECT project_path, locked_libraries, created_at, last_used_at"
+            " FROM project_context WHERE project_path = ?",
+            [project_path],
+        )
+        if row is None:
+            return None
+        result = dict(row)
+        try:
+            libs = json.loads(result["locked_libraries"])
+            if not isinstance(libs, list):
+                libs = []
+            result["locked_libraries"] = libs
+        except (TypeError, json.JSONDecodeError) as e:
+            # Same trade-off DocsDB.get_project_context documents: an unreadable
+            # lock reads as "nothing locked", which is shaped exactly like a
+            # project that was never locked, so it is logged rather than hidden.
+            logger.warning(
+                f"project_context row for {project_path!r} has unreadable "
+                f"locked_libraries ({type(e).__name__}: {e}); treating the "
+                "project as unlocked"
+            )
+            result["locked_libraries"] = []
+        return result
+
+    def touch_project_context(self, project_path: str) -> None:
+        """Update last_used_at; call before each query that honors a lock."""
+        self._d1.execute(
+            "UPDATE project_context SET last_used_at = ? WHERE project_path = ?",
+            [time.time(), project_path],
+        )
+
+    # --- lifecycle + file-based sync ---
+
+    def close(self) -> None:
+        """No handle to release: D1 and Vectorize are reached per request.
+
+        DocsDB.close() ends a long-lived sqlite3 connection. D1Backend and
+        VectorizeBackend hold nothing open between calls, so there is nothing
+        here to close. server.py calls this during shutdown, so it returns
+        quietly because there genuinely is no work -- not because a failure
+        was swallowed.
+        """
+
+    def export_jsonl(self) -> str:
+        raise NotImplementedError(
+            "export_jsonl is not available on DOCS_DB_BACKEND=cf-d1. The store "
+            "is Cloudflare D1 + Vectorize, already shared and durable across "
+            "every instance, so there is no local docs.db to export and no "
+            "second copy to keep in step. The GDrive/S3 DB-sync exists to move "
+            "a single-machine SQLite file around and is redundant here (see "
+            "docs/cf-template.md, 'Sync mode-gating'). Leave SYNC_ENABLED off "
+            "on a cf-d1 deployment, or read the rows directly with "
+            "`wrangler d1 execute`."
+        )
+
+    def import_jsonl(self, data: str, mode: str = "merge") -> dict:
+        raise NotImplementedError(
+            "import_jsonl is not available on DOCS_DB_BACKEND=cf-d1. Sync JSONL "
+            "carries no embeddings -- export_jsonl drops them by design -- so "
+            "every imported chunk would land in D1 with no matching vector in "
+            "Vectorize. Those chunks would answer FTS queries while staying "
+            "invisible to the vector arm of search(), i.e. a half-ranked index "
+            "that looks like a working one. Index the library normally so "
+            "chunks and embeddings are written together, or bulk-load D1 with "
+            "`wrangler d1 execute` and re-embed."
+        )
 
     # --- hybrid search (ranking pipeline reused from db.py) ---
 

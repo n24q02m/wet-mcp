@@ -27,8 +27,13 @@ Hardened for E.1 + E.2 (PR series cf-p3-01); do not re-solve those per server.
 - The Container DO shape (`defaultPort`, `sleepAfter`, `enableInternet`, `envVars`).
 
 ## KEEP ONLY IF USED
-- `d1Outbound` + `D1` binding -> ONLY if the server uses D1 (mnemo only).
-- `vectorizeOutbound` + `VECTORIZE` binding -> ONLY if the server uses Vectorize (mnemo only).
+- `d1Outbound` + `D1` binding -> ONLY if the server uses D1 (wet, mnemo).
+- `vectorizeOutbound` + `VECTORIZE` binding -> ONLY if the server uses Vectorize (wet, mnemo).
+  Routes: `POST /upsert`, `POST /query`, `POST /deleteByIds`, and `GET -> {ready:true}`.
+  `deleteByIds` is REQUIRED on any server whose records can be re-indexed or deleted:
+  dropping the D1 rows without dropping their vectors leaves entries that keep scoring
+  in vector search but resolve to no content. Delete vectors BEFORE the rows, and do not
+  wrap that call in a log-only `except` — a half-completed delete must be visible.
 - imagine / notion / email / telegram are KV-only: drop both handlers + bindings; keep `kvOutbound`.
 
 ## Security (non-negotiable)

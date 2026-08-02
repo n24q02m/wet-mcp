@@ -28,6 +28,7 @@ export interface Env {
   VECTORIZE: {
     upsert(v: unknown[]): Promise<{ mutationId: string }>
     query(vector: number[], opts: { topK: number; filter?: unknown }): Promise<{ matches: unknown[] }>
+    deleteByIds(ids: string[]): Promise<{ mutationId: string }>
   }
   WET?: { idFromName(n: string): unknown; get(id: unknown): { fetch(r: Request): Promise<Response> } }
   // Container config (wrangler.jsonc `vars`) + secrets (`wrangler secret put`),
@@ -161,6 +162,12 @@ const vectorizeOutbound: OutboundHandler<Env> = async (request, env) => {
   if (url.pathname === '/query' && request.method === 'POST') {
     const { vector, topK, filter } = (await request.json()) as { vector: number[]; topK: number; filter?: unknown }
     return Response.json(await env.VECTORIZE.query(vector, { topK, filter }))
+  }
+  // Re-indexing deletes chunk rows from D1; without this route their vectors
+  // stay in the index and come back as search hits whose content is gone.
+  if (url.pathname === '/deleteByIds' && request.method === 'POST') {
+    const { ids } = (await request.json()) as { ids: string[] }
+    return Response.json(await env.VECTORIZE.deleteByIds(ids))
   }
   if (request.method === 'GET') return Response.json({ ready: true })
   return new Response('not found', { status: 404 })

@@ -9,7 +9,11 @@ from wet_mcp.backends.vectorize import VectorizeBackend
 from wet_mcp.db import DocsDB
 from wet_mcp.db_cf import DocsDBCfBackend
 
-DDL = Path("migrations/0001_init_wet.sql").read_text(encoding="utf-8")
+# The D1 schema now spans more than one migration (0002 adds project_context and
+# libraries.metadata_seeded_at), so apply them all in order rather than pinning 0001.
+DDL = "\n".join(
+    p.read_text(encoding="utf-8") for p in sorted(Path("migrations").glob("*.sql"))
+)
 
 
 def _backend(ready_after=0):
