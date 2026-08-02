@@ -206,17 +206,22 @@ def lock_project(db: Any, project_path: Path) -> dict:
     detected = detect_manifests(project_path)
 
     enriched: list[dict] = []
+    # Bolt optimization: track indexed count in the same pass instead of using sum() generator
+    indexed_count = 0
     for entry in detected:
         name = entry["id"]
         version = entry.get("version", "")
         lib_row = db.get_library(name)
         lib_id = lib_row["id"] if lib_row else None
+        is_indexed = lib_row is not None
+        if is_indexed:
+            indexed_count += 1
         enriched.append(
             {
                 "id": lib_id or name,
                 "name": name,
                 "version": version,
-                "indexed": lib_row is not None,
+                "indexed": is_indexed,
             }
         )
 
@@ -226,7 +231,7 @@ def lock_project(db: Any, project_path: Path) -> dict:
         "project_path": str(project_path),
         "locked_libraries": enriched,
         "total": len(enriched),
-        "indexed": sum(1 for e in enriched if e["indexed"]),
+        "indexed": indexed_count,
     }
 
 

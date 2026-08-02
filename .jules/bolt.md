@@ -67,3 +67,6 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+## $(date +%Y-%m-%d) - Eliminate Python-level generator iteration overhead
+**Learning:** Python-level generator expressions inside `any()` for checking multiple suffixes (e.g., `any(host.endswith(s) for s in SUFFIXES)`) and inside `sum()` (e.g., `sum(1 for x in xs if condition)`) introduce significant measurable overhead because they push the iteration up into Python rather than keeping it in optimized C code.
+**Action:** Replace `any(... endswith ...)` with `str.endswith(tuple(SUFFIXES))` and use `frozenset` for exact match fallbacks. For `sum()` generators on lists that are already being constructed in a loop, track the count using an accumulator integer variable directly inside the existing `for` loop to avoid an `O(2N)` traversal.

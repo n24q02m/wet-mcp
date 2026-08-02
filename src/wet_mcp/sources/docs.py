@@ -1632,6 +1632,10 @@ _READTHEDOCS_HOSTS = (
     "readthedocs-hosted.com",
 )
 
+# Bolt optimization: precompute tuple and frozenset to eliminate Python-level iteration overhead
+_READTHEDOCS_HOSTS_SET = frozenset(_READTHEDOCS_HOSTS)
+_READTHEDOCS_SUFFIXES = tuple(f".{h}" for h in _READTHEDOCS_HOSTS)
+
 
 def _is_readthedocs_host(netloc: str) -> bool:
     """True when netloc is a ReadTheDocs host or a subdomain of one.
@@ -1642,7 +1646,8 @@ def _is_readthedocs_host(netloc: str) -> bool:
     subdomain check below and collect the bonus.
     """
     host = netloc.lower().partition(":")[0].rstrip(".")
-    return any(host == h or host.endswith(f".{h}") for h in _READTHEDOCS_HOSTS)
+    # Bolt optimization: use O(1) set lookup and tuple endswith instead of any() generator
+    return host in _READTHEDOCS_HOSTS_SET or host.endswith(_READTHEDOCS_SUFFIXES)
 
 
 def _score_discovery_result(r: dict, name: str) -> int:
