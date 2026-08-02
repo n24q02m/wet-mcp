@@ -81,7 +81,7 @@ def _missing_docs_db_methods(backend) -> list[str]:
     )
 
 
-def make_docs_db():
+def make_docs_db(db_path: Path | None = None):
     """Select docs DB backend: sqlite (default) or cf-d1 (D1 + Vectorize).
 
     DOCS_DB_BACKEND is orthogonal to MCP_STORAGE_BACKEND. The selector is read
@@ -89,6 +89,14 @@ def make_docs_db():
     sqlite path uses the module Settings singleton (patchable in tests) and
     preserves the B2 embedding-model identity guard; the cf-d1 path routes
     relational + FTS5 to D1 and vectors to Vectorize via env-configured clients.
+
+    ``db_path`` overrides ``settings.get_db_path()`` for a caller that opens a
+    store at an explicit location -- ``scripts/build_tier1_index.py --db-path``
+    is the one that does. It exists so that caller does not have to rebuild the
+    embedding identity itself: the dims and model id below are what the guard
+    in ``DocsDB`` compares against, so a second implementation of them stamps a
+    store the server then refuses to open. It is meaningful only for the sqlite
+    backend; under cf-d1 there is no local file to point at.
     """
     import os
 
@@ -96,6 +104,15 @@ def make_docs_db():
 
     dims = settings.resolve_embedding_dims() or _DEFAULT_EMBEDDING_DIMS
     backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
+    if backend == "cf-d1" and db_path is not None:
+        raise RuntimeError(
+            f"make_docs_db(db_path={str(db_path)!r}) was called while "
+            "DOCS_DB_BACKEND=cf-d1 selects the D1 + Vectorize store, where "
+            "that path addresses nothing. Honouring the selector would write "
+            "to a store the caller did not name, and honouring the path would "
+            "ignore the selector. Unset DOCS_DB_BACKEND to use the local "
+            "SQLite store at that path, or drop the path to use cf-d1."
+        )
     if backend == "cf-d1":
         from wet_mcp.backends.d1 import d1_backend_from_env
         from wet_mcp.backends.vectorize import vectorize_backend_from_env
@@ -132,7 +149,7 @@ def make_docs_db():
     else:  # unavailable -- local disabled + no cloud chain; no active embed model
         model_identity = ""
     return DocsDB(
-        settings.get_db_path(),
+        settings.get_db_path() if db_path is None else db_path,
         embedding_dims=dims,
         model_identity=model_identity,
         reindex_on_model_change=settings.reindex_on_model_change,

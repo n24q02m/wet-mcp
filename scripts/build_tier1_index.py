@@ -29,6 +29,35 @@ from pathlib import Path
 from typing import Any
 
 
+def open_docs_db(db_path: Path):
+    """Open the docs store this script ingests into, as the server opens it.
+
+    This ingests into the same ``docs.db`` a running server reads, and
+    ``DocsDB`` stamps ``(embedding_model, embedding_dims)`` into ``store_meta``
+    on first open and refuses to reopen a store stamped with a different
+    identity. So the identity used here is not a detail of this script -- it
+    has to be the server's, byte for byte.
+
+    Hence the delegation to ``make_docs_db`` rather than a second copy of the
+    dims/model resolution. The copy this replaces was ``DocsDB(db_path,
+    embedding_dims=0)``: an identity no server ever produces, which broke
+    ingest in both directions. On a machine that had run the server, the
+    script could not open the store at all. On a clean runner -- the weekly
+    ``refresh-tier1`` job -- the script stamped dims=0 first and left behind a
+    store no server could open, then exited 0 because nothing in CI starts a
+    server afterwards.
+
+    ``make_docs_db`` also rejects ``DOCS_DB_BACKEND=cf-d1`` here: everything
+    this script does with the path (migrations, the metrics file written
+    beside it) is SQLite-specific, so a cf-d1 environment gets a clear refusal
+    instead of a run that quietly ingests into D1.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+    from wet_mcp.server import make_docs_db
+
+    return make_docs_db(db_path=db_path)
+
+
 async def _amain() -> int:
     parser = argparse.ArgumentParser(description="Eager Tier 1 docs ingestion")
     parser.add_argument(
@@ -50,13 +79,12 @@ async def _amain() -> int:
 
     # Lazy imports so script-only deps stay out of the runtime hot path.
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-    from wet_mcp.db import DocsDB
     from wet_mcp.migrations import run_migrations_on_startup
     from wet_mcp.sources.docs import ingest_tier2
     from wet_mcp.sources.tier1_warmup import _load_tier1_payload, maybe_warm
 
     args.db_path.parent.mkdir(parents=True, exist_ok=True)
-    db = DocsDB(args.db_path, embedding_dims=0)
+    db = open_docs_db(args.db_path)
     run_migrations_on_startup(args.db_path)
     maybe_warm(db, force=True)
 
