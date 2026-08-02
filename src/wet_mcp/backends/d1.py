@@ -15,7 +15,16 @@ from typing import Any
 
 import httpx
 
-# SQLite bound-variable ceiling; D1 inherits it. Keep INSERT batches well under.
+# Cloudflare D1 rejects any single query carrying more than this many bound
+# parameters. It is a limit on PARAMETERS, not on rows -- a distinction the
+# previous comment here lost, which is how a 100-row batch of the 13-column
+# doc_chunks INSERT came to send 1300 parameters and get refused.
+# https://developers.cloudflare.com/d1/platform/limits/
+D1_MAX_BOUND_PARAMS = 100
+
+# Upper bound on rows per multi-row INSERT, applied on top of the parameter cap
+# above. The parameter cap is what D1 enforces; this only lets a caller ask for
+# smaller statements than the cap would allow.
 _DEFAULT_MAX_ROWS_PER_INSERT = 100
 
 # Matches the trailing VALUES (?,?,...) tuple of a single-row INSERT so it can
@@ -82,11 +91,31 @@ class D1Backend:
     def executemany(self, sql: str, rows: list[list[Any]]) -> None:
         # D1 has no native executemany over HTTP; batch rows into multi-row
         # INSERTs (one POST per chunk) by expanding the VALUES (...) tuple.
+        #
+        # Batch size is DERIVED from how wide the rows actually are, never
+        # assumed: one statement carries rows_per_statement * cols parameters,
+        # and D1 refuses the whole statement past D1_MAX_BOUND_PARAMS. Sizing
+        # by row count alone silently scales the parameter count with the
+        # table's width.
         if not rows:
             return
+        cols = max((len(r) for r in rows), default=0)
+        if cols > D1_MAX_BOUND_PARAMS:
+            raise ValueError(
+                f"executemany was given {cols}-column rows, but D1 accepts at "
+                f"most {D1_MAX_BOUND_PARAMS} bound parameters per statement, so "
+                "not even one row fits. Splitting the row across statements "
+                "would write corrupt partial rows; widen the schema less, or "
+                "write the row in pieces the caller can make atomic itself."
+            )
+        rows_per_statement = (
+            min(self.max_rows_per_insert, D1_MAX_BOUND_PARAMS // cols)
+            if cols
+            else self.max_rows_per_insert
+        )
         match = _VALUES_TUPLE_RE.search(sql)
-        for i in range(0, len(rows), self.max_rows_per_insert):
-            batch = rows[i : i + self.max_rows_per_insert]
+        for i in range(0, len(rows), rows_per_statement):
+            batch = rows[i : i + rows_per_statement]
             if match and len(batch) > 1:
                 tuple_sql = match.group(1)
                 values = ", ".join(tuple_sql for _ in batch)
