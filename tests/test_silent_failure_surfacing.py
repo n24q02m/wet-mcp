@@ -14,7 +14,7 @@ that is the property that hid the bug.
 import contextlib
 import json
 import sqlite3
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -23,6 +23,9 @@ from loguru import logger
 from wet_mcp import server
 from wet_mcp.db import DocsDB
 from wet_mcp.server import search
+
+if TYPE_CHECKING:
+    from loguru import Record
 
 _LEVELS = {
     "TRACE": 5,
@@ -42,7 +45,7 @@ def captured_logs(level: str = "DEBUG"):
     ``logger.add`` is additive, so the module-level stderr sink configured by
     ``wet_mcp.server`` keeps working and no global logger state is mutated.
     """
-    records: list[dict] = []
+    records: list[Record] = []
     sink_id = logger.add(lambda message: records.append(message.record), level=level)
     try:
         yield records
@@ -50,13 +53,13 @@ def captured_logs(level: str = "DEBUG"):
         logger.remove(sink_id)
 
 
-def at_least(records: list[dict], level: str) -> list[dict]:
+def at_least(records: list["Record"], level: str) -> list["Record"]:
     """Records logged at ``level`` or above."""
     floor = _LEVELS[level]
     return [r for r in records if r["level"].no >= floor]
 
 
-def messages(records: list[dict], level: str) -> list[str]:
+def messages(records: list["Record"], level: str) -> list[str]:
     return [r["message"] for r in at_least(records, level)]
 
 
