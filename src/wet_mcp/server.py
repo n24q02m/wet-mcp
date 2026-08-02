@@ -65,6 +65,22 @@ _docs_db: DocsDB | None = None
 _embedding_dims: int = 0
 
 
+def _missing_docs_db_methods(backend) -> list[str]:
+    """Public ``DocsDB`` methods that ``backend`` (class or instance) lacks.
+
+    ``DocsDB`` itself is the contract, read at runtime rather than copied into
+    a hand-written list, so a method added there cannot quietly become a hole
+    in an alternate backend.
+    """
+    return sorted(
+        name
+        for name, attr in vars(DocsDB).items()
+        if not name.startswith("_")
+        and callable(attr)
+        and not callable(getattr(backend, name, None))
+    )
+
+
 def make_docs_db():
     """Select docs DB backend: sqlite (default) or cf-d1 (D1 + Vectorize).
 
@@ -85,11 +101,29 @@ def make_docs_db():
         from wet_mcp.backends.vectorize import vectorize_backend_from_env
         from wet_mcp.db_cf import DocsDBCfBackend
 
-        return DocsDBCfBackend(
+        cf_db = DocsDBCfBackend(
             d1_backend_from_env(),
             vectorize_backend_from_env(),
             embedding_dims=dims,
         )
+        # A backend that implements only part of DocsDB does not fail at
+        # startup, it fails mid-index: _background_index_and_search writes the
+        # chunks through add_chunks (present) and then raises AttributeError on
+        # mark_version_indexed (absent), inside a broad `except Exception` that
+        # only logs. The version never reaches status='indexed', so the next
+        # request re-indexes it, forever, while the row count keeps growing.
+        # Refuse the object here instead, where the missing names can be named.
+        missing = _missing_docs_db_methods(cf_db)
+        if missing:
+            raise RuntimeError(
+                f"DOCS_DB_BACKEND=cf-d1 built {type(cf_db).__name__}, which is "
+                f"missing {len(missing)} method(s) that callers invoke on a "
+                f"DocsDB: {', '.join(missing)}. Indexing would write chunks and "
+                "then fail on the first missing call, leaving every version "
+                "short of status='indexed' and re-indexed on every request. "
+                "Refusing to start until the backend implements them."
+            )
+        return cf_db
     embed_backend = settings.resolve_embedding_backend()
     if embed_backend == "cloud":
         model_identity = settings.embedding_primary() or ""
@@ -706,7 +740,15 @@ async def _rerank_results(
                     reranked.append(result)
             return reranked
     except Exception as e:
-        logger.debug(f"Reranking failed, using original order: {e}")
+        # A reranker that is configured but permanently broken (bad key, wrong
+        # model id, dead endpoint) silently returns keyword order on EVERY
+        # search. At debug level nobody sees that; warning is the level an
+        # operator actually reads.
+        logger.warning(
+            f"Reranking failed with {type(reranker).__name__} "
+            f"({len(results)} candidates, query {query[:80]!r}), "
+            f"falling back to unranked order: {type(e).__name__}: {e}"
+        )
 
     return results[:top_n]
 
@@ -1117,7 +1159,10 @@ async def search(  # noqa: PLR0913
                                 data["total"] = len(data["results"])
                                 modified = True
                     except Exception as e:
-                        logger.debug(f"Search reranking failed, using original: {e}")
+                        logger.warning(
+                            f"Search reranking step failed for query {query!r}, "
+                            f"returning backend order: {type(e).__name__}: {e}"
+                        )
 
                     # Optional snippet enrichment
                     if enrich:
@@ -1134,7 +1179,15 @@ async def search(  # noqa: PLR0913
                                 data["results"] = enriched
                                 modified = True
                         except Exception as e:
-                            logger.debug(f"Snippet enrichment failed: {e}")
+                            # enrich=True is an explicit opt-in the caller pays
+                            # latency for. Dropping it at debug level returns
+                            # plain snippets that look like a successful
+                            # enrichment.
+                            logger.warning(
+                                f"Snippet enrichment (enrich=True) failed for "
+                                f"query {query!r}; returning unenriched "
+                                f"snippets: {type(e).__name__}: {e}"
+                            )
 
                     # Citation standardization (always on -- cheap pure-python).
                     try:
@@ -1147,7 +1200,13 @@ async def search(  # noqa: PLR0913
                             )
                             modified = True
                     except Exception as e:
-                        logger.debug(f"Citation standardization failed: {e}")
+                        # Pure-python and always on, so a failure here is our
+                        # own bug, not an upstream outage.
+                        logger.warning(
+                            f"Citation standardization failed for query "
+                            f"{query!r}; results ship without freshness / "
+                            f"citation metadata: {type(e).__name__}: {e}"
+                        )
 
                     if modified:
                         result = json.dumps(data, ensure_ascii=False, indent=2)
@@ -2505,6 +2564,10 @@ async def _background_index_and_search(
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     for i, res in enumerate(results):
                         if isinstance(res, BaseException):
+                            logger.warning(
+                                f"Alternate docs source failed for '{library}' "
+                                f"at {alt_urls[i]}: {type(res).__name__}: {res}"
+                            )
                             continue
                         alt_chunks, alt_pages = res
                         if alt_pages > page_count and len(alt_chunks) > len(all_chunks):
@@ -2513,7 +2576,12 @@ async def _background_index_and_search(
                             page_count = alt_pages
                             break
             except Exception as e:
-                logger.debug(f"SearXNG fallback failed: {e}")
+                logger.warning(
+                    f"SearXNG docs fallback failed for '{library}' "
+                    f"(query {fallback_query!r}); staying with "
+                    f"{len(all_chunks)} chunks from {page_count} pages: "
+                    f"{type(e).__name__}: {e}"
+                )
 
         if not all_chunks:
             logger.error(
@@ -2543,6 +2611,17 @@ async def _background_index_and_search(
                         _embed_batch(embed_texts_list), timeout=_EMBED_TIMEOUT
                     )
                 except TimeoutError:
+                    # Storing the chunks anyway is the intended degrade (they
+                    # stay keyword-searchable), but the version is then stamped
+                    # 'indexed' with a full chunk_count while holding zero
+                    # vectors. Without this line that swap is invisible.
+                    logger.error(
+                        f"Embedding batch timed out after {_EMBED_TIMEOUT}s for "
+                        f"'{library}' ({len(embed_texts_list)} chunks from "
+                        f"{docs_url}); chunks are stored WITHOUT vectors, so "
+                        "this version answers keyword-only until it is "
+                        "re-indexed"
+                    )
                     embeddings = None
 
         # Store chunks
@@ -2567,7 +2646,19 @@ async def _background_index_and_search(
         )
 
     except Exception as e:
-        logger.error(f"Background indexing failed for {library}: {e}")
+        # Fire-and-forget task: nothing ever inspects its result, so this is
+        # the only record that the library was never indexed. A bare `{e}` on
+        # a KeyError/TypeError prints just the attribute name, which is what
+        # made the Tier 1 breakage of #1590 unreadable -- keep the traceback.
+        # Formatted here rather than via ``logger.opt(exception=True)`` because
+        # the stderr sink runs with loguru's default ``diagnose=True``, which
+        # would dump every local (chunk bodies, provider objects) into the log.
+        import traceback
+
+        logger.error(
+            f"Background indexing failed for '{library}' ({docs_url}): "
+            f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
+        )
 
 
 async def _search_cached_index(
@@ -2724,7 +2815,14 @@ async def _discover_docs_url(
         except TimeoutError:
             logger.warning("SearXNG discovery fallback timed out")
         except json.JSONDecodeError:
-            pass
+            # searxng_search reports failure by returning an "Error: ..."
+            # string, which lands here. Swallowing it made a dead SearXNG
+            # indistinguishable from "this library has no docs page".
+            logger.warning(
+                f"SearXNG discovery fallback for '{library}' returned "
+                f"non-JSON output, so no docs URL was found: "
+                f"{search_result[:200]!r}"
+            )
 
     return docs_url, repo_url, registry, description
 
@@ -2858,7 +2956,14 @@ async def _do_immediate_fallback_search(
                 query, fallback_data["results"], top_n=limit
             )
     except Exception as e:
-        logger.debug(f"Immediate fallback search failed: {e}")
+        # The caller ships this as `temporary_results` next to a message
+        # promising web results. An empty list therefore reads as "the web had
+        # nothing" rather than "the fallback search never ran".
+        logger.warning(
+            f"Immediate fallback search failed for '{library}' "
+            f"(query {fallback_search_query!r}); temporary_results will be "
+            f"empty: {type(e).__name__}: {e}"
+        )
     return fallback_data
 
 

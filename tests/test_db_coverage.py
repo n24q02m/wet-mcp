@@ -12,6 +12,7 @@ import struct
 import sys
 import types
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -334,7 +335,7 @@ class TestClearVersionChunksVec:
 
 class TestAddChunksWithEmbeddings:
     def test_add_chunks_vec_enabled_with_embeddings(self, tmp_path):
-        """Exercise embedding insertion path when vec is enabled (lines 526-540)."""
+        """A failed vector insert aborts the batch instead of reporting success."""
         d = DocsDB(tmp_path / "emb.db", embedding_dims=0)
         lib_id = d.upsert_library(name="emblib")
         ver_id = d.upsert_version(lib_id)
@@ -346,10 +347,12 @@ class TestAddChunksWithEmbeddings:
             {"content": "chunk A"},
             {"content": "chunk B"},
         ]
-        # This will try to insert into doc_chunks_vec which doesn't exist,
-        # exercising the exception handler (lines 534-540)
-        count = d.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
-        assert count == 2
+        # doc_chunks_vec does not exist at dims=0, so the vector INSERT fails.
+        # add_chunks used to swallow that and still return 2, which let the
+        # caller stamp the version 'indexed' over a vector-less batch.
+        with pytest.raises(sqlite3.Error):
+            d.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
+        assert d._conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()[0] == 0
         d.close()
 
     def test_add_chunks_vec_empty_embedding_skipped(self, tmp_path):
@@ -365,8 +368,31 @@ class TestAddChunksWithEmbeddings:
             {"content": "chunk X"},
             {"content": "chunk Y"},
         ]
-        count = d.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
+
+        # dims=0 leaves doc_chunks_vec uncreated and a failing vector INSERT now
+        # aborts the batch, so route that one statement to a spy: what this test
+        # asserts is which rows reach it, not that they land.
+        real_conn = d._conn
+        vec_batches: list[list] = []
+
+        class _VecSpyConn:
+            def executemany(self, sql, params):
+                if "doc_chunks_vec" in sql:
+                    vec_batches.append(list(params))
+                    return None
+                return real_conn.executemany(sql, params)
+
+            def __getattr__(self, name):
+                return getattr(real_conn, name)
+
+        d._conn = cast(Any, _VecSpyConn())
+        try:
+            count = d.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
+        finally:
+            d._conn = real_conn
         assert count == 2
+        assert len(vec_batches) == 1
+        assert len(vec_batches[0]) == 1  # only the non-empty embedding
         d.close()
 
 
@@ -777,10 +803,18 @@ class TestProjectContext:
 class TestAddChunksEdgeCases:
     def test_add_chunks_serialization_error(self, tmp_path):
         """add_chunks handles embedding serialization failure (lines 817-818)."""
-        # Use embedding_dims > 0 and force _vec_enabled to ensure serialization loop is hit
-        # Use embedding_dims > 0 to ensure doc_chunks_vec table exists
+        # embedding_dims > 0 both reaches the serialization loop and creates
+        # doc_chunks_vec -- but only where sqlite-vec actually loads.
         db = DocsDB(tmp_path / "ser.db", embedding_dims=2)
-        db._vec_enabled = True
+        if not db._vec_enabled:
+            db.close()
+            pytest.skip(
+                "sqlite-vec did not load here (sqlite3 built without "
+                "enable_load_extension, e.g. macOS actions/setup-python), so "
+                "doc_chunks_vec was never created; the batch insert below now "
+                "aborts rather than swallowing, and forcing the flag on would "
+                "fabricate a state the server cannot reach"
+            )
         lib_id = db.upsert_library(name="serlib")
         ver_id = db.upsert_version(lib_id)
 
@@ -804,7 +838,7 @@ class TestAddChunksEdgeCases:
         db.close()
 
     def test_add_chunks_batch_insert_error(self, db):
-        """add_chunks handles batch insert failure for vectors (lines 825-826)."""
+        """A batch vector-insert failure reaches the caller (lines 825-826)."""
         # Force vec_enabled to reach the insert path
         db._vec_enabled = True
         lib_id = db.upsert_library(name="batchlib")
@@ -826,8 +860,8 @@ class TestAddChunksEdgeCases:
 
         mock_conn.executemany.side_effect = mock_executemany
         mock_conn.commit = real_conn.commit
+        mock_conn.rollback = real_conn.rollback
 
-        with patch.object(db, "_conn", mock_conn):
-            # Should not raise
-            count = db.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
-            assert count == 1
+        with patch.object(db, "_conn", mock_conn), pytest.raises(sqlite3.Error):
+            db.add_chunks(ver_id, lib_id, chunks, embeddings=embeddings)
+        assert real_conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()[0] == 0

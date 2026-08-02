@@ -268,7 +268,16 @@ class DocsDB:
                 self._vec_enabled = True
                 logger.debug("sqlite-vec extension loaded")
             except Exception as e:
-                logger.debug(f"sqlite-vec not available, FTS-only mode: {e}")
+                # sqlite-vec is a hard dependency, and the caller asked for
+                # embedding_dims > 0. Falling back to FTS-only is a whole
+                # capability going away for the life of the process, so it is
+                # not a debug-level event.
+                logger.warning(
+                    f"sqlite-vec unavailable for {db_path} "
+                    f"({type(e).__name__}: {e}); running FTS-only -- vector "
+                    "search is disabled and docs queries answer with keyword "
+                    "matching alone"
+                )
 
         self._create_tables()
         self._guard_embedding_identity()
@@ -1079,7 +1088,16 @@ class DocsDB:
                 try:
                     vec_rows.append((chunk_ids[i], _serialize_f32(emb)))
                 except Exception as e:
-                    logger.debug(f"Failed to serialize embedding: {e}")
+                    # Per-chunk skip is a real degrade (the other chunks keep
+                    # their vectors and this one stays keyword-searchable), but
+                    # it must name the chunk so a systematic producer bug is
+                    # traceable instead of showing up as thin search results.
+                    logger.warning(
+                        f"Dropping the embedding for chunk {chunk_ids[i]}: "
+                        f"cannot serialize {type(emb).__name__} "
+                        f"({type(e).__name__}: {e}); the chunk will be "
+                        "keyword-searchable only"
+                    )
 
         if vec_rows:
             try:
@@ -1088,7 +1106,19 @@ class DocsDB:
                     vec_rows,
                 )
             except Exception as e:
-                logger.debug(f"Failed to batch-insert embeddings: {e}")
+                # Previously logged at debug and swallowed: add_chunks still
+                # returned the full chunk count, so the caller stamped the
+                # version 'indexed' over a database that could not answer a
+                # single semantic query. Roll the whole batch back (the
+                # doc_chunks INSERT above shares this open transaction) and let
+                # the caller see the failure.
+                logger.error(
+                    f"Vector insert failed for {len(vec_rows)} of "
+                    f"{len(chunk_ids)} chunks in {self._db_path} "
+                    f"({type(e).__name__}: {e}); rolling back the chunk batch"
+                )
+                self._conn.rollback()
+                raise
 
     def _prepare_chunk_rows(
         self,
@@ -1259,7 +1289,16 @@ class DocsDB:
                     fts_scores[cid] = score
                     fts_chunks[cid] = chunk
         except Exception as e:
-            logger.debug(f"FTS search error: {e}")
+            # An FTS5 syntax/schema error returns the same empty dict as "no
+            # document matched", and search() then reports an empty result set.
+            # The return shape is deliberately unchanged (a broken keyword tier
+            # must not take down a query the vector tier can still answer), so
+            # this log is the only place the difference is recorded.
+            logger.warning(
+                f"FTS search failed for {fts_queries!r} "
+                f"(library_id={library_id}, version_id={version_id}); "
+                f"returning zero keyword matches: {type(e).__name__}: {e}"
+            )
 
         # Min-max normalize FTS scores to 0-1
         if fts_scores:
@@ -1316,7 +1355,16 @@ class DocsDB:
                         chunk_data.pop("distance", None)
                         fts_chunks[chunk_id] = chunk_data
             except Exception as e:
-                logger.debug(f"Vector search error: {e}")
+                # Same shape as the FTS tier: an empty vec_scores is
+                # indistinguishable from "nothing was semantically close", so a
+                # dims mismatch or a missing doc_chunks_vec table used to read
+                # as a merely disappointing result set.
+                logger.warning(
+                    f"Vector search failed (library_id={library_id}, "
+                    f"version_id={version_id}, dims="
+                    f"{len(query_embedding)}); returning zero semantic "
+                    f"matches: {type(e).__name__}: {e}"
+                )
         return vec_scores
 
     def _prefetch_adjacent_chunks(
@@ -1765,7 +1813,15 @@ class DocsDB:
             if not isinstance(libs, list):
                 libs = []
             result["locked_libraries"] = libs
-        except (TypeError, json.JSONDecodeError):
+        except (TypeError, json.JSONDecodeError) as e:
+            # An unreadable lock silently becomes "no libraries locked", which
+            # is exactly the shape of a project that was never locked -- so
+            # Cabinets isolation switches itself off with no trace.
+            logger.warning(
+                f"project_context row for {project_path!r} has unreadable "
+                f"locked_libraries ({type(e).__name__}: {e}); treating the "
+                "project as unlocked"
+            )
             result["locked_libraries"] = []
         return result
 

@@ -8,6 +8,7 @@ RRF fusion scoring, and tiered FTS fallback.
 
 import importlib.util
 import json
+import sqlite3
 import struct
 import sys
 import types
@@ -863,7 +864,12 @@ class TestAddChunksVec:
             db.close()
 
     def test_add_chunks_vec_batch_insert_error(self, tmp_path):
-        """Batch vec insert error is caught gracefully."""
+        """Batch vec insert error aborts the batch instead of reporting success.
+
+        This used to be swallowed at debug level: ``add_chunks`` returned the
+        full chunk count and the caller stamped the version ``indexed`` over a
+        database that could not answer a single semantic query.
+        """
         db = DocsDB(tmp_path / "add_vec_err.db", embedding_dims=4)
         try:
             lib_id = db.upsert_library(name="emblib3")
@@ -874,14 +880,18 @@ class TestAddChunksVec:
             db._conn.commit()
 
             embeddings = [[1.0, 0.0, 0.0, 0.0]]
-            # Should not raise — error caught in except block
-            count = db.add_chunks(
-                ver_id,
-                lib_id,
-                [{"content": "test"}],
-                embeddings=embeddings,
-            )
-            assert count == 1  # doc chunks still inserted
+            with pytest.raises(sqlite3.Error):
+                db.add_chunks(
+                    ver_id,
+                    lib_id,
+                    [{"content": "test"}],
+                    embeddings=embeddings,
+                )
+            # The doc_chunks rows share the failed transaction.
+            remaining = db._conn.execute("SELECT COUNT(*) FROM doc_chunks").fetchone()[
+                0
+            ]
+            assert remaining == 0
         finally:
             db.close()
 
