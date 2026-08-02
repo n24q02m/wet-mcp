@@ -2,6 +2,215 @@
 
 <!-- version list -->
 
+## v3.7.0-beta.1 (2026-08-02)
+
+### Bug Fixes
+
+- Add bot PR governance workflow ([#1565](https://github.com/n24q02m/wet-mcp/pull/1565),
+  [`06a237a`](https://github.com/n24q02m/wet-mcp/commit/06a237abe3fa9416dbce9770bdd8f48b1ee14370))
+
+- Bump mcp-core to 1.21.0 ([#1563](https://github.com/n24q02m/wet-mcp/pull/1563),
+  [`fb3a0da`](https://github.com/n24q02m/wet-mcp/commit/fb3a0da033d2dcd47500031e2f40b19f6f935a76))
+
+- Cf-d1 index path drops docs_url and four doc_chunks columns
+  ([#1589](https://github.com/n24q02m/wet-mcp/pull/1589),
+  [`dc7fcaf`](https://github.com/n24q02m/wet-mcp/commit/dc7fcafc1ec6c9f66c56cb11af1737ceb14ba192))
+
+- Checkpoint sqlite wal into docs.db before sync push
+  ([#1587](https://github.com/n24q02m/wet-mcp/pull/1587),
+  [`e492351`](https://github.com/n24q02m/wet-mcp/commit/e492351bcff7608f1f14b98937baf8bbf3cb7897))
+
+- Collapse whitespace in normalize_query using split and join
+  ([`7cbab2e`](https://github.com/n24q02m/wet-mcp/commit/7cbab2ea5574f9651b1a067bdc5bbdd393536a40))
+
+- Combine markdown noise-filter regexes into one pattern
+  ([`32eba3c`](https://github.com/n24q02m/wet-mcp/commit/32eba3c79ed293759767122a1949d24e83537ba9))
+
+- Date the bot ledgers from git history and record rejections
+  ([#1562](https://github.com/n24q02m/wet-mcp/pull/1562),
+  [`aeafe25`](https://github.com/n24q02m/wet-mcp/commit/aeafe25dfe1eac2bfb5579caaa6d7f3f63b28f89))
+
+- Describe the HTTP mode instead of advertising a personal instance
+  ([`fa0d698`](https://github.com/n24q02m/wet-mcp/commit/fa0d69869edf1815ca3eb378eb0547042f76546a))
+
+- Drop rangeStrategy from update-type package rules
+  ([#1558](https://github.com/n24q02m/wet-mcp/pull/1558),
+  [`9c0ea05`](https://github.com/n24q02m/wet-mcp/commit/9c0ea05020a239b62dfd8a5dfbe16ceda0015640))
+
+- Drop the AI Agent header now that it labels nothing
+  ([#1592](https://github.com/n24q02m/wet-mcp/pull/1592),
+  [`0c52f92`](https://github.com/n24q02m/wet-mcp/commit/0c52f92180055509af44d01120e4a1f502e43061))
+
+- Drop the code_quality rule from the main ruleset
+  ([#1566](https://github.com/n24q02m/wet-mcp/pull/1566),
+  [`23e0b08`](https://github.com/n24q02m/wet-mcp/commit/23e0b08a976496676c14ba25180af1ffb8103039))
+
+- Gate bot governance on the branch living in this repository
+  ([#1568](https://github.com/n24q02m/wet-mcp/pull/1568),
+  [`9eb5fdf`](https://github.com/n24q02m/wet-mcp/commit/9eb5fdff9d00f7efdb3d626065aed5035944555d))
+
+- Implement the 10 missing DocsDBCfBackend methods and a vector delete route
+  ([#1605](https://github.com/n24q02m/wet-mcp/pull/1605),
+  [`c3aea52`](https://github.com/n24q02m/wet-mcp/commit/c3aea5229bcc0cca55a9c1c9bbe37f4569975409))
+
+- Install a single litellm distribution ([#1560](https://github.com/n24q02m/wet-mcp/pull/1560),
+  [`81b7e94`](https://github.com/n24q02m/wet-mcp/commit/81b7e948582d9558d4cb93fd6c79d59285e899fa))
+
+- Isolate test_config Settings() from leaked provider env vars
+  ([#1596](https://github.com/n24q02m/wet-mcp/pull/1596),
+  [`90ad90b`](https://github.com/n24q02m/wet-mcp/commit/90ad90b9b8acf82227e164db221d4ca02ea92113))
+
+- Match ReadTheDocs hosts by suffix instead of substring
+  ([#1559](https://github.com/n24q02m/wet-mcp/pull/1559),
+  [`efdf601`](https://github.com/n24q02m/wet-mcp/commit/efdf601a75c2f4c8bfc224f9c798e5ff0c7cf75a))
+
+- Match registry host checks on the host suffix, not a URL substring
+  ([#1593](https://github.com/n24q02m/wet-mcp/pull/1593),
+  [`dd9ebeb`](https://github.com/n24q02m/wet-mcp/commit/dd9ebebf7cd700a97016f0cd1fa7b044a832dcaf))
+
+- Move this repo to Apache-2.0 ([#1586](https://github.com/n24q02m/wet-mcp/pull/1586),
+  [`b63451b`](https://github.com/n24q02m/wet-mcp/commit/b63451bd8a247c1497a9a81f050dea745a9a6c1a))
+
+- Pin config status label to the backend make_docs_db builds
+  ([#1606](https://github.com/n24q02m/wet-mcp/pull/1606),
+  [`27be3bd`](https://github.com/n24q02m/wet-mcp/commit/27be3bd723fe51d4f0ffb951fc0be443bd5db197))
+
+- Pin GitHub Action references to commit SHAs
+  ([#1554](https://github.com/n24q02m/wet-mcp/pull/1554),
+  [`9476ade`](https://github.com/n24q02m/wet-mcp/commit/9476adef926360f3acb750b9c7d361c4b449092c))
+
+- Record the heading-run skip in the bolt ledger
+  ([#1588](https://github.com/n24q02m/wet-mcp/pull/1588),
+  [`49ab24a`](https://github.com/n24q02m/wet-mcp/commit/49ab24afc9edba48464939ebfb8b7fc5b2bc3e58))
+
+- Reduce snippet-scoring generator overhead
+  ([`c38e023`](https://github.com/n24q02m/wet-mcp/commit/c38e02385ea3e7f5b45ec7314a616c323fd97b89))
+
+- Remove redundant orphan-tag shell guard (better-semantic-release @v1 has a built-in one)
+  ([#1552](https://github.com/n24q02m/wet-mcp/pull/1552),
+  [`674e950`](https://github.com/n24q02m/wet-mcp/commit/674e9502dd7b7f943f62873abd220adea89dd92b))
+
+- Report the active docs backend in config status
+  ([#1606](https://github.com/n24q02m/wet-mcp/pull/1606),
+  [`27be3bd`](https://github.com/n24q02m/wet-mcp/commit/27be3bd723fe51d4f0ffb951fc0be443bd5db197))
+
+- Report weekly canary failures and keep their evidence
+  ([#1600](https://github.com/n24q02m/wet-mcp/pull/1600),
+  [`91a9cff`](https://github.com/n24q02m/wet-mcp/commit/91a9cff76dd5db029cdb670346aad5b2213b83ef))
+
+- Rewrite optimisation comments in the voice of each file
+  ([#1591](https://github.com/n24q02m/wet-mcp/pull/1591),
+  [`21ab77c`](https://github.com/n24q02m/wet-mcp/commit/21ab77c1498a4a2306e770f04e8ce59c94c6c30f))
+
+- Run CodeQL on bot pull requests ([#1564](https://github.com/n24q02m/wet-mcp/pull/1564),
+  [`b7a8e93`](https://github.com/n24q02m/wet-mcp/commit/b7a8e93044b891242de4db98adb393a31637f620))
+
+- Size D1 INSERT batches by bound parameters, add project_context to D1
+  ([#1605](https://github.com/n24q02m/wet-mcp/pull/1605),
+  [`c3aea52`](https://github.com/n24q02m/wet-mcp/commit/c3aea5229bcc0cca55a9c1c9bbe37f4569975409))
+
+- Size D1 INSERT batches by bound parameters, add project_context to D1
+  ([#1601](https://github.com/n24q02m/wet-mcp/pull/1601),
+  [`51dc144`](https://github.com/n24q02m/wet-mcp/commit/51dc14417d08fc0a0d595c350fd0ebea8db2699c))
+
+- Skip bot governance on pull requests from forks
+  ([#1567](https://github.com/n24q02m/wet-mcp/pull/1567),
+  [`ac0bfec`](https://github.com/n24q02m/wet-mcp/commit/ac0bfece6ae2ed81528208803dc90db95cca99b4))
+
+- Skip the vector-table tests where sqlite-vec cannot load
+  ([#1595](https://github.com/n24q02m/wet-mcp/pull/1595),
+  [`19ffc51`](https://github.com/n24q02m/wet-mcp/commit/19ffc511eef4afe2ea07fc61cd387cf6c9981f2e))
+
+- Stamp last_indexed_at on the background index path
+  ([#1590](https://github.com/n24q02m/wet-mcp/pull/1590),
+  [`07f0d42`](https://github.com/n24q02m/wet-mcp/commit/07f0d4286e230d46abe7c8d4b8ebd8f0d835550c))
+
+- Stop .gitignore from silently dropping new .jules bot ledgers
+  ([#1592](https://github.com/n24q02m/wet-mcp/pull/1592),
+  [`0c52f92`](https://github.com/n24q02m/wet-mcp/commit/0c52f92180055509af44d01120e4a1f502e43061))
+
+- Stop rescanning heading runs and copying whole llms.txt bodies
+  ([#1588](https://github.com/n24q02m/wet-mcp/pull/1588),
+  [`49ab24a`](https://github.com/n24q02m/wet-mcp/commit/49ab24afc9edba48464939ebfb8b7fc5b2bc3e58))
+
+- Stop tests writing credentials into the developer's real home
+  ([#1594](https://github.com/n24q02m/wet-mcp/pull/1594),
+  [`3751f7b`](https://github.com/n24q02m/wet-mcp/commit/3751f7b9c8713e847e061b591db5f681352730d5))
+
+- Surface the errors server.py and db.py were swallowing
+  ([#1595](https://github.com/n24q02m/wet-mcp/pull/1595),
+  [`19ffc51`](https://github.com/n24q02m/wet-mcp/commit/19ffc511eef4afe2ea07fc61cd387cf6c9981f2e))
+
+- Unblock Tier 1 docs indexing (seed stamp, ingest gate, page shape)
+  ([#1590](https://github.com/n24q02m/wet-mcp/pull/1590),
+  [`07f0d42`](https://github.com/n24q02m/wet-mcp/commit/07f0d4286e230d46abe7c8d4b8ebd8f0d835550c))
+
+- **deps**: Update @cloudflare/workers-types to ^5.20260719.1
+  ([#1576](https://github.com/n24q02m/wet-mcp/pull/1576),
+  [`51ff329`](https://github.com/n24q02m/wet-mcp/commit/51ff329b0b3beb346761d25487b46d83cea1abc6))
+
+- **deps**: Update actions/checkout action to v7
+  ([#1518](https://github.com/n24q02m/wet-mcp/pull/1518),
+  [`8ae32c8`](https://github.com/n24q02m/wet-mcp/commit/8ae32c8949c1a8c6625b87427b63e8785ab00705))
+
+- **deps**: Update actions/setup-node action to v7
+  ([#1577](https://github.com/n24q02m/wet-mcp/pull/1577),
+  [`97c67ee`](https://github.com/n24q02m/wet-mcp/commit/97c67ee11733f2d2bd08014d74a36755fc612396))
+
+- **deps**: Update actions/setup-python action to v7
+  ([#1599](https://github.com/n24q02m/wet-mcp/pull/1599),
+  [`a589d3f`](https://github.com/n24q02m/wet-mcp/commit/a589d3ffbc4722b93be5a3e49bf47cb243943c81))
+
+- **deps**: Update astral-sh/setup-uv action to v9
+  ([#1602](https://github.com/n24q02m/wet-mcp/pull/1602),
+  [`af64b29`](https://github.com/n24q02m/wet-mcp/commit/af64b29a2167fe3dd77ee10d33645745a28fa755))
+
+- **deps**: Update dawidd6/action-send-mail action to v18
+  ([#1519](https://github.com/n24q02m/wet-mcp/pull/1519),
+  [`70694d8`](https://github.com/n24q02m/wet-mcp/commit/70694d8bee0ab1329ebb66d4dd0c20e407d3956d))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest Docker digest to cf4eedc
+  ([#1570](https://github.com/n24q02m/wet-mcp/pull/1570),
+  [`14518c4`](https://github.com/n24q02m/wet-mcp/commit/14518c4e9ccaf7b1641e783c9bcce2ba30f1ef2a))
+
+- **deps**: Update minor dependencies ([#1573](https://github.com/n24q02m/wet-mcp/pull/1573),
+  [`541d390`](https://github.com/n24q02m/wet-mcp/commit/541d390cf491f22b2b753743bf5cd364fc5f1a3f))
+
+- **deps**: Update n24q02m/better-semantic-release action to v1.2.3
+  ([#1597](https://github.com/n24q02m/wet-mcp/pull/1597),
+  [`bf60e92`](https://github.com/n24q02m/wet-mcp/commit/bf60e927c8c570cebd01b552c8f0334b73c9ecaf))
+
+- **deps**: Update non-major dev dependencies
+  ([#1598](https://github.com/n24q02m/wet-mcp/pull/1598),
+  [`9ec0de3`](https://github.com/n24q02m/wet-mcp/commit/9ec0de34a5c418ec11c18ecf200c7269a9f33056))
+
+- **deps**: Update non-major dev dependencies
+  ([#1574](https://github.com/n24q02m/wet-mcp/pull/1574),
+  [`0bc03fe`](https://github.com/n24q02m/wet-mcp/commit/0bc03fee7863b96fe4f2e38e5bc77d60b84723e2))
+
+- **deps**: Update patch dependencies ([#1572](https://github.com/n24q02m/wet-mcp/pull/1572),
+  [`727475f`](https://github.com/n24q02m/wet-mcp/commit/727475fa67d3364c003f1c8ff8062f2a80da631d))
+
+- **deps**: Update python:3.13-slim-bookworm Docker digest to 9d7f287
+  ([#1571](https://github.com/n24q02m/wet-mcp/pull/1571),
+  [`c840fd1`](https://github.com/n24q02m/wet-mcp/commit/c840fd13fe3c85b5fcb258e42fbc9771dc6ee855))
+
+- **deps**: Update typescript to v7 ([#1520](https://github.com/n24q02m/wet-mcp/pull/1520),
+  [`52c99f6`](https://github.com/n24q02m/wet-mcp/commit/52c99f6bea77497693d1ab0f56b330c24368d2e6))
+
+### Features
+
+- Allow configuring bind interface via MCP_HOST in multi-user mode
+  ([#1557](https://github.com/n24q02m/wet-mcp/pull/1557),
+  [`fd3f437`](https://github.com/n24q02m/wet-mcp/commit/fd3f4378cc8e2ac6f2a08ab1f2b36b8b5b3c26d2))
+
+- Scrape-batch skill for bulk URL extraction ([#1569](https://github.com/n24q02m/wet-mcp/pull/1569),
+  [`d9cc762`](https://github.com/n24q02m/wet-mcp/commit/d9cc762aa3f21e2bdd2f28e866a3584663e5c05e))
+
+- Sync cross-promo section ([#1580](https://github.com/n24q02m/wet-mcp/pull/1580),
+  [`60888cb`](https://github.com/n24q02m/wet-mcp/commit/60888cb55dc744623287d7453e7565f137de09da))
+
+
 ## v3.6.0 (2026-07-18)
 
 
