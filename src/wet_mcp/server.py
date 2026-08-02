@@ -1948,6 +1948,18 @@ async def help(tool_name: str = "search") -> str:
         return f"Error loading documentation: {e}"
 
 
+def _active_docs_backend() -> str:
+    """The docs-store selector, resolved exactly as ``make_docs_db`` resolves it.
+
+    Deliberately a byte-for-byte mirror of the expression in ``make_docs_db``
+    (env first, Settings singleton as the default; no strip/lower). Normalizing
+    here would let ``config(action="status")`` report ``cf-d1`` for a value that
+    ``make_docs_db`` fell through to SQLite on -- a status line that disagrees
+    with the object actually serving requests is the bug this reports on.
+    """
+    return os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
+
+
 async def _handle_config_status() -> dict[str, Any]:
     from wet_mcp.embedder import get_backend
     from wet_mcp.reranker import get_reranker
@@ -1956,9 +1968,19 @@ async def _handle_config_status() -> dict[str, Any]:
     embed_backend = get_backend()
     reranker = get_reranker()
 
+    # The docs store is either a local SQLite file or Cloudflare D1 + Vectorize.
+    # On cf-d1 no local file is opened, so reporting settings.get_db_path()
+    # sends the operator to back up / inspect / copy a file that holds none of
+    # the served data. `path` is kept (readers keep their key) but goes null,
+    # and `backend` names which store the number in `docs_indexed` came from.
+    # No D1 identifier is exposed here: the tokens are secrets outright, and
+    # the account/database ids in MCP_D1_BASE_URL name the target a leaked
+    # token would open, while answering nothing the operator asked.
+    docs_backend = _active_docs_backend()
     status = {
         "database": {
-            "path": str(settings.get_db_path()),
+            "backend": docs_backend,
+            "path": (None if docs_backend == "cf-d1" else str(settings.get_db_path())),
             "docs_indexed": (_docs_db.stats() if _docs_db else {}),
         },
         "embedding": {
