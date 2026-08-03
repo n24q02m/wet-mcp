@@ -16,9 +16,20 @@ from loguru import logger
 from mcp_core.storage.d1 import D1Backend
 from mcp_core.storage.vectorize import VectorizeBackend
 
-# Reuse the exact ranking helpers and the chunk-id generator from the SQLite
-# implementation -- both backends must mint identity the same way.
-from wet_mcp.db import _build_fts_queries, _chunk_quality_score, new_chunk_id
+# Reuse the exact ranking helpers, the chunk-id generator and the column
+# allowlist from the SQLite implementation -- both backends must mint identity
+# and validate dynamic column names the same way.
+from wet_mcp.db import (
+    _LIBRARIES_COLUMNS,
+    _build_fts_queries,
+    _chunk_quality_score,
+    new_chunk_id,
+)
+
+# Stamped onto every library row, exactly as db.py does it. `_search_cached_index`
+# re-indexes any library whose stored value trails this constant, so a backend
+# that does not write it can never serve a cached index (issue #1624).
+from wet_mcp.sources.docs import DISCOVERY_VERSION
 
 
 class DocsDBCfBackend:
@@ -42,25 +53,111 @@ class DocsDBCfBackend:
 
     # --- relational CRUD (parameterized D1) ---
 
-    def upsert_library(self, name: str, docs_url: str | None = None, **extra) -> str:
-        existing = self.get_library(name)
+    def upsert_library(
+        self,
+        name: str,
+        docs_url: str | None = None,
+        registry: str | None = None,
+        description: str | None = None,
+        tier: int | None = None,
+        package_managers: list[str] | None = None,
+        homepage: str | None = None,
+        github_url: str | None = None,
+        canonical_name: str | None = None,
+    ) -> str:
+        """Create or update a library. Returns library ID.
+
+        Column-for-column mirror of ``wet_mcp.db.DocsDB.upsert_library`` over
+        the ``libraries`` table in ``migrations/0001_init_wet.sql`` +
+        ``0002_project_context.sql``. The signature is explicit rather than
+        ``**extra`` on purpose: it used to swallow every keyword past
+        ``docs_url`` and write none of them, so ``registry`` / ``description``
+        from the docs index path and ``tier`` / ``canonical_name`` /
+        ``homepage`` / ``github_url`` / ``package_managers`` from the Tier 1
+        warmup all vanished, and the next column added would have vanished
+        too. An unknown field must now raise TypeError, as it does on SQLite.
+
+        ``discovery_version`` is stamped on BOTH paths. Insert-only stamping
+        would leave every row already written at 0 re-indexing forever, since
+        an existing library is only ever updated (issue #1624).
+
+        ``last_indexed_at`` stays untouched here, matching DocsDB: writing
+        metadata says nothing about whether chunks landed.
+        """
+        norm_name = name.lower().strip()
         now = time.time()
+        pkg_json = (
+            json.dumps(package_managers, ensure_ascii=False)
+            if package_managers is not None
+            else None
+        )
+        # Both stores key on the normalised name. Storing it raw meant a search
+        # for "FastAPI" and one for "fastapi" minted two library rows on D1 and
+        # indexed the same docs twice.
+        optional = (
+            ("docs_url", docs_url),
+            ("registry", registry),
+            ("description", description),
+            ("canonical_name", canonical_name),
+            ("homepage", homepage),
+            ("github_url", github_url),
+            ("package_managers", pkg_json),
+            ("tier", None if tier is None else int(tier)),
+        )
+
+        existing = self.get_library(norm_name)
         if existing:
+            # Mirrors DocsDB._update_library_inner: a field left None keeps its
+            # stored value (assigning it unconditionally erased the docs URL of
+            # an indexed library on any metadata-only re-upsert), while
+            # discovery_version and updated_at are rewritten every time.
+            sets = ["discovery_version = ?", "updated_at = ?"]
+            params: list = [DISCOVERY_VERSION, now]
+            for col, value in optional:
+                if value is not None:
+                    sets.append(f"{col} = ?")
+                    params.append(value)
+            params.append(existing["id"])
+            self._assert_library_columns(s.split("=")[0].strip() for s in sets)
+            # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
             self._d1.execute(
-                "UPDATE libraries SET docs_url = ?, updated_at = ? WHERE id = ?",
-                [docs_url, now, existing["id"]],
+                "UPDATE libraries SET " + ", ".join(sets) + " WHERE id = ?",
+                params,
             )
             return existing["id"]
+
         lib_id = str(uuid.uuid4())
+        cols = ["id", "name", "discovery_version", "created_at", "updated_at"]
+        vals: list = [lib_id, norm_name, DISCOVERY_VERSION, now, now]
+        for col, value in optional:
+            # canonical_name is the one field DocsDB writes even when absent:
+            # it is the display label and defaults to the library's own name.
+            if col == "canonical_name":
+                value = value or norm_name
+            if value is not None:
+                cols.append(col)
+                vals.append(value)
+        self._assert_library_columns(cols)
+        # nosemgrep: python.sqlalchemy.security.sqlalchemy-execute-raw-query.sqlalchemy-execute-raw-query
         self._d1.execute(
-            "INSERT INTO libraries (id, name, docs_url, created_at, updated_at)"
-            " VALUES (?,?,?,?,?)",
-            [lib_id, name, docs_url, now, now],
+            f"INSERT INTO libraries ({', '.join(cols)})"
+            f" VALUES ({', '.join('?' * len(cols))})",
+            vals,
         )
         return lib_id
 
+    @staticmethod
+    def _assert_library_columns(cols) -> None:
+        """Gate dynamic column names against the same allowlist db.py uses."""
+        for col in cols:
+            if col not in _LIBRARIES_COLUMNS:
+                raise ValueError(f"Unauthorized library column: {col}")
+
     def get_library(self, name: str) -> dict | None:
-        return self._d1.fetchone("SELECT * FROM libraries WHERE name = ?", [name])
+        """Get library by name. Normalises like ``DocsDB.get_library`` does."""
+        return self._d1.fetchone(
+            "SELECT * FROM libraries WHERE name = ?", [name.lower().strip()]
+        )
 
     def upsert_version(
         self,
