@@ -36,6 +36,14 @@
     "DISABLE_LOCAL_SEARCH": "true",
     "DISABLE_LOCAL_BROWSER": "true",
     "DISABLE_LOCAL_EMBED": "true",
+    // The SLIM image this Worker runs uninstalls qwen3-embed outright, so the
+    // local leg is gone for BOTH capabilities -- the rerank flag has to say so
+    // too. Without it a sub whose own bucket carries no RERANK_MODELS resolves
+    // to the local cross-encoder, whose import failure Qwen3Reranker.rerank
+    // swallows into an empty list: every search silently answers in unranked
+    // order. The deploy-level RERANK_MODELS below does not cover that case; it
+    // is process env, and per-sub chains resolve from the sub's bucket.
+    "DISABLE_LOCAL_RERANK": "true",
     "BROWSER_BACKENDS": "browserless,cf-browser-rendering",
     "CF_ACCOUNT_ID": "<YOUR_ACCOUNT_ID>",
     "PUBLIC_URL": "<YOUR_PUBLIC_URL>",

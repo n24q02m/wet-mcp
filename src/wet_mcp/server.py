@@ -2029,12 +2029,27 @@ def _active_docs_backend() -> str:
 
 
 async def _handle_config_status() -> dict[str, Any]:
-    from wet_mcp.embedder import get_backend
-    from wet_mcp.reranker import get_reranker
+    from wet_mcp.embedder import (
+        embedding_unavailable_reason,
+        resolve_embed_backend_for_request,
+    )
+    from wet_mcp.reranker import resolve_rerank_backend_for_request
     from wet_mcp.sources.x_search import x_search_status
 
-    embed_backend = get_backend()
-    reranker = get_reranker()
+    # Same principle as _active_docs_backend above, one layer up -- with the
+    # part that makes it easier: there is nothing to mirror here, so these call
+    # the resolvers themselves and cannot drift from them.
+    #
+    # What they replaced was `get_backend()` / `get_reranker()`, the startup
+    # singletons. In HTTP multi-user mode those are nobody's backend: they were
+    # resolved from the OPERATOR's process env before any sub existed. A sub
+    # whose request resolves to local ONNX -- or, on a slim image, to nothing --
+    # was still told `CloudEmbeddingBackend available=true`.
+    #
+    # Cheap to call: every branch either hands back an already-built object or
+    # constructs one that loads no model until it is actually used.
+    embed_backend = resolve_embed_backend_for_request()
+    reranker = resolve_rerank_backend_for_request()
 
     # The docs store is either a local SQLite file or Cloudflare D1 + Vectorize.
     # On cf-d1 no local file is opened, so reporting settings.get_db_path()
@@ -2060,6 +2075,11 @@ async def _handle_config_status() -> dict[str, Any]:
             "backend": (type(embed_backend).__name__ if embed_backend else None),
             "dims": _embedding_dims,
             "available": embed_backend is not None,
+            # "available: false" on its own reads as a fault. Most of the time
+            # it is a deployment choice (no cloud chain + DISABLE_LOCAL_EMBED),
+            # and saying which knob produced it is the difference between an
+            # answer and a bug hunt. None whenever embedding IS available.
+            "unavailable_reason": embedding_unavailable_reason(),
         },
         "reranker": {
             "available": reranker is not None,
@@ -2775,9 +2795,24 @@ async def _background_index_and_search(
         # Generate embeddings
         embeddings = None
         if all_chunks:
-            from wet_mcp.embedder import resolve_embed_backend_for_request
+            from wet_mcp.embedder import (
+                embedding_unavailable_reason,
+                resolve_embed_backend_for_request,
+            )
 
-            if resolve_embed_backend_for_request() is not None:
+            if resolve_embed_backend_for_request() is None:
+                # The intended degrade, and the one the version is about to be
+                # stamped 'indexed' for: chunks land keyword-searchable with no
+                # vectors behind them. Same reasoning as the timeout branch
+                # below -- an unremarked swap here is a store that looks
+                # healthy and answers half as well.
+                logger.warning(
+                    f"Embedding unavailable while indexing '{library}' from "
+                    f"{docs_url}: {embedding_unavailable_reason()}. "
+                    f"{len(all_chunks)} chunks are stored WITHOUT vectors, so "
+                    "this version answers keyword-only"
+                )
+            else:
                 embed_texts_list = []
                 for c in all_chunks:
                     parts = []
@@ -2891,6 +2926,23 @@ async def _search_cached_index(
     query_embedding = await _embed(query, is_query=True)
     retrieve_limit = limit * _RERANK_CANDIDATE_MULTIPLIER
 
+    # Without a query vector the hybrid search silently drops its semantic leg
+    # and answers from BM25 alone. The reply is shaped identically either way,
+    # so the caller reads a thin result set as "the docs don't cover this"
+    # rather than "half the retrieval never ran" -- and retries the same query.
+    retrieval_notice: str | None = None
+    if query_embedding is None:
+        from wet_mcp.embedder import embedding_unavailable_reason
+
+        # No reason means a backend exists and the embed call itself failed;
+        # _embed already logged which, and degraded deliberately.
+        why = (
+            embedding_unavailable_reason() or "the embedding call failed for this query"
+        )
+        retrieval_notice = (
+            f"Vector search unavailable ({why}); these results are keyword-only."
+        )
+
     results = _docs_db.search(
         query=query,
         library_name=lib_key,
@@ -2938,6 +2990,8 @@ async def _search_cached_index(
         "results": results,
         "total": len(results),
         "source": "cached_index",
+        "retrieval": ("keyword_only" if query_embedding is None else "hybrid"),
+        "retrieval_notice": retrieval_notice,
     }
 
 
