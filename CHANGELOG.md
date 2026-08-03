@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v3.7.0-beta.3 (2026-08-03)
+
+### Bug Fixes
+
+- Adopt mcp_core.storage d1 and vectorize clients
+  ([`5c67267`](https://github.com/n24q02m/wet-mcp/commit/5c67267bccbf049270d07348e4b8e07ae279b5cf))
+
+- Bind single-user http to MCP_HOST/MCP_PORT when set
+  ([`70d3409`](https://github.com/n24q02m/wet-mcp/commit/70d34095f52bdb0f73cb82f5eb28d90d6882cd2d))
+
+- Honour disable-local flags in per-request embed/rerank resolution
+  ([`1918033`](https://github.com/n24q02m/wet-mcp/commit/1918033c878293cde2d6cd56f601d33a532ebee1))
+
+- Mint cf-d1 chunk ids in the backend instead of reading c["id"]
+  ([`a553681`](https://github.com/n24q02m/wet-mcp/commit/a5536813b0cb4d7bccf9c05805020073011c4097))
+
+
 ## v3.7.0-beta.2 (2026-08-03)
 
 ### Bug Fixes
