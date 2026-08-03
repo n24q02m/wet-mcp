@@ -3198,8 +3198,9 @@ async def run_http_server(port: int = 0) -> None:
     """Run wet-mcp as HTTP server. Local single-user (default) or remote
     multi-user (when ``PUBLIC_URL`` env set).
 
-    Local mode binds 127.0.0.1 with a single shared
-    ``~/.wet-mcp/config.json`` (PerPluginStore). Remote
+    Local mode binds 127.0.0.1 on an auto-picked port with a single shared
+    ``~/.wet-mcp/config.json`` (PerPluginStore); ``MCP_HOST`` and
+    ``MCP_PORT`` override that bind when the operator sets them. Remote
     multi-user mode binds 0.0.0.0:8080, requires ``MCP_DCR_SERVER_SECRET``
     as proof of intentional multi-user deployment, and scopes credentials
     per JWT ``sub`` (see ``credential_state.store_for_sub`` and the
@@ -3222,7 +3223,31 @@ async def run_http_server(port: int = 0) -> None:
         host = os.environ.get("MCP_HOST", "0.0.0.0")  # nosec B104
         port = int(os.environ.get("MCP_PORT", "8080"))
     else:
-        host = "127.0.0.1"
+        # Single-user mode honours MCP_HOST / MCP_PORT too, but only when the
+        # operator sets them; unset keeps loopback + auto-port so the desktop
+        # flow (browser setup form opened on this same machine) is untouched.
+        # Without this, wet-mcp deployed as an HTTP service in a container is
+        # unreachable from sibling containers: it binds loopback on a port
+        # picked at random, so no published port maps to it -- and the `http`
+        # Docker target's own MCP_PORT=8080 / EXPOSE 8080 were dead letters.
+        # int() is left unguarded, as in the multi-user branch above: a typo'd
+        # MCP_PORT must abort startup rather than silently degrade back to a
+        # random port the operator never published.
+        host = os.environ.get("MCP_HOST", "127.0.0.1")
+        port_env = os.environ.get("MCP_PORT")
+        if port_env is not None:
+            port = int(port_env)
+        if host not in ("127.0.0.1", "localhost", "::1"):
+            # Single-user mode keeps ONE credential set for the whole server,
+            # so reaching the port is enough to use it. Warn rather than
+            # refuse: the operator asked for this bind explicitly, and the
+            # reachability may already be fenced off (compose network, etc).
+            logger.warning(
+                f"MCP_HOST={host} binds wet-mcp beyond loopback while in "
+                "single-user mode: anything that can reach this port shares "
+                "the one credential set stored for this server. Set PUBLIC_URL "
+                "(with MCP_DCR_SERVER_SECRET) to scope credentials per user."
+            )
 
     # MCP_AUTH_DISABLE=1 skips Bearer JWT verification on /mcp -- for
     # deployments behind an external auth boundary (reverse proxy / API
