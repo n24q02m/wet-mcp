@@ -8,6 +8,8 @@ boot-time gate; this module keeps it satisfied and pins the behaviour of the
 methods that gate only proves are *present*.
 """
 
+import copy
+import re
 from pathlib import Path
 
 import pytest
@@ -15,8 +17,10 @@ from conftest_cf import FakeD1Http, FakeVectorizeHttp
 from mcp_core.storage.d1 import D1Backend
 from mcp_core.storage.vectorize import VectorizeBackend
 
+from wet_mcp.db import DocsDB
 from wet_mcp.db_cf import DocsDBCfBackend
 from wet_mcp.server import _missing_docs_db_methods
+from wet_mcp.sources.docs import chunk_markdown
 
 DDL = "\n".join(
     p.read_text(encoding="utf-8") for p in sorted(Path("migrations").glob("*.sql"))
@@ -311,6 +315,132 @@ def test_add_chunks_stays_inside_the_d1_parameter_cap():
     # 13 columns against a 100-parameter cap: 7 rows / 91 params per statement.
     assert widths == [91, 91, 91, 91, 26]
     assert db.stats()["chunks"] == 30
+
+
+# ---------------------------------------------------------------------------
+# Shape parity: both backends must accept the *same* chunker output.
+#
+# `_missing_docs_db_methods` proves the two classes expose the same method
+# NAMES. It cannot prove they accept the same INPUTS, and they did not: the CF
+# row builder read `c["id"]`, a key `chunk_markdown` has never emitted, so
+# `server._background_index_and_search` -- which passes the chunker's list
+# straight through -- raised KeyError on every cf-d1 index.
+# ---------------------------------------------------------------------------
+
+CHUNKER_INPUT = """# Alpha
+
+Alpha is a small library for reading and writing configuration files.
+It ships a single entry point and keeps its dependency list empty.
+
+## Installation
+
+Install the package from PyPI with your package manager of choice.
+The wheel is pure Python and needs no compiler on any supported platform.
+
+```bash
+pip install alpha
+```
+
+## Usage
+
+Load a document, mutate it in place, then write it back to disk.
+Every value keeps the type it had in the source file, so round-tripping
+a document never rewrites unrelated keys.
+
+```python
+import alpha
+
+doc = alpha.load("config.toml")
+doc["timeout"] = 30
+alpha.dump(doc, "config.toml")
+```
+
+### Error handling
+
+A malformed document raises `alpha.ParseError` with the byte offset of the
+first token that could not be read, which is enough to point an editor at
+the offending line without re-parsing the file.
+"""
+
+
+def _chunker_output() -> list[dict]:
+    """Real `chunk_markdown` output -- not a hand-written stand-in.
+
+    A hand-written fixture is what let this bug through: every existing CF
+    test spells `"id"` into its chunks, so none of them exercised the shape
+    production actually produces.
+    """
+    chunks = chunk_markdown(CHUNKER_INPUT, url="https://alpha.dev/guide")
+    assert len(chunks) > 1, "fixture must exercise the real chunker"
+    assert all("id" not in c for c in chunks), (
+        "the chunker mints no ids -- if that changes, identity ownership moved "
+        "and both backends need revisiting"
+    )
+    return chunks
+
+
+def test_both_backends_accept_raw_chunker_output(tmp_path):
+    """The exact call `server._background_index_and_search` makes, on both."""
+    chunks = _chunker_output()
+
+    local = DocsDB(tmp_path / "docs.db")
+    local_lib = local.upsert_library("alpha", docs_url="https://alpha.dev")
+    local_ver = local.upsert_version(local_lib, "1.0", docs_url="https://alpha.dev")
+    assert local.add_chunks(local_ver, local_lib, copy.deepcopy(chunks)) == len(chunks)
+
+    cf = _backend()
+    cf_lib, cf_ver = _seeded(cf)
+    cf.add_chunks(cf_ver, cf_lib, copy.deepcopy(chunks))
+    assert cf.stats()["chunks"] == len(chunks)
+
+
+def test_cf_generated_chunk_ids_match_the_sqlite_scheme(tmp_path):
+    """Identity is owned by the backend, and both mint it the same way.
+
+    Asserted against ids the SQLite backend actually produced rather than a
+    copied literal, so a change to `db._prepare_chunk_rows` fails here instead
+    of leaving the two stores quietly disagreeing on id shape.
+    """
+    chunks = _chunker_output()
+
+    local = DocsDB(tmp_path / "docs.db")
+    local_lib = local.upsert_library("alpha", docs_url="https://alpha.dev")
+    local_ver = local.upsert_version(local_lib, "1.0", docs_url="https://alpha.dev")
+    local.add_chunks(local_ver, local_lib, copy.deepcopy(chunks))
+    local_ids = [r[0] for r in local._conn.execute("SELECT id FROM doc_chunks")]
+
+    cf = _backend()
+    cf_lib, cf_ver = _seeded(cf)
+    cf.add_chunks(cf_ver, cf_lib, copy.deepcopy(chunks))
+    cf_ids = [r["id"] for r in cf._d1.execute("SELECT id FROM doc_chunks", [])]
+
+    assert len(cf_ids) == len(local_ids) == len(chunks)
+    assert len(set(cf_ids)) == len(cf_ids), "a duplicate id overwrites a chunk"
+    assert {len(i) for i in cf_ids} == {len(i) for i in local_ids}
+    assert all(re.fullmatch(r"[0-9a-f]+", i) for i in cf_ids)
+
+
+def test_cf_vector_ids_match_the_chunk_rows_they_belong_to():
+    """One id per chunk, shared by its D1 row and its vector.
+
+    The row and the vector are built in two separate comprehensions; minting
+    an id independently in each would store vectors that no chunk row claims,
+    which `clear_version_chunks` then cannot delete and `search` returns as
+    hits with no content behind them.
+    """
+    chunks = _chunker_output()
+    cf = _backend()
+    cf_lib, cf_ver = _seeded(cf)
+
+    cf.add_chunks(cf_ver, cf_lib, chunks, embeddings=[[0.1] * 768 for _ in chunks])
+
+    row_ids = {
+        r["id"]
+        for r in cf._d1.execute(
+            "SELECT id FROM doc_chunks WHERE version_id = ?", [cf_ver]
+        )
+    }
+    assert row_ids == set(cf._vec._http.vectors)
 
 
 @pytest.mark.parametrize("method", ["export_jsonl", "import_jsonl"])

@@ -208,7 +208,6 @@ def test_add_chunks_persists_every_column_the_sqlite_backend_writes():
         lib_id,
         [
             {
-                "id": "c1",
                 "url": "https://a/p1",
                 "title": "Routing",
                 "chunk_index": 0,
@@ -223,7 +222,9 @@ def test_add_chunks_persists_every_column_the_sqlite_backend_writes():
         embeddings=None,
     )
 
-    stored = db._d1.fetchone("SELECT * FROM doc_chunks WHERE id = ?", ["c1"])
+    # Looked up by version, not by a caller-chosen id: add_chunks mints the id
+    # itself (like DocsDB does), so the caller never knows one.
+    stored = db._d1.fetchone("SELECT * FROM doc_chunks WHERE version_id = ?", [ver_id])
     assert stored["section"] == "guide"
     assert stored["topic"] == "routing"
     assert stored["content_hash"] == "deadbeef"
@@ -243,10 +244,10 @@ def test_add_chunks_leaves_optional_columns_null_when_absent():
     db.add_chunks(
         ver_id,
         lib_id,
-        [{"id": "c1", "content": "hello world", "url": "https://a/p1"}],
+        [{"content": "hello world", "url": "https://a/p1"}],
         embeddings=None,
     )
-    stored = db._d1.fetchone("SELECT * FROM doc_chunks WHERE id = ?", ["c1"])
+    stored = db._d1.fetchone("SELECT * FROM doc_chunks WHERE version_id = ?", [ver_id])
     assert stored["section"] is None
     assert stored["topic"] is None
     assert stored["content_hash"] is None
