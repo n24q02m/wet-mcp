@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v3.7.0-beta.4 (2026-08-03)
+
+### Bug Fixes
+
+- Align cf-d1 get_best_version with DocsDB and heal un-normalised names
+  ([#1629](https://github.com/n24q02m/wet-mcp/pull/1629),
+  [`bca9b9b`](https://github.com/n24q02m/wet-mcp/commit/bca9b9be6045355fd6bb23712350210381345e53))
+
+- Apply D1 migrations on every CF deploy path
+  ([#1621](https://github.com/n24q02m/wet-mcp/pull/1621),
+  [`1b30442`](https://github.com/n24q02m/wet-mcp/commit/1b30442c2b4494f8e5202fc1c181d7596d7b5511))
+
+- Batch D1 neighbour prefetch by parameters, not rows
+  ([#1628](https://github.com/n24q02m/wet-mcp/pull/1628),
+  [`dce4334`](https://github.com/n24q02m/wet-mcp/commit/dce4334740b63051a03b88b853a16f201911f5cd))
+
+- Copy the DocsDB chunk-column fallbacks into the cf-d1 backend
+  ([#1623](https://github.com/n24q02m/wet-mcp/pull/1623),
+  [`f5040df`](https://github.com/n24q02m/wet-mcp/commit/f5040df6ab09cf73903256602ae99a2aa0f2c26e))
+
+- Stamp discovery_version and the dropped metadata in cf-d1 upsert_library
+  ([#1625](https://github.com/n24q02m/wet-mcp/pull/1625),
+  [`5452d29`](https://github.com/n24q02m/wet-mcp/commit/5452d2913a4f160ae93155d7a58bebb049fd7271))
+
+
 ## v3.7.0-beta.3 (2026-08-03)
 
 ### Bug Fixes
