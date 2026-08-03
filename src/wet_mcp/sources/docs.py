@@ -1631,6 +1631,7 @@ _READTHEDOCS_HOSTS = (
     # the substring check this replaces matched them, so keep them eligible.
     "readthedocs-hosted.com",
 )
+_READTHEDOCS_SUFFIXES = tuple(f".{h}" for h in _READTHEDOCS_HOSTS)
 
 
 def _is_readthedocs_host(netloc: str) -> bool:
@@ -1642,7 +1643,7 @@ def _is_readthedocs_host(netloc: str) -> bool:
     subdomain check below and collect the bonus.
     """
     host = netloc.lower().partition(":")[0].rstrip(".")
-    return any(host == h or host.endswith(f".{h}") for h in _READTHEDOCS_HOSTS)
+    return host in _READTHEDOCS_HOSTS or host.endswith(_READTHEDOCS_SUFFIXES)
 
 
 def _score_discovery_result(r: dict, name: str) -> int:
@@ -2684,7 +2685,7 @@ def _rst_to_markdown(content: str) -> str:
 _GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
 
 # Common docs directory names in repos
-_DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
+_DOC_DIRS = frozenset(("docs", "doc", "documentation", "guide", "guides", "wiki"))
 
 # Non-documentation files to skip (case-insensitive stem matching)
 _SKIP_FILES = frozenset(
