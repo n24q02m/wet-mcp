@@ -397,7 +397,10 @@ jobs:
           python-version: "3.13"
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-      - name: Deploy to Cloudflare (build http-slim + push + deploy + canary)
+      # CF_DEPLOY_TOKEN needs D1:edit on top of Workers/Containers edit: the
+      # script now applies migrations/ to the remote D1 before the worker rolls
+      # (wrangler deploy never did — issue #1617).
+      - name: Deploy to Cloudflare (build http-slim + push + migrate D1 + deploy + canary)
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_DEPLOY_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

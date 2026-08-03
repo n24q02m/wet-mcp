@@ -98,17 +98,39 @@ const tmpDir = mkdtempSync(join(tmpdir(), "wet-cf-deploy-"));
 const tmpConfig = join(process.cwd(), `.wrangler-deploy-${process.pid}.jsonc`);
 writeFileSync(tmpConfig, substituted, "utf8");
 
+// `wrangler deploy` does NOT apply D1 migrations -- `migrations_dir` on the D1
+// binding only tells `wrangler d1 migrations *` where to look. Apply them first
+// so this path can never ship code against a schema that is still behind
+// migrations/ (issue #1617). Schema before code: the reverse order opens a live
+// window where the worker queries columns that do not exist yet.
+const dbNames = [...substituted.matchAll(/"database_name"\s*:\s*"([^"]+)"/g)].map(
+  (m) => m[1],
+);
+
 const cmd = "wrangler";
+const migrateArgs = (db) => ["d1", "migrations", "apply", db, "--remote", "--config", tmpConfig];
 const args = ["deploy", "--config", tmpConfig];
+for (const db of dbNames) console.log(`$ ${cmd} ${migrateArgs(db).join(" ")}`);
 console.log(`$ ${cmd} ${args.join(" ")}`);
 
 try {
   if (dryRun) {
-    console.log("(--dry-run) resolved config written; not invoking wrangler deploy.");
-    process.exit(0);
+    console.log("(--dry-run) resolved config written; not invoking wrangler.");
+  } else {
+    // Stop at the first failed migration: deploying on top of a half-migrated
+    // schema is exactly the breakage this step exists to prevent.
+    let failed = 0;
+    for (const db of dbNames) {
+      const migrated = spawnSync(cmd, migrateArgs(db), { stdio: "inherit", shell: true });
+      if (migrated.status !== 0) {
+        failed = migrated.status ?? 1;
+        console.error(`d1 migrations apply failed for ${db}; not deploying.`);
+        break;
+      }
+    }
+    process.exitCode =
+      failed || (spawnSync(cmd, args, { stdio: "inherit", shell: true }).status ?? 1);
   }
-  const result = spawnSync(cmd, args, { stdio: "inherit", shell: true });
-  process.exitCode = result.status ?? 1;
 } finally {
   rmSync(tmpConfig, { force: true });
   rmSync(tmpDir, { recursive: true, force: true });

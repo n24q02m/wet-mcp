@@ -4,9 +4,18 @@
 Turns the manual CF redeploy recipe into one repeatable command. Reads the
 gitignored ``wrangler.deploy.jsonc`` (real account/KV/D1/Vectorize IDs) for the
 container image name + account, builds the ``http`` target, pushes to the CF
-managed registry, deploys, waits for the container rollout to finish
-(STATE=ready) so you never verify against a half-rolled old image, then runs a
-**credential-free canary gate** and **auto-rolls-back** if it fails.
+managed registry, **applies the D1 migrations in** ``migrations/``, deploys,
+waits for the container rollout to finish (STATE=ready) so you never verify
+against a half-rolled old image, then runs a **credential-free canary gate** and
+**auto-rolls-back** if it fails.
+
+Why the migration step: ``wrangler deploy`` does not apply D1 migrations, and
+the ``migrations_dir`` key on the D1 binding only tells ``wrangler d1
+migrations *`` where to look. Nothing called it, so prod D1 silently drifted
+from ``migrations/`` and a release shipping code that reads a new column failed
+at runtime (issue #1617). It runs before the deploy so the schema is never
+behind the code. The CF API token therefore needs D1:edit in addition to
+Workers/Containers edit.
 
 Set CLOUDFLARE_API_TOKEN in the environment (any secret manager works), then run
 from the repo root:
@@ -139,6 +148,61 @@ def _image_parts(cfg: dict) -> tuple[str, str, str]:
             f"unexpected image ref (need registry.cloudflare.com/<acct>/<name>): {ref}"
         )
     return base, m.group(1), m.group(2)
+
+
+def _d1_database_names(cfg: dict) -> list[str]:
+    """D1 database names to migrate, read from the RENDERED deploy config.
+
+    Never read these from the committed ``wrangler.jsonc``: it carries
+    placeholder resource IDs, so a migration aimed at it would target the wrong
+    (or no) database."""
+    return [
+        str(db["database_name"])
+        for db in (cfg.get("d1_databases") or [])
+        if db.get("database_name")
+    ]
+
+
+def _apply_d1_migrations(repo: Path, cfg: dict, *, dry: bool) -> None:
+    """Apply ``migrations/`` to the remote D1 BEFORE the new worker rolls out.
+
+    ``wrangler deploy`` does not run D1 migrations. The ``migrations_dir`` key on
+    the D1 binding only tells ``wrangler d1 migrations *`` where to look, so
+    before this step existed no deploy path touched the remote schema and prod
+    D1 drifted from ``migrations/`` (issue #1617).
+
+    Order is load-bearing: schema first, then code. Running this after
+    ``wrangler deploy`` opens a live window in which the new container queries
+    columns that do not exist yet.
+
+    Forward-only by design, so ``_rollback`` deliberately does not undo it: every
+    migration here is additive (CREATE / ADD COLUMN), which the previous image
+    tolerates, whereas reverting a column the rolled-back canary already wrote to
+    would lose data.
+
+    ``wrangler d1 migrations apply`` skips its confirmation prompt when it
+    detects a non-interactive/CI environment, so no extra flag is needed here.
+    """
+    names = _d1_database_names(cfg)
+    if not names:
+        print("  no d1_databases in the deploy config; nothing to migrate.")
+        return
+    for db in names:
+        _run(
+            [
+                "bunx",
+                "wrangler",
+                "d1",
+                "migrations",
+                "apply",
+                db,
+                "--remote",
+                "--config",
+                DEPLOY_CONFIG,
+            ],
+            dry=dry,
+            cwd=repo,
+        )
 
 
 def _public_url(cfg: dict) -> str:
@@ -365,7 +429,7 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"Deploy {worker}: image {local} -> {full}")
     if not args.skip_build:
-        print("[1/4] docker build --target http")
+        print("[1/5] docker build --target http")
         _run(
             [
                 "docker",
@@ -381,11 +445,15 @@ def main(argv: list[str] | None = None) -> int:
             dry=args.dry_run,
             cwd=repo,
         )
-    print("[2/4] docker tag -> CF registry")
+    print("[2/5] docker tag -> CF registry")
     _run(["docker", "tag", local, full], dry=args.dry_run)
-    print("[3/4] wrangler containers push")
+    print("[3/5] wrangler containers push")
     _run(["bunx", "wrangler", "containers", "push", full], dry=args.dry_run, cwd=repo)
-    print(f"[4/4] wrangler deploy --config {DEPLOY_CONFIG}")
+    # Schema before code, and only once the image is safely pushed: a build or
+    # push failure must not leave prod D1 migrated ahead of any shipped worker.
+    print("[4/5] wrangler d1 migrations apply --remote (schema before code)")
+    _apply_d1_migrations(repo, cfg, dry=args.dry_run)
+    print(f"[5/5] wrangler deploy --config {DEPLOY_CONFIG}")
     if not args.dry_run:
         _set_image_tag(repo, full)
     _run(
