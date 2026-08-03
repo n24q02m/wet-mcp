@@ -532,8 +532,22 @@ def resolve_embed_backend_for_request() -> EmbeddingBackend | None:
       sub's credential bucket. If the sub has a cloud embedding chain whose
       provider key is present, build a fresh request-scoped
       :class:`CloudEmbeddingBackend` carrying that sub's key explicitly (so the
-      key flows down the call, never into ``os.environ``). Otherwise fall back
-      to the process-shared local ONNX backend.
+      key flows down the call, never into ``os.environ``). With no such chain,
+      fall back to the process-shared local ONNX backend -- unless
+      ``DISABLE_LOCAL_EMBED`` turned that leg off, in which case embedding is
+      ``None``: gracefully unavailable.
+
+    That last exit is the same three-way resolution
+    :meth:`Settings.resolve_embedding_backend` performs at startup, where it
+    is spelled ``'unavailable'``. Keeping the two in step is the whole point:
+    the flag is what a slim deployment sets when the local ONNX extras were
+    never installed, so handing back a backend that raises
+    ``ModuleNotFoundError`` on first use fails the entire index instead of
+    storing keyword-searchable chunks without vectors.
+
+    ``None`` here, specifically -- NOT the startup singleton. That one was
+    resolved from the OPERATOR's process env, and lending it to an arbitrary
+    sub bills the operator's provider account for that sub's traffic.
 
     A per-sub request NEVER rebinds the module-level ``_backend`` singleton —
     that would let one user's cloud model/key serve another concurrent user
@@ -554,7 +568,39 @@ def resolve_embed_backend_for_request() -> EmbeddingBackend | None:
     if chain:
         model = chain[0]
         return CloudEmbeddingBackend(model, api_key=api_key_for_model(model))
+    if settings.disable_local_embed:
+        return None
     return _shared_local_embed_backend()
+
+
+def embedding_unavailable_reason() -> str | None:
+    """Why this request has no embedding backend, or ``None`` if it has one.
+
+    A caller that degrades to keyword-only needs to say WHY in its reply. The
+    degraded result set is shaped exactly like a working hybrid one, so silence
+    reads as "semantic search ran and matched little" when semantic search
+    never ran at all.
+
+    Mirrors :func:`resolve_embed_backend_for_request` rather than re-deriving
+    the decision: it asks that function first, so a reason can only be produced
+    for a request that genuinely has no backend.
+    """
+    from wet_mcp.credential_state import get_current_sub
+
+    if resolve_embed_backend_for_request() is not None:
+        return None
+    if get_current_sub() is None:
+        return (
+            "no embedding backend was initialised at startup: no EMBEDDING_MODELS "
+            "chain with a configured provider key, and the local ONNX leg is "
+            "disabled (DISABLE_LOCAL_EMBED) or failed to load"
+        )
+    # The only ``None`` exit left for a request that HAS a sub.
+    return (
+        "this session has no cloud embedding model configured (set "
+        "EMBEDDING_MODELS plus the matching provider key) and this deployment "
+        "runs with DISABLE_LOCAL_EMBED set, so there is no local fallback"
+    )
 
 
 def init_backend(

@@ -34,6 +34,10 @@
     "BROWSERLESS_URL": "https://browserless.n24q02m.com",
     "DISABLE_LOCAL_BROWSER": "true",
     "DISABLE_LOCAL_EMBED": "true",
+    // Paired with the line above: the SLIM image uninstalls qwen3-embed, so the
+    // local leg is absent for rerank too. See wrangler.jsonc for why the
+    // deploy-level RERANK_MODELS does not cover the per-sub case.
+    "DISABLE_LOCAL_RERANK": "true",
     "BROWSER_BACKENDS": "browserless,cf-browser-rendering",
     "CF_ACCOUNT_ID": "${CLOUDFLARE_ACCOUNT_ID}",
     "PUBLIC_URL": "${PUBLIC_URL}",
