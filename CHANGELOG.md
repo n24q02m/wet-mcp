@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v3.7.0-beta.2 (2026-08-03)
+
+### Bug Fixes
+
+- Lowercase Renovate lock-file-maintenance PR subject
+  ([#1607](https://github.com/n24q02m/wet-mcp/pull/1607),
+  [`30fe6db`](https://github.com/n24q02m/wet-mcp/commit/30fe6db9a1126535938da2aebe51dee95a5c9c4d))
+
+- Make background docs indexing durable and self-reporting
+  ([#1610](https://github.com/n24q02m/wet-mcp/pull/1610),
+  [`c037bb3`](https://github.com/n24q02m/wet-mcp/commit/c037bb3c53420b9912304d5f3d22437ed81ea37c))
+
+- Quote loguru Record type + lowercase Renovate lock-file-maintenance subject
+  ([#1607](https://github.com/n24q02m/wet-mcp/pull/1607),
+  [`30fe6db`](https://github.com/n24q02m/wet-mcp/commit/30fe6db9a1126535938da2aebe51dee95a5c9c4d))
+
+- Quote loguru Record TypedDict in test annotation for stricter ty
+  ([#1607](https://github.com/n24q02m/wet-mcp/pull/1607),
+  [`30fe6db`](https://github.com/n24q02m/wet-mcp/commit/30fe6db9a1126535938da2aebe51dee95a5c9c4d))
+
+- Stamp the server's embedding identity in the Tier 1 ingest script
+  ([#1609](https://github.com/n24q02m/wet-mcp/pull/1609),
+  [`5a68e9a`](https://github.com/n24q02m/wet-mcp/commit/5a68e9aa2bdf40660b6e0d90621563d24e0f27eb))
+
+- **deps**: Lock file maintenance ([#1604](https://github.com/n24q02m/wet-mcp/pull/1604),
+  [`88db575`](https://github.com/n24q02m/wet-mcp/commit/88db575ae16d041ce070e0f4c0479f322b5584b0))
+
+- **deps**: Update cryptography to v50 ([#1603](https://github.com/n24q02m/wet-mcp/pull/1603),
+  [`32656d8`](https://github.com/n24q02m/wet-mcp/commit/32656d8145e45a353485cec744c0648dd5452efe))
+
+
 ## v3.7.0-beta.1 (2026-08-02)
 
 ### Bug Fixes
