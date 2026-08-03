@@ -565,6 +565,240 @@ def test_cf_vector_metadata_repeats_the_chunk_index_of_its_own_row():
         assert meta["chunk_index"] == by_id[cid]
 
 
+# ---------------------------------------------------------------------------
+# Column parity: `libraries`.
+#
+# The libraries row is not a label, it is control state. `_search_cached_index`
+# reads `discovery_version` off it and forces a full re-index whenever the
+# stored value trails `sources.docs.DISCOVERY_VERSION`. `db_cf.upsert_library`
+# never wrote the column and took the rest of DocsDB's metadata as `**extra`,
+# which it dropped -- so a cf-d1 store answered `indexing_in_progress` forever,
+# re-indexing on every call, with 50 perfectly good chunks already in D1.
+#
+# Same failure class as #1618 (chunk id) and #1623 (chunk column fallbacks):
+# `_missing_docs_db_methods` only matches method NAMES, so what a method
+# actually writes drifts unseen. Compare whole rows, not one column.
+# ---------------------------------------------------------------------------
+
+# Every `libraries` column both stores own and either writer can set. `id` /
+# `created_at` / `updated_at` are excluded (opaque or wall-clock), as are the
+# columns owned by mark_library_indexed / mark_metadata_seeded.
+_LIBRARY_PARITY_COLUMNS = (
+    "name",
+    "docs_url",
+    "registry",
+    "description",
+    "canonical_name",
+    "homepage",
+    "github_url",
+    "package_managers",
+    "tier",
+    "discovery_version",
+)
+
+# Exactly what `sources.docs._index_library` passes in production.
+_FULL_LIBRARY_KWARGS = {
+    "docs_url": "https://alpha.dev",
+    "registry": "pypi",
+    "description": "Alpha reads and writes configuration files.",
+    "tier": 1,
+    "package_managers": ["pip", "uv"],
+    "homepage": "https://alpha.dev/home",
+    "github_url": "https://github.com/alpha/alpha",
+    "canonical_name": "Alpha",
+}
+
+
+def _library_rows(tmp_path, name, calls):
+    """Apply the same upsert sequence to both backends; return both rows."""
+    local = DocsDB(tmp_path / "docs.db")
+    cf = _backend()
+    for kwargs in calls:
+        local.upsert_library(name, **kwargs)
+        cf.upsert_library(name, **kwargs)
+    lookup = name.lower().strip()
+    return local.get_library(lookup), cf.get_library(lookup)
+
+
+def _parity(row):
+    assert row is not None, "the library row is missing entirely"
+    return {c: row.get(c) for c in _LIBRARY_PARITY_COLUMNS}
+
+
+def test_both_backends_insert_the_same_library_row(tmp_path):
+    """A first upsert must land the same metadata in D1 as in SQLite.
+
+    `db_cf.upsert_library` accepted `registry` / `description` / `tier` /
+    `package_managers` / `homepage` / `github_url` / `canonical_name` as
+    `**extra` and wrote none of them, so the Tier 1 warmup seeded rows on
+    cf-d1 that held nothing but a name.
+    """
+    local_row, cf_row = _library_rows(tmp_path, "alpha", [_FULL_LIBRARY_KWARGS])
+    assert _parity(cf_row) == _parity(local_row)
+
+
+def test_both_backends_stamp_discovery_version_on_insert(tmp_path):
+    """The stamp itself, named, because it is what breaks the search path."""
+    from wet_mcp.sources.docs import DISCOVERY_VERSION
+
+    local_row, cf_row = _library_rows(
+        tmp_path, "alpha", [{"docs_url": "https://alpha.dev"}]
+    )
+    assert local_row["discovery_version"] == DISCOVERY_VERSION
+    assert cf_row["discovery_version"] == DISCOVERY_VERSION
+
+
+def test_reupsert_restamps_discovery_version_on_an_existing_row(tmp_path):
+    """The UPDATE path is the one that heals production.
+
+    Prod D1 already holds rows written at `discovery_version = 0`. Stamping
+    only on INSERT would leave every one of them re-indexing forever, because
+    the row is never re-inserted -- only ever updated.
+    """
+    from wet_mcp.sources.docs import DISCOVERY_VERSION
+
+    cf = _backend()
+    lib_id = cf.upsert_library("alpha", docs_url="https://alpha.dev")
+    cf._d1.execute("UPDATE libraries SET discovery_version = 0 WHERE id = ?", [lib_id])
+    assert cf.get_library("alpha")["discovery_version"] == 0
+
+    cf.upsert_library("alpha", docs_url="https://alpha.dev")
+    assert cf.get_library("alpha")["discovery_version"] == DISCOVERY_VERSION
+
+
+def test_both_backends_update_the_same_library_columns(tmp_path):
+    """A second upsert must write the same columns -- and blank the same none.
+
+    DocsDB's UPDATE skips every field the caller left as None; the CF UPDATE
+    assigned `docs_url` unconditionally, so a metadata-only re-upsert erased
+    the stored docs URL of an already-indexed library.
+    """
+    local_row, cf_row = _library_rows(
+        tmp_path,
+        "alpha",
+        [
+            _FULL_LIBRARY_KWARGS,
+            {"registry": "npm", "description": "Alpha, restated."},
+        ],
+    )
+    assert _parity(cf_row) == _parity(local_row)
+
+
+def test_both_backends_normalise_the_library_name(tmp_path):
+    """`get_library` must find what `upsert_library` just wrote, in any casing.
+
+    DocsDB lowercases and strips on both read and write. db_cf did neither, so
+    a search for "FastAPI" followed by one for "fastapi" minted two library
+    rows and indexed the same docs twice -- the same unbounded re-index this
+    module exists to prevent.
+    """
+    local_row, cf_row = _library_rows(
+        tmp_path, "  FastAPI  ", [{"docs_url": "https://f.dev"}]
+    )
+    assert _parity(cf_row) == _parity(local_row)
+
+    cf = _backend()
+    first = cf.upsert_library("FastAPI", docs_url="https://f.dev")
+    again = cf.upsert_library("fastapi", docs_url="https://f.dev")
+    assert again == first
+    assert cf.stats()["libraries"] == 1
+
+
+def test_upsert_library_rejects_an_unknown_field(tmp_path):
+    """Silently swallowing kwargs is how this bug survived three releases.
+
+    `**extra` made every future column addition a no-op on cf-d1 that nothing
+    would report. An unknown field must fail the same way DocsDB fails it.
+
+    Dispatched by name because a literal keyword is a static type error on the
+    SQLite side -- which is exactly the report the CF side owed us and did not
+    give. Here we want the runtime error, so the call has to get past `ty`.
+    """
+    method = "upsert_library"
+    for db in (_backend(), DocsDB(tmp_path / "docs.db")):
+        with pytest.raises(TypeError):
+            getattr(db, method)("alpha", not_a_column="x")
+
+
+def test_both_backends_insert_the_same_version_row(tmp_path):
+    """`versions` INSERT parity: a fresh version is 'pending' with zero counts."""
+    cols = ("version", "docs_url", "status", "page_count", "chunk_count")
+
+    local = DocsDB(tmp_path / "docs.db")
+    local_lib = local.upsert_library("alpha", docs_url="https://alpha.dev")
+    local_ver = local.upsert_version(local_lib, "1.0", docs_url="https://alpha.dev")
+    local_row = dict(
+        local._conn.execute(
+            "SELECT * FROM versions WHERE id = ?", (local_ver,)
+        ).fetchone()
+    )
+
+    cf = _backend()
+    cf_lib = cf.upsert_library("alpha", docs_url="https://alpha.dev")
+    cf_ver = cf.upsert_version(cf_lib, "1.0", docs_url="https://alpha.dev")
+    cf_row = cf._d1.fetchone("SELECT * FROM versions WHERE id = ?", [cf_ver])
+
+    assert {c: cf_row[c] for c in cols} == {c: local_row[c] for c in cols}
+
+
+async def test_search_cached_index_serves_a_library_indexed_on_cf(monkeypatch):
+    """The whole point: an indexed cf-d1 library must be answered, not re-indexed.
+
+    Verified live on prod D1 2026-08-03 -- library `fastapi` held 50
+    doc_chunks, `versions.index_state='done'`, `chunk_count=50`, FTS synced
+    50/50, and `search(action="docs")` still replied `indexing_in_progress`
+    on every call because `discovery_version` read back 0 against a code
+    constant of 27.
+    """
+    from wet_mcp import server
+
+    cf = _backend()
+    lib_id = cf.upsert_library(
+        "alpha",
+        docs_url="https://alpha.dev",
+        registry="pypi",
+        description="Alpha reads config files.",
+    )
+    ver_id = cf.upsert_version(lib_id, "latest", docs_url="https://alpha.dev")
+    cf.add_chunks(
+        ver_id,
+        lib_id,
+        [
+            {
+                "url": "https://alpha.dev/retry",
+                "title": "Retry",
+                "content": "alpha retries a failed request with exponential backoff",
+                "heading_path": "Usage > Retry",
+            }
+        ],
+    )
+    cf.mark_version_indexed(ver_id, 1, 1)
+
+    async def _no_embedding(*_a, **_k):
+        return None
+
+    async def _no_hyde(*_a, **_k):
+        return None
+
+    async def _passthrough_rerank(_query, results, limit):
+        return results[:limit]
+
+    monkeypatch.setattr(server, "_docs_db", cf)
+    monkeypatch.setattr(server, "_embed", _no_embedding)
+    monkeypatch.setattr(server, "_rerank_results", _passthrough_rerank)
+    monkeypatch.setattr(
+        "wet_mcp.sources.search_strategies.generate_hyde_query", _no_hyde
+    )
+
+    payload = await server._search_cached_index("alpha", "retry backoff", None, 5)
+
+    assert payload is not None, (
+        "an indexed cf-d1 library was reported as needing indexing again"
+    )
+    assert payload["source"] == "cached_index"
+    assert payload["results"], "served an empty result set for an indexed library"
+
+
 @pytest.mark.parametrize("method", ["export_jsonl", "import_jsonl"])
 def test_jsonl_sync_degrades_loudly(method):
     """File-based DB sync is meaningless on CF -- say so, do not return empties.
