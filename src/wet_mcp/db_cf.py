@@ -13,7 +13,7 @@ import time
 import uuid
 
 from loguru import logger
-from mcp_core.storage.d1 import D1Backend
+from mcp_core.storage.d1 import D1_MAX_BOUND_PARAMS, D1Backend
 from mcp_core.storage.vectorize import VectorizeBackend
 
 # Reuse the exact ranking helpers, the chunk-id generator and the column
@@ -30,6 +30,26 @@ from wet_mcp.db import (
 # re-indexes any library whose stored value trails this constant, so a backend
 # that does not write it can never serve a cached index (issue #1624).
 from wet_mcp.sources.docs import DISCOVERY_VERSION
+
+
+def _d1_param_batches(items: list, params_per_item: int):
+    """Slice ``items`` so no single D1 statement binds more than D1's cap.
+
+    D1's ceiling counts BOUND PARAMETERS, not rows. The cap itself is imported
+    from ``mcp_core.storage.d1`` rather than restated here, so the read path
+    and the write path (``D1Backend.executemany``, which derives its
+    rows-per-INSERT the same way) can never drift apart on the number.
+
+    Batching a multi-column key list by ROWS is what killed the deployed
+    worker: 100 three-column keys bind 300 parameters, D1 answers
+    ``D1_ERROR: too many SQL variables``, and the container dies mid-request so
+    the client only sees "Server disconnected without sending a response".
+    Dividing the cap by the per-item width means widening a key tuple shrinks
+    the batch automatically instead of silently overflowing it.
+    """
+    per_batch = max(1, D1_MAX_BOUND_PARAMS // params_per_item)
+    for i in range(0, len(items), per_batch):
+        yield items[i : i + per_batch]
 
 
 class DocsDBCfBackend:
@@ -585,14 +605,22 @@ class DocsDBCfBackend:
                     missing_ids.append(cid)
 
             if missing_ids:
-                placeholders = ",".join(["?"] * len(missing_ids))
-                sql = (
-                    "SELECT c.*, l.name AS _library_name FROM doc_chunks c "
-                    "LEFT JOIN libraries l ON c.library_id = l.id "
-                    f"WHERE c.id IN ({placeholders})"
-                )
-                for row in self._d1.execute(sql, missing_ids):
-                    fts_chunks[row["id"]] = row
+                # One bound parameter per id. Today this cannot reach D1's cap
+                # on its own -- top_k above clamps vec_results to 50 -- but that
+                # is a property of a number written elsewhere, not of this
+                # statement. Routing it through the same helper as the
+                # neighbour prefetch means raising candidate_limit or that
+                # clamp can never silently reintroduce the "too many SQL
+                # variables" crash that takes the whole container down.
+                for batch in _d1_param_batches(missing_ids, 1):
+                    placeholders = ",".join(["?"] * len(batch))
+                    sql = (
+                        "SELECT c.*, l.name AS _library_name FROM doc_chunks c "
+                        "LEFT JOIN libraries l ON c.library_id = l.id "
+                        f"WHERE c.id IN ({placeholders})"
+                    )
+                    for row in self._d1.execute(sql, batch):
+                        fts_chunks[row["id"]] = row
                 for cid in missing_ids:
                     if cid not in fts_chunks:
                         fts_chunks[cid] = {}
@@ -649,10 +677,12 @@ def _build_results_cf(scored, fts_chunks, d1: D1Backend, limit: int):
     adj_map: dict[tuple[str, str, int], str] = {}
     if adj_keys:
         unique_keys = sorted(adj_keys)
-        batch_size = 100
-        for i in range(0, len(unique_keys), batch_size):
-            batch = unique_keys[i : i + batch_size]
-            placeholders = ",".join(["(?,?,?)"] * len(batch))
+        # The key width drives BOTH the ?-tuple and the batch size, so the two
+        # cannot disagree: adding a column to the key re-derives each of them.
+        key_width = len(unique_keys[0])
+        key_tuple = "(" + ",".join(["?"] * key_width) + ")"
+        for batch in _d1_param_batches(unique_keys, key_width):
+            placeholders = ",".join([key_tuple] * len(batch))
             params = [v for k in batch for v in k]
             sql = (
                 "SELECT url, version_id, chunk_index, content "
