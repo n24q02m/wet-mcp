@@ -52,10 +52,12 @@ def test_search_with_cf_db_eventual_consistency():
     db = _cf_db(d1, vec)
     db.upsert_library("alpha", docs_url="https://a")
     lib = db.get_library("alpha")
-    db.upsert_version(lib["id"], "1.0")
-    ver = db.get_best_version(lib["id"], "1.0")
+    # upsert_version returns the id directly. get_best_version means "best
+    # INDEXED version", and this row does not reach status='indexed' until
+    # mark_version_indexed runs, so it is the wrong way to fetch a fresh row.
+    ver_id = db.upsert_version(lib["id"], "1.0")
     db.add_chunks(
-        ver["id"],
+        ver_id,
         lib["id"],
         [
             {
@@ -114,10 +116,12 @@ def test_outbound_latency_under_budget():
     db = _cf_db(d1, vec)
     db.upsert_library("alpha")
     lib = db.get_library("alpha")
-    db.upsert_version(lib["id"], "1.0")
-    ver = db.get_best_version(lib["id"], "1.0")
+    # upsert_version returns the id directly. get_best_version means "best
+    # INDEXED version", and this row does not reach status='indexed' until
+    # mark_version_indexed runs, so it is the wrong way to fetch a fresh row.
+    ver_id = db.upsert_version(lib["id"], "1.0")
     db.add_chunks(
-        ver["id"],
+        ver_id,
         lib["id"],
         [
             {

@@ -110,9 +110,15 @@ class DocsDBCfBackend:
             # Mirrors DocsDB._update_library_inner: a field left None keeps its
             # stored value (assigning it unconditionally erased the docs URL of
             # an indexed library on any metadata-only re-upsert), while
-            # discovery_version and updated_at are rewritten every time.
-            sets = ["discovery_version = ?", "updated_at = ?"]
-            params: list = [DISCOVERY_VERSION, now]
+            # discovery_version, name and updated_at are rewritten every time.
+            #
+            # `name` is rewritten for the same reason discovery_version is: the
+            # UPDATE path, not the INSERT, is what repairs rows that are
+            # already stored. A row written un-normalised by an older container
+            # is healed in place here, so it keeps its id and its chunks stay
+            # reachable instead of being orphaned behind a second row.
+            sets = ["discovery_version = ?", "name = ?", "updated_at = ?"]
+            params: list = [DISCOVERY_VERSION, norm_name, now]
             for col, value in optional:
                 if value is not None:
                     sets.append(f"{col} = ?")
@@ -154,10 +160,34 @@ class DocsDBCfBackend:
                 raise ValueError(f"Unauthorized library column: {col}")
 
     def get_library(self, name: str) -> dict | None:
-        """Get library by name. Normalises like ``DocsDB.get_library`` does."""
-        return self._d1.fetchone(
-            "SELECT * FROM libraries WHERE name = ?", [name.lower().strip()]
-        )
+        """Get library by name. Normalises like ``DocsDB.get_library`` does.
+
+        Unlike DocsDB, this falls back to normalising the STORED name on a
+        miss. Normalising the lookup changes the key of a table that is
+        already populated: a row an older container wrote as "FastAPI" would
+        stop being found, the next upsert would mint a second row, and the
+        first row's chunks would become unreachable. Losing an index that was
+        built correctly is worse than the bug this fix exists for. DocsDB
+        needs no such fallback -- its writer has always normalised, so no
+        SQLite store can hold a raw name.
+
+        The exact match runs first so the common case still uses
+        ``idx_libraries_name``; the scan only happens when a library is
+        genuinely absent or still un-normalised. ``upsert_library`` then
+        rewrites the name in place, so each legacy row is repaired the first
+        time it is touched and the scan stops being reachable for it.
+
+        Measured on prod ``wet-docs`` before shipping: 0 of 10 library rows
+        had a name differing from ``lower(trim(name))``, so this covers the
+        mixed-version rollout window rather than a known-bad row.
+        """
+        norm_name = name.lower().strip()
+        row = self._d1.fetchone("SELECT * FROM libraries WHERE name = ?", [norm_name])
+        if row is None:
+            row = self._d1.fetchone(
+                "SELECT * FROM libraries WHERE lower(trim(name)) = ?", [norm_name]
+            )
+        return row
 
     def upsert_version(
         self,
@@ -171,8 +201,17 @@ class DocsDBCfBackend:
         both production index call sites pass ``docs_url=``, and an existing row
         gets the new ``docs_url`` written back onto it (a missing one leaves the
         stored value alone).
+
+        The existence check is its own direct, UNFILTERED lookup, exactly as
+        ``DocsDB.upsert_version`` does it -- deliberately not
+        ``get_best_version``, which only considers rows that reached
+        ``status='indexed'``. Reusing it here would miss a ``pending`` row and
+        INSERT a duplicate against ``UNIQUE(library_id, version)``.
         """
-        existing = self.get_best_version(library_id, version)
+        existing = self._d1.fetchone(
+            "SELECT id FROM versions WHERE library_id = ? AND version = ?",
+            [library_id, version],
+        )
         if existing:
             ver_id = existing["id"]
             if docs_url:
@@ -191,13 +230,34 @@ class DocsDBCfBackend:
     def get_best_version(
         self, library_id: str, target: str | None = None
     ) -> dict | None:
+        """Get the best SERVABLE version for a library. Mirrors DocsDB.
+
+        "Best" means indexed. A version that exists but never finished
+        indexing has no chunks behind it, so returning it tells the caller
+        the library is unservable when another version could in fact have
+        answered: ``_search_cached_index`` reads ``chunk_count`` off this row
+        and re-indexes when it is 0, which on cf-d1 meant asking for an
+        explicit ``version=`` that happened to be mid-index re-indexed the
+        library instead of serving the copy already on disk.
+
+        So both branches filter ``status = 'indexed'``, and an exact target
+        that is not indexed falls through to the newest version that is --
+        the same two-step DocsDB.get_best_version performs.
+
+        Callers that need a row REGARDLESS of status (``upsert_version``'s
+        existence check) must query directly; that is not what "best" means.
+        """
         if target:
-            return self._d1.fetchone(
-                "SELECT * FROM versions WHERE library_id = ? AND version = ?",
+            row = self._d1.fetchone(
+                "SELECT * FROM versions WHERE library_id = ? AND version = ?"
+                " AND status = 'indexed'",
                 [library_id, target],
             )
+            if row:
+                return row
         return self._d1.fetchone(
-            "SELECT * FROM versions WHERE library_id = ? ORDER BY indexed_at DESC LIMIT 1",
+            "SELECT * FROM versions WHERE library_id = ? AND status = 'indexed'"
+            " ORDER BY indexed_at DESC LIMIT 1",
             [library_id],
         )
 

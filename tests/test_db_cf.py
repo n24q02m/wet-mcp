@@ -28,10 +28,12 @@ def test_add_chunks_then_fts_search():
     db = _backend()
     db.upsert_library("alpha", docs_url="https://a")
     lib = db.get_library("alpha")
-    db.upsert_version(lib["id"], "1.0")
-    ver = db.get_best_version(lib["id"], "1.0")
+    # upsert_version returns the id directly. get_best_version means "best
+    # INDEXED version", and this row does not reach status='indexed' until
+    # mark_version_indexed runs, so it is the wrong way to fetch a fresh row.
+    ver_id = db.upsert_version(lib["id"], "1.0")
     db.add_chunks(
-        ver["id"],
+        ver_id,
         lib["id"],
         [
             {
@@ -58,10 +60,12 @@ def test_stats_reports_counts():
     assert db.stats() == {"libraries": 0, "chunks": 0, "vec_enabled": True}
     db.upsert_library("alpha", docs_url="https://a")
     lib = db.get_library("alpha")
-    db.upsert_version(lib["id"], "1.0")
-    ver = db.get_best_version(lib["id"], "1.0")
+    # upsert_version returns the id directly. get_best_version means "best
+    # INDEXED version", and this row does not reach status='indexed' until
+    # mark_version_indexed runs, so it is the wrong way to fetch a fresh row.
+    ver_id = db.upsert_version(lib["id"], "1.0")
     db.add_chunks(
-        ver["id"],
+        ver_id,
         lib["id"],
         [
             {
@@ -85,8 +89,7 @@ def test_hybrid_search_applies_rrf_and_url_diversity():
     db = _backend()
     db.upsert_library("alpha", docs_url="https://a")
     lib = db.get_library("alpha")
-    db.upsert_version(lib["id"], "1.0")
-    ver = db.get_best_version(lib["id"], "1.0")
+    ver_id = db.upsert_version(lib["id"], "1.0")
     chunks = [
         {
             "id": f"c{i}",
@@ -99,7 +102,7 @@ def test_hybrid_search_applies_rrf_and_url_diversity():
         for i in range(5)
     ]
     embeddings = [[1.0, 0.0, 0.0] + [0.0] * 765 for _ in chunks]
-    db.add_chunks(ver["id"], lib["id"], chunks, embeddings=embeddings)
+    db.add_chunks(ver_id, lib["id"], chunks, embeddings=embeddings)
     results = db.search(
         "vector search", limit=10, query_embedding=[1.0, 0.0, 0.0] + [0.0] * 765
     )
@@ -122,9 +125,8 @@ def test_cf_search_matches_sqlite_golden(cf_corpus, cf_golden_topk):
     for d in cf_corpus:
         db.upsert_library(d["library"], docs_url=d["url"])
         lib = db.get_library(d["library"])
-        db.upsert_version(lib["id"], d["version"])
-        ver = db.get_best_version(lib["id"], d["version"])
-        db.add_chunks(ver["id"], lib["id"], [d], embeddings=None)  # FTS-only parity
+        ver_id = db.upsert_version(lib["id"], d["version"])
+        db.add_chunks(ver_id, lib["id"], [d], embeddings=None)  # FTS-only parity
     for q in QUERIES:
         cf_top = [r["content"][:40] for r in db.search(q, limit=10)]
         golden = cf_golden_topk[q]
@@ -152,7 +154,9 @@ def test_upsert_version_accepts_docs_url_kwarg():
     ver_id = db.upsert_version(
         library_id=lib_id, version="1.0", docs_url="https://a/docs"
     )
-    row = db.get_best_version(lib_id, "1.0")
+    # Read the row itself: this asserts what upsert_version WROTE, which is a
+    # different question from what get_best_version chooses to SERVE.
+    row = db._d1.fetchone("SELECT * FROM versions WHERE id = ?", [ver_id])
     assert row["id"] == ver_id
     assert row["docs_url"] == "https://a/docs"
 
@@ -164,15 +168,22 @@ def test_upsert_version_updates_docs_url_on_existing_row():
     db = _backend()
     lib_id = db.upsert_library("alpha", docs_url="https://a")
 
+    def stored_docs_url(ver_id):
+        # The stored row, not get_best_version: a 'pending' version is exactly
+        # what this test is about, and "best version" no longer includes one.
+        return db._d1.fetchone("SELECT * FROM versions WHERE id = ?", [ver_id])[
+            "docs_url"
+        ]
+
     first = db.upsert_version(lib_id, "1.0")
-    assert db.get_best_version(lib_id, "1.0")["docs_url"] is None
+    assert stored_docs_url(first) is None
 
     again = db.upsert_version(lib_id, "1.0", docs_url="https://a/docs")
     assert again == first
-    assert db.get_best_version(lib_id, "1.0")["docs_url"] == "https://a/docs"
+    assert stored_docs_url(first) == "https://a/docs"
 
     db.upsert_version(lib_id, "1.0")
-    assert db.get_best_version(lib_id, "1.0")["docs_url"] == "https://a/docs"
+    assert stored_docs_url(first) == "https://a/docs"
 
 
 def test_upsert_version_defaults_to_latest():
@@ -181,16 +192,29 @@ def test_upsert_version_defaults_to_latest():
     db = _backend()
     lib_id = db.upsert_library("alpha", docs_url="https://a")
     ver_id = db.upsert_version(lib_id)
-    assert db.get_best_version(lib_id, "latest")["id"] == ver_id
+    row = db._d1.fetchone("SELECT * FROM versions WHERE id = ?", [ver_id])
+    assert row["version"] == "latest"
 
 
 def test_get_best_version_target_is_optional():
     """``config(action="clear")`` and ``cli.py`` call ``get_best_version(lib_id)``
     with no target. ``DocsDB`` defaults it to ``None``; the CF backend required a
-    second argument and named it ``version``, so the same call raised TypeError."""
+    second argument and named it ``version``, so the same call raised TypeError.
+
+    The fixture now indexes the version before reading it back. This test used
+    to pass against a bare 'pending' row, which quietly pinned a second
+    property the signature fix never intended to assert: that "best version"
+    includes versions that were never indexed. `DocsDB.get_best_version`
+    filters `status = 'indexed'` on both of its branches, so that reading made
+    the two backends disagree about which version a library can serve (#1626).
+    What this test is for -- `target` being optional and keyword-addressable --
+    is unchanged and still asserted; only the fixture gained the
+    `mark_version_indexed` that makes the row servable in the first place.
+    """
     db = _backend()
     lib_id = db.upsert_library("alpha", docs_url="https://a")
     ver_id = db.upsert_version(lib_id, "1.0")
+    db.mark_version_indexed(ver_id, 1, 1)
     assert db.get_best_version(lib_id)["id"] == ver_id
     assert db.get_best_version(lib_id, target="1.0")["id"] == ver_id
 

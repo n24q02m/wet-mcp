@@ -704,6 +704,48 @@ def test_both_backends_normalise_the_library_name(tmp_path):
     assert cf.stats()["libraries"] == 1
 
 
+def test_a_legacy_unnormalised_row_is_healed_not_orphaned():
+    """Normalising the lookup must not strand rows written before the change.
+
+    `libraries` is already populated in production. If the normalised lookup
+    simply missed a row stored as "FastAPI", the next upsert would mint a
+    second row and the first one's chunks would become unreachable -- a fix
+    that loses indexed data is worse than the bug. So the read falls back to
+    the raw name and the UPDATE rewrites it in place, keeping the id.
+
+    Measured on prod `wet-docs` before shipping: 0 of 10 library rows had a
+    name differing from `lower(trim(name))`, so this covers the mixed-version
+    rollout window rather than a known-bad row.
+    """
+    from wet_mcp.sources.docs import DISCOVERY_VERSION
+
+    cf = _backend()
+    # A row exactly as an older container would have written it.
+    legacy_id = "legacy-row"
+    now = 1.0
+    cf._d1.execute(
+        "INSERT INTO libraries (id, name, docs_url, created_at, updated_at)"
+        " VALUES (?,?,?,?,?)",
+        [legacy_id, "  FastAPI  ", "https://f.dev", now, now],
+    )
+    ver_id = cf.upsert_version(legacy_id, "latest", docs_url="https://f.dev")
+    cf.add_chunks(ver_id, legacy_id, [{"content": "fastapi dependency injection"}])
+    cf.mark_version_indexed(ver_id, 1, 1)
+
+    # The normalised lookup still reaches it...
+    assert cf.get_library("fastapi")["id"] == legacy_id
+
+    # ...and touching it repairs the row rather than replacing it.
+    assert cf.upsert_library("FastAPI", docs_url="https://f.dev") == legacy_id
+    assert cf.stats()["libraries"] == 1, "a second row was minted; chunks orphaned"
+
+    healed = cf.get_library("fastapi")
+    assert healed["id"] == legacy_id
+    assert healed["name"] == "fastapi"
+    assert healed["discovery_version"] == DISCOVERY_VERSION
+    assert cf.get_best_version(legacy_id, "latest")["chunk_count"] == 1
+
+
 def test_upsert_library_rejects_an_unknown_field(tmp_path):
     """Silently swallowing kwargs is how this bug survived three releases.
 
@@ -797,6 +839,83 @@ async def test_search_cached_index_serves_a_library_indexed_on_cf(monkeypatch):
     )
     assert payload["source"] == "cached_index"
     assert payload["results"], "served an empty result set for an indexed library"
+
+
+# ---------------------------------------------------------------------------
+# `get_best_version` parity (#1626).
+#
+# "Best" means best SERVABLE, i.e. indexed. `_search_cached_index` reads
+# `chunk_count` off whatever this returns and re-indexes when it is 0, so a
+# backend that hands back a half-finished version reports a library as
+# unservable while another version could have answered.
+#
+# cf-d1 filtered no status on either branch and never fell back, so the two
+# backends disagreed about which version a library can serve. Same class as
+# #1618 / #1623 / #1624: the shape gate matches method names, not answers.
+# ---------------------------------------------------------------------------
+
+
+def _version_case(db, lib_name, rows):
+    """Build one library with `rows` = [(version, indexed?)]; return its id."""
+    lib_id = db.upsert_library(lib_name, docs_url="https://alpha.dev")
+    for version, indexed in rows:
+        ver_id = db.upsert_version(lib_id, version, docs_url="https://alpha.dev")
+        if indexed:
+            db.add_chunks(ver_id, lib_id, [{"content": f"body of {version}"}])
+            db.mark_version_indexed(ver_id, 1, 1)
+    return lib_id
+
+
+def _best(db, lib_id, target):
+    row = db.get_best_version(lib_id, target)
+    return None if row is None else (row["version"], row["status"])
+
+
+@pytest.mark.parametrize(
+    ("rows", "target", "expected"),
+    [
+        # The exact target is indexed -- serve exactly it.
+        ([("1.0", True)], "1.0", ("1.0", "indexed")),
+        # The exact target exists but never finished indexing, while another
+        # version did. Returning the pending row reports "needs indexing" for a
+        # library that can be served right now; DocsDB falls back instead.
+        ([("1.0", True), ("2.0", False)], "2.0", ("1.0", "indexed")),
+        # Nothing is indexed -- both backends must say so rather than hand back
+        # a row with no chunks behind it.
+        ([("1.0", False)], "1.0", None),
+        # No target: newest indexed version, never a pending one.
+        ([("1.0", True), ("2.0", False)], None, ("1.0", "indexed")),
+    ],
+    ids=["target-indexed", "target-pending-other-indexed", "none-indexed", "no-target"],
+)
+def test_both_backends_pick_the_same_best_version(tmp_path, rows, target, expected):
+    local = DocsDB(tmp_path / "docs.db")
+    local_lib = _version_case(local, "alpha", rows)
+
+    cf = _backend()
+    cf_lib = _version_case(cf, "alpha", rows)
+
+    assert _best(local, local_lib, target) == expected, "SQLite is the reference here"
+    assert _best(cf, cf_lib, target) == expected
+
+
+def test_upsert_version_still_finds_a_pending_row(tmp_path):
+    """`upsert_version` must not be filtered by "best" -- it would duplicate.
+
+    Its existence check is a direct unfiltered lookup on both backends. Routing
+    it through `get_best_version` once the status filter exists would miss a
+    `pending` row and INSERT a second one against
+    `UNIQUE(library_id, version)`, which is why the decoupling lands with the
+    filter rather than after it.
+    """
+    for db in (_backend(), DocsDB(tmp_path / "docs.db")):
+        lib_id = db.upsert_library("alpha", docs_url="https://alpha.dev")
+        first = db.upsert_version(lib_id, "1.0", docs_url="https://alpha.dev")
+
+        # The row is 'pending', so it is invisible to get_best_version...
+        assert db.get_best_version(lib_id, "1.0") is None
+        # ...and must still be reused rather than duplicated.
+        assert db.upsert_version(lib_id, "1.0", docs_url="https://alpha.dev") == first
 
 
 @pytest.mark.parametrize("method", ["export_jsonl", "import_jsonl"])
