@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 from conftest_cf import FakeD1Http, FakeVectorizeHttp
-from mcp_core.storage.d1 import D1Backend
+from mcp_core.storage.d1 import D1_MAX_BOUND_PARAMS, D1Backend
 from mcp_core.storage.vectorize import VectorizeBackend
 
 from wet_mcp.db import DocsDB
@@ -315,6 +315,80 @@ def test_add_chunks_stays_inside_the_d1_parameter_cap():
     # 13 columns against a 100-parameter cap: 7 rows / 91 params per statement.
     assert widths == [91, 91, 91, 91, 26]
     assert db.stats()["chunks"] == 30
+
+
+def test_neighbour_prefetch_stays_inside_the_d1_parameter_cap():
+    """The read path's turn at the bug PR #1601 fixed for the write path.
+
+    Reproduces the crash captured from the deployed worker by `wrangler tail`
+    on 2026-08-03: `search(action="docs", library="fastapi")` came back as
+    "Server disconnected without sending a response" because this prefetch
+    batched by ROWS (100) while D1 caps PARAMETERS (100), so a full batch of
+    three-column keys sent 300 and D1 answered `D1_ERROR: too many SQL
+    variables at offset 376`, killing the container mid-request.
+
+    Asserts the parameter count actually bound per statement, not merely that
+    search() returns -- the fake D1 is real sqlite, whose own variable limit is
+    far higher, so a row-batched statement passes right through it.
+    """
+    import json as _json
+
+    captured = []
+
+    class RecordingHttp:
+        def __init__(self, inner):
+            self._inner = inner
+
+        def request(self, method, url, data=None, headers=None):
+            if url.endswith(("/query", "/batch")):
+                captured.append(_json.loads(data.decode()))
+            return self._inner.request(method, url, data, headers)
+
+    d1 = D1Backend("http://d1.internal", http=RecordingHttp(FakeD1Http(DDL)))
+    vec = VectorizeBackend(
+        "http://vectorize.internal", idx="wet", http=FakeVectorizeHttp()
+    )
+    db = DocsDBCfBackend(d1, vec, embedding_dims=768)
+    lib_id, ver_id = _seeded(db)
+    # 60 distinct urls -> each hit asks for its idx-1 and idx+1 neighbour ->
+    # 120 distinct keys, which needs several batches even after the fix.
+    db.add_chunks(
+        ver_id,
+        lib_id,
+        [
+            {
+                "url": f"https://a/p{i}",
+                "title": "T",
+                "chunk_index": 0,
+                "content": f"widget documentation page {i}",
+                "heading_path": "T",
+            }
+            for i in range(60)
+        ],
+        embeddings=None,
+    )
+
+    captured.clear()
+    db.search("widget", limit=40)
+
+    prefetch = [
+        s
+        for p in captured
+        for s in (p if isinstance(p, list) else [p])
+        if "IN (VALUES" in s["sql"]
+    ]
+    assert prefetch, "no neighbour-context prefetch was captured"
+    widths = [len(s["params"]) for s in prefetch]
+    assert max(widths) <= D1_MAX_BOUND_PARAMS, (
+        f"prefetch bound {max(widths)} parameters in one statement; D1 caps a "
+        f"query at {D1_MAX_BOUND_PARAMS} and drops the container over it"
+    )
+    assert len(prefetch) > 1, "corpus too small to have exercised batching at all"
+    # 3 columns against a 100-parameter cap: 33 keys / 99 params per statement.
+    assert widths == [99, 99, 99, 63]
+    # Every key still got looked up -- the cap is respected by splitting the
+    # work, not by dropping any of it.
+    assert sum(widths) == 120 * 3
 
 
 # ---------------------------------------------------------------------------
