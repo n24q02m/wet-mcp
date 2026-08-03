@@ -16,8 +16,9 @@ from loguru import logger
 from mcp_core.storage.d1 import D1Backend
 from mcp_core.storage.vectorize import VectorizeBackend
 
-# Reuse the exact ranking helpers from the SQLite implementation.
-from wet_mcp.db import _build_fts_queries, _chunk_quality_score
+# Reuse the exact ranking helpers and the chunk-id generator from the SQLite
+# implementation -- both backends must mint identity the same way.
+from wet_mcp.db import _build_fts_queries, _chunk_quality_score, new_chunk_id
 
 
 class DocsDBCfBackend:
@@ -111,9 +112,16 @@ class DocsDBCfBackend:
         embeddings: list[list[float]] | None = None,
     ) -> None:
         now = time.time()
+        # Minted here, not read off the chunk: the chunkers in sources.docs emit
+        # content only and server._background_index_and_search forwards their
+        # dicts untouched, so a c["id"] subscript raised KeyError on every cf-d1
+        # index. new_chunk_id() is the same generator DocsDB._prepare_chunk_rows
+        # uses, so the two stores agree on id shape. Generated once and reused
+        # below -- the vector must carry its own chunk row's id.
+        chunk_ids = [new_chunk_id() for _ in chunks]
         rows = [
             [
-                c["id"],
+                cid,
                 version_id,
                 library_id,
                 c.get("url"),
@@ -127,7 +135,7 @@ class DocsDBCfBackend:
                 c.get("token_count"),
                 now,
             ]
-            for c in chunks
+            for cid, c in zip(chunk_ids, chunks, strict=True)
         ]
         # section/topic/content_hash/token_count exist in migrations/0001_init_wet.sql
         # and search() reads them back, so persist them like DocsDB.add_chunks does.
@@ -140,7 +148,7 @@ class DocsDBCfBackend:
         if embeddings:
             vectors = [
                 {
-                    "id": c["id"],
+                    "id": cid,
                     "values": emb,
                     "metadata": {
                         "library_id": library_id,
@@ -149,7 +157,7 @@ class DocsDBCfBackend:
                         "chunk_index": c.get("chunk_index", 0),
                     },
                 }
-                for c, emb in zip(chunks, embeddings, strict=False)
+                for cid, c, emb in zip(chunk_ids, chunks, embeddings, strict=False)
             ]
             self._vec.upsert(vectors)
             # Upsert is eventual; block until index is ready so an immediate
