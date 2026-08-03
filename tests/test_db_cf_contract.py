@@ -443,6 +443,128 @@ def test_cf_vector_ids_match_the_chunk_rows_they_belong_to():
     assert row_ids == set(cf._vec._http.vectors)
 
 
+def _local_store(tmp_path):
+    db = DocsDB(tmp_path / "docs.db")
+    lib_id = db.upsert_library("alpha", docs_url="https://alpha.dev")
+    ver_id = db.upsert_version(lib_id, "1.0", docs_url="https://alpha.dev")
+    return db, lib_id, ver_id
+
+
+def test_both_backends_default_chunk_index_to_its_place_in_the_batch(tmp_path):
+    """An absent `chunk_index` must resolve identically, not to 0 on one side.
+
+    `DocsDB._prepare_chunk_rows` falls back to the chunk's position in the
+    batch; the CF backend fell back to a constant 0. Nothing raises either
+    way, so a cf-d1 store would simply hold a batch flattened onto index 0
+    while SQLite held 0..n-1 -- and `_build_results_cf` prefetches a hit's
+    neighbours by (url, version_id, chunk_index +/- 1), so `context_before` /
+    `context_after` would silently never resolve on CF alone.
+
+    Latent today: chunk_markdown / chunk_llms_txt always emit the key. It is
+    reachable the moment a caller does what `DocsDB` documents as legal --
+    `test_db.py::test_add_chunks_minimal_fields` passes content and nothing
+    else.
+    """
+    chunks = _chunker_output()
+    for c in chunks:
+        del c["chunk_index"]
+
+    local, local_lib, local_ver = _local_store(tmp_path)
+    local.add_chunks(local_ver, local_lib, copy.deepcopy(chunks))
+    local_idx = [
+        r[0]
+        for r in local._conn.execute(
+            "SELECT chunk_index FROM doc_chunks ORDER BY rowid"
+        )
+    ]
+
+    cf = _backend()
+    cf_lib, cf_ver = _seeded(cf)
+    cf.add_chunks(cf_ver, cf_lib, copy.deepcopy(chunks))
+    cf_idx = [
+        r["chunk_index"]
+        for r in cf._d1.execute(
+            "SELECT chunk_index FROM doc_chunks WHERE version_id = ? ORDER BY rowid",
+            [cf_ver],
+        )
+    ]
+
+    assert local_idx == list(range(len(chunks))), "SQLite is the reference here"
+    assert cf_idx == local_idx
+
+
+def test_both_backends_store_a_content_only_chunk_identically(tmp_path):
+    """Every fallback in the CF row builder, checked against SQLite at once.
+
+    `chunk_index` was not the only default that had drifted: url / title /
+    heading_path fell back to NULL on CF and to '' on SQLite. Comparing the
+    whole row rather than one column keeps the next added column from
+    diverging unnoticed -- the shape gate `_missing_docs_db_methods` only
+    matches method names.
+    """
+    cols = (
+        "url",
+        "title",
+        "chunk_index",
+        "content",
+        "heading_path",
+        "section",
+        "topic",
+        "content_hash",
+        "token_count",
+    )
+    chunks = [{"content": f"paragraph number {i}"} for i in range(3)]
+
+    local, local_lib, local_ver = _local_store(tmp_path)
+    local.add_chunks(local_ver, local_lib, copy.deepcopy(chunks))
+    local_rows = [
+        tuple(r)
+        for r in local._conn.execute(
+            f"SELECT {', '.join(cols)} FROM doc_chunks ORDER BY rowid"
+        )
+    ]
+
+    cf = _backend()
+    cf_lib, cf_ver = _seeded(cf)
+    cf.add_chunks(cf_ver, cf_lib, copy.deepcopy(chunks))
+    cf_rows = [
+        tuple(r[c] for c in cols)
+        for r in cf._d1.execute(
+            f"SELECT {', '.join(cols)} FROM doc_chunks"
+            " WHERE version_id = ? ORDER BY rowid",
+            [cf_ver],
+        )
+    ]
+
+    assert cf_rows == local_rows
+
+
+def test_cf_vector_metadata_repeats_the_chunk_index_of_its_own_row():
+    """Vector metadata and D1 row are built apart; they must still agree.
+
+    `search()` filters and orders on the metadata copy, so a metadata
+    chunk_index that does not match the row it points at reorders results
+    against content that never moved.
+    """
+    chunks = _chunker_output()
+    for c in chunks:
+        del c["chunk_index"]
+
+    cf = _backend()
+    cf_lib, cf_ver = _seeded(cf)
+    cf.add_chunks(cf_ver, cf_lib, chunks, embeddings=[[0.1] * 768 for _ in chunks])
+
+    by_id = {
+        r["id"]: r["chunk_index"]
+        for r in cf._d1.execute(
+            "SELECT id, chunk_index FROM doc_chunks WHERE version_id = ?", [cf_ver]
+        )
+    }
+    assert by_id, "nothing was written"
+    for cid, (_values, meta) in cf._vec._http.vectors.items():
+        assert meta["chunk_index"] == by_id[cid]
+
+
 @pytest.mark.parametrize("method", ["export_jsonl", "import_jsonl"])
 def test_jsonl_sync_degrades_loudly(method):
     """File-based DB sync is meaningless on CF -- say so, do not return empties.

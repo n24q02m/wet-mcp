@@ -119,23 +119,30 @@ class DocsDBCfBackend:
         # uses, so the two stores agree on id shape. Generated once and reused
         # below -- the vector must carry its own chunk row's id.
         chunk_ids = [new_chunk_id() for _ in chunks]
+        # Fallbacks are copied from DocsDB._prepare_chunk_rows, not chosen here:
+        # `content` is the only key add_chunks requires of a caller, so every
+        # other column is a default that both stores have to pick the same way
+        # or the same batch lands as two different documents. chunk_index in
+        # particular defaults to the chunk's position in the batch -- a constant
+        # 0 flattens the batch, and _build_results_cf then looks for a hit's
+        # neighbours at index +/-1 and never finds them.
         rows = [
             [
                 cid,
                 version_id,
                 library_id,
-                c.get("url"),
-                c.get("title"),
-                c.get("chunk_index", 0),
+                c.get("url", ""),
+                c.get("title", ""),
+                c.get("chunk_index", i),
                 c["content"],
-                c.get("heading_path"),
+                c.get("heading_path", ""),
                 c.get("section"),
                 c.get("topic"),
                 c.get("content_hash"),
                 c.get("token_count"),
                 now,
             ]
-            for cid, c in zip(chunk_ids, chunks, strict=True)
+            for i, (cid, c) in enumerate(zip(chunk_ids, chunks, strict=True))
         ]
         # section/topic/content_hash/token_count exist in migrations/0001_init_wet.sql
         # and search() reads them back, so persist them like DocsDB.add_chunks does.
@@ -154,10 +161,12 @@ class DocsDBCfBackend:
                         "library_id": library_id,
                         "version_id": version_id,
                         "url": c.get("url", ""),
-                        "chunk_index": c.get("chunk_index", 0),
+                        "chunk_index": c.get("chunk_index", i),
                     },
                 }
-                for cid, c, emb in zip(chunk_ids, chunks, embeddings, strict=False)
+                for i, (cid, c, emb) in enumerate(
+                    zip(chunk_ids, chunks, embeddings, strict=False)
+                )
             ]
             self._vec.upsert(vectors)
             # Upsert is eventual; block until index is ready so an immediate
