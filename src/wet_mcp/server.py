@@ -162,8 +162,9 @@ def make_docs_db(db_path: Path | None = None):
             "SQLite store at that path, or drop the path to use cf-d1."
         )
     if backend == "cf-d1":
-        from wet_mcp.backends.d1 import d1_backend_from_env
-        from wet_mcp.backends.vectorize import vectorize_backend_from_env
+        from mcp_core.storage.d1 import d1_backend_from_env
+        from mcp_core.storage.vectorize import vectorize_backend_from_env
+
         from wet_mcp.db_cf import DocsDBCfBackend
 
         cf_db = DocsDBCfBackend(

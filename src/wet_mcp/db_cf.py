@@ -13,9 +13,8 @@ import time
 import uuid
 
 from loguru import logger
-
-from wet_mcp.backends.d1 import D1Backend
-from wet_mcp.backends.vectorize import VectorizeBackend
+from mcp_core.storage.d1 import D1Backend
+from mcp_core.storage.vectorize import VectorizeBackend
 
 # Reuse the exact ranking helpers from the SQLite implementation.
 from wet_mcp.db import _build_fts_queries, _chunk_quality_score

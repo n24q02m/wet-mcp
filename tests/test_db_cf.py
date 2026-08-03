@@ -3,9 +3,9 @@ from pathlib import Path
 
 import pytest
 from conftest_cf import FakeD1Http, FakeVectorizeHttp
+from mcp_core.storage.d1 import D1Backend
+from mcp_core.storage.vectorize import VectorizeBackend
 
-from wet_mcp.backends.d1 import D1Backend
-from wet_mcp.backends.vectorize import VectorizeBackend
 from wet_mcp.db import DocsDB
 from wet_mcp.db_cf import DocsDBCfBackend
 

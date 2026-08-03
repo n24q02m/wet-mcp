@@ -1,6 +1,6 @@
 import json
 
-from wet_mcp.backends.d1 import D1Backend, d1_backend_from_env
+from mcp_core.storage.d1 import D1Backend, d1_backend_from_env
 
 
 def test_d1_execute_returns_rows():

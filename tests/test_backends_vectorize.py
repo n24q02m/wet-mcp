@@ -1,6 +1,5 @@
 from conftest_cf import FakeVectorizeHttp
-
-from wet_mcp.backends.vectorize import VectorizeBackend, vectorize_backend_from_env
+from mcp_core.storage.vectorize import VectorizeBackend, vectorize_backend_from_env
 
 
 def test_upsert_then_query_cosine_ranks():
