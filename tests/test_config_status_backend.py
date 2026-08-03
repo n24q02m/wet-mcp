@@ -56,10 +56,10 @@ def _built_backend(monkeypatch):
     monkeypatch.setattr(DocsDB, "__init__", _sqlite_init)
     monkeypatch.setattr("wet_mcp.db_cf.DocsDBCfBackend", _cf_build)
     monkeypatch.setattr(
-        "wet_mcp.backends.d1.d1_backend_from_env", lambda *a, **k: MagicMock()
+        "mcp_core.storage.d1.d1_backend_from_env", lambda *a, **k: MagicMock()
     )
     monkeypatch.setattr(
-        "wet_mcp.backends.vectorize.vectorize_backend_from_env",
+        "mcp_core.storage.vectorize.vectorize_backend_from_env",
         lambda *a, **k: MagicMock(),
     )
     return built

@@ -1770,7 +1770,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.21.0"
+version = "1.22.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1785,9 +1785,9 @@ dependencies = [
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2d/30/590222f26ace6b3f4eb9d39f6338993a77a487056131e3b8e44cac1f3a01/n24q02m_mcp_core-1.21.0.tar.gz", hash = "sha256:0902edef3c11cae453b12054b5c86b01f2c44b340baa62ba20178913c5605e0c", size = 347475, upload-time = "2026-07-25T07:39:49.345Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ae/7b/eec27b8ec98dccd343d61831a180154d98fa5d4a356db2258c1221d42585/n24q02m_mcp_core-1.22.0.tar.gz", hash = "sha256:a0fea7229bb9054773a30b98622794738ae26594231a95b7d40f9eceac31011f", size = 356585, upload-time = "2026-08-03T03:04:26.603Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/09/0777b67ea7e8fdf96294342bf6aa3b5d76a368a67f46a870a7e4a3bf7966/n24q02m_mcp_core-1.21.0-py3-none-any.whl", hash = "sha256:9f78057826aa32a752bed5d7512bc78f0574b4b56a619f4b1b6cfa12d22cfb89", size = 190145, upload-time = "2026-07-25T07:39:47.979Z" },
+    { url = "https://files.pythonhosted.org/packages/28/e3/8987a54e0ef7057f1145154d7a5a650f6eb8ed624d00bcd98594f816d86a/n24q02m_mcp_core-1.22.0-py3-none-any.whl", hash = "sha256:41b6c83790e727b53a6b0faffe74e965c0325eefdfeb979b505ca7e5713e87ac", size = 194831, upload-time = "2026-08-03T03:04:25.325Z" },
 ]
 
 [package.optional-dependencies]
@@ -3446,7 +3446,7 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.21.0,<2" },
+    { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.22.0,<2" },
     { name = "n24q02m-web-core", specifier = ">=2.3.1,<3" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.13.4,<2.14" },

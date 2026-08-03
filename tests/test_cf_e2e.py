@@ -7,9 +7,9 @@ from pathlib import Path
 
 from conftest_cf import FakeD1Http, FakeVectorizeHttp
 from mcp_core.storage.backends import CfKvBackend
+from mcp_core.storage.d1 import D1Backend
+from mcp_core.storage.vectorize import VectorizeBackend
 
-from wet_mcp.backends.d1 import D1Backend
-from wet_mcp.backends.vectorize import VectorizeBackend
 from wet_mcp.db_cf import DocsDBCfBackend
 
 DDL = Path("migrations/0001_init_wet.sql").read_text(encoding="utf-8")
