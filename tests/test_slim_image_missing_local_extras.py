@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import builtins
 import importlib.util
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -379,6 +379,22 @@ def real_backend_factories(monkeypatch):
 
 
 class TestStartupNeverInstallsABackendItCannotLoad:
+    @staticmethod
+    def _enable_local_startup(monkeypatch):
+        from wet_mcp.config import settings
+
+        monkeypatch.setattr(type(settings), "local_embed_available", lambda self: True)
+        monkeypatch.setattr(type(settings), "local_rerank_available", lambda self: True)
+
+    @staticmethod
+    def _set_local_credential_state(monkeypatch):
+        from wet_mcp import credential_state
+        from wet_mcp.credential_state import CredentialState
+
+        monkeypatch.setattr(
+            credential_state, "get_state", lambda: CredentialState.LOCAL
+        )
+
     async def test_local_backend_is_not_installed_when_the_package_is_absent(
         self, slim_image, real_backend_factories, monkeypatch
     ):
@@ -402,6 +418,40 @@ class TestStartupNeverInstallsABackendItCannotLoad:
         assert embedder.get_backend() is None
         assert slim_image == [], f"local ONNX leg was entered: {slim_image}"
 
+    async def test_local_backend_is_cleared_when_availability_check_returns_false(
+        self, real_backend_factories, monkeypatch
+    ):
+        from wet_mcp import embedder
+        from wet_mcp.embedder import Qwen3EmbedBackend
+
+        self._enable_local_startup(monkeypatch)
+        self._set_local_credential_state(monkeypatch)
+        monkeypatch.setattr(
+            Qwen3EmbedBackend, "check_available", AsyncMock(return_value=0)
+        )
+
+        await server._init_embedding_backend("local")
+
+        assert embedder.get_backend() is None
+
+    async def test_local_backend_is_cleared_when_availability_check_raises(
+        self, real_backend_factories, monkeypatch
+    ):
+        from wet_mcp import embedder
+        from wet_mcp.embedder import Qwen3EmbedBackend
+
+        self._enable_local_startup(monkeypatch)
+        self._set_local_credential_state(monkeypatch)
+        monkeypatch.setattr(
+            Qwen3EmbedBackend,
+            "check_available",
+            AsyncMock(side_effect=RuntimeError("embedding unavailable")),
+        )
+
+        await server._init_embedding_backend("local")
+
+        assert embedder.get_backend() is None
+
     async def test_local_reranker_is_not_installed_when_the_package_is_absent(
         self, slim_image, real_backend_factories, monkeypatch
     ):
@@ -416,3 +466,35 @@ class TestStartupNeverInstallsABackendItCannotLoad:
 
         assert reranker.get_reranker() is None
         assert slim_image == [], f"local ONNX leg was entered: {slim_image}"
+
+    async def test_local_reranker_is_cleared_when_availability_check_returns_false(
+        self, real_backend_factories, monkeypatch
+    ):
+        from wet_mcp import reranker
+        from wet_mcp.reranker import Qwen3Reranker
+
+        self._enable_local_startup(monkeypatch)
+        self._set_local_credential_state(monkeypatch)
+        monkeypatch.setattr(Qwen3Reranker, "check_available", Mock(return_value=False))
+
+        await server._init_reranker_backend("local")
+
+        assert reranker.get_reranker() is None
+
+    async def test_local_reranker_is_cleared_when_availability_check_raises(
+        self, real_backend_factories, monkeypatch
+    ):
+        from wet_mcp import reranker
+        from wet_mcp.reranker import Qwen3Reranker
+
+        self._enable_local_startup(monkeypatch)
+        self._set_local_credential_state(monkeypatch)
+        monkeypatch.setattr(
+            Qwen3Reranker,
+            "check_available",
+            Mock(side_effect=RuntimeError("reranker unavailable")),
+        )
+
+        await server._init_reranker_backend("local")
+
+        assert reranker.get_reranker() is None

@@ -596,7 +596,7 @@ async def _init_embedding_backend(mode: str) -> None:
     """
     global _embedding_dims
     from wet_mcp.credential_state import CredentialState, get_state
-    from wet_mcp.embedder import init_backend, no_local_embed_clause
+    from wet_mcp.embedder import clear_backend, init_backend, no_local_embed_clause
 
     cred_state = get_state()
 
@@ -638,8 +638,10 @@ async def _init_embedding_backend(mode: str) -> None:
                     f"(native={native_dims}, stored={_embedding_dims})"
                 )
             else:
+                clear_backend()
                 logger.error("Local embedding model not available")
         except Exception as e:
+            clear_backend()
             logger.error(f"Local embedding init failed: {e}")
         return
 
@@ -657,7 +659,9 @@ async def _init_embedding_backend(mode: str) -> None:
                     f"(native={native_dims}, stored={_embedding_dims})"
                 )
                 return
+            clear_backend()
         except Exception as e:
+            clear_backend()
             logger.warning(f"Embedding model {candidate} not available: {e}")
 
     logger.error("Cloud embedding not available and local fallback is disabled")
@@ -690,7 +694,7 @@ async def _init_reranker_backend(mode: str) -> None:
         )
         return
 
-    from wet_mcp.reranker import init_reranker
+    from wet_mcp.reranker import clear_reranker, init_reranker
 
     if cred_state == CredentialState.LOCAL or rerank_backend_type == "local":
         if not settings.local_rerank_available():
@@ -712,8 +716,10 @@ async def _init_reranker_backend(mode: str) -> None:
             if available:
                 logger.info(f"Reranker: local {local_model}")
             else:
+                clear_reranker()
                 logger.error("Local reranker not available")
         except Exception as e:
+            clear_reranker()
             logger.error(f"Local reranker init failed: {e}")
         return
 
@@ -726,7 +732,9 @@ async def _init_reranker_backend(mode: str) -> None:
             if available:
                 logger.info(f"Reranker: {model} (cloud)")
                 return
+            clear_reranker()
         except Exception as e:
+            clear_reranker()
             logger.warning(f"Cloud reranker {model} not available: {e}")
 
     logger.error("Cloud reranker not available and local fallback is disabled")

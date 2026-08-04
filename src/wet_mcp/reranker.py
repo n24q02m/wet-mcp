@@ -243,6 +243,12 @@ def get_reranker() -> RerankerBackend | None:
     return _backend
 
 
+def clear_reranker() -> None:
+    """Clear the startup singleton after backend validation fails."""
+    global _backend
+    _backend = None
+
+
 def _shared_local_reranker() -> Qwen3Reranker:
     """Return the process-shared local ONNX reranker backend (lazy)."""
     global _shared_local_backend

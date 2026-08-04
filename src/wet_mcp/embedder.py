@@ -513,6 +513,12 @@ def get_backend() -> EmbeddingBackend | None:
     return _backend
 
 
+def clear_backend() -> None:
+    """Clear the startup singleton after backend validation fails."""
+    global _backend
+    _backend = None
+
+
 def _shared_local_embed_backend() -> Qwen3EmbedBackend:
     """Return the process-shared local ONNX embedding backend (lazy)."""
     global _shared_local_backend
