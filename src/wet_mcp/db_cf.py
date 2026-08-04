@@ -209,6 +209,34 @@ class DocsDBCfBackend:
             )
         return row
 
+    def get_library_by_id(self, library_id: str) -> dict | None:
+        """Get a library row by its stable identifier."""
+        return self._d1.fetchone("SELECT * FROM libraries WHERE id = ?", [library_id])
+
+    def find_libraries_by_prefix(self, name: str, limit: int = 20) -> list[dict]:
+        """Return libraries whose names start with ``name``, alphabetically."""
+        norm_name = name.lower().strip()
+        if not norm_name or limit <= 0:
+            return []
+        return self._d1.fetchall(
+            "SELECT * FROM libraries "
+            "WHERE name LIKE ? AND name != ? "
+            "ORDER BY length(name) ASC, name ASC LIMIT ?",
+            [f"{norm_name}%", norm_name, limit],
+        )
+
+    def find_libraries_by_substring(self, name: str, limit: int = 20) -> list[dict]:
+        """Return libraries containing ``name`` beyond a prefix match."""
+        norm_name = name.lower().strip()
+        if not norm_name or limit <= 0:
+            return []
+        return self._d1.fetchall(
+            "SELECT * FROM libraries "
+            "WHERE name LIKE ? AND name NOT LIKE ? AND name != ? "
+            "ORDER BY length(name) ASC, name ASC LIMIT ?",
+            [f"%{norm_name}%", f"{norm_name}%", norm_name, limit],
+        )
+
     def upsert_version(
         self,
         library_id: str,

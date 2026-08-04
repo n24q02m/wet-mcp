@@ -8,6 +8,7 @@ from mcp_core.storage.vectorize import VectorizeBackend
 
 from wet_mcp.db import DocsDB
 from wet_mcp.db_cf import DocsDBCfBackend
+from wet_mcp.sources.docs import DocsQueryOptions, query_docs, resolve_library
 
 # The D1 schema now spans more than one migration (0002 adds project_context and
 # libraries.metadata_seeded_at), so apply them all in order rather than pinning 0001.
@@ -83,6 +84,36 @@ def test_stats_reports_counts():
     assert s["libraries"] == 1
     assert s["chunks"] == 1
     assert s["vec_enabled"] is True
+
+
+def test_resolve_library_uses_cf_backend_for_prefix_and_substring():
+    db = _backend()
+    db.upsert_library("next")
+    db.upsert_library("nextflow")
+    db.upsert_library("my-react-lib")
+
+    prefix = resolve_library(db, "next")
+    substring = resolve_library(db, "react")
+
+    assert [item["name"] for item in prefix] == ["next", "nextflow"]
+    assert [item["name"] for item in substring] == ["my-react-lib"]
+
+
+def test_query_docs_hydrates_library_through_cf_backend_api():
+    db = _backend()
+    lib_id = db.upsert_library("alpha")
+    ver_id = db.upsert_version(lib_id, "1.0")
+    db.add_chunks(
+        ver_id,
+        lib_id,
+        [{"url": "https://a/p1", "content": "async function handler"}],
+        embeddings=None,
+    )
+    db.mark_version_indexed(ver_id, page_count=1, chunk_count=1)
+
+    results = query_docs(db, lib_id, "function", options=DocsQueryOptions(limit=1))
+
+    assert results and results[0]["library"] == "alpha"
 
 
 def test_hybrid_search_applies_rrf_and_url_diversity():
