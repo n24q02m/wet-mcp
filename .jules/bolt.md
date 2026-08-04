@@ -67,3 +67,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-08-01 - Avoid generator expressions in inner loops and use frozenset for static sets
+**Learning:** Python generator expressions inside `any()` for checking membership against static tuples (e.g. `any(p.lower() in _DOC_DIRS for p in parts)`) are slow due to Python-level iteration overhead. Moreover, checking membership (`in`) against a `tuple` is an O(N) operation, whereas using a `frozenset` is an O(1) hash map lookup.
+**Action:** Define static collections frequently used for membership tests as `frozenset` instead of `tuple` or `list`. Replace generator expressions (like `any(...)`) with inline `for` loops combined with early exits (`break`) to eliminate generator creation overhead.
