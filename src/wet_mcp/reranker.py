@@ -261,16 +261,19 @@ def resolve_rerank_backend_for_request() -> RerankerBackend | None:
       sub's credential bucket. If the sub has a cloud rerank chain whose
       provider key is present, build a fresh request-scoped
       :class:`CloudReranker` carrying that sub's key explicitly. With no such
-      chain, fall back to the process-shared local ONNX reranker -- unless
-      ``DISABLE_LOCAL_RERANK`` turned that leg off, in which case reranking is
-      ``None``: gracefully unavailable.
+      chain, fall back to the process-shared local ONNX reranker -- unless that
+      leg is unavailable, in which case reranking is ``None``: gracefully
+      unavailable.
 
-    The disable-local exit mirrors :meth:`Settings.resolve_rerank_backend`,
-    which spells it ``'unavailable'`` at startup. It matters more here than the
-    traceback suggests: :meth:`Qwen3Reranker.rerank` swallows its own load
-    failure and returns ``[]``, so a local reranker on an image built without
-    the ONNX extras degrades every search to unranked order behind one log
-    line, quietly, forever. Returning ``None`` says the same thing out loud.
+    The unavailable exit mirrors :meth:`Settings.resolve_rerank_backend`, which
+    spells it ``'unavailable'`` at startup, via the shared
+    :meth:`Settings.local_rerank_available` predicate -- so it covers both
+    ``DISABLE_LOCAL_RERANK`` and an image the slim build stripped
+    ``qwen3-embed`` out of. It matters more here than the traceback suggests:
+    :meth:`Qwen3Reranker.rerank` swallows its own load failure and returns
+    ``[]``, so a local reranker on an image built without the ONNX extras
+    degrades every search to unranked order behind one log line, quietly,
+    forever. Returning ``None`` says the same thing out loud.
 
     ``None``, not the startup singleton -- that one carries the OPERATOR's key
     and must not be spent on an arbitrary sub.
@@ -296,7 +299,7 @@ def resolve_rerank_backend_for_request() -> RerankerBackend | None:
     if chain:
         model = chain[0]
         return CloudReranker(model=model, api_key=api_key_for_model(model))
-    if settings.disable_local_rerank:
+    if not settings.local_rerank_available():
         return None
     return _shared_local_reranker()
 

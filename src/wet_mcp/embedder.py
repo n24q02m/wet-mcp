@@ -533,17 +533,18 @@ def resolve_embed_backend_for_request() -> EmbeddingBackend | None:
       provider key is present, build a fresh request-scoped
       :class:`CloudEmbeddingBackend` carrying that sub's key explicitly (so the
       key flows down the call, never into ``os.environ``). With no such chain,
-      fall back to the process-shared local ONNX backend -- unless
-      ``DISABLE_LOCAL_EMBED`` turned that leg off, in which case embedding is
-      ``None``: gracefully unavailable.
+      fall back to the process-shared local ONNX backend -- unless that leg is
+      unavailable, in which case embedding is ``None``: gracefully unavailable.
 
     That last exit is the same three-way resolution
     :meth:`Settings.resolve_embedding_backend` performs at startup, where it
-    is spelled ``'unavailable'``. Keeping the two in step is the whole point:
-    the flag is what a slim deployment sets when the local ONNX extras were
-    never installed, so handing back a backend that raises
-    ``ModuleNotFoundError`` on first use fails the entire index instead of
-    storing keyword-searchable chunks without vectors.
+    is spelled ``'unavailable'``, and it asks the same predicate
+    (:meth:`Settings.local_embed_available`) so the two cannot drift. Both
+    inputs matter: ``DISABLE_LOCAL_EMBED`` is what a slim deployment sets, and
+    whether ``qwen3-embed`` is installed is what is actually true of the image.
+    Consulting only the flag meant a slim image whose operator forgot it handed
+    back a backend that raises ``ModuleNotFoundError`` on first use, failing the
+    entire index instead of storing keyword-searchable chunks without vectors.
 
     ``None`` here, specifically -- NOT the startup singleton. That one was
     resolved from the OPERATOR's process env, and lending it to an arbitrary
@@ -568,9 +569,33 @@ def resolve_embed_backend_for_request() -> EmbeddingBackend | None:
     if chain:
         model = chain[0]
         return CloudEmbeddingBackend(model, api_key=api_key_for_model(model))
-    if settings.disable_local_embed:
+    if not settings.local_embed_available():
         return None
     return _shared_local_embed_backend()
+
+
+def no_local_embed_clause() -> str:
+    """Name the reason the local ONNX embedding leg is out, for a human.
+
+    Three states, three different actions, so they must not share one string.
+    Saying "DISABLE_LOCAL_EMBED is set" on an image that never shipped
+    ``qwen3-embed`` sends the reader after a var they never set -- and having
+    checked it and found it empty, they conclude the message is wrong. The
+    absent-image wording says instead that this is a property of the build, so
+    the answer is "give this deployment a cloud chain", not "unset a flag".
+    """
+    from wet_mcp.config import local_onnx_installed, settings
+
+    if settings.disable_local_embed:
+        return "this deployment runs with DISABLE_LOCAL_EMBED set"
+    if not local_onnx_installed():
+        return (
+            "this image has no local ONNX leg installed (no qwen3-embed or "
+            "onnxruntime, which the slim Cloudflare container build removes "
+            "on purpose)"
+        )
+    # Enabled and installed, yet nothing was resolved: it broke on load.
+    return "the local ONNX leg failed to load"
 
 
 def embedding_unavailable_reason() -> str | None:
@@ -592,14 +617,15 @@ def embedding_unavailable_reason() -> str | None:
     if get_current_sub() is None:
         return (
             "no embedding backend was initialised at startup: no EMBEDDING_MODELS "
-            "chain with a configured provider key, and the local ONNX leg is "
-            "disabled (DISABLE_LOCAL_EMBED) or failed to load"
+            f"chain with a configured provider key, and {no_local_embed_clause()}"
         )
-    # The only ``None`` exit left for a request that HAS a sub.
+    # The only ``None`` exit left for a request that HAS a sub. (The clause's
+    # "failed to load" state cannot be reached from here: a usable local leg
+    # would have been returned as the backend.)
     return (
         "this session has no cloud embedding model configured (set "
-        "EMBEDDING_MODELS plus the matching provider key) and this deployment "
-        "runs with DISABLE_LOCAL_EMBED set, so there is no local fallback"
+        "EMBEDDING_MODELS plus the matching provider key) and "
+        f"{no_local_embed_clause()}, so there is no local fallback"
     )
 
 

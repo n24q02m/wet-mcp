@@ -35,6 +35,32 @@ def _has_gguf_support() -> bool:
     return importlib.util.find_spec("llama_cpp") is not None
 
 
+def local_onnx_installed() -> bool:
+    """Whether both local ONNX extras exist in this image.
+
+    The slim container build uninstalls ``qwen3-embed`` and ``onnxruntime``
+    (see ``Dockerfile``), so on that image the local embed/rerank leg is simply
+    absent. Resolving that leg from ``DISABLE_LOCAL_EMBED`` /
+    ``DISABLE_LOCAL_RERANK`` alone made a slim deployment correct only for as
+    long as somebody remembered to set those vars; miss one and the first index
+    attempt died inside the lazy ``from qwen3_embed import ...``, recorded in
+    D1 as ``ModuleNotFoundError: No module named 'qwen3_embed'`` with zero
+    chunks (#1630) -- a hard failure where a keyword-only degrade was available.
+
+    The image is the ground truth, the flag is only a promise about it, so ask
+    the image. ``find_spec`` answers without importing: a full install pays a
+    path lookup and a slim one never touches the missing package.
+    """
+
+    def _package_present(package: str) -> bool:
+        try:
+            return importlib.util.find_spec(package) is not None
+        except (ImportError, ValueError):
+            return False
+
+    return all(_package_present(package) for package in ("qwen3_embed", "onnxruntime"))
+
+
 def _resolve_local_model(onnx_name: str, gguf_name: str) -> str:
     """Choose local model variant: GGUF if GPU + llama-cpp, else ONNX."""
     if _detect_gpu() and _has_gguf_support():
@@ -553,15 +579,30 @@ class Settings(BaseSettings):
             "n24q02m/Qwen3-Embedding-0.6B-GGUF",
         )
 
+    def local_embed_available(self) -> bool:
+        """Whether the local ONNX embedding leg is both allowed AND present.
+
+        One predicate for both resolution paths (startup and per-request), so
+        they cannot drift apart again. ``DISABLE_LOCAL_EMBED`` is the operator's
+        answer; :func:`local_onnx_installed` is the image's, and the image gets
+        a veto -- a leg the build removed is not available however the config
+        reads.
+        """
+        return not self.disable_local_embed and local_onnx_installed()
+
+    def local_rerank_available(self) -> bool:
+        """Whether the local ONNX rerank leg is both allowed AND present."""
+        return not self.disable_local_rerank and local_onnx_installed()
+
     def resolve_embedding_backend(self) -> str:
         """Resolve embedding backend: 'cloud', 'local', or 'unavailable'.
 
         3-way resolution via the shared mcp-core primitive:
         - 'cloud'       -- a non-empty EMBEDDING_MODELS chain (with keys).
-        - 'local'       -- empty chain AND the local leg is enabled.
-        - 'unavailable' -- empty chain AND DISABLE_LOCAL_EMBED is set (the
-          local qwen3 ONNX download is skipped and no cloud chain is
-          configured, so embedding is gracefully unavailable -- NOT forced).
+        - 'local'       -- empty chain AND the local leg is enabled and present.
+        - 'unavailable' -- empty chain AND no usable local leg, i.e.
+          DISABLE_LOCAL_EMBED is set OR the slim image has no ``qwen3-embed``
+          installed. Embedding is then gracefully unavailable -- NOT forced.
 
         The deprecated EMBEDDING_BACKEND env var is honored for one release.
         """
@@ -577,7 +618,7 @@ class Settings(BaseSettings):
             )
         return resolve_backend(
             has_cloud_chain=bool(self.embedding_chain()),
-            local_enabled=not self.disable_local_embed,
+            local_enabled=self.local_embed_available(),
         ).value
 
     # --- Reranking resolution ---
@@ -603,8 +644,9 @@ class Settings(BaseSettings):
 
         '' when rerank_enabled is False. Otherwise 3-way via the shared
         mcp-core primitive (same semantics as resolve_embedding_backend, keyed
-        on RERANK_MODELS + DISABLE_LOCAL_RERANK); the deprecated RERANK_BACKEND
-        env var is honored for one release.
+        on RERANK_MODELS + DISABLE_LOCAL_RERANK + whether the slim image kept
+        ``qwen3-embed``); the deprecated RERANK_BACKEND env var is honored for
+        one release.
         """
         if not self.rerank_enabled:
             return ""
@@ -619,7 +661,7 @@ class Settings(BaseSettings):
             )
         return resolve_backend(
             has_cloud_chain=bool(self.rerank_chain()),
-            local_enabled=not self.disable_local_rerank,
+            local_enabled=self.local_rerank_available(),
         ).value
 
     # --- Provider mode resolution ---
