@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 import unittest.mock
 
@@ -35,3 +36,13 @@ def test_cloud_config_no_local_model_download(monkeypatch):
     s = Settings()
     assert s.resolve_embedding_backend() == "cloud"
     fake_qwen.assert_not_called()
+
+
+def test_local_onnx_presence_treats_broken_module_specs_as_unavailable(monkeypatch):
+    from wet_mcp.config import local_onnx_installed
+
+    for error in (ValueError("__spec__ is unset"), ImportError()):
+        find_spec = unittest.mock.Mock(side_effect=error)
+        monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+
+        assert local_onnx_installed() is False

@@ -596,7 +596,7 @@ async def _init_embedding_backend(mode: str) -> None:
     """
     global _embedding_dims
     from wet_mcp.credential_state import CredentialState, get_state
-    from wet_mcp.embedder import init_backend
+    from wet_mcp.embedder import clear_backend, init_backend, no_local_embed_clause
 
     cred_state = get_state()
 
@@ -613,6 +613,18 @@ async def _init_embedding_backend(mode: str) -> None:
         return
 
     if cred_state == CredentialState.LOCAL or backend_type == "local":
+        if not settings.local_embed_available():
+            # Only reachable through the cred_state disjunct: whenever the
+            # local leg is out and no cloud chain exists, backend_type is
+            # already 'unavailable' and returned above. Building it anyway
+            # installed a singleton whose FIRST USE raises -- and, not being
+            # None, it also defeats the `is None` guard the background indexer
+            # uses to degrade loudly instead of dying (#1630).
+            logger.error(
+                "Embedding: local backend requested but unavailable "
+                f"({no_local_embed_clause()}); none initialised"
+            )
+            return
         local_model = settings.resolve_local_embedding_model()
         _maybe_register_custom_embed(local_model)
         try:
@@ -626,8 +638,10 @@ async def _init_embedding_backend(mode: str) -> None:
                     f"(native={native_dims}, stored={_embedding_dims})"
                 )
             else:
+                clear_backend()
                 logger.error("Local embedding model not available")
         except Exception as e:
+            clear_backend()
             logger.error(f"Local embedding init failed: {e}")
         return
 
@@ -645,7 +659,9 @@ async def _init_embedding_backend(mode: str) -> None:
                     f"(native={native_dims}, stored={_embedding_dims})"
                 )
                 return
+            clear_backend()
         except Exception as e:
+            clear_backend()
             logger.warning(f"Embedding model {candidate} not available: {e}")
 
     logger.error("Cloud embedding not available and local fallback is disabled")
@@ -678,9 +694,20 @@ async def _init_reranker_backend(mode: str) -> None:
         )
         return
 
-    from wet_mcp.reranker import init_reranker
+    from wet_mcp.reranker import clear_reranker, init_reranker
 
     if cred_state == CredentialState.LOCAL or rerank_backend_type == "local":
+        if not settings.local_rerank_available():
+            # Same landmine as the embedding path above: an installed-but-
+            # unusable singleton reads as "reranking is configured" everywhere
+            # downstream, and Qwen3Reranker.rerank swallows its own load
+            # failure, so every search silently returns unranked order.
+            logger.error(
+                "Reranker: local backend requested but unavailable "
+                "(DISABLE_LOCAL_RERANK set, or no qwen3-embed installed in "
+                "this image); none initialised"
+            )
+            return
         local_model = settings.resolve_local_rerank_model()
         _maybe_register_custom_rerank(local_model)
         try:
@@ -689,8 +716,10 @@ async def _init_reranker_backend(mode: str) -> None:
             if available:
                 logger.info(f"Reranker: local {local_model}")
             else:
+                clear_reranker()
                 logger.error("Local reranker not available")
         except Exception as e:
+            clear_reranker()
             logger.error(f"Local reranker init failed: {e}")
         return
 
@@ -703,7 +732,9 @@ async def _init_reranker_backend(mode: str) -> None:
             if available:
                 logger.info(f"Reranker: {model} (cloud)")
                 return
+            clear_reranker()
         except Exception as e:
+            clear_reranker()
             logger.warning(f"Cloud reranker {model} not available: {e}")
 
     logger.error("Cloud reranker not available and local fallback is disabled")
@@ -2794,6 +2825,12 @@ async def _background_index_and_search(
 
         # Generate embeddings
         embeddings = None
+        # Set when the chunks are about to be stored without vectors. The log
+        # lines below never leave the container -- which is the whole reason
+        # #1630 needed a D1 query to diagnose -- so the reason is recorded on
+        # the version too, where `config(action="status")` and the docs query
+        # path can both read it back.
+        keyword_only_reason: str | None = None
         if all_chunks:
             from wet_mcp.embedder import (
                 embedding_unavailable_reason,
@@ -2806,6 +2843,11 @@ async def _background_index_and_search(
                 # vectors behind them. Same reasoning as the timeout branch
                 # below -- an unremarked swap here is a store that looks
                 # healthy and answers half as well.
+                keyword_only_reason = (
+                    f"indexed keyword-only: {len(all_chunks)} chunks stored "
+                    "WITHOUT vectors because embedding was unavailable "
+                    f"({embedding_unavailable_reason()})"
+                )
                 logger.warning(
                     f"Embedding unavailable while indexing '{library}' from "
                     f"{docs_url}: {embedding_unavailable_reason()}. "
@@ -2833,6 +2875,11 @@ async def _background_index_and_search(
                     # stay keyword-searchable), but the version is then stamped
                     # 'indexed' with a full chunk_count while holding zero
                     # vectors. Without this line that swap is invisible.
+                    keyword_only_reason = (
+                        f"indexed keyword-only: {len(embed_texts_list)} chunks "
+                        "stored WITHOUT vectors because the embedding batch "
+                        f"timed out after {_EMBED_TIMEOUT}s"
+                    )
                     logger.error(
                         f"Embedding batch timed out after {_EMBED_TIMEOUT}s for "
                         f"'{library}' ({len(embed_texts_list)} chunks from "
@@ -2865,7 +2912,12 @@ async def _background_index_and_search(
         # `versions` (the table is UNIQUE(library_id, version)) and a
         # hardcoded 1 would be wrong.
         _docs_db.mark_library_indexed(lib_id)
-        _record_index_state(ver_id, INDEX_STATE_DONE)
+        # 'done' with a note, not 'failed': the chunks ARE there and ARE
+        # served. `set_index_state` writes the note to `index_error`, which the
+        # status payload surfaces for every state -- while `_docs_indexing_message`
+        # only quotes it for 'failed', so a healthy-but-degraded version is
+        # never reported to a caller as a failed one.
+        _record_index_state(ver_id, INDEX_STATE_DONE, keyword_only_reason)
         logger.info(
             f"Background indexing complete for '{library}'. Pages: {page_count}, Chunks: {len(all_chunks)}"
         )

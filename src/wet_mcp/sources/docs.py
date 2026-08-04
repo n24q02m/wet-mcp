@@ -3919,12 +3919,7 @@ def resolve_library(db: Any, name: str, limit: int = 5) -> list[dict]:
         return out
 
     # Prefix match — bounded by limit*4 candidate scan to keep query cheap.
-    prefix_rows = db._conn.execute(
-        "SELECT * FROM libraries "
-        "WHERE name LIKE ? AND name != ? "
-        "ORDER BY length(name) ASC, name ASC LIMIT ?",
-        (f"{norm}%", norm, limit * 4),
-    ).fetchall()
+    prefix_rows = db.find_libraries_by_prefix(norm, limit=limit * 4)
     for row in prefix_rows:
         if len(out) >= limit:
             break
@@ -3939,12 +3934,7 @@ def resolve_library(db: Any, name: str, limit: int = 5) -> list[dict]:
 
     # Substring fallback (broad). Skip if exact-only requested via limit=1.
     if limit > 1:
-        substring_rows = db._conn.execute(
-            "SELECT * FROM libraries "
-            "WHERE name LIKE ? AND name NOT LIKE ? AND name != ? "
-            "ORDER BY length(name) ASC, name ASC LIMIT ?",
-            (f"%{norm}%", f"{norm}%", norm, limit * 4),
-        ).fetchall()
+        substring_rows = db.find_libraries_by_substring(norm, limit=limit * 4)
         for row in substring_rows:
             if len(out) >= limit:
                 break
@@ -4006,9 +3996,7 @@ def query_docs(
     opt = options or DocsQueryOptions()
 
     # Hydrate library + version metadata.
-    lib_row = db._conn.execute(
-        "SELECT * FROM libraries WHERE id = ?", (library_id,)
-    ).fetchone()
+    lib_row = db.get_library_by_id(library_id)
     if lib_row is None:
         return []
     library_name = lib_row["name"]
