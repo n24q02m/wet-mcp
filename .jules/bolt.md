@@ -71,3 +71,8 @@ closed pull request.
 ## 2026-08-03 - Optimize generator loops in string suffix matching and membership checks
 **Learning:** In `_is_readthedocs_host`, a generator expression `any(...)` using string concatenation inside a loop to check hostname suffixes is notably slower than leveraging the C-optimized `str.endswith` method which can natively take a tuple of suffixes. Furthermore, looking up members in a `tuple` like `_DOC_DIRS` is `O(N)` and gets slower for longer tuples in tight paths.
 **Action:** Replace `any(path.endswith(...) for ext in EXTS)` with `path.endswith(EXTS_TUPLE)` where `EXTS_TUPLE` is pre-defined at module level. Convert static tuples used solely for membership testing (`x in items`) into `frozenset` objects to reduce complexity to `O(1)`.
+
+### 2026-08-04 - Optimize ReadTheDocs host matching and `_DOC_DIRS` lookups (#1633)
+**Proposed:** land the suffix-tuple and `_DOC_DIRS` `frozenset` changes from the pull request.
+**Why rejected:** the pull request was opened with the unsupported `perf:` title, so its title validation check failed. Its diff also carried a Bolt-generated ledger update and benchmark claim; that bot-shaped diff is not merged verbatim into this public repository.
+**Action:** Keep the code idea available for a clean, measured reapplication if the hot-path benchmark justifies it. Do not treat this closed pull request as landed.
