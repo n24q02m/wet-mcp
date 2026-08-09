@@ -2,6 +2,67 @@
 
 <!-- version list -->
 
+## v3.7.0-beta.5 (2026-08-09)
+
+### Bug Fixes
+
+- Clear invalid backend singletons ([#1634](https://github.com/n24q02m/wet-mcp/pull/1634),
+  [`b35b100`](https://github.com/n24q02m/wet-mcp/commit/b35b1004afca0edee77bad24e2767297bc028dbf))
+
+- Guard slim image local backend fallback ([#1634](https://github.com/n24q02m/wet-mcp/pull/1634),
+  [`b35b100`](https://github.com/n24q02m/wet-mcp/commit/b35b1004afca0edee77bad24e2767297bc028dbf))
+
+- Route docs queries through backend contract
+  ([#1634](https://github.com/n24q02m/wet-mcp/pull/1634),
+  [`b35b100`](https://github.com/n24q02m/wet-mcp/commit/b35b1004afca0edee77bad24e2767297bc028dbf))
+
+- **deps**: Lock file maintenance ([#1653](https://github.com/n24q02m/wet-mcp/pull/1653),
+  [`b90c58f`](https://github.com/n24q02m/wet-mcp/commit/b90c58fa8a5cce81fdbbdf30cb53494661de7669))
+
+- **deps**: Lock file maintenance ([#1647](https://github.com/n24q02m/wet-mcp/pull/1647),
+  [`898a03a`](https://github.com/n24q02m/wet-mcp/commit/898a03a9be79d3dc9cfbe12c9d5b3eaf3dee74c2))
+
+- **deps**: Lock file maintenance ([#1645](https://github.com/n24q02m/wet-mcp/pull/1645),
+  [`6f0e8fb`](https://github.com/n24q02m/wet-mcp/commit/6f0e8fb742b21b635f41097b203edb2437601e07))
+
+- **deps**: Lock file maintenance ([#1644](https://github.com/n24q02m/wet-mcp/pull/1644),
+  [`5f9f781`](https://github.com/n24q02m/wet-mcp/commit/5f9f781f9442301398f935f330b11e09a55e1ec2))
+
+- **deps**: Lock file maintenance ([#1642](https://github.com/n24q02m/wet-mcp/pull/1642),
+  [`80d281c`](https://github.com/n24q02m/wet-mcp/commit/80d281c3dc2086c3cf04b18352bc8d6dc8c4ad76))
+
+- **deps**: Lock file maintenance ([#1632](https://github.com/n24q02m/wet-mcp/pull/1632),
+  [`de101e9`](https://github.com/n24q02m/wet-mcp/commit/de101e92da77671d42dc2ede48cf97dcec28113b))
+
+- **deps**: Update @cloudflare/workers-types to ^5.20260727.1
+  ([#1631](https://github.com/n24q02m/wet-mcp/pull/1631),
+  [`25467f1`](https://github.com/n24q02m/wet-mcp/commit/25467f140058e464820832c0694e60d1975b0ecd))
+
+- **deps**: Update @cloudflare/workers-types to ^5.20260729.1
+  ([#1641](https://github.com/n24q02m/wet-mcp/pull/1641),
+  [`ff7b6b5`](https://github.com/n24q02m/wet-mcp/commit/ff7b6b5807607299cbf73d8737c9919367b01c4f))
+
+- **deps**: Update @cloudflare/workers-types to ^5.20260801.1
+  ([#1652](https://github.com/n24q02m/wet-mcp/pull/1652),
+  [`c8dd882`](https://github.com/n24q02m/wet-mcp/commit/c8dd8820692f67b4f7ba9c5a9a709ae03dfd8cf6))
+
+- **deps**: Update non-major dev dependencies
+  ([#1643](https://github.com/n24q02m/wet-mcp/pull/1643),
+  [`f2138ac`](https://github.com/n24q02m/wet-mcp/commit/f2138acdc193551fa621b6af5faa6cce1613f493))
+
+- **deps**: Update non-major dev dependencies
+  ([#1636](https://github.com/n24q02m/wet-mcp/pull/1636),
+  [`5c82cbf`](https://github.com/n24q02m/wet-mcp/commit/5c82cbf4dd5b70cb26e5b64a87b03f82c002703e))
+
+- **deps**: Update wrangler to ^4.118.0 ([#1646](https://github.com/n24q02m/wet-mcp/pull/1646),
+  [`ebfdab5`](https://github.com/n24q02m/wet-mcp/commit/ebfdab509d8d946dedf21340e98e4979053ce1cb))
+
+### Features
+
+- Add search quality baseline harness ([#1655](https://github.com/n24q02m/wet-mcp/pull/1655),
+  [`eed318d`](https://github.com/n24q02m/wet-mcp/commit/eed318dc3f0d910ab2643bec2a76530a4af6964c))
+
+
 ## v3.7.0-beta.4 (2026-08-03)
 
 ### Bug Fixes
