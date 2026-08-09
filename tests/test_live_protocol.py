@@ -83,7 +83,14 @@ class TestMeta:
     async def test_list_tools(self, mcp_session: ClientSession):
         result = await mcp_session.list_tools()
         tool_names = sorted(t.name for t in result.tools)
-        expected = ["config", "extract", "help", "media", "search"]
+        expected = [
+            "config",
+            "config__open_relay",
+            "extract",
+            "help",
+            "media",
+            "search",
+        ]
         assert tool_names == expected, f"Expected {expected}, got {tool_names}"
 
 
