@@ -2684,7 +2684,7 @@ def _rst_to_markdown(content: str) -> str:
 _GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
 
 # Common docs directory names in repos
-_DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
+_DOC_DIRS = frozenset({"docs", "doc", "documentation", "guide", "guides", "wiki"})
 
 # Non-documentation files to skip (case-insensitive stem matching)
 _SKIP_FILES = frozenset(
@@ -3217,8 +3217,10 @@ async def _try_github_raw_docs(
 
                 # Must be in a docs-like directory
                 parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
-                    candidate_paths.append(path)
+                for p in parts:
+                    if p.lower() in _DOC_DIRS:
+                        candidate_paths.append(path)
+                        break
         except Exception:
             return None
 

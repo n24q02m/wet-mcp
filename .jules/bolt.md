@@ -67,3 +67,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-08-05 - Use frozenset and inline for loop for membership testing
+**Learning:** Python generator expressions inside `any()` for checking membership against a static collection (`if any(p.lower() in _DOC_DIRS for p in parts)`) are slow due to iteration overhead and tuple $O(N)$ lookup.
+**Action:** Define static collections frequently used for membership tests as a `frozenset` ($O(1)$ lookup). Replace `any()` with an inline `for` loop that checks membership and exits early using `break` to eliminate generator overhead and improve performance in hot paths.
