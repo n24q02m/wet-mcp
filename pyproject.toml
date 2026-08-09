@@ -23,7 +23,7 @@ dependencies = [
     # wet consumes web-core's SSRF surface (is_safe_url / safe_httpx_client) AND, since 2.3.0,
     # the remote render backends (CFBrowserRenderingClient / BrowserlessClient /
     # RemoteRenderStrategy) for the browser provider chain + the under-rendered escalation fix.
-    "n24q02m-web-core>=2.3.1,<3",
+    "n24q02m-web-core>=2.4.0,<3",
     # MCP Server
     "mcp[cli]",
     # HTTP Client
@@ -44,7 +44,7 @@ dependencies = [
     # Vector search for docs
     "sqlite-vec",
     # Local ONNX embedding + reranking (auto-fallback when no cloud API)
-    "qwen3-embed>=1.12.1",
+    "qwen3-embed>=1.13.0",
     "pillow>=12.3.0",
     "diskcache>=5.6.3",
     "cryptography>=50.0.0",
@@ -65,9 +65,9 @@ dependencies = [
     # mcp_core.storage.d1 / mcp_core.storage.vectorize, the shared D1 +
     # Vectorize HTTP clients this server now imports instead of keeping its
     # own copy under wet_mcp.backends.
-    "n24q02m-mcp-core[llm]>=1.22.0,<2",
+    "n24q02m-mcp-core[llm]>=1.23.0,<2",
     # Schema migrations (auto-migrate-on-startup with backup)
-    "alembic>=1.18.5",
+    "alembic>=1.19.1",
     # fastmcp arrives transitively via mcp-core; both bounds are pinned here,
     # for different reasons.
     # Floor: keeps a Renovate lockFileMaintenance refresh from resolving back
@@ -81,12 +81,12 @@ dependencies = [
     # that major bump on its own. Lift it deliberately, alongside mcp-core,
     # after re-checking the SDK surfaces this server touches directly — the
     # ToolAnnotations built at each tool definition in server.py above all.
-    "fastmcp>=3.4.4,<4",
+    "fastmcp>=3.4.5,<4",
     # Google Drive sync
     "google-api-python-client>=2.198.0",
     "google-auth>=2.56.2",
     # S3-compatible sync (AWS S3, Cloudflare R2, Backblaze B2, MinIO)
-    "boto3>=1.43.56",
+    "boto3>=1.43.62",
     # Production WSGI server for embedded SearXNG on Windows
     # (Werkzeug dev server deadlocks under concurrent engine requests)
     "waitress>=3.0.2; sys_platform == 'win32'",
@@ -106,7 +106,7 @@ dependencies = [
     # langchain-core -> langsmith (used for tracing, not prompt pull, so
     # the vulnerable Client.pull_prompt path is not exercised by wet-mcp
     # — pinned as defense-in-depth). First patched in langsmith 0.8.0.
-    "langsmith>=0.10.10",
+    "langsmith>=0.10.15",
 ]
 
 [dependency-groups]
