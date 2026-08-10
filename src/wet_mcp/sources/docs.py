@@ -2546,7 +2546,7 @@ def _process_rst_directive(
         out.append(f"```{lang}")
         i += 1
         while i < len(lines) and (
-            not lines[i].strip() or lines[i].strip().startswith(":")
+            not lines[i].strip() or lines[i].lstrip().startswith(":")
         ):
             i += 1
         if i < len(lines):
@@ -2580,7 +2580,7 @@ def _process_rst_directive(
             i += 1
     else:
         i += 1
-        while i < len(lines) and lines[i].strip().startswith(":"):
+        while i < len(lines) and lines[i].lstrip().startswith(":"):
             i += 1
 
     return i, in_code_block, code_indent
@@ -3217,8 +3217,10 @@ async def _try_github_raw_docs(
 
                 # Must be in a docs-like directory
                 parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
-                    candidate_paths.append(path)
+                for p in parts:
+                    if p.lower() in _DOC_DIRS:
+                        candidate_paths.append(path)
+                        break
         except Exception:
             return None
 
@@ -3411,12 +3413,15 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     "/_modules/",
                     "/_sources/",
                 )
-                filtered = [
-                    u
-                    for u in urls
-                    if parsed.netloc in u
-                    and not any(skip in u.lower() for skip in skip_patterns)
-                ]
+                filtered = []
+                for u in urls:
+                    if parsed.netloc in u:
+                        u_lower = u.lower()
+                        for skip in skip_patterns:
+                            if skip in u_lower:
+                                break
+                        else:
+                            filtered.append(u)
 
                 if filtered:
                     logger.info(f"Found {len(filtered)} URLs from sitemap at {url}")
@@ -3540,18 +3545,20 @@ def _parse_objects_inv(data: bytes, base_url: str) -> list[str]:
             continue
         # Skip non-doc paths
         uri_lower = uri.lower()
-        if any(
-            skip in uri_lower
-            for skip in (
-                "changelog",
-                "changes",
-                "genindex",
-                "modindex",
-                "searchindex",
-                "_modules/",
-                "_sources/",
-            )
+        skip_uri = False
+        for skip in (
+            "changelog",
+            "changes",
+            "genindex",
+            "modindex",
+            "searchindex",
+            "_modules/",
+            "_sources/",
         ):
+            if skip in uri_lower:
+                skip_uri = True
+                break
+        if skip_uri:
             continue
         doc_urls.add(f"{base_url}{uri}")
 
@@ -3705,7 +3712,13 @@ async def fetch_docs_pages(
             full_parsed = urlparse(full_url)
 
             # Skip generated index/module pages
-            if any(pat in full_parsed.path.lower() for pat in _skip_url_patterns):
+            full_path_lower = full_parsed.path.lower()
+            skip_url = False
+            for pat in _skip_url_patterns:
+                if pat in full_path_lower:
+                    skip_url = True
+                    break
+            if skip_url:
                 continue
 
             # GitHub-specific: stay within same repo
