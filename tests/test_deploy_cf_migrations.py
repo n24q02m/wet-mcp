@@ -66,6 +66,111 @@ def _index_of(calls: list[list[str]], *needle: str) -> int:
     raise AssertionError(f"no call containing {needle} in {calls}")
 
 
+def test_container_id_parser_requires_exact_worker_name():
+    """Recovery must select the configured worker by name, never by position."""
+    payload = json.dumps(
+        {
+            "containers": [
+                {"id": "other-id", "name": "other-worker"},
+                {"id": "target-id", "name": "wet-mcp-worker"},
+            ]
+        }
+    )
+    assert deploy_cf._container_id_for_worker(payload, "wet-mcp-worker") == "target-id"
+    assert deploy_cf._container_id_for_worker(payload, "missing-worker") is None
+
+
+def test_container_id_parser_refuses_ambiguous_exact_worker():
+    payload = json.dumps(
+        {
+            "containers": [
+                {"id": "target-a", "name": "wet-mcp-worker"},
+                {"id": "target-b", "name": "wet-mcp-worker"},
+            ]
+        }
+    )
+    with pytest.raises(RuntimeError, match="multiple container IDs"):
+        deploy_cf._container_id_for_worker(payload, "wet-mcp-worker")
+
+
+def test_recreate_container_deletes_only_exact_id(monkeypatch):
+    """The opt-in recovery path must list, ground, then delete the exact ID."""
+    list_result = subprocess.CompletedProcess(
+        args=["wrangler"],
+        returncode=0,
+        stdout=json.dumps(
+            {"containers": [{"id": "target-id", "name": "wet-mcp-worker"}]}
+        ),
+        stderr="",
+    )
+    monkeypatch.setattr(deploy_cf.subprocess, "run", lambda *a, **k: list_result)
+    calls: list[tuple[list[str], dict]] = []
+    monkeypatch.setattr(
+        deploy_cf,
+        "_run",
+        lambda cmd, **kw: calls.append((list(cmd), dict(kw))),
+    )
+
+    deploy_cf._recreate_container("wet-mcp-worker", dry=False, cwd=pathlib.Path("."))
+
+    assert calls == [
+        (
+            ["bunx", "wrangler", "containers", "delete", "target-id"],
+            {"dry": False, "cwd": pathlib.Path("."), "input_text": "y\n"},
+        )
+    ]
+
+
+def test_recreate_container_is_noop_when_worker_is_absent(monkeypatch):
+    """An already-absent container is safe and must not trigger a broad delete."""
+    list_result = subprocess.CompletedProcess(
+        args=["wrangler"],
+        returncode=0,
+        stdout=json.dumps({"containers": [{"id": "other-id", "name": "other-worker"}]}),
+        stderr="",
+    )
+    monkeypatch.setattr(deploy_cf.subprocess, "run", lambda *a, **k: list_result)
+    monkeypatch.setattr(
+        deploy_cf,
+        "_run",
+        lambda *a, **k: pytest.fail("must not delete when the exact worker is absent"),
+    )
+
+    deploy_cf._recreate_container("wet-mcp-worker", dry=False, cwd=pathlib.Path("."))
+
+
+def test_recreate_option_runs_after_migrations_before_deploy(monkeypatch):
+    events: list[str] = []
+    monkeypatch.setattr(deploy_cf, "_load_deploy_config", lambda repo: _fake_cfg())
+    monkeypatch.setattr(
+        deploy_cf,
+        "_run",
+        lambda cmd, **kw: events.append("deploy" if "deploy" in cmd else "other"),
+    )
+    monkeypatch.setattr(deploy_cf, "_wait_ready", lambda *a, **k: None)
+    monkeypatch.setattr(deploy_cf, "_set_image_tag", lambda *a, **k: None)
+    monkeypatch.setattr(
+        deploy_cf,
+        "_apply_d1_migrations",
+        lambda *a, **k: events.append("migrations"),
+    )
+    monkeypatch.setattr(
+        deploy_cf,
+        "_recreate_container",
+        lambda *a, **k: events.append("recreate"),
+    )
+
+    assert (
+        deploy_cf.main(
+            ["--skip-build", "--recreate-container", "--no-canary", "--tag", "t1"]
+        )
+        == 0
+    )
+    assert (
+        events.index("migrations") < events.index("recreate") < events.index("deploy")
+    )
+
+
 def test_migrations_apply_runs_before_wrangler_deploy(monkeypatch):
     """Schema first, then code. Deploying the worker before the columns exist
     leaves a live window where the new code 500s on a missing column."""
