@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v3.7.1-beta.1 (2026-08-11)
+
+### Bug Fixes
+
+- Disable legacy sync on Cloudflare docs backend
+  ([#1664](https://github.com/n24q02m/wet-mcp/pull/1664),
+  [`45410cd`](https://github.com/n24q02m/wet-mcp/commit/45410cdb6fe6d90fc5f32e6ee2bfb4dc3dff374e))
+
+- **deps**: Update n24q02m/better-semantic-release action to v1.3.0
+  ([#1637](https://github.com/n24q02m/wet-mcp/pull/1637),
+  [`4aaf51d`](https://github.com/n24q02m/wet-mcp/commit/4aaf51da5ca05ac72afbda04f5d4fc9e3f4d42ac))
+
+
 ## v3.7.0 (2026-08-11)
 
 ### Bug Fixes
