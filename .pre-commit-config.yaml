@@ -49,7 +49,9 @@ repos:
     hooks:
       - id: pytest
         name: pytest (Python)
-        entry: uv run --no-sync pytest --tb=short -q --timeout=30
+        # Shared Windows workspaces can pause the async/DNS fixture over 30s
+        # while other harnesses run; 120s still fails a genuinely stuck test.
+        entry: uv run --no-sync pytest --tb=short -q --timeout=120
         language: system
         types: [python]
         pass_filenames: false
