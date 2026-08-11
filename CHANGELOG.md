@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v3.7.2-beta.1 (2026-08-11)
+
+### Bug Fixes
+
+- Recover unavailable Cloudflare containers ([#1669](https://github.com/n24q02m/wet-mcp/pull/1669),
+  [`ebf7b33`](https://github.com/n24q02m/wet-mcp/commit/ebf7b338ed14842b7b56ea4a7e2b43d3f99ad8cd))
+
+
 ## v3.7.1 (2026-08-11)
 
 
