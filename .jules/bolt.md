@@ -67,3 +67,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-08-11 - Hoist transformations out of generator expressions inside `any()`
+**Learning:** Using a generator expression with `any()` where an element is transformed on every iteration (like `any(skip in u.lower() for skip in skip_patterns)`) causes the transformation (`u.lower()`) to be redundantly re-evaluated for every single item in the generator. This creates unnecessary memory allocations and CPU overhead, particularly in tight loops (e.g., filtering URLs).
+**Action:** Always extract and hoist the transformation outside the loop/generator (e.g., `u_lower = u.lower()`) so it evaluates exactly once, reducing the complexity from O(N) allocations to O(1).
