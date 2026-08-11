@@ -35,6 +35,11 @@ Resolution rule (`wet_mcp.sync.resolve_active_backend`):
 - `SYNC_S3_BUCKET` is set (env var or pydantic `settings.sync_s3_bucket`)
   → active backend = **S3**. GDrive Device Code OAuth is **disabled** at
   startup; the relay form does NOT prompt for a Google account.
+- `DOCS_DB_BACKEND=cf-d1` → active backend = **disabled** for legacy DB-file
+  sync. Cloudflare D1 + Vectorize already hold the durable docs store, so
+  this override wins even if an old bucket or bundled Google client remains
+  in the container environment. Set `SYNC_ENABLED=false` to disable sync in
+  any deployment mode.
 - Otherwise → active backend = **GDrive**. The relay form drives the
   Device Code flow for the end-user's Google account on first config.
 
@@ -102,7 +107,7 @@ see the bucket name and never authenticate with Google.
 | `SYNC_INTERVAL` | `300` | Seconds between push ticks (0 = manual only) |
 | `SYNC_FOLDER` | `wet-mcp` | GDrive folder name (gdrive mode only) |
 | `GOOGLE_DRIVE_CLIENT_ID` | `<bundled>` | Desktop OAuth client (public per Google docs) |
-| `SYNC_S3_BUCKET` | `` | **Setting this switches to S3 mode** |
+| `SYNC_S3_BUCKET` | `` | **Setting this switches to S3 mode** (unless `DOCS_DB_BACKEND=cf-d1`) |
 | `SYNC_S3_REGION` | `us-east-1` | Region (`auto` for R2) |
 | `SYNC_S3_ENDPOINT` | `` | Custom endpoint for R2 / B2 / MinIO (empty = AWS) |
 | `SYNC_S3_ACCESS_KEY_ID` | `` | Static access key |

@@ -462,7 +462,7 @@ async def _lifespan_startup() -> asyncio.Task | None:
         from wet_mcp.sync import start_s3_auto_sync
 
         start_s3_auto_sync(_docs_db)
-    elif settings.google_drive_client_id:
+    elif active_backend == "gdrive" and settings.google_drive_client_id:
         logger.info("Sync backend: gdrive (Device Code OAuth via relay)")
         from wet_mcp.sync import start_auto_sync
 
@@ -494,7 +494,7 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
         from wet_mcp.sync import stop_s3_auto_sync
 
         stop_s3_auto_sync()
-    elif settings.google_drive_client_id:
+    elif active_backend == "gdrive" and settings.google_drive_client_id:
         from wet_mcp.sync import stop_auto_sync
 
         stop_auto_sync()
@@ -2091,6 +2091,9 @@ async def _handle_config_status() -> dict[str, Any]:
     # the account/database ids in MCP_D1_BASE_URL name the target a leaked
     # token would open, while answering nothing the operator asked.
     docs_backend = _active_docs_backend()
+    from wet_mcp.sync import resolve_active_backend
+
+    sync_backend = resolve_active_backend()
     status = {
         "database": {
             "backend": docs_backend,
@@ -2121,11 +2124,15 @@ async def _handle_config_status() -> dict[str, Any]:
             "path": (str(settings.get_cache_db_path()) if settings.wet_cache else None),
         },
         "sync": {
-            "enabled": settings.sync_enabled,
-            "provider": "google_drive",
+            "enabled": sync_backend != "disabled",
+            "provider": sync_backend,
             "folder": settings.sync_folder,
             "interval": settings.sync_interval,
-            "google_drive_client_id": bool(settings.google_drive_client_id),
+            "google_drive_client_id": (
+                bool(settings.google_drive_client_id)
+                if sync_backend == "gdrive"
+                else False
+            ),
         },
         "settings": {
             "log_level": settings.log_level,
