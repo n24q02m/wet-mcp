@@ -2,6 +2,28 @@
 
 <!-- version list -->
 
+## v3.7.0 (2026-08-11)
+
+### Bug Fixes
+
+- **deps**: Lock file maintenance ([#1662](https://github.com/n24q02m/wet-mcp/pull/1662),
+  [`d031006`](https://github.com/n24q02m/wet-mcp/commit/d031006161a14d1a549d5048cbe2cbe554a47cbe))
+
+- **deps**: Lock file maintenance ([#1660](https://github.com/n24q02m/wet-mcp/pull/1660),
+  [`dc86a97`](https://github.com/n24q02m/wet-mcp/commit/dc86a97eb2d6ba5548cb796cfb49aa4b50168bb1))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest Docker digest to 2d89062
+  ([`217b5c6`](https://github.com/n24q02m/wet-mcp/commit/217b5c60d847152c15b6f564607b26b42771c142))
+
+- **deps**: Update python:3.13-slim-bookworm Docker digest to 67a1e1f
+  ([`031a79c`](https://github.com/n24q02m/wet-mcp/commit/031a79c0635c436548d147df1c882080a1b54ce3))
+
+### Features
+
+- Lock wet tool names through protocol
+  ([`fc34d36`](https://github.com/n24q02m/wet-mcp/commit/fc34d367e47d4fa08b77ace30510f1042f86f8e3))
+
+
 ## v3.7.0-beta.5 (2026-08-09)
 
 ### Bug Fixes
