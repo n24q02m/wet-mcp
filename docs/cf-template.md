@@ -67,6 +67,9 @@ Hardened for E.1 + E.2 (PR series cf-p3-01); do not re-solve those per server.
    same tag does NOT roll a running app -> delete+recreate. `wrangler containers delete`
    takes the container ID (from `wrangler containers list`), NOT the name
    (wrangler 4.100.0: `Expected a container ID but got <name>`); it prompts -> pipe `yes`.
+   The release workflow's opt-in `recreate_container` input (or
+   `scripts/deploy_cf.py --recreate-container`) lists JSON, matches the exact
+   worker name, and deletes only that ID; an absent exact worker is a no-op.
    `wrangler deploy` reports "no changes" for the container (tracks tag not digest) until
    the app is deleted+recreated. `wrangler kv` needs `--remote`.
 

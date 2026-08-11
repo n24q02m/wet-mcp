@@ -15,6 +15,11 @@ on:
         required: false
         type: string
         default: ""
+      recreate_container:
+        description: "Recovery only: delete the exact existing CF Container ID before redeploying the selected image."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -409,4 +414,9 @@ jobs:
           CF_VECTORIZE_ID: ${{ secrets.CF_VECTORIZE_ID }}
           PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
           IMAGE_TAG: ${{ needs.release.outputs.version }}
-        run: python scripts/deploy_cf.py --from-template --tag "${IMAGE_TAG}"
+        run: |
+          extra_args=()
+          if [[ "${{ inputs.recreate_container }}" == "true" ]]; then
+            extra_args+=(--recreate-container)
+          fi
+          python scripts/deploy_cf.py --from-template --tag "${IMAGE_TAG}" "${extra_args[@]}"

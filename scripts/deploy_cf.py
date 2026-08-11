@@ -26,6 +26,7 @@ from the repo root:
     ... python scripts/deploy_cf.py --skip-build          # reuse a built image
     ... python scripts/deploy_cf.py --dry-run             # print the plan only
     ... python scripts/deploy_cf.py --no-canary           # skip the post-deploy gate
+    ... python scripts/deploy_cf.py --recreate-container  # recover one exact stuck container
 
 The maintainer injects the token via ``skret`` (one option), e.g.:
     MSYS_NO_PATHCONV=1 skret run -e dev --path=/n24q02m/dev -- python scripts/deploy_cf.py
@@ -129,11 +130,26 @@ def _short_sha(repo: Path) -> str:
     ).stdout.strip()
 
 
-def _run(cmd: list[str], *, dry: bool, cwd: Path | None = None) -> None:
+def _run(
+    cmd: list[str],
+    *,
+    dry: bool,
+    cwd: Path | None = None,
+    input_text: str | None = None,
+) -> None:
     print(f"  $ {' '.join(cmd)}")
     if dry:
         return
-    subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True)
+    if input_text is None:
+        subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True)
+    else:
+        subprocess.run(
+            cmd,
+            cwd=str(cwd) if cwd else None,
+            check=True,
+            input=input_text,
+            text=True,
+        )
 
 
 def _image_parts(cfg: dict) -> tuple[str, str, str]:
@@ -253,6 +269,80 @@ def _wait_ready(worker: str, *, dry: bool, timeout_s: int = 600) -> None:
             return
         time.sleep(25)
     print(f"  WARNING: {worker} still provisioning after {timeout_s}s — verify later.")
+
+
+def _container_id_for_worker(payload: str, worker: str) -> str | None:
+    """Return the exact CF Container ID for ``worker`` from list JSON.
+
+    ``wrangler containers delete`` accepts an ID, not a worker name. Keep the
+    lookup deliberately narrow: malformed output, an exact-name row without an
+    ID, or multiple different IDs for the same worker aborts before any delete.
+    """
+    data = json.loads(payload)
+    if isinstance(data, list):
+        rows = data
+    elif isinstance(data, dict) and isinstance(data.get("containers"), list):
+        rows = data["containers"]
+    else:
+        raise RuntimeError("wrangler containers list returned no containers array")
+
+    matches: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("name") != worker:
+            continue
+        container_id = row.get("id")
+        if not isinstance(container_id, str) or not container_id.strip():
+            raise RuntimeError(
+                f"exact container row for {worker!r} has no usable id; refusing delete"
+            )
+        matches.append(container_id.strip())
+
+    unique = set(matches)
+    if len(unique) > 1:
+        raise RuntimeError(
+            f"multiple container IDs found for exact worker {worker!r}: {sorted(unique)}; "
+            "refusing broad delete"
+        )
+    return matches[0] if matches else None
+
+
+def _recreate_container(worker: str, *, dry: bool, cwd: Path) -> None:
+    """Delete only the currently listed exact worker container when requested.
+
+    This is an opt-in recovery for CF Container instances that keep serving an
+    unavailable/stale image after a tag redeploy. The normal deploy path is
+    unchanged. Listing and exact-name grounding happen immediately before
+    deploy, after image push and D1 migration, so a failed recovery cannot
+    accidentally delete another worker or run before the release artifacts are
+    ready.
+    """
+    list_cmd = ["bunx", "wrangler", "containers", "list", "--json"]
+    print(f"  $ {' '.join(list_cmd)}")
+    if dry:
+        print(f"  (dry-run) would delete the exact listed container for {worker}")
+        return
+
+    result = subprocess.run(
+        list_cmd,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
+    )
+    container_id = _container_id_for_worker(result.stdout or "", worker)
+    if container_id is None:
+        print(f"  no exact container found for {worker}; recovery delete is a no-op")
+        return
+
+    print(f"  recovery: deleting exact container {container_id} for {worker}")
+    _run(
+        ["bunx", "wrangler", "containers", "delete", container_id],
+        dry=False,
+        cwd=cwd,
+        input_text="y\n",
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -411,6 +501,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="skip the post-deploy canary gate (and its auto-rollback)",
     )
+    p.add_argument(
+        "--recreate-container",
+        action="store_true",
+        help="delete the exact existing CF Container ID before deploy (recovery only)",
+    )
     args = p.parse_args(argv)
 
     repo = Path(__file__).resolve().parent.parent
@@ -453,6 +548,9 @@ def main(argv: list[str] | None = None) -> int:
     # push failure must not leave prod D1 migrated ahead of any shipped worker.
     print("[4/5] wrangler d1 migrations apply --remote (schema before code)")
     _apply_d1_migrations(repo, cfg, dry=args.dry_run)
+    if args.recreate_container:
+        print("[recovery] recreate exact existing Cloudflare Container before deploy")
+        _recreate_container(worker, dry=args.dry_run, cwd=repo)
     print(f"[5/5] wrangler deploy --config {DEPLOY_CONFIG}")
     if not args.dry_run:
         _set_image_tag(repo, full)
