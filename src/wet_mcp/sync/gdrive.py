@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -507,7 +508,8 @@ async def sync_full(db: DocsDB) -> dict:
     """
     from wet_mcp.db import DocsDB
 
-    if not settings.sync_enabled:
+    docs_backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
+    if not settings.sync_enabled or docs_backend.strip().lower() == "cf-d1":
         return {"status": "disabled", "message": "Sync not configured"}
 
     if not settings.google_drive_client_id:
@@ -788,7 +790,12 @@ def start_auto_sync(db: DocsDB) -> None:
     """Start background auto-sync task."""
     global _sync_task
 
-    if not settings.sync_enabled or settings.sync_interval <= 0:
+    docs_backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
+    if (
+        not settings.sync_enabled
+        or docs_backend.strip().lower() == "cf-d1"
+        or settings.sync_interval <= 0
+    ):
         return
 
     if _sync_task and not _sync_task.done():

@@ -32,6 +32,7 @@ Backend selection (XOR semantics):
 
 from __future__ import annotations
 
+import os
 import sys
 from types import ModuleType
 
@@ -159,7 +160,13 @@ def reset_registry() -> None:
 def resolve_active_backend() -> str:
     """Resolve the active sync backend name from environment.
 
-    Returns ``"s3"`` when ``SYNC_S3_BUCKET`` is non-empty (operator deploy
+    Cloudflare D1 + Vectorize is the durable docs store, so legacy DB-file
+    sync is disabled there even when old bucket/client settings are still
+    present in the container environment. ``SYNC_ENABLED=false`` is also a
+    hard off switch for every backend.
+
+    Returns ``"disabled"`` for the CF D1 store or when ``SYNC_ENABLED`` is
+    false, ``"s3"`` when ``SYNC_S3_BUCKET`` is non-empty (operator deploy
     mode: HTTP / Docker), otherwise ``"gdrive"`` (default uvx Method 1
     local-relay mode with per-user OAuth Device Code).
 
@@ -170,6 +177,9 @@ def resolve_active_backend() -> str:
     """
     from wet_mcp.config import settings
 
+    docs_backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
+    if docs_backend.strip().lower() == "cf-d1" or not settings.sync_enabled:
+        return "disabled"
     if settings.sync_s3_bucket:
         return "s3"
     return "gdrive"
@@ -195,6 +205,10 @@ async def _s3_auto_sync_loop(db) -> None:  # type: ignore[no-untyped-def]
     from loguru import logger
 
     from wet_mcp.config import settings as _settings
+
+    if resolve_active_backend() != "s3":
+        logger.info("S3 auto-sync disabled by the effective sync backend")
+        return
 
     interval = _settings.sync_interval
     if interval <= 0:
@@ -244,6 +258,9 @@ async def _s3_auto_sync_loop(db) -> None:  # type: ignore[no-untyped-def]
     while True:
         try:
             await asyncio.sleep(interval)
+            if resolve_active_backend() != "s3":
+                logger.info("S3 auto-sync stopped by the effective sync backend")
+                return
             # Flush WAL into docs.db first: the backend only ships the
             # main file, so an un-checkpointed sidecar means an empty push.
             await checkpoint_wal(db_path)
@@ -264,7 +281,7 @@ def start_s3_auto_sync(db) -> None:  # type: ignore[no-untyped-def]
     global _s3_sync_task
     from wet_mcp.config import settings as _settings
 
-    if not _settings.sync_s3_bucket:
+    if resolve_active_backend() != "s3":
         return
     if _settings.sync_interval <= 0:
         return

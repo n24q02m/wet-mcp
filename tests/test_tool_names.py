@@ -17,12 +17,20 @@ EXPECTED_NAMES = [
     "search",
 ]
 RETIRED_NAMES: list[str] = []
+_TOOL_NAMES: list[str] | None = None
 
 
 async def _list_tool_names() -> list[str]:
+    global _TOOL_NAMES
+    if _TOOL_NAMES is not None:
+        return _TOOL_NAMES
+
     params = StdioServerParameters(
         command="uv",
-        args=["run", "wet-mcp"],
+        # The contract probe must not let uv mutate/sync the workspace while
+        # it is opening the real stdio server. Tool registration does not need
+        # remote D1 bindings; the CF selector is covered separately.
+        args=["run", "--no-sync", "wet-mcp"],
         env={
             **os.environ,
             "LOG_LEVEL": "WARNING",
@@ -30,12 +38,18 @@ async def _list_tool_names() -> list[str]:
             "DISABLE_LOCAL_RERANK": "true",
             "DISABLE_LOCAL_SEARCH": "true",
             "WET_AUTO_SEARXNG": "false",
+            "DOCS_DB_BACKEND": "sqlite",
+            "SYNC_ENABLED": "false",
+            "WET_CACHE": "false",
         },
     )
     async with stdio_client(params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
-            return sorted(tool.name for tool in (await session.list_tools()).tools)
+            _TOOL_NAMES = sorted(
+                tool.name for tool in (await session.list_tools()).tools
+            )
+            return _TOOL_NAMES
 
 
 @pytest.mark.asyncio

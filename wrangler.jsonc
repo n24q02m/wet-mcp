@@ -50,6 +50,7 @@
     "MCP_STORAGE_BACKEND": "cf-kv",
     "MCP_KV_BASE_URL": "http://kv.internal",
     "DOCS_DB_BACKEND": "cf-d1",
+    "SYNC_ENABLED": "false",
     "MCP_D1_BASE_URL": "http://d1.internal",
     "MCP_VECTORIZE_BASE_URL": "http://vectorize.internal",
     "MCP_VECTORIZE_IDX": "wet-docs-vectors",
