@@ -14,6 +14,7 @@ for better precision. Pipeline: retrieve top-30 -> rerank -> return top-N.
 from __future__ import annotations
 
 from typing import Any, Protocol
+from urllib.parse import urlsplit, urlunsplit
 
 from loguru import logger
 
@@ -58,6 +59,7 @@ class CloudReranker:
     """Cloud reranking via mcp_core.llm (litellm passthrough)."""
 
     DEFAULT_MODEL = "rerank-v4.0-pro"
+    _CLOUDFLARE_AI_GATEWAY_HOST = "gateway.ai.cloudflare.com"
 
     def __init__(self, model: str | None = None, api_key: str | None = None):
         self.model = model or self.DEFAULT_MODEL
@@ -73,6 +75,59 @@ class CloudReranker:
             return f"jina_ai/{self.model}"
         return f"cohere/{self.model}"
 
+    @classmethod
+    def _is_cloudflare_jina_route(cls, model: str, api_base: str | None) -> bool:
+        """Return whether a Jina model targets the Cloudflare AI Gateway."""
+        if not api_base or not model.lower().startswith("jina_ai/"):
+            return False
+        return (
+            urlsplit(api_base).hostname or ""
+        ).lower() == cls._CLOUDFLARE_AI_GATEWAY_HOST
+
+    @staticmethod
+    def _cloudflare_rerank_api_base(api_base: str) -> str:
+        """Append only ``/rerank`` to a Cloudflare Gateway route."""
+        parts = urlsplit(api_base)
+        path = parts.path.rstrip("/")
+        if not path.lower().endswith("/rerank"):
+            path = f"{path}/rerank" if path else "/rerank"
+        return urlunsplit(
+            (parts.scheme, parts.netloc, path, parts.query, parts.fragment)
+        )
+
+    def _resolve_call_parameters(self) -> tuple[str, str | None, str | None]:
+        """Resolve model, endpoint, and key for the current rerank request.
+
+        LiteLLM's Jina transformer normalizes the path to ``/v1/rerank``;
+        Cohere leaves the explicit Cloudflare Gateway ``/rerank`` route intact.
+        """
+        from wet_mcp.credential_state import (
+            api_base_for_task,
+            api_key_for_model,
+            credentials_for_current_request,
+        )
+
+        litellm_model = self._litellm_model()
+        api_base = api_base_for_task("RERANK_API_BASE")
+        if litellm_model.lower().startswith("jina_ai/") and not api_base:
+            api_base = api_base_for_task("JINA_AI_API_BASE")
+
+        if self._is_cloudflare_jina_route(litellm_model, api_base):
+            assert api_base is not None
+            jina_model = litellm_model.split("/", 1)[1]
+            api_key = self.api_key or api_key_for_model(litellm_model)
+            if api_key is None:
+                api_key = (
+                    credentials_for_current_request().get("JINA_AI_API_KEY") or None
+                )
+            return (
+                f"cohere/{jina_model}",
+                self._cloudflare_rerank_api_base(api_base),
+                api_key,
+            )
+
+        return litellm_model, api_base, self.api_key or api_key_for_model(litellm_model)
+
     def _call_rerank(
         self, query: str, documents: list[str], top_n: int
     ) -> list[tuple[int, float]]:
@@ -80,9 +135,7 @@ class CloudReranker:
         # Lazy import: litellm costs ~1-2s on first import.
         from mcp_core.llm import rerank as core_rerank
 
-        from wet_mcp.credential_state import api_base_for_task, api_key_for_model
-
-        litellm_model = self._litellm_model()
+        litellm_model, api_base, api_key = self._resolve_call_parameters()
         # Resolve the provider key AND custom endpoint from the request-scoped
         # per-sub bucket (HTTP multi-user) or the process env (single-user);
         # explicit api_key wins. Avoids os.environ cross-user bleed. SSRF-vetted
@@ -92,8 +145,8 @@ class CloudReranker:
             query=query,
             documents=documents,
             top_n=top_n,
-            api_base=api_base_for_task("RERANK_API_BASE"),
-            api_key=self.api_key or api_key_for_model(litellm_model),
+            api_base=api_base,
+            api_key=api_key,
         )
 
         # litellm RerankResponse.results defaults to None and rerank items

@@ -4,6 +4,7 @@ Covers CloudReranker (litellm passthrough via mcp_core.llm), Qwen3Reranker,
 factory functions, and graceful fallback behavior.
 """
 
+import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -183,6 +184,121 @@ class TestCloudRerankerModelMapping:
         assert (
             CloudReranker(model="rerank-v3.5")._litellm_model() == "cohere/rerank-v3.5"
         )
+
+
+class TestCloudflareGatewayJinaRoute:
+    """Cloudflare AI Gateway's custom Jina route needs Cohere dispatch."""
+
+    def test_gateway_jina_uses_cohere_and_explicit_single_user_jina_key(
+        self, monkeypatch
+    ):
+        gateway_base = (
+            "https://gateway.ai.cloudflare.com/v1/account/gateway/custom-jina/v1"
+        )
+        monkeypatch.setenv("JINA_AI_API_BASE", gateway_base)
+        monkeypatch.delenv("RERANK_API_BASE", raising=False)
+        monkeypatch.setenv("JINA_AI_API_KEY", "jina-single-user-key")
+        monkeypatch.delenv("COHERE_API_KEY", raising=False)
+
+        from wet_mcp.credential_state import set_current_sub
+
+        set_current_sub(None)
+        reranker = CloudReranker(model="jina_ai/jina-reranker-v3")
+
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.9)])
+            reranker.rerank("query", ["document"], top_n=1)
+
+        call_kwargs = mock_rerank.call_args[1]
+        assert call_kwargs["model"] == "cohere/jina-reranker-v3"
+        assert call_kwargs["api_base"] == f"{gateway_base}/rerank"
+        assert call_kwargs["api_key"] == "jina-single-user-key"
+        assert os.environ["JINA_AI_API_KEY"] == "jina-single-user-key"
+
+    def test_gateway_jina_prefers_rerank_base_without_double_suffix(self, monkeypatch):
+        rerank_base = (
+            "https://gateway.ai.cloudflare.com/v1/account/gateway/custom-jina/v1/rerank"
+        )
+        monkeypatch.setenv("RERANK_API_BASE", rerank_base)
+        monkeypatch.setenv(
+            "JINA_AI_API_BASE",
+            "https://gateway.ai.cloudflare.com/v1/other/route/custom-jina/v1",
+        )
+
+        reranker = CloudReranker(model="jina_ai/jina-reranker-v3", api_key="jina-key")
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.9)])
+            reranker.rerank("query", ["document"], top_n=1)
+
+        call_kwargs = mock_rerank.call_args[1]
+        assert call_kwargs["model"] == "cohere/jina-reranker-v3"
+        assert call_kwargs["api_base"] == rerank_base
+        assert call_kwargs["api_key"] == "jina-key"
+
+    @pytest.mark.parametrize(
+        ("model", "api_base", "expected_model"),
+        [
+            (
+                "jina_ai/jina-reranker-v3",
+                "https://api.jina.ai/v1",
+                "jina_ai/jina-reranker-v3",
+            ),
+            (
+                "cohere/rerank-v3.5",
+                "https://gateway.ai.cloudflare.com/v1/account/gateway/cohere/v1",
+                "cohere/rerank-v3.5",
+            ),
+        ],
+    )
+    def test_adapter_only_targets_cloudflare_jina_route(
+        self, monkeypatch, model, api_base, expected_model
+    ):
+        monkeypatch.setenv("RERANK_API_BASE", api_base)
+        reranker = CloudReranker(model=model, api_key="provider-key")
+
+        with patch("mcp_core.llm.rerank") as mock_rerank:
+            mock_rerank.return_value = _rerank_response([(0, 0.9)])
+            reranker.rerank("query", ["document"], top_n=1)
+
+        call_kwargs = mock_rerank.call_args[1]
+        assert call_kwargs["model"] == expected_model
+        assert call_kwargs["api_base"] == api_base
+        assert call_kwargs["api_key"] == "provider-key"
+
+    def test_gateway_jina_uses_per_sub_key_and_never_mutates_process_env(
+        self, monkeypatch, tmp_path
+    ):
+        gateway_base = (
+            "https://gateway.ai.cloudflare.com/v1/account/gateway/custom-jina/v1"
+        )
+        monkeypatch.setenv("WET_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("CREDENTIAL_SECRET", "test-secret")
+        monkeypatch.setenv("JINA_AI_API_KEY", "operator-key")
+        monkeypatch.delenv("RERANK_API_BASE", raising=False)
+        monkeypatch.delenv("COHERE_API_KEY", raising=False)
+
+        from wet_mcp.credential_state import set_current_sub, store_for_sub
+
+        store_for_sub(
+            "user_a",
+            {"JINA_AI_API_KEY": "user-a-key", "JINA_AI_API_BASE": gateway_base},
+        )
+        reranker = CloudReranker(model="jina_ai/jina-reranker-v3")
+
+        try:
+            set_current_sub("user_a")
+            with patch("mcp_core.llm.rerank") as mock_rerank:
+                mock_rerank.return_value = _rerank_response([(0, 0.9)])
+                reranker.rerank("query", ["document"], top_n=1)
+
+            call_kwargs = mock_rerank.call_args[1]
+            assert call_kwargs["model"] == "cohere/jina-reranker-v3"
+            assert call_kwargs["api_base"] == f"{gateway_base}/rerank"
+            assert call_kwargs["api_key"] == "user-a-key"
+            assert os.environ["JINA_AI_API_KEY"] == "operator-key"
+            assert "COHERE_API_KEY" not in os.environ
+        finally:
+            set_current_sub(None)
 
 
 # -----------------------------------------------------------------------
