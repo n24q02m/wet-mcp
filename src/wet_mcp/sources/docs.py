@@ -2684,7 +2684,8 @@ def _rst_to_markdown(content: str) -> str:
 _GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
 
 # Common docs directory names in repos
-_DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
+# Optimized: use frozenset for O(1) membership lookups
+_DOC_DIRS = frozenset({"docs", "doc", "documentation", "guide", "guides", "wiki"})
 
 # Non-documentation files to skip (case-insensitive stem matching)
 _SKIP_FILES = frozenset(
@@ -3217,8 +3218,11 @@ async def _try_github_raw_docs(
 
                 # Must be in a docs-like directory
                 parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
-                    candidate_paths.append(path)
+                # Optimized: avoid generator overhead of any(...)
+                for p in parts:
+                    if p.lower() in _DOC_DIRS:
+                        candidate_paths.append(path)
+                        break
         except Exception:
             return None
 
@@ -3411,12 +3415,18 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     "/_modules/",
                     "/_sources/",
                 )
-                filtered = [
-                    u
-                    for u in urls
-                    if parsed.netloc in u
-                    and not any(skip in u.lower() for skip in skip_patterns)
-                ]
+                # Optimized: avoid generator overhead of any(...) and hoist u.lower()
+                filtered = []
+                for u in urls:
+                    if parsed.netloc in u:
+                        u_lower = u.lower()
+                        should_skip = False
+                        for skip in skip_patterns:
+                            if skip in u_lower:
+                                should_skip = True
+                                break
+                        if not should_skip:
+                            filtered.append(u)
 
                 if filtered:
                     logger.info(f"Found {len(filtered)} URLs from sitemap at {url}")
