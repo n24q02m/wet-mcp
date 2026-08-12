@@ -70,9 +70,4 @@ closed pull request.
 
 ## 2026-08-12 - Optimize URL filtering loops and path checks
 **Learning:** Generator expressions inside `any()` expressions and list comprehensions incur significant Python-level evaluation overhead in tight text-processing and filtering loops (e.g., iterating through thousands of URLs from a sitemap or validating large lists of paths). Hoisting expressions like `.lower()` out of the inner loop avoids redundant allocations.
-**Action:** Replace  generator checks with explicit inline `for` loops and `break` statements in hot paths. For membership tests against static collections, use a `frozenset` rather than a `list` or `tuple` to upgrade the lookup from O(N) to O(1).
-
-
-## 2024-08-12 - Optimize URL filtering loops and path checks
-**Learning:** Generator expressions inside `any()` expressions and list comprehensions incur significant Python-level evaluation overhead in tight text-processing and filtering loops (e.g., iterating through thousands of URLs from a sitemap or validating large lists of paths). Hoisting expressions like `.lower()` out of the inner loop avoids redundant string allocations.
-**Action:** Replace `any(...)` generator checks with explicit inline `for` loops and `break` statements in hot paths. For membership tests against static collections, use a `frozenset` rather than a `list` or `tuple` to upgrade the lookup from O(N) to O(1).
+**Action:** Replace generator checks with explicit inline `for` loops and `break` statements in hot paths. For membership tests against static collections, use a `frozenset` rather than a `list` or `tuple` to upgrade the lookup from O(N) to O(1).
