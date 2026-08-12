@@ -154,18 +154,29 @@ def _payload(result: Any) -> dict[str, Any]:
     return data
 
 
+def _server_env(temp_path: Path) -> dict[str, str]:
+    """Build an isolated server environment for the search-quality protocol run."""
+    env = {
+        **os.environ,
+        "LOG_LEVEL": os.environ.get("LOG_LEVEL", "WARNING"),
+        "CACHE_DIR": str(temp_path / "cache"),
+        "DOCS_DB_PATH": str(temp_path / "docs.db"),
+        "DOWNLOAD_DIR": str(temp_path / "downloads"),
+        # Search quality exercises the web-search path, not legacy Drive sync.
+        # Blank both values so a stale one-sided local credential cannot prevent
+        # server startup after the Drive-to-Cloudflare cutover.
+        "GOOGLE_DRIVE_CLIENT_ID": "",
+        "GOOGLE_DRIVE_CLIENT_SECRET": "",
+    }
+    return env
+
+
 async def run(queries: list[dict[str, Any]]) -> dict[str, Any]:
     records: list[dict[str, Any]] = []
     runner_error: str | None = None
     with tempfile.TemporaryDirectory(prefix="wet-search-quality-") as temp_dir:
         temp_path = Path(temp_dir)
-        env = {
-            **os.environ,
-            "LOG_LEVEL": os.environ.get("LOG_LEVEL", "WARNING"),
-            "CACHE_DIR": str(temp_path / "cache"),
-            "DOCS_DB_PATH": str(temp_path / "docs.db"),
-            "DOWNLOAD_DIR": str(temp_path / "downloads"),
-        }
+        env = _server_env(temp_path)
         params = StdioServerParameters(command="uv", args=["run", "wet-mcp"], env=env)
         try:
             async with stdio_client(params) as (read_stream, write_stream):

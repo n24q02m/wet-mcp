@@ -3,7 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from run_baseline import _payload, dedupe, filter_unusable, load_queries, score_one
+from run_baseline import (
+    _payload,
+    _server_env,
+    dedupe,
+    filter_unusable,
+    load_queries,
+    score_one,
+)
 
 
 def test_fixed_queries_have_scoring_metadata_and_topic_clusters():
@@ -76,3 +83,10 @@ def test_payload_extracts_json_from_mcp_untrusted_content_wrapper():
     assert _payload(result) == {
         "results": [{"url": "https://example.test", "title": "Result"}]
     }
+
+
+def test_server_env_disables_legacy_drive_pair_for_search_baseline(tmp_path):
+    env = _server_env(tmp_path)
+
+    assert env["GOOGLE_DRIVE_CLIENT_ID"] == ""
+    assert env["GOOGLE_DRIVE_CLIENT_SECRET"] == ""
