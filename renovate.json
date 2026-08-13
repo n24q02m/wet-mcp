@@ -13,7 +13,7 @@
   "labels": [
     "dependencies"
   ],
-  "rangeStrategy": "bump",
+  "rangeStrategy": "widen",
   "lockFileMaintenance": {
     "enabled": true,
     "schedule": [
@@ -24,6 +24,14 @@
     "commitMessageAction": "lock file maintenance"
   },
   "packageRules": [
+    {
+      "matchCategories": [
+        "golang"
+      ],
+      "postUpdateOptions": [
+        "gomodTidy"
+      ]
+    },
     {
       "description": "Group minor updates for review (prod scope by default)",
       "matchUpdateTypes": [
@@ -84,8 +92,8 @@
     },
     {
       "description": "Pin PSR to v10 — block Renovate downgrades",
-      "matchPackagePatterns": [
-        "^python-semantic-release/"
+      "matchPackageNames": [
+        "/^python-semantic-release//"
       ],
       "matchManagers": [
         "github-actions"
@@ -131,10 +139,5 @@
   "commitMessageAction": "update",
   "commitMessageTopic": "{{depName}}",
   "semanticCommitType": "fix",
-  "semanticCommitScope": "deps",
-  "golang": {
-    "postUpdateOptions": [
-      "gomodTidy"
-    ]
-  }
+  "semanticCommitScope": "deps"
 }
