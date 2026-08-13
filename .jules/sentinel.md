@@ -35,3 +35,7 @@ closed pull request.
 No security finding has been rejected in this repository yet. When one is,
 record what was proposed, why it was turned down, and what the correct shape
 looks like, so the next scan starts from the answer rather than the question.
+## 2024-08-14 - SSRF vulnerability in crawler media downloads
+**Vulnerability:** DNS rebinding / SSRF vulnerability when fetching media files.
+**Learning:** `_safe_httpx_client` provides custom secure HTTP transports to protect against SSRF and DNS rebinding. Manually passing a raw `httpx.AsyncHTTPTransport` to it inadvertently overwrites and defeats these security mechanisms.
+**Prevention:** Always rely on `_safe_httpx_client`'s default transport and only configure allowed transport parameters (like retries) if safely exposed by the security library, rather than instantiating and injecting a raw `httpx` transport.
