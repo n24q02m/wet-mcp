@@ -849,7 +849,7 @@ async def _rerank_results(
     from wet_mcp.reranker import resolve_rerank_backend_for_request
 
     reranker = resolve_rerank_backend_for_request()
-    if not reranker or len(results) <= top_n:
+    if not reranker or len(results) < top_n:
         return results[:top_n]
 
     try:
@@ -1267,19 +1267,33 @@ async def search(  # noqa: PLR0913
 
                     # Rerank by semantic relevance (same as research/docs)
                     try:
-                        results_list = data.get("results", [])
+                        raw_results = data.get("results", [])
+                        results_list = [
+                            r
+                            for r in raw_results
+                            if any(
+                                isinstance(value, str) and value.strip()
+                                for value in (r.get("content"), r.get("snippet"))
+                            )
+                        ]
+                        if len(results_list) != len(raw_results):
+                            data["results"] = results_list[:max_results]
+                            data["total"] = len(data["results"])
+                            modified = True
                         if results_list:
-                            # Map snippet -> content for reranker (fallback to title)
+                            # Normalize the usable body for reranking and output.
                             for r in results_list:
-                                if "content" not in r:
-                                    r["content"] = r.get("snippet", r.get("title", ""))
+                                content = r.get("content")
+                                snippet = r.get("snippet")
+                                if not isinstance(content, str) or not content.strip():
+                                    r["content"] = snippet
+                                if not isinstance(snippet, str) or not snippet.strip():
+                                    r["snippet"] = r["content"]
                             reranked = await _rerank_results(
                                 query, results_list, top_n=max_results
                             )
                             if reranked:
-                                data["results"] = [
-                                    r for r in reranked if r.get("score", 1.0) > 0.2
-                                ]
+                                data["results"] = reranked
                                 data["total"] = len(data["results"])
                                 modified = True
                     except Exception as e:

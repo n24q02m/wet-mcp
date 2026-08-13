@@ -25,6 +25,8 @@ CRITICAL multi-user invariant: per-sub creds NEVER touch the process-global
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from wet_mcp.credential_state import (
@@ -442,6 +444,135 @@ class TestLiveDispatchWiring:
         assert captured["api_key"] == "co_a"
         # top result is index 1 (doc-b) per the fake scores.
         assert ranked[0]["content"] == "doc-b"
+
+    async def test_rerank_applies_semantic_order_when_candidates_equal_top_n(
+        self, monkeypatch
+    ):
+        """Candidate-count equality must not bypass an available cloud reranker."""
+        from wet_mcp import server
+
+        store_for_sub(
+            "user_a",
+            {"RERANK_MODELS": "cohere/rerank-v3.5", "COHERE_API_KEY": "co_a"},
+        )
+        captured: dict = {}
+
+        def fake_rerank(**kwargs):
+            captured.update(kwargs)
+
+            class _R:
+                results = [
+                    {"index": 1, "relevance_score": 0.9},
+                    {"index": 0, "relevance_score": 0.1},
+                ]
+
+            return _R()
+
+        monkeypatch.setattr("mcp_core.llm.rerank", fake_rerank)
+        set_current_sub("user_a")
+        results = [
+            {"content": "keyword-first"},
+            {"content": "semantic-first"},
+        ]
+
+        ranked = await server._rerank_results("semantic query", results, top_n=2)
+
+        assert [result["content"] for result in ranked] == [
+            "semantic-first",
+            "keyword-first",
+        ]
+        assert captured["top_n"] == 2
+
+    async def test_web_search_reranks_only_structurally_usable_results(
+        self, monkeypatch
+    ):
+        """Web search fills top_n from usable results regardless of score scale."""
+        from wet_mcp import server
+
+        store_for_sub(
+            "user_a",
+            {"RERANK_MODELS": "cohere/rerank-v3.5", "COHERE_API_KEY": "co_a"},
+        )
+
+        def fake_rerank(**kwargs):
+            relevance_by_document = {
+                "\t": 0.99,
+                "Best semantic result.": 0.19,
+                "Second-best semantic result.": 0.05,
+                "A less relevant candidate.": 0.01,
+            }
+            ranked = sorted(
+                enumerate(kwargs["documents"]),
+                key=lambda item: relevance_by_document[item[1]],
+                reverse=True,
+            )[: kwargs["top_n"]]
+
+            class _R:
+                results = [
+                    {
+                        "index": index,
+                        "relevance_score": relevance_by_document[document],
+                    }
+                    for index, document in ranked
+                ]
+
+            return _R()
+
+        async def fake_search_chain(**_kwargs):
+            return json.dumps(
+                {
+                    "results": [
+                        {
+                            "title": "semantic-second-low-score",
+                            "url": "https://example.com/second",
+                            "snippet": "Second-best semantic result.",
+                        },
+                        {
+                            "title": "empty-structural-result",
+                            "url": "https://account.apple.com/",
+                            "snippet": "",
+                            "content": "\t",
+                        },
+                        {
+                            "title": "not-selected",
+                            "url": "https://example.com/other",
+                            "snippet": "A less relevant candidate.",
+                        },
+                        {
+                            "title": "semantic-best-low-score",
+                            "url": "https://example.com/best",
+                            "snippet": "Best semantic result.",
+                        },
+                    ],
+                    "total": 4,
+                }
+            )
+
+        async def fake_ensure_searxng():
+            return "http://searxng.test"
+
+        monkeypatch.setattr("mcp_core.llm.rerank", fake_rerank)
+        monkeypatch.setattr(server, "_require_credentials", lambda: None)
+        monkeypatch.setattr(server, "is_uvx_tool_venv", lambda: False)
+        monkeypatch.setattr(server, "_web_cache", None)
+        monkeypatch.setattr(server, "ensure_searxng", fake_ensure_searxng)
+        monkeypatch.setattr(
+            server.search_backends, "chain_backend_names", lambda: ["searxng"]
+        )
+        monkeypatch.setattr(
+            server.search_backends, "run_search_chain", fake_search_chain
+        )
+        set_current_sub("user_a")
+
+        response = await server.search("search", query="semantic query", max_results=2)
+        results = response.structuredContent["results"]
+
+        assert [result["title"] for result in results] == [
+            "semantic-best-low-score",
+            "semantic-second-low-score",
+        ]
+        assert [result["score"] for result in results] == [0.19, 0.05]
+        assert response.structuredContent["total"] == 2
 
     async def test_single_user_embed_unchanged(self, monkeypatch):
         """sub=None still uses the startup singleton (no behaviour change)."""
