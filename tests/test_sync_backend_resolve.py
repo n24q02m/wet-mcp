@@ -283,15 +283,27 @@ async def test_s3_auto_sync_loop_push_error_is_non_fatal(monkeypatch, tmp_path) 
 
     fake_backend = MagicMock()
     fake_backend.pull = AsyncMock(return_value=None)
-    fake_backend.push = AsyncMock(side_effect=RuntimeError("boom"))
+    second_push_attempted = _asyncio.Event()
+    push_attempts = 0
+
+    async def failing_push(*_args: object, **_kwargs: object) -> None:
+        nonlocal push_attempts
+        push_attempts += 1
+        if push_attempts >= 2:
+            second_push_attempted.set()
+        raise RuntimeError("boom")
+
+    fake_backend.push = AsyncMock(side_effect=failing_push)
 
     monkeypatch.setattr("wet_mcp.sync.get", lambda name: fake_backend)
 
     task = _asyncio.create_task(_s3_auto_sync_loop(db=MagicMock()))
-    await _asyncio.sleep(0.2)
-    assert fake_backend.push.await_count >= 2  # still ticking after error
-    task.cancel()
     try:
-        await task
-    except _asyncio.CancelledError:
-        pass
+        await _asyncio.wait_for(second_push_attempted.wait(), timeout=5.0)
+        assert fake_backend.push.await_count >= 2  # still ticking after error
+    finally:
+        task.cancel()
+        try:
+            await task
+        except _asyncio.CancelledError:
+            pass
