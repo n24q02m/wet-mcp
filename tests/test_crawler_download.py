@@ -56,6 +56,29 @@ async def test_download_media_success(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_download_media_uses_ssrf_safe_transport(tmp_path):
+    """Media downloads must keep web-core's SSRF-protected transport."""
+    mock_response = MagicMock()
+    mock_response.is_redirect = False
+    mock_response.content = b"safe content"
+    mock_response.raise_for_status = MagicMock()
+    mock_response.headers = {}
+
+    mock_client = AsyncMock()
+    mock_client.get.return_value = mock_response
+
+    mock_client_instance = AsyncMock()
+    mock_client_instance.__aenter__.return_value = mock_client
+    mock_client_instance.__aexit__.return_value = None
+    mock_client_factory = MagicMock(return_value=mock_client_instance)
+
+    with patch("wet_mcp.sources.crawler._safe_httpx_client", mock_client_factory):
+        await download_media(["http://example.com/file.txt"], str(tmp_path))
+
+    assert "transport" not in mock_client_factory.call_args.kwargs
+
+
+@pytest.mark.asyncio
 async def test_download_media_protocol_relative(tmp_path):
     """Test handling of protocol-relative URLs."""
     mock_content = b"image data"

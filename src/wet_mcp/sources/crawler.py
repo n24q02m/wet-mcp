@@ -683,7 +683,6 @@ async def download_media(
     output_path = Path(output_dir).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
 
-    transport = httpx.AsyncHTTPTransport(retries=3)
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -776,7 +775,7 @@ async def download_media(
                 }
 
     async with _safe_httpx_client(
-        timeout=settings.crawler_timeout, transport=transport, headers=headers
+        timeout=settings.crawler_timeout, headers=headers
     ) as client:
         tasks = [_download_one(url, client) for url in media_urls]
         results = await asyncio.gather(*tasks)
