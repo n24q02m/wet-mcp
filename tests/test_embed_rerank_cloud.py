@@ -29,13 +29,13 @@ def test_key_gating_filters_chain_without_key(monkeypatch):
 def test_cloud_config_no_local_model_download(monkeypatch):
     monkeypatch.setenv("EMBEDDING_MODELS", "jina_ai/jina-embeddings-v5-text-small")
     monkeypatch.setenv("JINA_AI_API_KEY", "k")
-    fake_qwen = unittest.mock.MagicMock()
-    monkeypatch.setitem(sys.modules, "qwen3_embed", fake_qwen)
+    fake_fastretrieval = unittest.mock.MagicMock()
+    monkeypatch.setitem(sys.modules, "fastretrieval", fake_fastretrieval)
     from wet_mcp.config import Settings
 
     s = Settings()
     assert s.resolve_embedding_backend() == "cloud"
-    fake_qwen.assert_not_called()
+    fake_fastretrieval.assert_not_called()
 
 
 def test_local_onnx_presence_treats_broken_module_specs_as_unavailable(monkeypatch):

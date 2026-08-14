@@ -7,7 +7,6 @@ structured dicts for MCP tool responses.
 import asyncio
 import os
 import shutil
-import tempfile
 from pathlib import Path
 
 from loguru import logger
@@ -15,17 +14,31 @@ from loguru import logger
 from wet_mcp.config import settings
 
 
+def _resolve_cache_dir() -> Path:
+    """Resolve the fastretrieval cache path with an intentional old alias."""
+    new = os.getenv("FASTRETRIEVAL_CACHE_PATH")
+    if new:
+        return Path(new)
+
+    old = os.getenv("QWEN3_EMBED_CACHE_PATH")
+    if old:
+        logger.warning(
+            "QWEN3_EMBED_CACHE_PATH is deprecated; use "
+            "FASTRETRIEVAL_CACHE_PATH instead. Still honoring it."
+        )
+        return Path(old)
+
+    xdg_cache_home = os.getenv("XDG_CACHE_HOME")
+    base_path = Path(xdg_cache_home) if xdg_cache_home else Path.home() / ".cache"
+    return base_path / "fastretrieval"
+
+
 def clear_model_cache(model_name: str) -> str | None:
     """Remove corrupted HuggingFace cache for a model so it re-downloads.
 
     Returns the path that was cleared, or None if no cache existed.
     """
-    cache_dir = Path(
-        os.getenv(
-            "QWEN3_EMBED_CACHE_PATH",
-            os.path.join(tempfile.gettempdir(), "qwen3_embed_cache"),
-        )
-    )
+    cache_dir = _resolve_cache_dir()
     safe_name = model_name.replace("/", "--")
     model_cache = cache_dir / f"models--{safe_name}"
     if model_cache.exists():
@@ -76,7 +89,7 @@ async def _validate_cloud_models(settings_obj) -> dict:
 
 def _download_local_embedding(settings_obj) -> dict:
     """Download and validate local embedding model."""
-    from qwen3_embed import TextEmbedding
+    from fastretrieval import TextEmbedding
 
     local_model = settings_obj.resolve_local_embedding_model()
     try:
@@ -125,7 +138,7 @@ def _download_local_reranker(settings_obj) -> dict:
             "message": "Reranking disabled",
         }
 
-    from qwen3_embed import TextCrossEncoder
+    from fastretrieval import TextCrossEncoder
 
     local_model = settings_obj.resolve_local_rerank_model()
     try:

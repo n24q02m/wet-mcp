@@ -1,10 +1,10 @@
-"""Dual-backend reranking: Cloud (litellm passthrough) + qwen3-embed (local ONNX).
+"""Dual-backend reranking: Cloud (litellm passthrough) + fastretrieval (local ONNX).
 
 Supports two backends:
 - **cloud**: Cloud reranking via mcp_core.llm (litellm passthrough — Jina,
   Cohere, or any litellm rerank 'provider/model'). Requires the matching
   provider API key env var (JINA_AI_API_KEY, COHERE_API_KEY / CO_API_KEY).
-- **local**: Local ONNX cross-encoder via qwen3-embed (Qwen3-Reranker-0.6B).
+- **local**: Local ONNX cross-encoder via fastretrieval's configured model.
   No API keys needed, ~0.57GB model download on first use.
 
 Reranker takes search results and re-scores them with a cross-encoder
@@ -206,12 +206,12 @@ class CloudReranker:
 
 
 # ---------------------------------------------------------------------------
-# qwen3-embed Backend (local ONNX)
+# fastretrieval Backend (local ONNX)
 # ---------------------------------------------------------------------------
 
 
-class Qwen3Reranker:
-    """Local ONNX cross-encoder reranking via qwen3-embed (Qwen3-Reranker-0.6B).
+class LocalReranker:
+    """Local ONNX cross-encoder reranking via fastretrieval's configured model.
 
     Uses causal LM yes/no logit scoring with chat template.
     Scores are P(yes) in [0, 1].
@@ -219,7 +219,7 @@ class Qwen3Reranker:
     """
 
     # YesNo variant: ~598 MB at inference vs ~12 GB for the full-vocab build,
-    # mathematically equivalent, batch-invariant since qwen3-embed 1.11.2b3 (#725).
+    # The reference YesNo variant is small and keeps scores batch-invariant.
     DEFAULT_MODEL = "n24q02m/Qwen3-Reranker-0.6B-ONNX-YesNo"
 
     def __init__(self, model_name: str | None = None):
@@ -233,7 +233,7 @@ class Qwen3Reranker:
         if not already cached. Logs a warning so users know why startup is slow.
         """
         if self._model is None:
-            from qwen3_embed import TextCrossEncoder
+            from fastretrieval import TextCrossEncoder
 
             logger.warning(
                 f"Loading local reranker model: {self._model_name} "
@@ -269,7 +269,7 @@ class Qwen3Reranker:
             return []
 
     def check_available(self) -> bool:
-        """Check if qwen3-embed reranker is available."""
+        """Check if fastretrieval reranker is available."""
         try:
             model = self._get_model()
             scores = list(model.rerank("test", ["test document"]))
@@ -288,7 +288,7 @@ _backend: RerankerBackend | None = None
 # Shared local ONNX reranker for the HTTP multi-user path. Local inference is
 # stateless and key-free, so one instance is safely shared across subs. Lazy
 # so single-user / stdio deployments never download the model unnecessarily.
-_shared_local_backend: Qwen3Reranker | None = None
+_shared_local_backend: LocalReranker | None = None
 
 
 def get_reranker() -> RerankerBackend | None:
@@ -302,11 +302,11 @@ def clear_reranker() -> None:
     _backend = None
 
 
-def _shared_local_reranker() -> Qwen3Reranker:
+def _shared_local_reranker() -> LocalReranker:
     """Return the process-shared local ONNX reranker backend (lazy)."""
     global _shared_local_backend
     if _shared_local_backend is None:
-        _shared_local_backend = Qwen3Reranker()
+        _shared_local_backend = LocalReranker()
     return _shared_local_backend
 
 
@@ -328,8 +328,8 @@ def resolve_rerank_backend_for_request() -> RerankerBackend | None:
     spells it ``'unavailable'`` at startup, via the shared
     :meth:`Settings.local_rerank_available` predicate -- so it covers both
     ``DISABLE_LOCAL_RERANK`` and an image the slim build stripped
-    ``qwen3-embed`` out of. It matters more here than the traceback suggests:
-    :meth:`Qwen3Reranker.rerank` swallows its own load failure and returns
+    ``fastretrieval`` out of. It matters more here than the traceback suggests:
+    :meth:`LocalReranker.rerank` swallows its own load failure and returns
     ``[]``, so a local reranker on an image built without the ONNX extras
     degrades every search to unranked order behind one log line, quietly,
     forever. Returning ``None`` says the same thing out loud.
@@ -385,7 +385,7 @@ def init_reranker(
     if backend_type == "cloud":
         _backend = CloudReranker(model=model, api_key=api_key)
     elif backend_type == "local":
-        _backend = Qwen3Reranker(model)
+        _backend = LocalReranker(model)
     else:
         raise ValueError(f"Unknown reranker backend type: {backend_type}")
 

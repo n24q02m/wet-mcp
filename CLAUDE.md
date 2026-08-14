@@ -57,7 +57,7 @@ mise run dev       # uv run wet-mcp
 
 - KHONG co prefix ung dung (day la open-source MCP server)
 - LLM/Embed/Rerank: litellm passthrough qua `mcp_core.llm` (mcp-core[llm]). Per-task model chains, CSV `provider/model,provider/model`, order = litellm fallback:
-  - `EMBEDDING_MODELS` -- chain embedding. Rong = local ONNX (qwen3-embed).
+  - `EMBEDDING_MODELS` -- chain embedding. Rong = local ONNX (fastretrieval).
   - `RERANK_MODELS` -- chain rerank. Rong = local ONNX cross-encoder.
   - `LLM_MODELS` -- chain LLM. Rong = tat feature LLM.
 - Provider duoc suy ra tu prefix model. API key theo convention litellm `<PROVIDER>_API_KEY`. 7 provider servers goi y:
@@ -73,7 +73,9 @@ mise run dev       # uv run wet-mcp
   | `anthropic/` | `ANTHROPIC_API_KEY` | console.anthropic.com |
 
   For any other litellm provider (used via env passthrough), see https://docs.litellm.ai/docs/providers/<provider> for its `<PROVIDER>_API_KEY` name.
-- Custom endpoint (SSRF-guarded): `LLM_API_BASE`, `EMBEDDING_API_BASE`, `RERANK_API_BASE`
+ - Custom endpoint (SSRF-guarded): `LLM_API_BASE`, `EMBEDDING_API_BASE`, `RERANK_API_BASE`
+ - Local model cache: `FASTRETRIEVAL_CACHE_PATH` (preferred); the old
+   `QWEN3_EMBED_CACHE_PATH` name is still honored when the new name is absent.
 - X/Twitter search (`search` action `x`): `XAI_API_KEY` (from skret `/wet-mcp/prod`), `X_SEARCH_MODEL` (default `grok-4.3` ~$0.032/query; `grok-4.5` ~$0.12/query). Transport = `litellm.aresponses` (OpenAI Responses API shape), NOT `mcp_core.llm.acompletion`: xAI's `x_search` server-side tool is only accepted on `/v1/responses` — the chat-completions endpoint rejects `tools=[{"type":"x_search"}]` with `unknown variant 'x_search'`. litellm forwards the server tool and returns the same `AnnotationURLCitation` shape as the raw openai SDK, so no direct provider-SDK dep is added. Citations gotcha: `response.citations` is absent on this path — parse them from the `output_text` block's `annotations`. See `sources/x_search.py`.
 - Deprecated (honored mot release voi warning): singular `EMBEDDING_MODEL`/`RERANK_MODEL` + `EMBEDDING_BACKEND`/`RERANK_BACKEND` (backend gio suy ra tu chain rong hay khong). Priority-router cu "Jina > Gemini > OpenAI > Cohere" da bo.
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
@@ -116,7 +118,7 @@ Forcing cloud embed/rerank (so the container never downloads local ONNX models):
 
 A non-empty `*_MODELS` chain whose provider key is set -> cloud backend (inferred,
 not via the deprecated `*_BACKEND`). Empty chain -> local ONNX. With cloud forced,
-`qwen3-embed` is never instantiated, keeping the container slim. Storage: set
+  `fastretrieval` is never instantiated, keeping the container slim. Storage: set
 `MCP_STORAGE_BACKEND=cf-kv` + `MCP_KV_BASE_URL=http://kv.internal`,
 `DOCS_DB_BACKEND=cf-d1` + `MCP_D1_BASE_URL`/`MCP_VECTORIZE_BASE_URL`/`MCP_VECTORIZE_IDX`,
 `SEARCH_BACKEND=tavily` + `TAVILY_API_KEY`, and `CREDENTIAL_SECRET`.

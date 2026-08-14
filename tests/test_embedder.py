@@ -1,7 +1,7 @@
 """Tests for src/wet_mcp/embedder.py -- Dual-backend embedding.
 
 Covers CloudEmbeddingBackend (litellm passthrough via mcp_core.llm),
-batch splitting, retry logic, Qwen3EmbedBackend (local ONNX), factory functions,
+batch splitting, retry logic, LocalEmbeddingBackend (local ONNX), factory functions,
 and provider detection helpers.
 """
 
@@ -12,7 +12,7 @@ import pytest
 
 from wet_mcp.embedder import (
     CloudEmbeddingBackend,
-    Qwen3EmbedBackend,
+    LocalEmbeddingBackend,
     _detect_embedding_provider,
     _is_retryable,
     _is_unsupported_param,
@@ -562,16 +562,16 @@ class TestRetryLogic:
 
 
 # -----------------------------------------------------------------------
-# Qwen3EmbedBackend
+# LocalEmbeddingBackend
 # -----------------------------------------------------------------------
 
 
-class TestQwen3EmbedBackend:
+class TestLocalEmbeddingBackend:
     async def test_embed_texts_success(self):
         """Local ONNX embedding returns correct vectors."""
         import numpy as np
 
-        backend = Qwen3EmbedBackend("test-model")
+        backend = LocalEmbeddingBackend("test-model")
         mock_model = MagicMock()
         mock_model.embed.return_value = iter(
             [
@@ -589,14 +589,14 @@ class TestQwen3EmbedBackend:
 
     async def test_embed_texts_empty(self):
         """Empty input returns empty list."""
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         assert await backend.embed_texts([]) == []
 
     async def test_embed_texts_with_mrl_truncation(self):
         """Dimensions parameter is passed to model.embed(dim=) for MRL."""
         import numpy as np
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         # Model handles truncation internally when dim= is passed
         mock_model.embed.return_value = iter(
@@ -616,7 +616,7 @@ class TestQwen3EmbedBackend:
         """embed_single delegates to embed_texts."""
         import numpy as np
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.embed.return_value = iter([np.array([0.1, 0.2])])
 
@@ -629,7 +629,7 @@ class TestQwen3EmbedBackend:
         """Returns dimensions when model loads successfully."""
         import numpy as np
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.embed.return_value = iter([np.array([0.0] * 1024)])
 
@@ -640,7 +640,7 @@ class TestQwen3EmbedBackend:
 
     async def test_check_available_failure(self):
         """Returns 0 when model fails to load."""
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
 
         with patch.object(
             backend, "_get_model", side_effect=Exception("ONNX load error")
@@ -651,7 +651,7 @@ class TestQwen3EmbedBackend:
 
     async def test_check_available_embed_exception(self):
         """Returns 0 when model.embed fails."""
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.embed.side_effect = Exception("Runtime error")
 
@@ -662,7 +662,7 @@ class TestQwen3EmbedBackend:
 
     async def test_check_available_empty_result(self):
         """Returns 0 when model.embed returns empty list."""
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.embed.return_value = []
 
@@ -675,7 +675,7 @@ class TestQwen3EmbedBackend:
         """embed_single_query calls model.query_embed."""
         import numpy as np
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.query_embed.return_value = iter([np.array([0.1, 0.2])])
 
@@ -689,7 +689,7 @@ class TestQwen3EmbedBackend:
         """embed_single_query passes dim parameter to model.query_embed."""
         import numpy as np
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.query_embed.return_value = iter([np.array([0.1, 0.2])])
 
@@ -701,8 +701,8 @@ class TestQwen3EmbedBackend:
 
     async def test_get_model_caching(self):
         """_get_model instantiates TextEmbedding once and caches it."""
-        backend = Qwen3EmbedBackend()
-        with patch("qwen3_embed.TextEmbedding") as mock_cls:
+        backend = LocalEmbeddingBackend()
+        with patch("fastretrieval.TextEmbedding") as mock_cls:
             mock_model = MagicMock()
             mock_cls.return_value = mock_model
 
@@ -730,9 +730,9 @@ class TestBackendFactory:
         assert get_backend() is backend
 
     async def test_init_local_backend(self):
-        """init_backend('local') creates Qwen3EmbedBackend."""
+        """init_backend('local') creates LocalEmbeddingBackend."""
         backend = init_backend("local")
-        assert isinstance(backend, Qwen3EmbedBackend)
+        assert isinstance(backend, LocalEmbeddingBackend)
         assert get_backend() is backend
 
     async def test_init_cloud_requires_model(self):
@@ -830,16 +830,16 @@ class TestCheckAvailableApiKeyValidation:
 
 
 # -----------------------------------------------------------------------
-# Qwen3 model loading edge cases
+# Local model loading edge cases
 # -----------------------------------------------------------------------
 
 
-class TestQwen3GetModelWarning:
+class TestLocalGetModelWarning:
     """_get_model() logs download warning and check_available edge cases."""
 
     async def test_check_available_import_error(self):
-        """Returns 0 when qwen3-embed is not installed."""
-        backend = Qwen3EmbedBackend()
+        """Returns 0 when fastretrieval is not installed."""
+        backend = LocalEmbeddingBackend()
         with patch.object(backend, "_get_model", side_effect=ImportError("No module")):
             assert await backend.check_available() == 0
 
@@ -847,7 +847,7 @@ class TestQwen3GetModelWarning:
         """Returns dims when local model works."""
         import numpy as np
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.embed.return_value = iter([np.array([0.1, 0.2, 0.3])])
         with patch.object(backend, "_get_model", return_value=mock_model):
@@ -865,7 +865,7 @@ class TestSharedLocalBackend:
         wet_mcp.embedder._shared_local_backend = None
 
         try:
-            with patch("wet_mcp.embedder.Qwen3EmbedBackend") as mock_cls:
+            with patch("wet_mcp.embedder.LocalEmbeddingBackend") as mock_cls:
                 instance = MagicMock()
                 mock_cls.return_value = instance
 

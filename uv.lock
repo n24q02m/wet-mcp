@@ -762,6 +762,24 @@ server = [
 ]
 
 [[package]]
+name = "fastretrieval"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "huggingface-hub" },
+    { name = "loguru" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
+    { name = "requests" },
+    { name = "tokenizers" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/26/35/2a91b42d6b9784ee620d4c75bd2abadbcbd3cf304dcb0a41f5a3a22ee0ba/fastretrieval-1.0.1.tar.gz", hash = "sha256:a1d766e1c1471347ba830c4a7f280ed7b0ff86fbc48425ac457b7b9d8d0e5783", size = 330230, upload-time = "2026-08-14T16:58:25.577Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6f/94/28ba6e0d86b4b8bb0f2a687d5669bd3c6adb7c3346d6e80431fb66ba6c2d/fastretrieval-1.0.1-py3-none-any.whl", hash = "sha256:902851b02c6b1ffefc66aa63c7976a2226696d7ea2b43b9ec471029e97e58892", size = 144199, upload-time = "2026-08-14T16:58:24.195Z" },
+]
+
+[[package]]
 name = "fastuuid"
 version = "0.14.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2652,24 +2670,6 @@ wheels = [
 ]
 
 [[package]]
-name = "qwen3-embed"
-version = "1.13.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "huggingface-hub" },
-    { name = "loguru" },
-    { name = "numpy" },
-    { name = "onnxruntime" },
-    { name = "requests" },
-    { name = "tokenizers" },
-    { name = "tqdm" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/82/57/05fbd601679bbfd49c882bc21f4e17ec3e1e01946cd71a84bc49abe6d7d9/qwen3_embed-1.13.0.tar.gz", hash = "sha256:f5384c8348b521d7bed34b9cd1d120fd63892fc1c22c7598b996914097309d21", size = 234980, upload-time = "2026-08-08T04:06:32.853Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d5/fb/06af2973c1988cc1d2db58b226b5914149b71481c33b005440b1892eb1a6/qwen3_embed-1.13.0-py3-none-any.whl", hash = "sha256:d6bace0157032edf96bf6b36b3d8004817a65093ec1fd723682bbd62939b3d1b", size = 69825, upload-time = "2026-08-08T04:06:31.906Z" },
-]
-
-[[package]]
 name = "rank-bm25"
 version = "0.2.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3411,6 +3411,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "diskcache" },
     { name = "fastmcp" },
+    { name = "fastretrieval" },
     { name = "google-api-python-client" },
     { name = "google-auth" },
     { name = "greenlet" },
@@ -3425,7 +3426,6 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed" },
     { name = "sqlite-vec" },
     { name = "urllib3" },
     { name = "waitress", marker = "sys_platform == 'win32'" },
@@ -3453,6 +3453,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "diskcache", specifier = ">=5.6.3" },
     { name = "fastmcp", specifier = ">=3.4.4,<4" },
+    { name = "fastretrieval", specifier = ">=1.0.1" },
     { name = "google-api-python-client", specifier = ">=2.198.0" },
     { name = "google-auth", specifier = ">=2.56.2" },
     { name = "greenlet", specifier = "<3.5.5" },
@@ -3468,7 +3469,6 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.13.4,<2.14" },
     { name = "pydantic-settings" },
-    { name = "qwen3-embed", specifier = ">=1.13.0" },
     { name = "sqlite-vec" },
     { name = "urllib3", specifier = ">=2.7.0" },
     { name = "waitress", marker = "sys_platform == 'win32'", specifier = ">=3.0.2" },

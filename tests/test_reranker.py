@@ -1,6 +1,6 @@
 """Tests for src/wet_mcp/reranker.py — Dual-backend reranking.
 
-Covers CloudReranker (litellm passthrough via mcp_core.llm), Qwen3Reranker,
+Covers CloudReranker (litellm passthrough via mcp_core.llm), LocalReranker,
 factory functions, and graceful fallback behavior.
 """
 
@@ -12,7 +12,7 @@ import pytest
 
 from wet_mcp.reranker import (
     CloudReranker,
-    Qwen3Reranker,
+    LocalReranker,
     get_reranker,
     init_reranker,
 )
@@ -302,14 +302,14 @@ class TestCloudflareGatewayJinaRoute:
 
 
 # -----------------------------------------------------------------------
-# Qwen3Reranker
+# LocalReranker
 # -----------------------------------------------------------------------
 
 
-class TestQwen3Reranker:
+class TestLocalReranker:
     def test_rerank_success(self):
         """Local cross-encoder reranking returns sorted results."""
-        reranker = Qwen3Reranker("test-model")
+        reranker = LocalReranker("test-model")
 
         mock_model = MagicMock()
         # Simulate P(yes) scores for 3 documents
@@ -331,13 +331,13 @@ class TestQwen3Reranker:
 
     def test_rerank_empty_documents(self):
         """Empty documents return empty results."""
-        reranker = Qwen3Reranker()
+        reranker = LocalReranker()
         results = reranker.rerank("query", [])
         assert results == []
 
     def test_rerank_passes_pairs(self):
         """Reranker receives (query, document) pairs."""
-        reranker = Qwen3Reranker()
+        reranker = LocalReranker()
 
         mock_model = MagicMock()
         mock_model.rerank.return_value = iter([0.5, 0.8])
@@ -351,7 +351,7 @@ class TestQwen3Reranker:
 
     def test_rerank_error_returns_empty(self):
         """Model errors return empty results (graceful fallback)."""
-        reranker = Qwen3Reranker()
+        reranker = LocalReranker()
 
         with patch.object(reranker, "_get_model", side_effect=Exception("ONNX error")):
             results = reranker.rerank("query", ["doc1"])
@@ -360,7 +360,7 @@ class TestQwen3Reranker:
 
     def test_check_available_success(self):
         """Returns True when model loads successfully."""
-        reranker = Qwen3Reranker()
+        reranker = LocalReranker()
 
         mock_model = MagicMock()
         mock_model.rerank.return_value = iter([0.5])
@@ -370,7 +370,7 @@ class TestQwen3Reranker:
 
     def test_check_available_failure(self):
         """Returns False when model fails to load."""
-        reranker = Qwen3Reranker()
+        reranker = LocalReranker()
 
         with patch.object(reranker, "_get_model", side_effect=Exception("Load error")):
             assert reranker.check_available() is False
@@ -416,18 +416,18 @@ class TestCloudRerankerApiKeyValidation:
             assert reranker.check_available() is True
 
 
-class TestQwen3RerankerGetModelWarning:
+class TestLocalRerankerGetModelWarning:
     """_get_model() and check_available edge cases."""
 
     def test_check_available_import_error(self):
-        """Returns False when qwen3-embed is not installed."""
-        reranker = Qwen3Reranker()
+        """Returns False when fastretrieval is not installed."""
+        reranker = LocalReranker()
         with patch.object(reranker, "_get_model", side_effect=ImportError("No module")):
             assert reranker.check_available() is False
 
     def test_check_available_success(self):
         """Returns True when local reranker works."""
-        reranker = Qwen3Reranker()
+        reranker = LocalReranker()
         mock_model = MagicMock()
         mock_model.rerank.return_value = iter([0.8])
         with patch.object(reranker, "_get_model", return_value=mock_model):
@@ -442,9 +442,9 @@ class TestRerankerFactory:
         assert get_reranker() is reranker
 
     def test_init_local_reranker(self):
-        """init_reranker('local') creates Qwen3Reranker."""
+        """init_reranker('local') creates LocalReranker."""
         reranker = init_reranker("local")
-        assert isinstance(reranker, Qwen3Reranker)
+        assert isinstance(reranker, LocalReranker)
         assert get_reranker() is reranker
 
     def test_init_unknown_backend(self):

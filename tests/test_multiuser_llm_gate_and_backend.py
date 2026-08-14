@@ -140,11 +140,11 @@ class TestPerRequestEmbedBackend:
         """sub=None -> the module-level startup singleton, unchanged."""
         from wet_mcp import embedder
         from wet_mcp.embedder import (
-            Qwen3EmbedBackend,
+            LocalEmbeddingBackend,
             resolve_embed_backend_for_request,
         )
 
-        sentinel = Qwen3EmbedBackend()
+        sentinel = LocalEmbeddingBackend()
         monkeypatch.setattr(embedder, "_backend", sentinel)
         assert resolve_embed_backend_for_request() is sentinel
 
@@ -197,11 +197,11 @@ class TestPerRequestEmbedBackend:
         """Resolving a per-sub cloud backend must NOT mutate the module singleton."""
         from wet_mcp import embedder
         from wet_mcp.embedder import (
-            Qwen3EmbedBackend,
+            LocalEmbeddingBackend,
             resolve_embed_backend_for_request,
         )
 
-        startup = Qwen3EmbedBackend()
+        startup = LocalEmbeddingBackend()
         monkeypatch.setattr(embedder, "_backend", startup)
 
         store_for_sub(
@@ -247,11 +247,11 @@ class TestPerRequestRerankBackend:
     def test_single_user_returns_startup_singleton(self, monkeypatch):
         from wet_mcp import reranker
         from wet_mcp.reranker import (
-            Qwen3Reranker,
+            LocalReranker,
             resolve_rerank_backend_for_request,
         )
 
-        sentinel = Qwen3Reranker()
+        sentinel = LocalReranker()
         monkeypatch.setattr(reranker, "_backend", sentinel)
         assert resolve_rerank_backend_for_request() is sentinel
 
@@ -305,11 +305,11 @@ class TestPerRequestRerankBackend:
     def test_multi_user_does_not_rebind_singleton(self, monkeypatch):
         from wet_mcp import reranker
         from wet_mcp.reranker import (
-            Qwen3Reranker,
+            LocalReranker,
             resolve_rerank_backend_for_request,
         )
 
-        startup = Qwen3Reranker()
+        startup = LocalReranker()
         monkeypatch.setattr(reranker, "_backend", startup)
 
         store_for_sub(

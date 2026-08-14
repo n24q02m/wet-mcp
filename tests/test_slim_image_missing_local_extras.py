@@ -1,16 +1,16 @@
 """The local ONNX leg must be resolved from the IMAGE, not only from a flag.
 
-The http-slim build uninstalls ``qwen3-embed`` and ``onnxruntime`` (see
+The http-slim build uninstalls ``fastretrieval`` and ``onnxruntime`` (see
 ``Dockerfile``), so on that image the local embed/rerank leg does not exist --
 whatever the configuration says. Every resolver in the codebase decided the
 question from ``DISABLE_LOCAL_EMBED`` / ``DISABLE_LOCAL_RERANK`` alone, which
 makes a slim deployment correct only for as long as somebody remembers to set
 those vars. Forget one, or run the slim image outside the Cloudflare worker
 that supplies them, and the first index attempt dies inside the lazy import in
-``Qwen3EmbedBackend._get_model``. Live prod D1 recorded exactly that (#1630)::
+``LocalEmbeddingBackend._get_model``. Live prod D1 recorded exactly that (#1630)::
 
     fastapi:python  pending  0 chunks  failed
-        ModuleNotFoundError: No module named 'qwen3_embed'
+        ModuleNotFoundError: No module named 'fastretrieval'
 
 -- a hard failure with zero chunks, where the same request had a perfectly good
 keyword-only degrade available to it.
@@ -20,7 +20,7 @@ string a caller is told, the durable record the background indexer leaves in
 ``versions.index_error``, and the startup path that used to install a backend
 it had already proved could not load.
 
-Both ``qwen3_embed`` and ``onnxruntime`` ARE installed in the dev venv, so the
+Both ``fastretrieval`` and ``onnxruntime`` ARE installed in the dev venv, so the
 slim container cannot be reproduced by simply not having them. The
 ``slim_image`` fixture simulates both packages on two channels at once:
 ``find_spec`` answers "absent" (what the fix is supposed to consult) and
@@ -95,7 +95,7 @@ def slim_image(monkeypatch):
     real_import = builtins.__import__
     real_find_spec = importlib.util.find_spec
     attempted: list[str] = []
-    missing = ("qwen3_embed", "onnxruntime")
+    missing = ("fastretrieval", "onnxruntime")
 
     def _guarded_import(name, *args, **kwargs):
         if any(
@@ -167,7 +167,7 @@ class TestEmbedResolutionOnASlimImage:
 
         reason = embedding_unavailable_reason()
         assert reason is not None
-        assert "qwen3-embed" in reason
+        assert "fastretrieval" in reason
         assert "onnxruntime" in reason
         # Named as a property of the build, so the reader looks for a cloud
         # chain rather than a flag to unset.
@@ -188,18 +188,18 @@ class TestEmbedResolutionOnASlimImage:
         reason = embedding_unavailable_reason()
         assert reason is not None
         assert "DISABLE_LOCAL_EMBED" in reason
-        assert "qwen3-embed" not in reason
+        assert "fastretrieval" not in reason
 
     def test_installed_local_extras_are_still_used(self):
         """No regression: a full image with the flag off keeps its local leg."""
         from wet_mcp import embedder
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
         store_for_sub("user_a", {"GITHUB_TOKEN": "ghp_x"})
         set_current_sub("user_a")
 
         backend = embedder.resolve_embed_backend_for_request()
-        assert isinstance(backend, Qwen3EmbedBackend)
+        assert isinstance(backend, LocalEmbeddingBackend)
         assert backend is embedder.resolve_embed_backend_for_request()
 
 
@@ -214,7 +214,7 @@ class TestRerankResolutionOnASlimImage:
         assert slim_image == [], f"local ONNX leg was entered: {slim_image}"
 
     async def test_rerank_returns_unranked_order_touching_nothing(self, slim_image):
-        """``Qwen3Reranker.rerank`` swallows its own load failure and returns
+        """``LocalReranker.rerank`` swallows its own load failure and returns
         ``[]``, so the broken leg is invisible in the result. The import list is
         the only thing that can tell "skipped" from "failed quietly"."""
         store_for_sub("user_a", {"GITHUB_TOKEN": "ghp_x"})
@@ -228,12 +228,12 @@ class TestRerankResolutionOnASlimImage:
 
     def test_installed_local_extras_are_still_used(self):
         from wet_mcp import reranker
-        from wet_mcp.reranker import Qwen3Reranker
+        from wet_mcp.reranker import LocalReranker
 
         store_for_sub("user_a", {"GITHUB_TOKEN": "ghp_x"})
         set_current_sub("user_a")
 
-        assert isinstance(reranker.resolve_rerank_backend_for_request(), Qwen3Reranker)
+        assert isinstance(reranker.resolve_rerank_backend_for_request(), LocalReranker)
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +288,7 @@ class TestBackgroundIndexerOnASlimImage:
         """The exact prod row, inverted.
 
         Before: ``state=failed``, ``error='ModuleNotFoundError: No module named
-        'qwen3_embed''``, ``chunk_count=0`` -- the library unservable forever.
+        'fastretrieval''``, ``chunk_count=0`` -- the library unservable forever.
         After: the chunks land keyword-searchable and the version says, where
         ``config(action="status")`` and D1 both show it, that it holds no
         vectors and why. Storing them silently would trade a loud failure for a
@@ -321,7 +321,7 @@ class TestBackgroundIndexerOnASlimImage:
 
         error = state["error"] or ""
         assert "ModuleNotFoundError" not in error
-        assert "qwen3-embed" in error
+        assert "fastretrieval" in error
         assert "keyword" in error.lower(), (
             "the record must say the version holds no vectors, not just that "
             f"something was off: {error!r}"
@@ -422,12 +422,12 @@ class TestStartupNeverInstallsABackendItCannotLoad:
         self, real_backend_factories, monkeypatch
     ):
         from wet_mcp import embedder
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
         self._enable_local_startup(monkeypatch)
         self._set_local_credential_state(monkeypatch)
         monkeypatch.setattr(
-            Qwen3EmbedBackend, "check_available", AsyncMock(return_value=0)
+            LocalEmbeddingBackend, "check_available", AsyncMock(return_value=0)
         )
 
         await server._init_embedding_backend("local")
@@ -438,12 +438,12 @@ class TestStartupNeverInstallsABackendItCannotLoad:
         self, real_backend_factories, monkeypatch
     ):
         from wet_mcp import embedder
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
         self._enable_local_startup(monkeypatch)
         self._set_local_credential_state(monkeypatch)
         monkeypatch.setattr(
-            Qwen3EmbedBackend,
+            LocalEmbeddingBackend,
             "check_available",
             AsyncMock(side_effect=RuntimeError("embedding unavailable")),
         )
@@ -471,11 +471,11 @@ class TestStartupNeverInstallsABackendItCannotLoad:
         self, real_backend_factories, monkeypatch
     ):
         from wet_mcp import reranker
-        from wet_mcp.reranker import Qwen3Reranker
+        from wet_mcp.reranker import LocalReranker
 
         self._enable_local_startup(monkeypatch)
         self._set_local_credential_state(monkeypatch)
-        monkeypatch.setattr(Qwen3Reranker, "check_available", Mock(return_value=False))
+        monkeypatch.setattr(LocalReranker, "check_available", Mock(return_value=False))
 
         await server._init_reranker_backend("local")
 
@@ -485,12 +485,12 @@ class TestStartupNeverInstallsABackendItCannotLoad:
         self, real_backend_factories, monkeypatch
     ):
         from wet_mcp import reranker
-        from wet_mcp.reranker import Qwen3Reranker
+        from wet_mcp.reranker import LocalReranker
 
         self._enable_local_startup(monkeypatch)
         self._set_local_credential_state(monkeypatch)
         monkeypatch.setattr(
-            Qwen3Reranker,
+            LocalReranker,
             "check_available",
             Mock(side_effect=RuntimeError("reranker unavailable")),
         )

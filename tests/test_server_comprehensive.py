@@ -1219,11 +1219,11 @@ async def test_embed_no_backend():
 
 @pytest.mark.asyncio
 async def test_embed_query_mode():
-    """Test _embed with is_query=True for Qwen3 (lines 327-330)."""
+    """Test _embed with is_query=True for the local backend (lines 327-330)."""
     with patch("wet_mcp.embedder.get_backend") as mock_get:
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        mock_backend = MagicMock(spec=Qwen3EmbedBackend)
+        mock_backend = MagicMock(spec=LocalEmbeddingBackend)
         mock_backend.embed_single_query.return_value = [0.5, 0.6]
         mock_get.return_value = mock_backend
 

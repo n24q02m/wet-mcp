@@ -136,7 +136,7 @@ key-priority router. Each chain is a CSV of `provider/model` entries
 
 ```text
 LLM_MODELS        -> LLM chain (e.g. extract agent). Empty -> LLM features off.
-EMBEDDING_MODELS  -> embedding chain. Empty -> local ONNX (qwen3-embed).
+EMBEDDING_MODELS  -> embedding chain. Empty -> local ONNX (fastretrieval).
 RERANK_MODELS     -> rerank chain. Empty -> local ONNX cross-encoder.
 LLM_API_BASE      -> custom OpenAI-compatible endpoint (SSRF-guarded)
 ```

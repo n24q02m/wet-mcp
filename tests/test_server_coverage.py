@@ -417,12 +417,12 @@ async def test_init_reranker_local_exception(_mock_settings):
 # ---------------------------------------------------------------------------
 
 
-async def test_embed_query_qwen3_backend():
-    """Lines 327-330: query embedding with Qwen3EmbedBackend."""
+async def test_embed_query_local_backend():
+    """Lines 327-330: query embedding with LocalEmbeddingBackend."""
     with patch("wet_mcp.embedder.get_backend") as mock_get:
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        mock_backend = MagicMock(spec=Qwen3EmbedBackend)
+        mock_backend = MagicMock(spec=LocalEmbeddingBackend)
         mock_backend.embed_single_query.return_value = [0.5, 0.6]
         mock_get.return_value = mock_backend
 

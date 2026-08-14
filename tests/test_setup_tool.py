@@ -13,7 +13,7 @@ class TestRunWarmup:
         with (
             patch("wet_mcp.setup.run_auto_setup"),
             patch("wet_mcp.setup_tool.settings") as mock_settings,
-            patch("qwen3_embed.TextEmbedding") as mock_embed,
+            patch("fastretrieval.TextEmbedding") as mock_embed,
         ):
             mock_settings.setup_providers.return_value = "local"
             mock_settings.rerank_enabled = False
@@ -65,7 +65,7 @@ class TestRunWarmup:
             patch("wet_mcp.setup.run_auto_setup"),
             patch("wet_mcp.setup_tool.settings") as mock_settings,
             patch("wet_mcp.embedder.init_backend") as mock_init_backend,
-            patch("qwen3_embed.TextEmbedding") as mock_embed,
+            patch("fastretrieval.TextEmbedding") as mock_embed,
         ):
             mock_settings.setup_providers.return_value = "sdk"
             mock_settings.embedding_chain.return_value = ["gemini/embed"]
@@ -93,7 +93,7 @@ class TestRunWarmup:
                 side_effect=Exception("setup failed"),
             ),
             patch("wet_mcp.setup_tool.settings") as mock_settings,
-            patch("qwen3_embed.TextEmbedding") as mock_embed,
+            patch("fastretrieval.TextEmbedding") as mock_embed,
         ):
             mock_settings.setup_providers.return_value = "local"
             mock_settings.rerank_enabled = False
@@ -113,8 +113,8 @@ class TestRunWarmup:
         with (
             patch("wet_mcp.setup.run_auto_setup"),
             patch("wet_mcp.setup_tool.settings") as mock_settings,
-            patch("qwen3_embed.TextEmbedding") as mock_embed,
-            patch("qwen3_embed.TextCrossEncoder") as mock_reranker,
+            patch("fastretrieval.TextEmbedding") as mock_embed,
+            patch("fastretrieval.TextCrossEncoder") as mock_reranker,
         ):
             mock_settings.setup_providers.return_value = "local"
             mock_settings.rerank_enabled = True
@@ -138,7 +138,7 @@ class TestRunWarmup:
             patch("wet_mcp.setup.run_auto_setup"),
             patch("wet_mcp.setup_tool.settings") as mock_settings,
             patch("wet_mcp.setup_tool.clear_model_cache") as mock_clear,
-            patch("qwen3_embed.TextEmbedding") as mock_embed,
+            patch("fastretrieval.TextEmbedding") as mock_embed,
         ):
             mock_settings.setup_providers.return_value = "local"
             mock_settings.rerank_enabled = False
