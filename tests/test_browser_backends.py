@@ -135,3 +135,19 @@ def test_captcha_tier_absent_when_no_key(monkeypatch):
     agent = _build_scraping_agent(stealth=True)
     assert "captcha" not in agent.strategies
     assert "basic_http" in agent.strategies
+
+
+def test_scraping_agent_uses_configured_robots_policy(monkeypatch):
+    _set_browser(monkeypatch, respect_robots_txt=True)
+
+    agent = _build_scraping_agent(stealth=True)
+
+    assert agent.respect_robots is True
+
+
+def test_scraping_agent_defaults_to_disabled_robots_policy(monkeypatch):
+    _set_browser(monkeypatch)
+
+    agent = _build_scraping_agent(stealth=True)
+
+    assert agent.respect_robots is False

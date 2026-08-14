@@ -12,6 +12,38 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from web_core.scraper import RobotsCache, ScrapingAgent, ScrapingResult, StrategyCache
+
+
+class _FakeRobotsCache(RobotsCache):
+    def __init__(self, allowed: bool):
+        super().__init__(user_agent="test-agent")
+        self.allowed = allowed
+
+    async def is_allowed(self, url: str) -> bool:
+        return self.allowed
+
+
+def _build_actual_scraping_agent(*, respect_robots: bool):
+    strategy = MagicMock()
+    strategy.fetch = AsyncMock(
+        return_value=ScrapingResult(
+            content="x" * 120,
+            url="https://example.com/page",
+            strategy="fake",
+            status_code=200,
+        )
+    )
+    agent = ScrapingAgent(
+        strategies={"fake": strategy},
+        strategy_cache=StrategyCache(default_order=["fake"]),
+        robots_cache=_FakeRobotsCache(allowed=False),
+        max_retries=1,
+        min_content_length=1,
+        enable_selector_inference=False,
+        respect_robots=respect_robots,
+    )
+    return agent, strategy
 
 
 def _build_fake_agent(scrape_return: str | None = None, scrape_side_effect=None):
@@ -115,6 +147,53 @@ async def test_extract_agent_error_surfaces_in_result() -> None:
 
     pages = json.loads(result_json)
     assert "strategy chain exhausted" in pages[0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_extract_actual_agent_blocks_before_strategy_when_robots_enabled() -> (
+    None
+):
+    """The real ScrapingAgent must enforce its RobotsCache before any strategy."""
+    from wet_mcp.sources.crawler import extract
+
+    agent, strategy = _build_actual_scraping_agent(respect_robots=True)
+
+    with (
+        patch(
+            "wet_mcp.sources.crawler._get_scraping_agent",
+            new_callable=AsyncMock,
+            return_value=agent,
+        ),
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+    ):
+        result_json = await extract(["https://example.com/page"])
+
+    pages = json.loads(result_json)
+    assert "robots.txt disallows" in pages[0]["error"]
+    strategy.fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_extract_actual_agent_reaches_strategy_when_robots_disabled() -> None:
+    """The legacy disabled mode still executes the configured strategy."""
+    from wet_mcp.sources.crawler import extract
+
+    agent, strategy = _build_actual_scraping_agent(respect_robots=False)
+
+    with (
+        patch(
+            "wet_mcp.sources.crawler._get_scraping_agent",
+            new_callable=AsyncMock,
+            return_value=agent,
+        ),
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+    ):
+        result_json = await extract(["https://example.com/page"])
+
+    pages = json.loads(result_json)
+    assert "error" not in pages[0]
+    assert pages[0]["url"] == "https://example.com/page"
+    strategy.fetch.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -134,6 +134,18 @@ class TestCleanEnvCoverage:
         assert missing == []
 
 
+def test_robots_policy_preserves_legacy_default():
+    """Existing deployments keep robots checks disabled unless opted in."""
+    assert Settings().respect_robots_txt is False
+
+
+def test_robots_policy_reads_environment(monkeypatch):
+    """RESPECT_ROBOTS_TXT is the explicit process-level policy switch."""
+    monkeypatch.setenv("RESPECT_ROBOTS_TXT", "true")
+
+    assert Settings().respect_robots_txt is True
+
+
 def test_setup_api_keys_valid():
     """Test setup_api_keys with valid input."""
     settings = Settings(api_keys=SecretStr("GOOGLE_API_KEY:abc,OPENAI_API_KEY:xyz"))
