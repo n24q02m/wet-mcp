@@ -70,6 +70,7 @@ _RERANK_CANDIDATE_MULTIPLIER = 3
 _web_cache: WebCache | None = None
 _docs_db: DocsDB | None = None
 _embedding_dims: int = 0
+_backend_init_task: asyncio.Task | None = None
 
 # Strong references to fire-and-forget background tasks. asyncio keeps only a
 # WEAK reference to a running task, so a task whose handle is discarded can be
@@ -111,6 +112,16 @@ def _launch_background_task(coro, label: str) -> asyncio.Task:
     _background_tasks.add(task)
     task.add_done_callback(functools.partial(_on_background_task_done, label=label))
     return task
+
+
+async def _wait_for_backend_init() -> None:
+    """Wait for startup backend initialization when it is still running."""
+    task = _backend_init_task
+    if task is None or task.done():
+        return
+    # A canceled request must not cancel the shared startup task. Shutdown
+    # owns cancellation of that task explicitly in _lifespan_shutdown.
+    await asyncio.shield(task)
 
 
 def _missing_docs_db_methods(backend) -> list[str]:
@@ -334,7 +345,7 @@ async def _lifespan(_server: FastMCP):
 
 async def _lifespan_startup() -> asyncio.Task | None:
     """Initialize all server components. Returns SearXNG warmup task."""
-    global _web_cache, _docs_db, _embedding_dims
+    global _backend_init_task, _web_cache, _docs_db, _embedding_dims
 
     logger.info("Starting WET MCP Server...")
 
@@ -417,7 +428,7 @@ async def _lifespan_startup() -> asyncio.Task | None:
         except Exception as e:
             logger.error(f"Background backend init failed: {e}")
 
-    _launch_background_task(_init_backends_task(), "init-backends")
+    _backend_init_task = _launch_background_task(_init_backends_task(), "init-backends")
 
     # 5. Initialize docs DB (sqlite or cf-d1) via the backend factory, then run
     #    Alembic migrations (auto-migrate-on-startup with backup-before-migrate
@@ -473,7 +484,7 @@ async def _lifespan_startup() -> asyncio.Task | None:
 
 async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
     """Shut down all server components."""
-    global _web_cache, _docs_db
+    global _backend_init_task, _web_cache, _docs_db
 
     logger.info("Shutting down WET MCP Server...")
 
@@ -484,6 +495,16 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
             await warmup_task
         except (asyncio.CancelledError, Exception):
             pass
+
+    # Backend initialization is tracked separately because embedding and
+    # reranking requests wait for it while startup is still in progress.
+    if _backend_init_task and not _backend_init_task.done():
+        _backend_init_task.cancel()
+        try:
+            await _backend_init_task
+        except (asyncio.CancelledError, Exception):
+            pass
+    _backend_init_task = None
 
     # Stop auto-sync (whichever backend is active)
     from wet_mcp.config import settings
@@ -758,6 +779,8 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
         is_query: If True, use the model's query embedding path for asymmetric
             retrieval. Document embeddings stay raw.
     """
+    await _wait_for_backend_init()
+
     from wet_mcp.embedder import (
         LocalEmbeddingBackend,
         _is_retryable,
@@ -791,6 +814,8 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
 
 async def _embed_batch(texts: list[str]) -> list[list[float]] | None:
     """Embed batch of texts if backend is available."""
+    await _wait_for_backend_init()
+
     from wet_mcp.embedder import _is_retryable, resolve_embed_backend_for_request
 
     backend = resolve_embed_backend_for_request()
@@ -826,10 +851,12 @@ async def _rerank_results(
 
     Falls back to original results if reranking fails or is unavailable.
     """
+    await _wait_for_backend_init()
+
     from wet_mcp.reranker import resolve_rerank_backend_for_request
 
     reranker = resolve_rerank_backend_for_request()
-    if not reranker or len(results) <= top_n:
+    if not reranker or len(results) < top_n:
         return results[:top_n]
 
     try:
@@ -1247,19 +1274,33 @@ async def search(  # noqa: PLR0913
 
                     # Rerank by semantic relevance (same as research/docs)
                     try:
-                        results_list = data.get("results", [])
+                        raw_results = data.get("results", [])
+                        results_list = [
+                            r
+                            for r in raw_results
+                            if any(
+                                isinstance(value, str) and value.strip()
+                                for value in (r.get("content"), r.get("snippet"))
+                            )
+                        ]
+                        if len(results_list) != len(raw_results):
+                            data["results"] = results_list[:max_results]
+                            data["total"] = len(data["results"])
+                            modified = True
                         if results_list:
-                            # Map snippet -> content for reranker (fallback to title)
+                            # Normalize the usable body for reranking and output.
                             for r in results_list:
-                                if "content" not in r:
-                                    r["content"] = r.get("snippet", r.get("title", ""))
+                                content = r.get("content")
+                                snippet = r.get("snippet")
+                                if not isinstance(content, str) or not content.strip():
+                                    r["content"] = snippet
+                                if not isinstance(snippet, str) or not snippet.strip():
+                                    r["snippet"] = r["content"]
                             reranked = await _rerank_results(
                                 query, results_list, top_n=max_results
                             )
                             if reranked:
-                                data["results"] = [
-                                    r for r in reranked if r.get("score", 1.0) > 0.2
-                                ]
+                                data["results"] = reranked
                                 data["total"] = len(data["results"])
                                 modified = True
                     except Exception as e:
@@ -2067,6 +2108,8 @@ def _active_docs_backend() -> str:
 
 
 async def _handle_config_status() -> dict[str, Any]:
+    await _wait_for_backend_init()
+
     from wet_mcp.embedder import (
         embedding_unavailable_reason,
         resolve_embed_backend_for_request,
@@ -2846,6 +2889,8 @@ async def _background_index_and_search(
         # path can both read it back.
         keyword_only_reason: str | None = None
         if all_chunks:
+            await _wait_for_backend_init()
+
             from wet_mcp.embedder import (
                 embedding_unavailable_reason,
                 resolve_embed_backend_for_request,

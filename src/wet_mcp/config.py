@@ -111,6 +111,8 @@ class Settings(BaseSettings):
     - EMBEDDING_DIMS: Embedding dimensions (0 = auto-detect, default 768)
     - RERANK_ENABLED: Enable reranking (default: true)
     - RERANK_TOP_N: Return top N results after reranking (default: 10)
+    - RESPECT_ROBOTS_TXT: Enforce robots.txt for extract and crawler actions
+        (default: false)
     - EMBEDDING_MODEL / EMBEDDING_BACKEND / RERANK_MODEL / RERANK_BACKEND:
         DEPRECATED (2026-06-11) -- singular model + backend env vars, folded
         into the plural *_MODELS chain (honored one release with a warning).
@@ -156,6 +158,7 @@ class Settings(BaseSettings):
     # Crawler
     crawler_headless: bool = True
     crawler_timeout: int = 60
+    respect_robots_txt: bool = False  # env RESPECT_ROBOTS_TXT
 
     # Browser backend chain for the headless (JS-render) leg. BROWSER_BACKENDS
     # CSV (order = agent escalation/fallback): native (in-process chromium) |

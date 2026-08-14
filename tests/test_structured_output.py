@@ -87,7 +87,12 @@ async def test_external_tool_marks_both_channels():
 
 
 async def test_search_marks_both_channels():
-    chain = json.dumps({"results": [{"url": "https://e", "title": "T"}], "total": 1})
+    chain = json.dumps(
+        {
+            "results": [{"url": "https://e", "title": "T", "snippet": "usable result"}],
+            "total": 1,
+        }
+    )
     with (
         patch(
             "wet_mcp.server.ensure_searxng",

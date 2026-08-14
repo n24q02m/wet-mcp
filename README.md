@@ -175,6 +175,12 @@ Browser Rendering -- set `CF_ACCOUNT_ID` + `CF_BROWSER_RENDERING_TOKEN`). Empty
 chain falls back to `native`. Set `CAPSOLVER_API_KEY` to append an optional,
 key-gated CAPTCHA tier as the last escalation step.
 
+**Robots policy** -- set `RESPECT_ROBOTS_TXT=true` to enforce `robots.txt`
+across both the `extract` strategy chain and the Crawl4AI-backed `crawl`,
+`sitemap`, and `list_media` actions. The default is `false` to preserve existing
+deployment behaviour; configure this process-level policy explicitly when the
+operator requires robots enforcement.
+
 **Disable local fallbacks** -- opt out of the heavy in-process local fallbacks
 per capability (e.g. on a slim container that renders/searches/embeds via cloud
 backends only): `DISABLE_LOCAL_BROWSER`, `DISABLE_LOCAL_SEARCH`,

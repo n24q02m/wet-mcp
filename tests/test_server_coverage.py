@@ -17,6 +17,26 @@ from structured import payload, text
 
 from wet_mcp import server
 
+
+async def test_rerank_waits_for_background_backend_initialization(monkeypatch):
+    """A first request must not silently bypass a backend still starting."""
+    ready = asyncio.Event()
+
+    async def _pending_backend_init():
+        await ready.wait()
+
+    backend_init_task = asyncio.create_task(_pending_backend_init())
+    monkeypatch.setattr(server, "_backend_init_task", backend_init_task, raising=False)
+    results = [{"content": "doc-a"}, {"content": "doc-b"}]
+    rerank_task = asyncio.create_task(server._rerank_results("query", results, 1))
+
+    await asyncio.sleep(0)
+    assert not rerank_task.done()
+
+    ready.set()
+    assert await rerank_task == [{"content": "doc-a"}]
+
+
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import worker, { OUTBOUND_BY_HOST } from '../src/worker'
+import worker, { OUTBOUND_BY_HOST, pickContainerEnv } from '../src/worker'
 
 function fakeEnv() {
   const kv = new Map<string, string>()
@@ -35,6 +35,14 @@ const vectorizeH = OUTBOUND_BY_HOST['vectorize.internal']!
 // Handlers also take an OutboundHandlerContext third arg (containerId/className);
 // unused by these handlers, only needed to satisfy the call signature in tests.
 const ctx = { containerId: 'test', className: 'WetContainer' } as never
+
+describe('container environment forwarding', () => {
+  it('forwards the explicit robots policy to the Python process', () => {
+    const env = { RESPECT_ROBOTS_TXT: 'true' }
+
+    expect(pickContainerEnv(env as never)).toEqual({ RESPECT_ROBOTS_TXT: 'true' })
+  })
+})
 
 describe('outbound handlers', () => {
   it('KV get 404 then put then get 200', async () => {

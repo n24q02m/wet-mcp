@@ -68,6 +68,7 @@ export interface Env {
   DISABLE_LOCAL_RERANK?: string
   DISABLE_LOCAL_SEARCH?: string
   DISABLE_LOCAL_BROWSER?: string
+  RESPECT_ROBOTS_TXT?: string
 }
 
 // Keys forwarded from the Worker env (wrangler vars + secrets) into the container
@@ -87,11 +88,12 @@ const CONTAINER_ENV_KEYS = [
   'BROWSERLESS_URL', 'BROWSERLESS_TOKEN', 'CAPSOLVER_API_KEY',
   'DISABLE_LOCAL_EMBED', 'DISABLE_LOCAL_RERANK',
   'DISABLE_LOCAL_SEARCH', 'DISABLE_LOCAL_BROWSER',
+  'RESPECT_ROBOTS_TXT',
   // CF AI Gateway (llm-main) litellm routing
   'OPENROUTER_API_BASE', 'OPENROUTER_API_KEY', 'JINA_AI_API_BASE',
 ] as const
 
-function pickContainerEnv(env: Env): Record<string, string> {
+export function pickContainerEnv(env: Env): Record<string, string> {
   const out: Record<string, string> = {}
   for (const k of CONTAINER_ENV_KEYS) {
     const v = (env as unknown as Record<string, unknown>)[k]

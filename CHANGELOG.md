@@ -2,6 +2,69 @@
 
 <!-- version list -->
 
+## v3.7.3 (2026-08-15)
+
+### Bug Fixes
+
+- Bump wet dependency floors ([#1672](https://github.com/n24q02m/wet-mcp/pull/1672),
+  [`fbdcb8a`](https://github.com/n24q02m/wet-mcp/commit/fbdcb8a1b0ee8e81bbf35555dd623ad709dfde69))
+
+- Enforce robots policy in crawler actions ([#1687](https://github.com/n24q02m/wet-mcp/pull/1687),
+  [`a839414`](https://github.com/n24q02m/wet-mcp/commit/a83941436b2453d5846dc595a5906f3ca9992c48))
+
+- Isolate search quality harness from legacy drive credentials
+  ([#1671](https://github.com/n24q02m/wet-mcp/pull/1671),
+  [`13610e9`](https://github.com/n24q02m/wet-mcp/commit/13610e9aaf35fddc26d728dd794d1179381491f0))
+
+- Preserve crawler SSRF transport protection ([#1686](https://github.com/n24q02m/wet-mcp/pull/1686),
+  [`6b03aa5`](https://github.com/n24q02m/wet-mcp/commit/6b03aa56f3a0064818ad21aaae7eb3c25c79d866))
+
+- Preserve usable web search results ([#1680](https://github.com/n24q02m/wet-mcp/pull/1680),
+  [`dc7f262`](https://github.com/n24q02m/wet-mcp/commit/dc7f26202087471fa9ed94b5aa8c88af624ea5b4))
+
+- Route Jina reranking through Cloudflare gateway
+  ([`51529e0`](https://github.com/n24q02m/wet-mcp/commit/51529e09141fdb9347cec48120110cba71515691))
+
+- Separate Renovate range and lock ownership ([#1681](https://github.com/n24q02m/wet-mcp/pull/1681),
+  [`3744e36`](https://github.com/n24q02m/wet-mcp/commit/3744e36ae2a241f6f81c6b1b2f8e965b4b86eb86))
+
+- Stabilize s3 auto-sync error test ([#1679](https://github.com/n24q02m/wet-mcp/pull/1679),
+  [`5234350`](https://github.com/n24q02m/wet-mcp/commit/52343509b6c2936db1dce5248bdfd989b9300ddb))
+
+- Wait for backend readiness before first request
+  ([`2b820b6`](https://github.com/n24q02m/wet-mcp/commit/2b820b6bcc2360e1fbcc388d000455bf929c8906))
+
+- **deps**: Lock file maintenance ([#1683](https://github.com/n24q02m/wet-mcp/pull/1683),
+  [`bcff61c`](https://github.com/n24q02m/wet-mcp/commit/bcff61cfbefa364472d28dc3a561b4f2440b1c8f))
+
+- **deps**: Lock file maintenance ([#1677](https://github.com/n24q02m/wet-mcp/pull/1677),
+  [`77027da`](https://github.com/n24q02m/wet-mcp/commit/77027da52b1c1a1ee03078991508594e5a4c519f))
+
+- **deps**: Lock file maintenance ([#1668](https://github.com/n24q02m/wet-mcp/pull/1668),
+  [`4f3a133`](https://github.com/n24q02m/wet-mcp/commit/4f3a133b102b26b1a3cbe4ab7efaf85612e0ab8a))
+
+- **deps**: Update @cloudflare/workers-types to ^5.20260804.1
+  ([#1667](https://github.com/n24q02m/wet-mcp/pull/1667),
+  [`818044d`](https://github.com/n24q02m/wet-mcp/commit/818044d4c8cb0ba87abb674814653880c020e6e2))
+
+- **deps**: Update astral-sh/setup-uv action to v10
+  ([#1676](https://github.com/n24q02m/wet-mcp/pull/1676),
+  [`09a0af2`](https://github.com/n24q02m/wet-mcp/commit/09a0af2b159d31de0c3ce32a8b531358967f3380))
+
+- **deps**: Update greenlet to <3.5.6 ([#1682](https://github.com/n24q02m/wet-mcp/pull/1682),
+  [`53ea909`](https://github.com/n24q02m/wet-mcp/commit/53ea9097c115dab1bdea7c286d829503483eadb2))
+
+- **deps**: Update patch dependencies ([#1659](https://github.com/n24q02m/wet-mcp/pull/1659),
+  [`013843d`](https://github.com/n24q02m/wet-mcp/commit/013843d40fd03d0179c4ca206cfbea33be2d6579))
+
+- **deps**: Update python:3.13-slim-bookworm Docker digest to 00faa2d
+  ([#1666](https://github.com/n24q02m/wet-mcp/pull/1666),
+  [`a0628f0`](https://github.com/n24q02m/wet-mcp/commit/a0628f009e99a310757d945bd0d1479bb749adb0))
+
+- **deps**: Update wrangler to ^4.119.0 ([#1675](https://github.com/n24q02m/wet-mcp/pull/1675),
+  [`92c3b13`](https://github.com/n24q02m/wet-mcp/commit/92c3b13d89f8091febc36c33741f88319ec90d13))
+
+
 ## v3.7.2 (2026-08-11)
 
 
