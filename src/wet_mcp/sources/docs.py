@@ -2686,6 +2686,45 @@ _GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
 # Common docs directory names in repos
 _DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
 
+# Pre-compiled regex for skipping non-documentation URLs in sitemap parsing
+_SITEMAP_SKIP_RE = re.compile(
+    "|".join(
+        re.escape(p)
+        for p in (
+            "/blog/",
+            "/changelog",
+            "/releases",
+            "/feed",
+            "/rss",
+            "/sitemap",
+            "/robots.txt",
+            "/search",
+            "/genindex",
+            "/searchindex",
+            "/modindex",
+            "/_modules/",
+            "/_sources/",
+        )
+    )
+)
+
+# Pre-compiled regex for skipping non-documentation URLs in spidering
+_SPIDER_SKIP_RE = re.compile(
+    "|".join(
+        re.escape(p)
+        for p in (
+            "/genindex",
+            "/searchindex",
+            "/modindex",
+            "/_modules/",
+            "/_sources/",
+            "/blog/",
+            "/changelog",
+            "/releases",
+        )
+    )
+)
+
 # Non-documentation files to skip (case-insensitive stem matching)
 _SKIP_FILES = frozenset(
     {
@@ -3396,26 +3435,10 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     urls = re.findall(r"<loc>\s*(.*?)\s*</loc>", text)
 
                 # Filter to same domain, skip non-doc paths
-                skip_patterns = (
-                    "/blog/",
-                    "/changelog",
-                    "/releases",
-                    "/feed",
-                    "/rss",
-                    "/sitemap",
-                    "/robots.txt",
-                    "/search",
-                    "/genindex",
-                    "/searchindex",
-                    "/modindex",
-                    "/_modules/",
-                    "/_sources/",
-                )
                 filtered = [
                     u
                     for u in urls
-                    if parsed.netloc in u
-                    and not any(skip in u.lower() for skip in skip_patterns)
+                    if parsed.netloc in u and not _SITEMAP_SKIP_RE.search(u.lower())
                 ]
 
                 if filtered:
@@ -3659,18 +3682,6 @@ async def fetch_docs_pages(
         "why-github",
     }
 
-    # Generated/index pages to skip (Sphinx, MkDocs, etc.)
-    _skip_url_patterns = (
-        "/genindex",
-        "/searchindex",
-        "/modindex",
-        "/_modules/",
-        "/_sources/",
-        "/blog/",
-        "/changelog",
-        "/releases",
-    )
-
     # Detect redirect: if actual URL differs from docs_url (e.g., versioned
     # docs), use the redirected path as prefix to restrict crawling to that
     # version.  Prevents crawling sibling version pages (/en/13/, /en/14/).
@@ -3705,7 +3716,7 @@ async def fetch_docs_pages(
             full_parsed = urlparse(full_url)
 
             # Skip generated index/module pages
-            if any(pat in full_parsed.path.lower() for pat in _skip_url_patterns):
+            if _SPIDER_SKIP_RE.search(full_parsed.path.lower()):
                 continue
 
             # GitHub-specific: stay within same repo
