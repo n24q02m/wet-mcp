@@ -182,6 +182,28 @@ async def test_crawl_success():
 
 
 @pytest.mark.asyncio
+async def test_crawl_robots_blocked_result_is_excluded(monkeypatch):
+    mock_crawler = MockAsyncWebCrawler()
+    mock_crawler.arun.return_value = MockCrawlerResult(
+        success=False,
+        error_message="robots.txt disallows the URL",
+    )
+    monkeypatch.setattr(crawler.settings, "respect_robots_txt", True)
+
+    with (
+        patch(
+            "wet_mcp.sources.crawler._get_crawler",
+            new=AsyncMock(return_value=mock_crawler),
+        ),
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+    ):
+        result_json = await crawler.crawl(["https://safe.com"], depth=0)
+
+    assert json.loads(result_json) == []
+    assert mock_crawler.arun.await_args.kwargs["config"].check_robots_txt is True
+
+
+@pytest.mark.asyncio
 async def test_crawl_unsafe_url():
     with patch("wet_mcp.sources.crawler.is_safe_url", return_value=False):
         with patch("wet_mcp.sources.crawler._get_crawler", new_callable=AsyncMock):
@@ -227,6 +249,50 @@ async def test_sitemap_success():
         assert "https://safe.com" in urls
         assert "https://safe.com/page2" in urls
         assert "https://safe.com/page3" in urls
+
+
+@pytest.mark.asyncio
+async def test_sitemap_robots_blocked_result_is_excluded_when_enabled(monkeypatch):
+    mock_crawler = MockAsyncWebCrawler()
+    mock_crawler.arun.return_value = MockCrawlerResult(
+        success=False,
+        error_message="robots.txt disallows the URL",
+    )
+    monkeypatch.setattr(crawler.settings, "respect_robots_txt", True)
+
+    with (
+        patch(
+            "wet_mcp.sources.crawler._get_crawler",
+            new=AsyncMock(return_value=mock_crawler),
+        ),
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+    ):
+        result_json = await crawler.sitemap(["https://safe.com"], depth=0)
+
+    assert json.loads(result_json) == []
+    assert mock_crawler.arun.await_args.kwargs["config"].check_robots_txt is True
+
+
+@pytest.mark.asyncio
+async def test_sitemap_failed_result_keeps_legacy_output_when_disabled(monkeypatch):
+    mock_crawler = MockAsyncWebCrawler()
+    mock_crawler.arun.return_value = MockCrawlerResult(
+        success=False,
+        error_message="robots.txt disallows the URL",
+    )
+    monkeypatch.setattr(crawler.settings, "respect_robots_txt", False)
+
+    with (
+        patch(
+            "wet_mcp.sources.crawler._get_crawler",
+            new=AsyncMock(return_value=mock_crawler),
+        ),
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+    ):
+        result_json = await crawler.sitemap(["https://safe.com"], depth=0)
+
+    assert json.loads(result_json) == [{"url": "https://safe.com", "depth": 0}]
+    assert mock_crawler.arun.await_args.kwargs["config"].check_robots_txt is False
 
 
 @pytest.mark.asyncio
@@ -278,6 +344,28 @@ async def test_list_media_success():
         assert len(data["videos"]) == 1
         assert "audio" in data
         assert len(data["audio"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_media_robots_blocked_result_returns_error(monkeypatch):
+    mock_crawler = MockAsyncWebCrawler()
+    mock_crawler.arun.return_value = MockCrawlerResult(
+        success=False,
+        error_message="robots.txt disallows the URL",
+    )
+    monkeypatch.setattr(crawler.settings, "respect_robots_txt", True)
+
+    with (
+        patch(
+            "wet_mcp.sources.crawler._get_crawler",
+            new=AsyncMock(return_value=mock_crawler),
+        ),
+        patch("wet_mcp.sources.crawler.is_safe_url", return_value=True),
+    ):
+        result_json = await crawler.list_media("https://safe.com")
+
+    assert json.loads(result_json) == {"error": "robots.txt disallows the URL"}
+    assert mock_crawler.arun.await_args.kwargs["config"].check_robots_txt is True
 
 
 @pytest.mark.asyncio

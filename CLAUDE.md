@@ -78,6 +78,7 @@ mise run dev       # uv run wet-mcp
 - Deprecated (honored mot release voi warning): singular `EMBEDDING_MODEL`/`RERANK_MODEL` + `EMBEDDING_BACKEND`/`RERANK_BACKEND` (backend gio suy ra tu chain rong hay khong). Priority-router cu "Jina > Gemini > OpenAI > Cohere" da bo.
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)
 - Browser render backends (headless leg of `extract`): `BROWSER_BACKENDS` (CSV escalation chain: `native` | `browserless` | `cf-browser-rendering`; empty = `native`), `BROWSERLESS_URL`/`BROWSERLESS_TOKEN` (self-host browserless), `CF_BROWSER_RENDERING_TOKEN`/`CF_ACCOUNT_ID` (Cloudflare Browser Rendering), `CAPSOLVER_API_KEY` (optional key-gated captcha tier)
+- Robots policy: `RESPECT_ROBOTS_TXT` (default `false`); set `true` to enforce `robots.txt` for the ScrapingAgent extract chain and Crawl4AI `crawl`, `sitemap`, and `list_media` actions
 - Disable-local toggles (skip heavy in-process fallbacks per capability): `DISABLE_LOCAL_BROWSER`, `DISABLE_LOCAL_SEARCH`, `DISABLE_LOCAL_EMBED`, `DISABLE_LOCAL_RERANK`
 - Sync: `SYNC_ENABLED` (default true), `GOOGLE_DRIVE_CLIENT_ID` (required for sync), `SYNC_FOLDER` (default "wet-mcp"), `SYNC_INTERVAL` (default 300s)
 - Sync dung Google Drive API truc tiep (httpx). OAuth Device Code flow, token luu tai `~/.wet-mcp/tokens/google_drive.json`

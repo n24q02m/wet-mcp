@@ -126,6 +126,14 @@ def _get_semaphore() -> asyncio.Semaphore:
     return _browser_semaphore
 
 
+def _crawler_run_config() -> CrawlerRunConfig:
+    """Build the shared Crawl4AI run policy for legacy crawler actions."""
+    return CrawlerRunConfig(
+        verbose=False,
+        check_robots_txt=settings.respect_robots_txt,
+    )
+
+
 def _cleanup_browser_data_dir() -> None:
     """Remove browser data directory to clear stale locks and state."""
     import shutil
@@ -274,8 +282,8 @@ def _build_scraping_agent(stealth: bool = True) -> ScrapingAgent:
     on arbitrary URLs; patchright pulls in heavier optional deps); ``captcha`` is
     appended separately as a key-gated tier (see _build_scraping_agent callers).
 
-    ``respect_robots`` stays False to preserve wet's historical behaviour;
-    callers wanting robots compliance can override via env in a follow-up.
+    ``respect_robots`` follows ``RESPECT_ROBOTS_TXT``. The setting defaults to
+    False to preserve wet's historical behaviour for existing deployments.
     """
     strategies: dict[str, Any] = {
         "basic_http": BasicHTTPStrategy(timeout=settings.crawler_timeout),
@@ -292,7 +300,10 @@ def _build_scraping_agent(stealth: bool = True) -> ScrapingAgent:
         strategies["captcha"] = CaptchaStrategy(
             capsolver_api_key=settings.capsolver_api_key
         )
-    return ScrapingAgent(strategies=strategies, respect_robots=False)
+    return ScrapingAgent(
+        strategies=strategies,
+        respect_robots=settings.respect_robots_txt,
+    )
 
 
 async def _get_scraping_agent(stealth: bool = True) -> ScrapingAgent:
@@ -504,7 +515,7 @@ async def crawl(
                 try:
                     result = await crawler.arun(  # ty: ignore[missing-argument]
                         url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
+                        config=_crawler_run_config(),
                     )
 
                     if result.success:
@@ -594,8 +605,12 @@ async def sitemap(
                 try:
                     result = await crawler.arun(  # ty: ignore[missing-argument]
                         url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
-                        config=CrawlerRunConfig(verbose=False),
+                        config=_crawler_run_config(),
                     )
+
+                    if settings.respect_robots_txt and not result.success:
+                        site_urls.pop()
+                        continue
 
                     if result.success and current_depth < depth:
                         for link in result.links.get("internal", [])[:20]:
@@ -641,7 +656,7 @@ async def list_media(
     async with sem:
         result = await crawler.arun(  # ty: ignore[missing-argument]
             url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
-            config=CrawlerRunConfig(verbose=False),
+            config=_crawler_run_config(),
         )
 
         if not result.success:
