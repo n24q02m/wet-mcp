@@ -537,18 +537,33 @@ async def _lifespan_shutdown(warmup_task: asyncio.Task | None) -> None:
     stop_searxng()
 
 
-def _maybe_register_custom_embed(local_model: str) -> None:
-    """Register a BYO local embedding model with qwen3-embed if needed.
+def _supported_model_ids(model_class: Any) -> set[str]:
+    """Read supported model ids from fastretrieval's public registry."""
+    ids: set[str] = set()
+    for item in model_class.list_supported_models():
+        model_id = (
+            item.get("model")
+            if isinstance(item, dict)
+            else getattr(item, "model", item)
+        )
+        if isinstance(model_id, str):
+            ids.add(model_id.lower())
+    return ids
 
-    Only fires when the user opted in via LOCAL_EMBEDDING_MODEL. Built-in
-    ``n24q02m/Qwen3-*`` ids are already known to qwen3-embed and are left
-    untouched. A custom id is registered via ``qwen3_embed.CustomModelSpec``
-    using the companion env vars so the local backend can load it. Requires
-    LOCAL_EMBEDDING_DIM (>0).
+
+def _maybe_register_custom_embed(local_model: str) -> None:
+    """Register a BYO local embedding model when it is not in the registry.
+
+    Built-in ids are resolved from fastretrieval's registry instead of a model
+    family prefix. External ids require explicit dimension, pooling, and
+    normalization settings from the user.
     """
     if not settings.local_embedding_model:
         return
-    if local_model.startswith("n24q02m/Qwen3-"):
+
+    from fastretrieval import CustomModelSpec, TextEmbedding
+
+    if local_model.lower() in _supported_model_ids(TextEmbedding):
         return
     if settings.local_embedding_dim <= 0:
         logger.error(
@@ -557,8 +572,6 @@ def _maybe_register_custom_embed(local_model: str) -> None:
             local_model,
         )
         return
-
-    from qwen3_embed import CustomModelSpec
 
     try:
         CustomModelSpec(
@@ -581,20 +594,14 @@ def _maybe_register_custom_embed(local_model: str) -> None:
 
 
 def _maybe_register_custom_rerank(local_model: str) -> None:
-    """Register a BYO local reranker with qwen3-embed if needed.
-
-    Only fires when the user opted in via LOCAL_RERANK_MODEL. Built-in
-    ``n24q02m/Qwen3-Reranker-*`` ids are already known to qwen3-embed and are
-    left untouched. A custom id is registered via ``qwen3_embed.CustomRerankerSpec``
-    using LOCAL_RERANK_MODEL_FILE so the local cross-encoder can load it. A
-    cross-encoder needs no dim/pooling.
-    """
+    """Register a BYO local reranker when it is not in the registry."""
     if not settings.local_rerank_model:
         return
-    if local_model.startswith("n24q02m/Qwen3-Reranker-"):
-        return
 
-    from qwen3_embed import CustomRerankerSpec
+    from fastretrieval import CustomRerankerSpec, TextCrossEncoder
+
+    if local_model.lower() in _supported_model_ids(TextCrossEncoder):
+        return
 
     try:
         CustomRerankerSpec(
@@ -721,11 +728,11 @@ async def _init_reranker_backend(mode: str) -> None:
         if not settings.local_rerank_available():
             # Same landmine as the embedding path above: an installed-but-
             # unusable singleton reads as "reranking is configured" everywhere
-            # downstream, and Qwen3Reranker.rerank swallows its own load
+            # downstream, and the local reranker swallows its own load
             # failure, so every search silently returns unranked order.
             logger.error(
                 "Reranker: local backend requested but unavailable "
-                "(DISABLE_LOCAL_RERANK set, or no qwen3-embed installed in "
+                "(DISABLE_LOCAL_RERANK set, or no fastretrieval installed in "
                 "this image); none initialised"
             )
             return
@@ -769,13 +776,13 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
 
     Args:
         text: Text to embed.
-        is_query: If True, use query_embed for instruction-aware asymmetric
-            retrieval (Qwen3). Document embeddings stay raw.
+        is_query: If True, use the model's query embedding path for asymmetric
+            retrieval. Document embeddings stay raw.
     """
     await _wait_for_backend_init()
 
     from wet_mcp.embedder import (
-        Qwen3EmbedBackend,
+        LocalEmbeddingBackend,
         _is_retryable,
         resolve_embed_backend_for_request,
     )
@@ -784,7 +791,7 @@ async def _embed(text: str, is_query: bool = False) -> list[float] | None:
     if not backend:
         return None
     try:
-        if is_query and isinstance(backend, Qwen3EmbedBackend):
+        if is_query and isinstance(backend, LocalEmbeddingBackend):
             return await backend.embed_single_query(text, _embedding_dims)
         return await backend.embed_single(text, _embedding_dims)
     except Exception as e:

@@ -386,20 +386,20 @@ class TestLiteLLMSDK:
 
 
 class TestLocalONNX:
-    """Test local Qwen3 ONNX embedding and reranking."""
+    """Test local ONNX embedding and reranking."""
 
     async def test_local_embedding(self):
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         vectors = await backend.embed_texts(["Hello world", "Python programming"])
         assert len(vectors) == 2
         assert len(vectors[0]) > 0  # Should have dimensions
 
     async def test_local_reranking(self):
-        from wet_mcp.reranker import Qwen3Reranker
+        from wet_mcp.reranker import LocalReranker
 
-        reranker = Qwen3Reranker()
+        reranker = LocalReranker()
         results = reranker.rerank(
             query="What is Python?",
             documents=[

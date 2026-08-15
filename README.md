@@ -50,7 +50,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 | [jules-task-archiver](https://github.com/n24q02m/jules-task-archiver) | Chrome Extension for bulk operations on Jules tasks via batchexecute API -- a... | Tooling |
 | [mcp-core](https://github.com/n24q02m/mcp-core) | Shared foundation for building MCP servers -- Streamable HTTP transport, OAut... | MCP |
 | [mnemo-mcp](https://github.com/n24q02m/mnemo-mcp) | Persistent AI memory with hybrid search and embedded sync. Open, free, unlimi... | MCP |
-| [qwen3-embed](https://github.com/n24q02m/qwen3-embed) | Lightweight Qwen3 text embedding and reranking via ONNX Runtime and GGUF | Library |
+| [fastretrieval](https://github.com/n24q02m/fastretrieval) | Multi-model embedding and reranking runtime via ONNX and GGUF | Library |
 | [skret](https://github.com/n24q02m/skret) | Secrets without the server. | CLI |
 | [tacet](https://github.com/n24q02m/tacet) | A self-distilling neuro-symbolic cascade that amortises LLM cost across knowl... | Tooling |
 | [web-core](https://github.com/n24q02m/web-core) | Shared web infrastructure package for search, scraping, HTTP security, and st... | Library |
@@ -91,7 +91,7 @@ mcp-name: io.github.n24q02m/wet-mcp
 - **Local File Conversion** -- Convert PDF, DOCX, XLSX, CSV, HTML, EPUB, PPTX to Markdown
 - **Media** -- List + download images / videos / audio files. `analyze` was removed in v2.0.0 -- use `imagine-mcp.understand` for vision/audio inference
 - **Anti-bot** -- Stealth strategies bypass Cloudflare, Medium, LinkedIn, Twitter
-- **Zero Config** -- Built-in local Qwen3 embedding + reranking, no API keys needed. Optional cloud providers (Jina AI, Gemini, OpenAI, Cohere, xAI, Anthropic) selected per task via the `EMBEDDING_MODELS` / `RERANK_MODELS` / `LLM_MODELS` model chains for higher-quality vectors and LLM features
+- **Zero Config** -- Built-in local reference embedding + reranking through fastretrieval, no API keys needed. Optional cloud providers (Jina AI, Gemini, OpenAI, Cohere, xAI, Anthropic) selected per task via the `EMBEDDING_MODELS` / `RERANK_MODELS` / `LLM_MODELS` model chains for higher-quality vectors and LLM features
 - **Sync** -- Cross-machine sync of indexed docs via Google Drive (OAuth Device Code, no browser redirect)
 
 ## Quick install
@@ -128,8 +128,8 @@ and the paste-to-agent snippets at
 ## Configuration
 
 wet runs zero-config out of the box: web search uses an embedded local SearXNG,
-and embedding/reranking fall back to the bundled local Qwen3 ONNX models when no
-cloud keys are set. For higher-quality results, point each task at a cloud model
+and embedding/reranking fall back to the bundled local ONNX models through
+fastretrieval when no cloud keys are set. For higher-quality results, point each task at a cloud model
 chain. All settings are plain environment variables (no app prefix) -- in the
 HTTP self-host mode they are entered through the browser setup form instead.
 
@@ -139,8 +139,8 @@ features (LLM):
 
 | Env var | Task | Empty default |
 |---|---|---|
-| `EMBEDDING_MODELS` | Embeddings for docs search | Local Qwen3-Embedding ONNX |
-| `RERANK_MODELS` | Result reranking | Local Qwen3-Reranker ONNX |
+| `EMBEDDING_MODELS` | Embeddings for docs search | Local fastretrieval ONNX |
+| `RERANK_MODELS` | Result reranking | Local fastretrieval cross-encoder |
 | `LLM_MODELS` | `extract(action="agent")` synthesis | LLM features disabled |
 
 **Provider keys** -- the provider is inferred from each model's prefix; supply the
@@ -158,6 +158,9 @@ matching key (litellm `<PROVIDER>_API_KEY` convention):
 
 Any other litellm provider works via env passthrough -- see
 [litellm provider docs](https://docs.litellm.ai/docs/providers) for its key name.
+
+`FASTRETRIEVAL_CACHE_PATH` controls the local model cache. The old
+`QWEN3_EMBED_CACHE_PATH` name is still honored when the new name is absent.
 
 **Search backends** -- `SEARCH_BACKENDS` (CSV, runtime fallback chain) over
 `searxng` (default, local) plus optional cloud providers `tavily` / `brave` /

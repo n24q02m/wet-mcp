@@ -72,14 +72,14 @@ vf.write_text('VERSION_STRING = \"0.0.0\"\nVERSION_TAG = \"v0.0.0\"\nDOCKER_TAG 
 print(f'Created {vf}')"; \
     else echo "SLIM: skipping local SearXNG (external SEARXNG_URL used)"; fi
 
-# SLIM builds also drop the local qwen3 ONNX embed/rerank deps (CF uses cloud
-# Jina via EMBEDDING_MODELS; DISABLE_LOCAL_EMBED/RERANK). qwen3_embed is
+# SLIM builds also drop the local fastretrieval ONNX embed/rerank deps (CF uses
+# cloud Jina via EMBEDDING_MODELS; DISABLE_LOCAL_EMBED/RERANK). fastretrieval is
 # lazy-imported, so the slim image runs fine as long as the cloud chain is set.
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ "$SLIM" = "1" ]; then \
-    uv pip uninstall qwen3-embed onnxruntime || true; \
-    echo "SLIM: pruned qwen3-embed + onnxruntime"; \
-    else echo "full build: keeping local qwen3 embed/rerank"; fi
+    uv pip uninstall fastretrieval onnxruntime || true; \
+    echo "SLIM: pruned fastretrieval + onnxruntime"; \
+    else echo "full build: keeping local fastretrieval embed/rerank"; fi
 
 # Install Playwright chromium browser (skipped in SLIM CF builds — the browser
 # leg is offloaded to remote backends: CF Browser Rendering + OCI browserless,

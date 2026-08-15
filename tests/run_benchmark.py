@@ -273,13 +273,13 @@ async def main():
             print(f"Embedding: local ONNX (dims={ndims})")
 
             async def _embed(text, is_query=False):
-                from wet_mcp.embedder import Qwen3EmbedBackend
+                from wet_mcp.embedder import LocalEmbeddingBackend
 
                 b = get_backend()
                 if not b:
                     return None
                 t = text
-                if is_query and isinstance(b, Qwen3EmbedBackend):
+                if is_query and isinstance(b, LocalEmbeddingBackend):
                     t = f"Instruct: Retrieve relevant technical documentation\nQuery: {text}"
                 vec = await b.embed_single(t, 768)
                 return vec[:768] if len(vec) > 768 else vec

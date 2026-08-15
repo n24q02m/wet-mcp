@@ -38,13 +38,13 @@ def _has_gguf_support() -> bool:
 def local_onnx_installed() -> bool:
     """Whether both local ONNX extras exist in this image.
 
-    The slim container build uninstalls ``qwen3-embed`` and ``onnxruntime``
+    The slim container build uninstalls ``fastretrieval`` and ``onnxruntime``
     (see ``Dockerfile``), so on that image the local embed/rerank leg is simply
     absent. Resolving that leg from ``DISABLE_LOCAL_EMBED`` /
     ``DISABLE_LOCAL_RERANK`` alone made a slim deployment correct only for as
     long as somebody remembered to set those vars; miss one and the first index
-    attempt died inside the lazy ``from qwen3_embed import ...``, recorded in
-    D1 as ``ModuleNotFoundError: No module named 'qwen3_embed'`` with zero
+    attempt died inside the lazy ``from fastretrieval import ...``, recorded in
+    D1 as ``ModuleNotFoundError: No module named 'fastretrieval'`` with zero
     chunks (#1630) -- a hard failure where a keyword-only degrade was available.
 
     The image is the ground truth, the flag is only a promise about it, so ask
@@ -58,7 +58,9 @@ def local_onnx_installed() -> bool:
         except (ImportError, ValueError):
             return False
 
-    return all(_package_present(package) for package in ("qwen3_embed", "onnxruntime"))
+    return all(
+        _package_present(package) for package in ("fastretrieval", "onnxruntime")
+    )
 
 
 def _resolve_local_model(onnx_name: str, gguf_name: str) -> str:
@@ -229,7 +231,7 @@ class Settings(BaseSettings):
     # honored one release with a warning. Backend now inferred.
 
     # Per-capability disable-local toggles (cross-cutting; see mcp_core.chains).
-    # Turn OFF the heavy local qwen3 ONNX fallback (~570MB download) WITHOUT
+    # Turn OFF the heavy local fastretrieval ONNX fallback (~570MB download) WITHOUT
     # pinning a specific cloud model. Toggle on + no cloud chain => the feature
     # is gracefully UNAVAILABLE (clear status), never silently forced to a
     # provider. Independent per task: a user may disable local embed but keep
@@ -251,7 +253,7 @@ class Settings(BaseSettings):
 
     # BYO local model override. When set, the LOCAL embedding/rerank backend
     # loads this model id instead of the bundled Qwen3 default. A non-built-in
-    # id is registered with qwen3-embed at startup using the companion vars
+    # id is registered with fastretrieval at startup using the companion vars
     # below.
     local_embedding_model: str = ""  # env LOCAL_EMBEDDING_MODEL
     local_rerank_model: str = ""  # env LOCAL_RERANK_MODEL
@@ -604,7 +606,7 @@ class Settings(BaseSettings):
         - 'cloud'       -- a non-empty EMBEDDING_MODELS chain (with keys).
         - 'local'       -- empty chain AND the local leg is enabled and present.
         - 'unavailable' -- empty chain AND no usable local leg, i.e.
-          DISABLE_LOCAL_EMBED is set OR the slim image has no ``qwen3-embed``
+          DISABLE_LOCAL_EMBED is set OR the slim image has no ``fastretrieval``
           installed. Embedding is then gracefully unavailable -- NOT forced.
 
         The deprecated EMBEDDING_BACKEND env var is honored for one release.
@@ -631,7 +633,7 @@ class Settings(BaseSettings):
 
         The ONNX default is the YesNo variant (~598 MB at inference vs ~12 GB
         for the full-vocab build); it is mathematically equivalent and, since
-        qwen3-embed 1.11.2b3, produces batch-invariant scores (issue #725).
+        fastretrieval's local runtime produces batch-invariant scores.
 
         LOCAL_RERANK_MODEL overrides the bundled default (BYO model).
         """
@@ -648,7 +650,7 @@ class Settings(BaseSettings):
         '' when rerank_enabled is False. Otherwise 3-way via the shared
         mcp-core primitive (same semantics as resolve_embedding_backend, keyed
         on RERANK_MODELS + DISABLE_LOCAL_RERANK + whether the slim image kept
-        ``qwen3-embed``); the deprecated RERANK_BACKEND env var is honored for
+        ``fastretrieval``); the deprecated RERANK_BACKEND env var is honored for
         one release.
         """
         if not self.rerank_enabled:

@@ -1,8 +1,8 @@
-"""Dual-backend embedding: Cloud (litellm passthrough via mcp_core.llm) + qwen3-embed (local ONNX).
+"""Dual-backend embedding: Cloud (litellm passthrough via mcp_core.llm) + fastretrieval (local ONNX).
 
 Backend is inferred from the EMBEDDING_MODELS chain:
 - Non-empty chain (with a configured provider key) -> Cloud via mcp_core.llm.
-- Empty chain -> Local ONNX via qwen3-embed.
+- Empty chain -> Local ONNX via fastretrieval.
 
 Embeddings are truncated to the configured dims in server._embed().
 """
@@ -389,19 +389,19 @@ class CloudEmbeddingBackend:
 
 
 # ---------------------------------------------------------------------------
-# qwen3-embed Backend (local ONNX)
+# fastretrieval Backend (local ONNX)
 # ---------------------------------------------------------------------------
 
 
-class Qwen3EmbedBackend:
-    """Local ONNX embedding via qwen3-embed (Qwen3-Embedding-0.6B).
+class LocalEmbeddingBackend:
+    """Local ONNX embedding via fastretrieval's configured model.
 
     Uses last-token pooling with instruction-aware queries.
     Model is downloaded on first use (~0.57GB).
     Batch size is forced to 1 (static ONNX graph).
     """
 
-    # Default model for qwen3-embed
+    # Default model supplied by fastretrieval
     DEFAULT_MODEL = "n24q02m/Qwen3-Embedding-0.6B-ONNX"
 
     def __init__(self, model_name: str | None = None):
@@ -415,7 +415,7 @@ class Qwen3EmbedBackend:
         if not already cached. Logs a warning so users know why startup is slow.
         """
         if self._model is None:
-            from qwen3_embed import TextEmbedding
+            from fastretrieval import TextEmbedding
 
             logger.warning(
                 f"Loading local embedding model: {self._model_name} "
@@ -475,7 +475,7 @@ class Qwen3EmbedBackend:
         return result[0].tolist()
 
     async def check_available(self) -> int:
-        """Check if qwen3-embed is available."""
+        """Check if fastretrieval is available."""
         try:
             model = self._get_model()
 
@@ -505,7 +505,7 @@ _backend: EmbeddingBackend | None = None
 # stateless and key-free, so a single instance is safely shared across subs
 # (no per-sub data flows through it). Lazily created so single-user / stdio
 # deployments that never hit the multi-user resolver don't download the model.
-_shared_local_backend: Qwen3EmbedBackend | None = None
+_shared_local_backend: LocalEmbeddingBackend | None = None
 
 
 def get_backend() -> EmbeddingBackend | None:
@@ -519,11 +519,11 @@ def clear_backend() -> None:
     _backend = None
 
 
-def _shared_local_embed_backend() -> Qwen3EmbedBackend:
+def _shared_local_embed_backend() -> LocalEmbeddingBackend:
     """Return the process-shared local ONNX embedding backend (lazy)."""
     global _shared_local_backend
     if _shared_local_backend is None:
-        _shared_local_backend = Qwen3EmbedBackend()
+        _shared_local_backend = LocalEmbeddingBackend()
     return _shared_local_backend
 
 
@@ -547,7 +547,7 @@ def resolve_embed_backend_for_request() -> EmbeddingBackend | None:
     is spelled ``'unavailable'``, and it asks the same predicate
     (:meth:`Settings.local_embed_available`) so the two cannot drift. Both
     inputs matter: ``DISABLE_LOCAL_EMBED`` is what a slim deployment sets, and
-    whether ``qwen3-embed`` is installed is what is actually true of the image.
+    whether ``fastretrieval`` is installed is what is actually true of the image.
     Consulting only the flag meant a slim image whose operator forgot it handed
     back a backend that raises ``ModuleNotFoundError`` on first use, failing the
     entire index instead of storing keyword-searchable chunks without vectors.
@@ -585,7 +585,7 @@ def no_local_embed_clause() -> str:
 
     Three states, three different actions, so they must not share one string.
     Saying "DISABLE_LOCAL_EMBED is set" on an image that never shipped
-    ``qwen3-embed`` sends the reader after a var they never set -- and having
+    ``fastretrieval`` sends the reader after a var they never set -- and having
     checked it and found it empty, they conclude the message is wrong. The
     absent-image wording says instead that this is a property of the build, so
     the answer is "give this deployment a cloud chain", not "unset a flag".
@@ -596,7 +596,7 @@ def no_local_embed_clause() -> str:
         return "this deployment runs with DISABLE_LOCAL_EMBED set"
     if not local_onnx_installed():
         return (
-            "this image has no local ONNX leg installed (no qwen3-embed or "
+            "this image has no local ONNX leg installed (no fastretrieval or "
             "onnxruntime, which the slim Cloudflare container build removes "
             "on purpose)"
         )
@@ -659,7 +659,7 @@ def init_backend(
             raise ValueError("model is required for cloud backend")
         _backend = CloudEmbeddingBackend(model, api_base=api_base, api_key=api_key)
     elif backend_type == "local":
-        _backend = Qwen3EmbedBackend(model)
+        _backend = LocalEmbeddingBackend(model)
     else:
         raise ValueError(f"Unknown backend type: {backend_type}")
 

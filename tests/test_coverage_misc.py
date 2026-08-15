@@ -1036,30 +1036,30 @@ class TestCloudEmbeddingBackendWithApiBaseAndKey:
             assert dims == 2
 
 
-class TestQwen3EmbedBackendLoadError:
+class TestLocalEmbeddingBackendLoadError:
     """Cover lines 262-272: _get_model import error and lazy loading."""
 
     async def test_get_model_import_error(self):
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        backend = Qwen3EmbedBackend()
-        with patch.dict("sys.modules", {"qwen3_embed": None}):
+        backend = LocalEmbeddingBackend()
+        with patch.dict("sys.modules", {"fastretrieval": None}):
             with patch(
                 "builtins.__import__",
-                side_effect=ImportError("No module named 'qwen3_embed'"),
+                side_effect=ImportError("No module named 'fastretrieval'"),
             ):
                 with pytest.raises(ImportError):
                     backend._get_model()
 
     async def test_get_model_caches(self):
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        backend = Qwen3EmbedBackend("test-model")
+        backend = LocalEmbeddingBackend("test-model")
         mock_text_embedding = MagicMock()
         mock_module = MagicMock()
         mock_module.TextEmbedding = mock_text_embedding
 
-        with patch.dict("sys.modules", {"qwen3_embed": mock_module}):
+        with patch.dict("sys.modules", {"fastretrieval": mock_module}):
             model1 = backend._get_model()
             model2 = backend._get_model()
             assert model1 is model2
@@ -1067,13 +1067,13 @@ class TestQwen3EmbedBackendLoadError:
             mock_text_embedding.assert_called_once()
 
 
-class TestQwen3EmbedCheckAvailableEmptyResult:
+class TestLocalEmbedCheckAvailableEmptyResult:
     """Cover line 324: check_available returns 0 when result is empty."""
 
     async def test_check_available_empty_result(self):
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.embed.return_value = iter([])
 
@@ -1082,15 +1082,15 @@ class TestQwen3EmbedCheckAvailableEmptyResult:
             assert dims == 0
 
 
-class TestQwen3EmbedSingleQuery:
+class TestLocalEmbedSingleQuery:
     """Cover lines 306-311: embed_single_query with dimensions."""
 
     async def test_embed_single_query_with_dims(self):
         import numpy as np
 
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.query_embed.return_value = iter([np.array([0.1, 0.2, 0.3])])
 
@@ -1102,9 +1102,9 @@ class TestQwen3EmbedSingleQuery:
     async def test_embed_single_query_no_dims(self):
         import numpy as np
 
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        backend = Qwen3EmbedBackend()
+        backend = LocalEmbeddingBackend()
         mock_model = MagicMock()
         mock_model.query_embed.return_value = iter([np.array([0.4, 0.5])])
 
@@ -1289,28 +1289,28 @@ class TestCloudRerankerWithApiKey:
             assert reranker.api_key == "sk-test"
 
 
-class TestQwen3RerankerLoadModel:
+class TestLocalRerankerLoadModel:
     """Cover lines 164-174: _get_model lazy loading and caching."""
 
     async def test_get_model_loads_and_caches(self):
-        from wet_mcp.reranker import Qwen3Reranker
+        from wet_mcp.reranker import LocalReranker
 
-        reranker = Qwen3Reranker("test-model")
+        reranker = LocalReranker("test-model")
         mock_cross_encoder = MagicMock()
         mock_module = MagicMock()
         mock_module.TextCrossEncoder = mock_cross_encoder
 
-        with patch.dict("sys.modules", {"qwen3_embed": mock_module}):
+        with patch.dict("sys.modules", {"fastretrieval": mock_module}):
             model1 = reranker._get_model()
             model2 = reranker._get_model()
             assert model1 is model2
             mock_cross_encoder.assert_called_once()
 
     async def test_get_model_import_error(self):
-        from wet_mcp.reranker import Qwen3Reranker
+        from wet_mcp.reranker import LocalReranker
 
-        reranker = Qwen3Reranker()
-        with patch.dict("sys.modules", {"qwen3_embed": None}):
+        reranker = LocalReranker()
+        with patch.dict("sys.modules", {"fastretrieval": None}):
             with patch(
                 "builtins.__import__",
                 side_effect=ImportError("No module"),

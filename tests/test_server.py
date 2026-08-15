@@ -32,44 +32,37 @@ def _no_real_searxng_spawn():
 
 def test_maybe_register_custom_embed_no_optin_noop(monkeypatch):
     """No registration when LOCAL_EMBEDDING_MODEL is unset (default local)."""
-    import qwen3_embed
-
     from wet_mcp.config import settings
 
     monkeypatch.setattr(settings, "local_embedding_model", "")
-    called = []
-    monkeypatch.setattr(
-        qwen3_embed.TextEmbedding,
-        "add_custom_model",
-        classmethod(lambda cls, desc, **kw: called.append((desc, kw))),
-    )
     _maybe_register_custom_embed("local-model")
-    assert called == []
 
 
 def test_maybe_register_custom_embed_builtin_noop(monkeypatch):
-    """Built-in Qwen3 ids are left untouched (no registration call)."""
-    import qwen3_embed
+    """Any id in the live registry is left untouched."""
+    import fastretrieval
 
     from wet_mcp.config import settings
 
+    monkeypatch.setattr(settings, "local_embedding_model", "acme/tiny-e5")
     monkeypatch.setattr(
-        settings, "local_embedding_model", "n24q02m/Qwen3-Embedding-0.6B-ONNX"
+        fastretrieval.TextEmbedding,
+        "list_supported_models",
+        classmethod(lambda cls: [{"model": "acme/tiny-e5"}]),
     )
     called = []
     monkeypatch.setattr(
-        qwen3_embed.TextEmbedding,
-        "add_custom_model",
-        classmethod(lambda cls, desc, **kw: called.append((desc, kw))),
+        fastretrieval.CustomModelSpec,
+        "register",
+        lambda self: called.append(self),
     )
-    _maybe_register_custom_embed("n24q02m/Qwen3-Embedding-0.6B-ONNX")
+    _maybe_register_custom_embed("acme/tiny-e5")
     assert called == []
 
 
-def test_maybe_register_custom_embed_calls_add_custom_model(monkeypatch):
-    """A BYO id with dim/pooling registers via TextEmbedding.add_custom_model."""
-    import qwen3_embed
-    from qwen3_embed.common.model_description import PoolingType
+def test_maybe_register_custom_embed_registers_public_spec(monkeypatch):
+    """A BYO id with explicit metadata registers through the public spec API."""
+    import fastretrieval
 
     from wet_mcp.config import settings
 
@@ -79,37 +72,46 @@ def test_maybe_register_custom_embed_calls_add_custom_model(monkeypatch):
 
     captured = {}
 
-    def _fake(cls, desc, *, pooling, normalization):
-        captured["model"] = desc.model
-        captured["pooling"] = pooling
-        captured["normalization"] = normalization
-
     monkeypatch.setattr(
-        qwen3_embed.TextEmbedding,
-        "add_custom_model",
-        classmethod(_fake),
+        fastretrieval.TextEmbedding,
+        "list_supported_models",
+        classmethod(lambda cls: []),
+    )
+    monkeypatch.setattr(
+        fastretrieval.CustomModelSpec,
+        "register",
+        lambda self: captured.update(
+            model=self.model_id,
+            pooling=self.pooling,
+            normalization=self.normalization,
+        ),
     )
 
     _maybe_register_custom_embed("Org/custom-embed")
 
     assert captured["model"] == "Org/custom-embed"
-    assert captured["pooling"] == PoolingType.CLS
+    assert captured["pooling"] == "CLS"
     assert captured["normalization"] is True
 
 
 def test_maybe_register_custom_embed_missing_dim(monkeypatch):
     """A BYO id without LOCAL_EMBEDDING_DIM skips registration (no call)."""
-    import qwen3_embed
+    import fastretrieval
 
     from wet_mcp.config import settings
 
     monkeypatch.setattr(settings, "local_embedding_model", "Org/custom-embed")
     monkeypatch.setattr(settings, "local_embedding_dim", 0)
+    monkeypatch.setattr(
+        fastretrieval.TextEmbedding,
+        "list_supported_models",
+        classmethod(lambda cls: []),
+    )
     called = []
     monkeypatch.setattr(
-        qwen3_embed.TextEmbedding,
-        "add_custom_model",
-        classmethod(lambda cls, desc, **kw: called.append(desc)),
+        fastretrieval.CustomModelSpec,
+        "register",
+        lambda self: called.append(self),
     )
     _maybe_register_custom_embed("Org/custom-embed")
     assert called == []
@@ -117,43 +119,37 @@ def test_maybe_register_custom_embed_missing_dim(monkeypatch):
 
 def test_maybe_register_custom_rerank_no_optin_noop(monkeypatch):
     """No registration when LOCAL_RERANK_MODEL is unset (default local)."""
-    import qwen3_embed
-
     from wet_mcp.config import settings
 
     monkeypatch.setattr(settings, "local_rerank_model", "")
-    called = []
-    monkeypatch.setattr(
-        qwen3_embed.TextCrossEncoder,
-        "add_custom_model",
-        classmethod(lambda cls, desc, **kw: called.append(desc)),
-    )
     _maybe_register_custom_rerank("local-reranker")
-    assert called == []
 
 
 def test_maybe_register_custom_rerank_builtin_noop(monkeypatch):
-    """Built-in Qwen3 reranker ids are left untouched (no registration call)."""
-    import qwen3_embed
+    """Any reranker id in the live registry is left untouched."""
+    import fastretrieval
 
     from wet_mcp.config import settings
 
+    monkeypatch.setattr(settings, "local_rerank_model", "acme/tiny-reranker")
     monkeypatch.setattr(
-        settings, "local_rerank_model", "n24q02m/Qwen3-Reranker-0.6B-ONNX-YesNo"
+        fastretrieval.TextCrossEncoder,
+        "list_supported_models",
+        classmethod(lambda cls: [{"model": "acme/tiny-reranker"}]),
     )
     called = []
     monkeypatch.setattr(
-        qwen3_embed.TextCrossEncoder,
-        "add_custom_model",
-        classmethod(lambda cls, desc, **kw: called.append(desc)),
+        fastretrieval.CustomRerankerSpec,
+        "register",
+        lambda self: called.append(self),
     )
-    _maybe_register_custom_rerank("n24q02m/Qwen3-Reranker-0.6B-ONNX-YesNo")
+    _maybe_register_custom_rerank("acme/tiny-reranker")
     assert called == []
 
 
-def test_maybe_register_custom_rerank_calls_add_custom_model(monkeypatch):
-    """A BYO reranker id registers via TextCrossEncoder.add_custom_model."""
-    import qwen3_embed
+def test_maybe_register_custom_rerank_registers_public_spec(monkeypatch):
+    """A BYO reranker id registers through the public spec API."""
+    import fastretrieval
 
     from wet_mcp.config import settings
 
@@ -164,15 +160,19 @@ def test_maybe_register_custom_rerank_calls_add_custom_model(monkeypatch):
 
     captured = {}
 
-    def _fake(cls, desc):
-        captured["model"] = desc.model
-        captured["model_file"] = desc.model_file
-        captured["hf"] = desc.sources.hf
-
     monkeypatch.setattr(
-        qwen3_embed.TextCrossEncoder,
-        "add_custom_model",
-        classmethod(_fake),
+        fastretrieval.TextCrossEncoder,
+        "list_supported_models",
+        classmethod(lambda cls: []),
+    )
+    monkeypatch.setattr(
+        fastretrieval.CustomRerankerSpec,
+        "register",
+        lambda self: captured.update(
+            model=self.model_id,
+            model_file=self.model_file,
+            hf=self.hf,
+        ),
     )
 
     _maybe_register_custom_rerank("Org/custom-reranker")

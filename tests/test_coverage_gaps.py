@@ -175,7 +175,7 @@ class TestSetupSyncNoClientId:
 class TestSetupToolCoverageGaps:
     """Cover setup_tool.py edge cases for local embedding/reranker."""
 
-    @patch("qwen3_embed.TextEmbedding")
+    @patch("fastretrieval.TextEmbedding")
     def test_local_embedding_empty_result(self, mock_te):
         """embed returns empty list -- returns warning dict."""
         from wet_mcp.setup_tool import _download_local_embedding
@@ -191,7 +191,7 @@ class TestSetupToolCoverageGaps:
         assert result["status"] == "warning"
 
     @patch("wet_mcp.setup_tool.clear_model_cache")
-    @patch("qwen3_embed.TextEmbedding")
+    @patch("fastretrieval.TextEmbedding")
     def test_local_embedding_empty_after_retry(self, mock_te, mock_clear):
         """embed returns empty after cache clear retry."""
         from wet_mcp.setup_tool import _download_local_embedding
@@ -229,7 +229,7 @@ class TestSetupToolCoverageGaps:
         assert result["cloud_ready"] is True
         assert result["reranker"] is None
 
-    @patch("qwen3_embed.TextCrossEncoder")
+    @patch("fastretrieval.TextCrossEncoder")
     def test_local_reranker_empty_result(self, mock_tce):
         """local reranker returns empty scores."""
         from wet_mcp.setup_tool import _download_local_reranker
@@ -246,7 +246,7 @@ class TestSetupToolCoverageGaps:
         assert result["status"] == "warning"
 
     @patch("wet_mcp.setup_tool.clear_model_cache")
-    @patch("qwen3_embed.TextCrossEncoder")
+    @patch("fastretrieval.TextCrossEncoder")
     def test_local_reranker_empty_after_retry(self, mock_tce, mock_clear):
         """reranker retry returns empty scores."""
         from wet_mcp.setup_tool import _download_local_reranker
@@ -265,7 +265,7 @@ class TestSetupToolCoverageGaps:
         mock_clear.assert_called_once_with("org/rerank")
         assert result["status"] == "warning"
 
-    @patch("qwen3_embed.TextCrossEncoder")
+    @patch("fastretrieval.TextCrossEncoder")
     def test_local_reranker_non_cache_error_reraises(self, mock_tce):
         """non-cache reranker error is re-raised."""
         from wet_mcp.setup_tool import _download_local_reranker
@@ -274,7 +274,7 @@ class TestSetupToolCoverageGaps:
         mock_settings.rerank_enabled = True
         mock_settings.resolve_local_rerank_model.return_value = "org/rerank"
 
-        mock_tce.side_effect = ImportError("qwen3_embed broken")
+        mock_tce.side_effect = ImportError("fastretrieval broken")
 
         with pytest.raises(ImportError, match="broken"):
             _download_local_reranker(mock_settings)

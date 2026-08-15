@@ -50,11 +50,34 @@ class TestClearModelCache:
 
         assert result is None
 
+    def test_new_cache_env_wins_over_old_alias(self, tmp_path):
+        from wet_mcp.setup_tool import clear_model_cache
+
+        old_dir = tmp_path / "old"
+        new_dir = tmp_path / "new"
+        old_model = old_dir / "models--org--model"
+        new_model = new_dir / "models--org--model"
+        old_model.mkdir(parents=True)
+        new_model.mkdir(parents=True)
+
+        with patch.dict(
+            "os.environ",
+            {
+                "FASTRETRIEVAL_CACHE_PATH": str(new_dir),
+                "QWEN3_EMBED_CACHE_PATH": str(old_dir),
+            },
+        ):
+            result = clear_model_cache("org/model")
+
+        assert result == str(new_model)
+        assert not new_model.exists()
+        assert old_model.exists()
+
 
 class TestDownloadLocalEmbedding:
     """_download_local_embedding validates and downloads local models."""
 
-    @patch("qwen3_embed.TextEmbedding")
+    @patch("fastretrieval.TextEmbedding")
     def test_embedding_success(self, mock_te):
         from wet_mcp.setup_tool import _download_local_embedding
 
@@ -72,7 +95,7 @@ class TestDownloadLocalEmbedding:
         assert result["dims"] == 2
 
     @patch("wet_mcp.setup_tool.clear_model_cache")
-    @patch("qwen3_embed.TextEmbedding")
+    @patch("fastretrieval.TextEmbedding")
     def test_corrupted_cache_clears_and_retries(self, mock_te, mock_clear):
         from wet_mcp.setup_tool import _download_local_embedding
 
@@ -91,21 +114,21 @@ class TestDownloadLocalEmbedding:
         assert result["status"] == "ok"
         assert result.get("retried") is True
 
-    @patch("qwen3_embed.TextEmbedding")
+    @patch("fastretrieval.TextEmbedding")
     def test_non_cache_error_reraises(self, mock_te):
         from wet_mcp.setup_tool import _download_local_embedding
 
         mock_settings = MagicMock()
         mock_settings.resolve_local_embedding_model.return_value = "org/model"
 
-        mock_te.side_effect = ImportError("qwen3_embed not installed")
+        mock_te.side_effect = ImportError("fastretrieval not installed")
 
         import pytest
 
         with pytest.raises(ImportError, match="not installed"):
             _download_local_embedding(mock_settings)
 
-    @patch("qwen3_embed.TextEmbedding")
+    @patch("fastretrieval.TextEmbedding")
     def test_embedding_empty_result(self, mock_te):
         from wet_mcp.setup_tool import _download_local_embedding
 
@@ -120,7 +143,7 @@ class TestDownloadLocalEmbedding:
         assert result["status"] == "warning"
 
     @patch("wet_mcp.setup_tool.clear_model_cache")
-    @patch("qwen3_embed.TextEmbedding")
+    @patch("fastretrieval.TextEmbedding")
     def test_embedding_empty_after_retry(self, mock_te, mock_clear):
         from wet_mcp.setup_tool import _download_local_embedding
 
@@ -149,7 +172,7 @@ class TestDownloadLocalReranker:
         result = _download_local_reranker(mock_settings)
         assert result["status"] == "skipped"
 
-    @patch("qwen3_embed.TextCrossEncoder")
+    @patch("fastretrieval.TextCrossEncoder")
     def test_reranker_success(self, mock_tce):
         from wet_mcp.setup_tool import _download_local_reranker
 
@@ -165,7 +188,7 @@ class TestDownloadLocalReranker:
         assert result["status"] == "ok"
 
     @patch("wet_mcp.setup_tool.clear_model_cache")
-    @patch("qwen3_embed.TextCrossEncoder")
+    @patch("fastretrieval.TextCrossEncoder")
     def test_corrupted_reranker_cache_retries(self, mock_tce, mock_clear):
         from wet_mcp.setup_tool import _download_local_reranker
 
@@ -183,7 +206,7 @@ class TestDownloadLocalReranker:
         assert result["status"] == "ok"
         assert result.get("retried") is True
 
-    @patch("qwen3_embed.TextCrossEncoder")
+    @patch("fastretrieval.TextCrossEncoder")
     def test_reranker_empty_result(self, mock_tce):
         from wet_mcp.setup_tool import _download_local_reranker
 
@@ -199,7 +222,7 @@ class TestDownloadLocalReranker:
         assert result["status"] == "warning"
 
     @patch("wet_mcp.setup_tool.clear_model_cache")
-    @patch("qwen3_embed.TextCrossEncoder")
+    @patch("fastretrieval.TextCrossEncoder")
     def test_reranker_empty_after_retry(self, mock_tce, mock_clear):
         from wet_mcp.setup_tool import _download_local_reranker
 
@@ -215,7 +238,7 @@ class TestDownloadLocalReranker:
         result = _download_local_reranker(mock_settings)
         assert result["status"] == "warning"
 
-    @patch("qwen3_embed.TextCrossEncoder")
+    @patch("fastretrieval.TextCrossEncoder")
     def test_reranker_non_cache_error_reraises(self, mock_tce):
         from wet_mcp.setup_tool import _download_local_reranker
 

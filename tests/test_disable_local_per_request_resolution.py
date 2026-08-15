@@ -5,10 +5,10 @@ Two backend-selection paths exist and they disagreed. The startup path
 chain is empty and ``DISABLE_LOCAL_EMBED`` is set. The per-request path
 (``embedder.resolve_embed_backend_for_request``) fell through to the local ONNX
 backend unconditionally, so on a deployment built WITHOUT the local extras --
-the http-slim image, which ``Dockerfile`` uninstalls ``qwen3-embed`` and
+the http-slim image, which ``Dockerfile`` uninstalls ``fastretrieval`` and
 ``onnxruntime`` from -- every indexing request for a sub with no cloud chain
-died on ``ModuleNotFoundError: No module named 'qwen3_embed'`` raised from the
-lazy import inside ``Qwen3EmbedBackend._get_model``. Live D1 recorded exactly
+died on ``ModuleNotFoundError: No module named 'fastretrieval'`` raised from the
+lazy import inside ``LocalEmbeddingBackend._get_model``. Live D1 recorded exactly
 that in ``index_state='failed'`` (#1614) while ``config status`` reported the
 startup singleton and claimed embedding was available.
 
@@ -17,7 +17,7 @@ chain + local disabled == gracefully UNAVAILABLE. Not the local backend, and
 not the startup singleton either -- that one carries the OPERATOR's key, and
 spending it on an arbitrary sub is what the resolver's docstring rules out.
 
-``qwen3_embed`` is installed in the dev venv, so these tests intercept the
+``fastretrieval`` is installed in the dev venv, so these tests intercept the
 import instead of relying on its absence: that both reproduces the slim image
 and makes "the local leg was never reached" assertable. A test that only
 checked the return value would stay green if the import happened first.
@@ -60,7 +60,7 @@ def _isolate(monkeypatch, tmp_path):
 
 @pytest.fixture
 def slim_image(monkeypatch):
-    """Make ``qwen3_embed`` unimportable, as the http-slim build leaves it.
+    """Make ``fastretrieval`` unimportable, as the http-slim build leaves it.
 
     Returns the list of import names the code under test asked for, so a test
     can assert the local leg was never even entered.
@@ -69,7 +69,7 @@ def slim_image(monkeypatch):
     attempted: list[str] = []
 
     def _guarded(name, *args, **kwargs):
-        if name == "qwen3_embed" or name.startswith("qwen3_embed."):
+        if name == "fastretrieval" or name.startswith("fastretrieval."):
             attempted.append(name)
             raise ModuleNotFoundError(f"No module named '{name}'")
         return real_import(name, *args, **kwargs)
@@ -107,7 +107,7 @@ class TestEmbedResolverHonoursDisableLocalEmbed:
 
         assert resolve_embed_backend_for_request() is None
 
-    async def test_no_chain_and_local_disabled_never_imports_qwen3_embed(
+    async def test_no_chain_and_local_disabled_never_imports_fastretrieval(
         self, local_embed_disabled, slim_image
     ):
         """End-to-end through the live dispatch helper, on a slim image.
@@ -115,7 +115,7 @@ class TestEmbedResolverHonoursDisableLocalEmbed:
         ``server._embed`` is what the search path calls. With the local leg
         still reachable this raises ModuleNotFoundError out of the lazy import;
         the fix has to make the resolver say "none" BEFORE anything touches
-        ``qwen3_embed``, which is why the import list is asserted too.
+        ``fastretrieval``, which is why the import list is asserted too.
         """
         from wet_mcp import server
 
@@ -163,13 +163,13 @@ class TestEmbedResolverHonoursDisableLocalEmbed:
     def test_no_chain_with_local_enabled_still_returns_shared_local(self):
         """No regression: the local fallback is untouched when local is on."""
         from wet_mcp import embedder
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
         store_for_sub("user_a", {"GITHUB_TOKEN": "ghp_x"})
         set_current_sub("user_a")
 
         backend = embedder.resolve_embed_backend_for_request()
-        assert isinstance(backend, Qwen3EmbedBackend)
+        assert isinstance(backend, LocalEmbeddingBackend)
         # It is the process-shared instance, not a fresh one per request.
         assert backend is embedder.resolve_embed_backend_for_request()
 
@@ -201,9 +201,9 @@ class TestEmbedResolverHonoursDisableLocalEmbed:
     ):
         """Stdio / single-user is out of scope for the per-sub flag branch."""
         from wet_mcp import embedder
-        from wet_mcp.embedder import Qwen3EmbedBackend
+        from wet_mcp.embedder import LocalEmbeddingBackend
 
-        sentinel = Qwen3EmbedBackend()
+        sentinel = LocalEmbeddingBackend()
         monkeypatch.setattr(embedder, "_backend", sentinel)
         set_current_sub(None)
 
@@ -224,12 +224,12 @@ class TestRerankResolverHonoursDisableLocalRerank:
 
         assert resolve_rerank_backend_for_request() is None
 
-    async def test_no_chain_and_local_disabled_never_imports_qwen3_embed(
+    async def test_no_chain_and_local_disabled_never_imports_fastretrieval(
         self, local_rerank_disabled, slim_image
     ):
         """``_rerank_results`` must return the unranked order, importing nothing.
 
-        ``Qwen3Reranker.rerank`` swallows its own exceptions, so the broken
+        ``LocalReranker.rerank`` swallows its own exceptions, so the broken
         local leg shows up here as a silent ``logger.warning`` per search
         rather than a traceback -- the import list is the only assertion that
         can tell "reranking was skipped" from "reranking failed quietly".
@@ -262,13 +262,13 @@ class TestRerankResolverHonoursDisableLocalRerank:
 
     def test_no_chain_with_local_enabled_still_returns_shared_local(self):
         from wet_mcp import reranker
-        from wet_mcp.reranker import Qwen3Reranker
+        from wet_mcp.reranker import LocalReranker
 
         store_for_sub("user_a", {"GITHUB_TOKEN": "ghp_x"})
         set_current_sub("user_a")
 
         backend = reranker.resolve_rerank_backend_for_request()
-        assert isinstance(backend, Qwen3Reranker)
+        assert isinstance(backend, LocalReranker)
         assert backend is reranker.resolve_rerank_backend_for_request()
 
     def test_cloud_chain_wins_over_the_flag_and_carries_the_subs_key(
@@ -294,9 +294,9 @@ class TestRerankResolverHonoursDisableLocalRerank:
         self, local_rerank_disabled, monkeypatch
     ):
         from wet_mcp import reranker
-        from wet_mcp.reranker import Qwen3Reranker
+        from wet_mcp.reranker import LocalReranker
 
-        sentinel = Qwen3Reranker()
+        sentinel = LocalReranker()
         monkeypatch.setattr(reranker, "_backend", sentinel)
         set_current_sub(None)
 

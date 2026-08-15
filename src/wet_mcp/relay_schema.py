@@ -217,12 +217,12 @@ RELAY_SCHEMA: dict[str, Any] = {
         {
             "label": "Embedding",
             "priority": "configurable",
-            "description": "Vector embeddings for docs search. Empty = local Qwen3-Embedding ONNX.",
+            "description": "Vector embeddings for docs search. Empty = local fastretrieval ONNX.",
         },
         {
             "label": "Reranking",
             "priority": "configurable",
-            "description": "Re-ranks search results for accuracy. Empty = local Qwen3-Reranker ONNX.",
+            "description": "Re-ranks search results for accuracy. Empty = local fastretrieval cross-encoder.",
         },
         {
             "label": "LLM",
