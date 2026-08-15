@@ -67,3 +67,6 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+## 2026-08-16 - Hoist `.lower()` calls outside of `any()`
+**Learning:** Python generator expressions inside `any()` that re-evaluate a string transformation, such as `any(skip in u.lower() for skip in skip_patterns)`, are computationally expensive because `.lower()` is executed repeatedly for every element in the generator, compounding overhead on hot paths.
+**Action:** When using `any()` with a generator expression that checks for substrings, hoist string transformations like `.lower()` outside the expression to compute them exactly once (e.g. `u_lower = u.lower(); any(skip in u_lower ...)`), significantly reducing redundant string allocation and function call overhead.
