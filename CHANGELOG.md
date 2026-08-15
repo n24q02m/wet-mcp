@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v3.7.4-beta.1 (2026-08-15)
+
+### Bug Fixes
+
+- Migrate wet-mcp to fastretrieval ([#1691](https://github.com/n24q02m/wet-mcp/pull/1691),
+  [`7038308`](https://github.com/n24q02m/wet-mcp/commit/703830898ba419312404dbd719713c719e2af6d7))
+
+- Sync wet lock metadata after release merge ([#1691](https://github.com/n24q02m/wet-mcp/pull/1691),
+  [`7038308`](https://github.com/n24q02m/wet-mcp/commit/703830898ba419312404dbd719713c719e2af6d7))
+
+
 ## v3.7.3 (2026-08-15)
 
 ### Bug Fixes
