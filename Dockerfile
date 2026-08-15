@@ -51,7 +51,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && uv run python -c "import litellm; from litellm.constants import REDIS_CIRCUIT_BREAKER_FAILURE_THRESHOLD; from mcp_core.llm.catalog import list_models; n=len(list_models(modes=('chat',), configured_only=False, limit=5000)); assert n > 100, f'catalog too small: {n}'; print(f'litellm import OK, catalog chat models={n}')"
 
 # SLIM=1 (CF builds) drops all three LOCAL capability legs (native chromium,
-# qwen3 ONNX embed/rerank, bundled SearXNG) — the CF deploy offloads each to a
+# fastretrieval ONNX embed/rerank, bundled SearXNG) — the CF deploy offloads each to a
 # remote/cloud tier via DISABLE_LOCAL_BROWSER/EMBED/SEARCH. Declared HERE (after
 # uv sync) so it does not bust the apt + uv-sync layer cache above.
 ARG SLIM=0
