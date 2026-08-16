@@ -3217,8 +3217,11 @@ async def _try_github_raw_docs(
 
                 # Must be in a docs-like directory
                 parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
-                    candidate_paths.append(path)
+                # Replace any() to avoid generator creation overhead
+                for p in parts:
+                    if p.lower() in _DOC_DIRS:
+                        candidate_paths.append(path)
+                        break
         except Exception:
             return None
 
@@ -3411,12 +3414,20 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     "/_modules/",
                     "/_sources/",
                 )
-                filtered = [
-                    u
-                    for u in urls
-                    if parsed.netloc in u
-                    and not any(skip in u.lower() for skip in skip_patterns)
-                ]
+                # Hoist u.lower() outside to prevent redundant string copies
+                # Replace any() generator with inline loops
+                filtered = []
+                for u in urls:
+                    if parsed.netloc not in u:
+                        continue
+                    u_lower = u.lower()
+                    skip_url = False
+                    for skip in skip_patterns:
+                        if skip in u_lower:
+                            skip_url = True
+                            break
+                    if not skip_url:
+                        filtered.append(u)
 
                 if filtered:
                     logger.info(f"Found {len(filtered)} URLs from sitemap at {url}")
@@ -3705,7 +3716,13 @@ async def fetch_docs_pages(
             full_parsed = urlparse(full_url)
 
             # Skip generated index/module pages
-            if any(pat in full_parsed.path.lower() for pat in _skip_url_patterns):
+            path_lower = full_parsed.path.lower()
+            skip_url = False
+            for pat in _skip_url_patterns:
+                if pat in path_lower:
+                    skip_url = True
+                    break
+            if skip_url:
                 continue
 
             # GitHub-specific: stay within same repo
