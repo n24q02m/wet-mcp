@@ -67,3 +67,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-08-05 - Avoid generator expressions for simple counting
+**Learning:** Using `sum(1 for x in iterable if condition)` inside loops or functions called frequently adds unnecessary generator creation overhead.
+**Action:** Use an explicit loop with an accumulator variable (e.g., `count += 1`) to avoid generator overhead.
