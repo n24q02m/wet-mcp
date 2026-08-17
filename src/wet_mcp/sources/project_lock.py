@@ -212,10 +212,8 @@ def lock_project(db: Any, project_path: Path) -> dict:
         version = entry.get("version", "")
         lib_row = db.get_library(name)
         lib_id = lib_row["id"] if lib_row else None
-
         if lib_row is not None:
             indexed_count += 1
-
         enriched.append(
             {
                 "id": lib_id or name,
