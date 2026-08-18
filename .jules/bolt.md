@@ -67,3 +67,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-08-01 - Avoid redundant transformations in `any()`
+**Learning:** When using generator expressions inside `any()` for substring checking (e.g., `any(skip in u.lower() for skip in skip_patterns)`), any transformations applied to the outer variable (e.g., `u.lower()`) inside the expression are executed redundantly on every iteration of the inner loop.
+**Action:** Extract transformations to a local variable outside the generator expression (e.g., `u_lower = u.lower()`) to perform the operation only once. Avoid fully expanding the expression into a verbose manual `for` loop with flags to preserve code readability.

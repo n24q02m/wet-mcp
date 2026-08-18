@@ -3411,12 +3411,12 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     "/_modules/",
                     "/_sources/",
                 )
-                filtered = [
-                    u
-                    for u in urls
-                    if parsed.netloc in u
-                    and not any(skip in u.lower() for skip in skip_patterns)
-                ]
+                filtered = []
+                for u in urls:
+                    if parsed.netloc in u:
+                        u_lower = u.lower()
+                        if not any(skip in u_lower for skip in skip_patterns):
+                            filtered.append(u)
 
                 if filtered:
                     logger.info(f"Found {len(filtered)} URLs from sitemap at {url}")
@@ -3705,7 +3705,8 @@ async def fetch_docs_pages(
             full_parsed = urlparse(full_url)
 
             # Skip generated index/module pages
-            if any(pat in full_parsed.path.lower() for pat in _skip_url_patterns):
+            path_lower = full_parsed.path.lower()
+            if any(pat in path_lower for pat in _skip_url_patterns):
                 continue
 
             # GitHub-specific: stay within same repo
