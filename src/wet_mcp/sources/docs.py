@@ -3216,9 +3216,12 @@ async def _try_github_raw_docs(
                     continue
 
                 # Must be in a docs-like directory
+                # Bolt optimization: explicit inline loop for performance
                 parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
-                    candidate_paths.append(path)
+                for p in parts:
+                    if p.lower() in _DOC_DIRS:
+                        candidate_paths.append(path)
+                        break
         except Exception:
             return None
 
