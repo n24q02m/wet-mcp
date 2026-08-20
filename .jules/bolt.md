@@ -67,3 +67,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-08-20 - Fast-path text processing with C-optimized substring checks
+**Learning:** Functions that parse entire files line-by-line (such as `_strip_template_macros` checking every line for `{{`) incur high costs from `splitlines()` allocating large lists of strings and `.strip()` creating many short-lived string copies. For patterns that are mostly absent in the majority of inputs, this parsing overhead is entirely wasted.
+**Action:** Always wrap heavy string splitting and line-by-line loop logic inside an initial fast-path string membership check (e.g., `if "{{" not in content: return content`). This offloads the initial check to highly optimized C code, safely bypassing slow Python-level iteration and memory allocation when the pattern isn't present.
