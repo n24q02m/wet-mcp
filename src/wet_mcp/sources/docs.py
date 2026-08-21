@@ -3013,6 +3013,9 @@ def _strip_template_macros(content: str) -> str:
     Removes lines with ``{{...}}`` patterns (Jinja2/mkdocs-macros) that
     produce noise in raw markdown. Keeps the rest of the content intact.
     """
+    if "{{" not in content:
+        return content
+
     lines = content.splitlines()
     cleaned = []
     for ln in lines:

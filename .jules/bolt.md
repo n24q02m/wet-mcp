@@ -67,3 +67,6 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+## 2026-08-01 - Add fast-path to macro stripping
+**Learning:** In text processing functions that search for specific patterns across large documents (e.g., extracting template macros like `{{`), if the pattern is typically absent in most inputs, implement a fast-path early return (e.g., `if "{{" not in content: return content`) using Python's C-optimized string search. This avoids expensive memory allocations and loops associated with `splitlines()` or `split()`.
+**Action:** When implementing text transformations or stripping functions that target specific, rare substrings, always add an upfront string membership check (`if marker not in text: return text`) to bypass expensive Python-level iteration and string manipulation for the majority of cases.
