@@ -67,3 +67,6 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+## 2026-08-22 - Extract Redundant Transformations from any() Generators
+**Learning:** Python generator expressions inside `any()` that apply redundant transformations (e.g., `any(skip in u.lower() for skip in skip_patterns)`) are slow due to the transformation being re-evaluated for every element in the iterable.
+**Action:** Always extract redundant transformations outside the `any()` generator (e.g., `u_lower = u.lower()`) to avoid repeated allocations and operations, yielding a cleaner and more efficient check.
