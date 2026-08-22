@@ -7,6 +7,32 @@ benchmark runs (latency p50 / p95, recall@10, freshness, success rate
 against the 200-URL tier-1 fixture) land in a pre-release benchmark
 session.
 
+## W5 quality corpus and runner (2026-08-22)
+
+The repeatable public-safe corpus is
+`tests/fixtures/benchmark/wet-quality-corpus.jsonl`. It records a stable
+corpus ID, query, source URL, expected result type and fields, judged
+relevance metadata, freshness class, and provenance. It contains no private
+pages, credentials, or user content.
+
+Run the local direct benchmark from the repository root:
+
+```bash
+uv run python scripts/benchmark_quality.py \
+  --corpus tests/fixtures/benchmark/wet-quality-corpus.jsonl \
+  --mode stdio \
+  --backend searxng \
+  --output-jsonl /path/to/wet-benchmark.jsonl \
+  --output-summary /path/to/wet-benchmark-summary.json
+```
+
+The JSONL output contains one machine-readable result per corpus item followed
+by one `record_type=aggregate` row. Per-item records include coverage,
+judged-relevance precision, latency, cost estimate, failure class, and an
+extraction round-trip hash. Hosted and local-relay modes fail closed in this
+direct runner; those modes require the authorized MCP protocol harness and
+must not be reported as local direct-call measurements.
+
 ## v1.x baseline (2026-05-09)
 
 | Pillar | Metric | Value | Method |
