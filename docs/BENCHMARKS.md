@@ -28,10 +28,13 @@ uv run python scripts/benchmark_quality.py \
 
 The JSONL output contains one machine-readable result per corpus item followed
 by one `record_type=aggregate` row. Per-item records include coverage,
-judged-relevance precision, latency, cost estimate, failure class, and an
-extraction round-trip hash. Hosted and local-relay modes fail closed in this
-direct runner; those modes require the authorized MCP protocol harness and
-must not be reported as local direct-call measurements.
+judged-relevance precision, latency, cost estimate plus `cost_basis`, failure
+class, and an extraction round-trip hash. A cost estimate is emitted only for
+an observed/known-cost request; failed or unobserved provider work is marked
+`not_attempted` or `usage_unavailable` rather than assigned a hypothetical
+charge. Hosted and local-relay modes fail closed in this direct runner; those
+modes require the authorized MCP protocol harness and must not be reported as
+local direct-call measurements.
 
 ## v1.x baseline (2026-05-09)
 

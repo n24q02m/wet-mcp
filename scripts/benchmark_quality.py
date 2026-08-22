@@ -79,6 +79,7 @@ class BenchmarkResult:
     failures: str
     round_trip_hash: str
     status: str  # "PASS" | "FAIL"
+    cost_basis: str = "unavailable"
     raw_item_count: int = 0
     error_message: str = ""
 
@@ -482,7 +483,18 @@ async def run_single_case(
         status = "FAIL"
         error_msg = str(err)
 
-    cost = estimate_cost(backend=backend, model=model_chain)
+    if status != "PASS":
+        cost = 0.0
+        cost_basis = "not_attempted"
+    elif backend == "searxng" and model_chain == "none":
+        cost = 0.0
+        cost_basis = "no_provider_cost"
+    elif backend == "tavily":
+        cost = estimate_cost(backend=backend, model=model_chain)
+        cost_basis = "known_request_rate"
+    else:
+        cost = 0.0
+        cost_basis = "usage_unavailable"
 
     return BenchmarkResult(
         corpus_id=item.id,
@@ -493,6 +505,7 @@ async def run_single_case(
         precision=precision,
         latency_ms=lat_ms,
         cost_estimate=cost,
+        cost_basis=cost_basis,
         failures=failure_class,
         round_trip_hash=round_trip_hash,
         status=status,
