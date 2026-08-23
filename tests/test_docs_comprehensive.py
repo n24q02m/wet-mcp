@@ -329,6 +329,8 @@ async def test_try_sitemap_success():
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://docs.test/guide</loc></url>
   <url><loc>https://docs.test/api</loc></url>
+  <url><loc>https://docs.test/BLOG/post</loc></url>
+  <url><loc>https://docs.test/searchindex</loc></url>
 </urlset>"""
         mock_instance.get.return_value = mock_resp
 
