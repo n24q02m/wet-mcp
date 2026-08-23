@@ -1623,14 +1623,17 @@ _WELL_KNOWN_DOCS: dict[str, dict[str, str]] = {
 }
 
 
-_READTHEDOCS_HOSTS = (
-    "readthedocs.io",
-    "readthedocs.org",
-    "rtfd.io",
-    # Projects on ReadTheDocs for Business are served from this host instead;
-    # the substring check this replaces matched them, so keep them eligible.
-    "readthedocs-hosted.com",
+_READTHEDOCS_HOSTS = frozenset(
+    (
+        "readthedocs.io",
+        "readthedocs.org",
+        "rtfd.io",
+        # Projects on ReadTheDocs for Business are served from this host instead;
+        # the substring check this replaces matched them, so keep them eligible.
+        "readthedocs-hosted.com",
+    )
 )
+_READTHEDOCS_SUFFIXES = tuple(f".{h}" for h in _READTHEDOCS_HOSTS)
 
 
 def _is_readthedocs_host(netloc: str) -> bool:
@@ -1642,7 +1645,7 @@ def _is_readthedocs_host(netloc: str) -> bool:
     subdomain check below and collect the bonus.
     """
     host = netloc.lower().partition(":")[0].rstrip(".")
-    return any(host == h or host.endswith(f".{h}") for h in _READTHEDOCS_HOSTS)
+    return host in _READTHEDOCS_HOSTS or host.endswith(_READTHEDOCS_SUFFIXES)
 
 
 def _score_discovery_result(r: dict, name: str) -> int:
