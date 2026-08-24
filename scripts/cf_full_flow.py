@@ -257,13 +257,35 @@ async def _run_extract(s) -> str | None:
 
 
 def _assert_extract_resolved(txt: str | None) -> None:
-    """Assert that extract returned structured content from a real URL."""
+    """Assert that extract returned non-empty structured content from a real URL."""
     assert txt is not None, "extract returned no payload (gave up while not ready)"
-    low = txt.lower()
-    assert "http" in low, f"extract returned no URL: {txt[:300]}"
-    assert any(field in low for field in ('"markdown"', '"clean_text"')), (
-        f"extract returned no content field: {txt[:300]}"
+    json_text = txt.strip()
+    opening = "<untrusted_extract_content>"
+    closing = "</untrusted_extract_content>"
+    if json_text.startswith(opening):
+        json_text, separator, _warning = json_text[len(opening) :].partition(closing)
+        assert separator, "extract wrapper is missing its closing boundary"
+        json_text = json_text.strip()
+    try:
+        payload = _json.loads(json_text)
+    except (TypeError, _json.JSONDecodeError) as error:
+        raise AssertionError(f"extract returned invalid JSON: {txt[:300]}") from error
+
+    results = payload.get("results") if isinstance(payload, dict) else None
+    assert isinstance(results, list) and results, (
+        f"extract returned no result records: {txt[:300]}"
     )
+    resolved = any(
+        isinstance(result, dict)
+        and isinstance(result.get("url"), str)
+        and result["url"].startswith(("http://", "https://"))
+        and any(
+            isinstance(result.get(field), str) and result[field].strip()
+            for field in ("markdown", "clean_text")
+        )
+        for result in results
+    )
+    assert resolved, f"extract returned no resolved page content: {txt[:300]}"
     print("ASSERT OK: extract resolved real page content over the CF deployment.")
 
 

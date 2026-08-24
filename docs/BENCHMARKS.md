@@ -36,6 +36,16 @@ charge. Hosted and local-relay modes fail closed in this direct runner; those
 modes require the authorized MCP protocol harness and must not be reported as
 local direct-call measurements.
 
+Run the hosted representative path through the MCP protocol harness instead:
+
+```bash
+uv run python scripts/cf_full_flow.py --endpoint https://<your-worker-domain>
+```
+
+The harness obtains an authorized session from environment-provided credentials,
+opens a Streamable HTTP `ClientSession`, and requires both a real search result
+and non-empty extracted page content. It does not print or persist credentials.
+
 ## v1.x baseline (2026-05-09)
 
 | Pillar | Metric | Value | Method |
