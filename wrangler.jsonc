@@ -10,10 +10,10 @@
     {
       "name": "wet-mcp-worker",
       "class_name": "WetContainer",
-      // CF Containers pull only from the Cloudflare managed registry (an external
-      // ghcr.io ref fails with IMAGE_REGISTRY_NOT_CONFIGURED). Push the pre-built
-      // image first: `docker pull ghcr.io/n24q02m/wet-mcp:beta && docker tag ... wet-mcp:beta
-      // && wrangler containers push wet-mcp:beta`, then fill <YOUR_ACCOUNT_ID>.
+      // CF Containers accept only images pushed to the Cloudflare-managed
+      // registry. Build the slim image from this checkout first:
+      // `docker build --target http --build-arg SLIM=1 -t wet-mcp:beta . &&
+      // wrangler containers push wet-mcp:beta`, then fill <YOUR_ACCOUNT_ID>.
       "image": "registry.cloudflare.com/<YOUR_ACCOUNT_ID>/wet-mcp:beta",
       "instance_type": "basic",
       "max_instances": 1

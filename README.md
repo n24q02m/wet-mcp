@@ -20,7 +20,6 @@ mcp-name: io.github.n24q02m/wet-mcp
 [![CI](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/n24q02m/wet-mcp/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/n24q02m/wet-mcp/graph/badge.svg?token=JK19TRLPEX)](https://codecov.io/gh/n24q02m/wet-mcp)
 [![PyPI](https://img.shields.io/pypi/v/wet-mcp?logo=pypi&logoColor=white)](https://pypi.org/project/wet-mcp/)
-[![Docker](https://img.shields.io/docker/v/n24q02m/wet-mcp?label=docker&logo=docker&logoColor=white&sort=semver)](https://hub.docker.com/r/n24q02m/wet-mcp)
 [![License: Apache-2.0](https://img.shields.io/github/license/n24q02m/wet-mcp)](LICENSE)
 
 <!-- Badge Row 2: Tech -->
@@ -104,15 +103,19 @@ mcp-name: io.github.n24q02m/wet-mcp
 # Method 2 (CLI): direct uvx invocation
 claude mcp add wet -- uvx wet-mcp
 
-# Method 3 (recommended for HTTP / multi-device / OAuth)
+# Method 3 (source-built container for HTTP / multi-device / OAuth)
+docker build --target http -t wet-mcp:local .
 docker run -d --name wet-mcp-http -p 8084:8080 \
-  -v wet-data:/data -e MCP_TRANSPORT=http \
-  -e PUBLIC_URL=https://wet.example.com \
-  n24q02m/wet-mcp:latest
+  -v wet-data:/data -e PUBLIC_URL=https://wet.example.com \
+  wet-mcp:local
 
 # Method 4 (remote): point a client at an HTTP deployment
 claude mcp add --transport http wet https://<your-host>/mcp
 ```
+
+Public OCI image publication is discontinued. Existing historical registry tags
+remain untouched; new container deployments build from source or use the
+Cloudflare-managed registry.
 
 The HTTP endpoint speaks Streamable HTTP and is OAuth-gated -- your client is
 prompted to authenticate in the browser on first connect (no API key to paste).
@@ -327,11 +330,11 @@ Run your own single-user wet instance serverless on Cloudflare (Containers + D1 
    wrangler kv namespace create wet-kv
    ```
    Paste the returned IDs into `wrangler.jsonc`.
-4. Push the container image to your Cloudflare managed registry (CF Containers cannot
-   pull from external registries directly), then set `<YOUR_ACCOUNT_ID>` in `wrangler.jsonc`:
+4. Build the slim HTTP image from this checkout and push it directly to
+   Cloudflare's managed registry (CF Containers cannot pull from external
+   registries):
    ```
-   docker pull ghcr.io/n24q02m/wet-mcp:beta
-   docker tag ghcr.io/n24q02m/wet-mcp:beta wet-mcp:beta
+   docker build --target http --build-arg SLIM=1 -t wet-mcp:beta .
    wrangler containers push wet-mcp:beta   # prints registry.cloudflare.com/<ACCOUNT_ID>/wet-mcp:beta
    ```
 5. Set secrets (use `SEARXNG_URL` with basic-auth userinfo, e.g.

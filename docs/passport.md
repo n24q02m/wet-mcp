@@ -60,11 +60,12 @@ on Drive: `wet-mcp` (override via `SYNC_FOLDER`).
 
 #### Method 2/3 (HTTP deploy / docker) → S3
 
-Operator sets S3 env at container spawn. End-users only paste API keys
-via the relay form — the docs.db sync is invisible to them and
-S3-backed under the hood.
+Operator builds the image from this checkout and sets S3 env at container
+spawn. End-users only paste API keys via the relay form — the docs.db sync
+is invisible to them and S3-backed under the hood.
 
 ```bash
+docker build --target http -t wet-mcp:local .
 docker run \
   -e SYNC_S3_BUCKET=wet-docs-cache \
   -e SYNC_S3_ACCESS_KEY_ID=AKIA... \
@@ -73,7 +74,7 @@ docker run \
   -e SYNC_S3_ENDPOINT=https://<account>.r2.cloudflarestorage.com \
   -e SYNC_S3_PREFIX=docs/ \
   -e PUBLIC_URL=https://wet.example.com \
-  ghcr.io/n24q02m/wet-mcp:latest
+  wet-mcp:local
 ```
 
 The credentials live ONLY in the container process. End-users never

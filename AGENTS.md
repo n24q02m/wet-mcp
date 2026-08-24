@@ -134,8 +134,9 @@ not via the deprecated `*_BACKEND`). Empty chain -> local ONNX. With cloud force
 
 - Conventional Commits. Tag format: `v{version}`
 - CD: workflow_dispatch, chon beta/stable
-- Pipeline: PSR v10 -> PyPI (uv publish) -> Docker multi-arch (amd64 + arm64) -> DockerHub + GHCR -> MCP Registry
-- Docker images: `n24q02m/wet-mcp`, `ghcr.io/n24q02m/wet-mcp`
+- Pipeline: PSR v10 -> PyPI (uv publish) -> MCP Registry
+- Cloudflare deploy remains release-triggered and pushes only its internal
+  image to `registry.cloudflare.com`; no public OCI image is published.
 
 ## Pre-commit hooks
 
