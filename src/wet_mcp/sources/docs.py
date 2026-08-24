@@ -1631,6 +1631,8 @@ _READTHEDOCS_HOSTS = (
     # the substring check this replaces matched them, so keep them eligible.
     "readthedocs-hosted.com",
 )
+_READTHEDOCS_HOSTS_SET = frozenset(_READTHEDOCS_HOSTS)
+_READTHEDOCS_HOSTS_SUFFIXES = tuple(f".{h}" for h in _READTHEDOCS_HOSTS)
 
 
 def _is_readthedocs_host(netloc: str) -> bool:
@@ -1642,7 +1644,9 @@ def _is_readthedocs_host(netloc: str) -> bool:
     subdomain check below and collect the bonus.
     """
     host = netloc.lower().partition(":")[0].rstrip(".")
-    return any(host == h or host.endswith(f".{h}") for h in _READTHEDOCS_HOSTS)
+    # Using a frozenset for exact matches and a tuple for suffix checks
+    # avoids the iteration overhead of any() and pushes work to C level.
+    return host in _READTHEDOCS_HOSTS_SET or host.endswith(_READTHEDOCS_HOSTS_SUFFIXES)
 
 
 def _score_discovery_result(r: dict, name: str) -> int:
