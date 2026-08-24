@@ -12,7 +12,7 @@ Show current server configuration and status.
 {"action": "status"}
 ```
 
-Returns: database stats, embedding model, cache status, SearXNG status, sync settings.
+Returns: database stats, embedding status (`backend`, resolved `model`, stored `dims`, `available`, and `unavailable_reason` when disabled), reranker status (`backend`, resolved `model`, `available`), cache status, SearXNG status, and sync settings.
 
 ### set
 
