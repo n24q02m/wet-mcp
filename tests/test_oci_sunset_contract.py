@@ -110,4 +110,4 @@ def test_release_guidance_names_only_pypi_and_internal_cf_path():
         assert "PyPI (uv publish) -> MCP Registry" in guidance
         assert "DockerHub" not in guidance
         assert "GHCR" not in guidance
-        assert "registry.cloudflare.com" in guidance
+        assert re.search(r"registry\.cloudflare\.com", guidance)
