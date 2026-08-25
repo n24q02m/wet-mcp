@@ -67,3 +67,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-08-01 - Optimize Collection Membership and Prevent Loop Reallocations
+**Learning:** Checking membership inside a `tuple` is an O(N) operation which slows down tightly coupled filtering loops, and generating modified string states inside an `any()` generator expression (e.g., `any(skip in u.lower() for skip in skip_patterns)`) triggers redundant inner loop evaluation causing O(L * S) allocations (where L is the URL length and S is the number of skipped patterns).
+**Action:** Replace stationary lookup tuples with `frozenset` objects to reduce membership testing latency to O(1). Second, avoid nested string transformations inside generator comprehensions by unrolling them into standard `for` loops, caching the string transformation (e.g. `u_lower = u.lower()`) prior to executing the `any()` evaluation, preventing recurrent state computation.

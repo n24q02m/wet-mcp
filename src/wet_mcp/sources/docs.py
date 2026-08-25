@@ -2684,7 +2684,8 @@ def _rst_to_markdown(content: str) -> str:
 _GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
 
 # Common docs directory names in repos
-_DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
+# frozenset provides O(1) membership testing for faster filtering
+_DOC_DIRS = frozenset({"docs", "doc", "documentation", "guide", "guides", "wiki"})
 
 # Non-documentation files to skip (case-insensitive stem matching)
 _SKIP_FILES = frozenset(
@@ -3411,12 +3412,13 @@ async def _try_sitemap(base_url: str, max_urls: int = 50) -> list[str]:
                     "/_modules/",
                     "/_sources/",
                 )
-                filtered = [
-                    u
-                    for u in urls
-                    if parsed.netloc in u
-                    and not any(skip in u.lower() for skip in skip_patterns)
-                ]
+                filtered = []
+                for u in urls:
+                    if parsed.netloc in u:
+                        # Extract lowercasing to avoid repeated string allocations in the generator expression
+                        u_lower = u.lower()
+                        if not any(skip in u_lower for skip in skip_patterns):
+                            filtered.append(u)
 
                 if filtered:
                     logger.info(f"Found {len(filtered)} URLs from sitemap at {url}")
