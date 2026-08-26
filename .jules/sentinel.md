@@ -35,3 +35,7 @@ closed pull request.
 No security finding has been rejected in this repository yet. When one is,
 record what was proposed, why it was turned down, and what the correct shape
 looks like, so the next scan starts from the answer rather than the question.
+## 2026-08-26 - Unsafe Dynamic SQL in SQLite PRAGMA calls in tests
+**Vulnerability:** Raw `PRAGMA table_info({table})` using f-strings allows for SQL injection if the table identifier is unsanitized user input in `tests/test_d1_schema_0002.py`.
+**Learning:** SQLite introduced table-valued functions for introspection (`pragma_table_info(?)`) which do support safe parameterization using bound variables.
+**Prevention:** Always use parameterized `SELECT name FROM pragma_table_info(?)` instead of using raw dynamic `PRAGMA` queries using string concatenation or f-strings. Note that when migrating from raw `PRAGMA` to `SELECT name FROM pragma_...`, the target column is returned at index 0 rather than index 1.
