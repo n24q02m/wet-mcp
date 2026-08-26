@@ -257,7 +257,7 @@ async function extractUserId(): Promise<string> {
 }
 
 // Per-user container Durable Object. wrangler.jsonc binds WET to this class and
-// runs the ghcr.io/n24q02m/wet-mcp:http image; one instance per JWT sub. The
+// runs the Cloudflare-managed wet-mcp HTTP image; one instance per JWT sub. The
 // container's HTTP server listens on 8080 (Dockerfile http target: MCP_PORT=8080
 // + EXPOSE 8080).
 export class WetContainer extends Container<Env> {
