@@ -67,3 +67,7 @@ closed pull request.
 **Proposed:** annotate the rewritten conditions with a comment naming the optimisation and its expected impact.
 **Why rejected:** this repository is public. A comment that names the tool which wrote it, and asserts an unmeasured speedup, is noise for every later reader of the file.
 **Action:** Write comments that explain why the code is shaped the way it is, in the voice of the surrounding file — for example, the reason a fast path exists and the measurement that justified it. Leave authorship to the commit metadata.
+
+## 2026-08-27 - Extract transformations from generator expressions
+**Learning:** Calling `.lower()` on a string directly inside a generator expression for `any()` evaluates the `.lower()` method repeatedly for every item in the iterable, resulting in redundant string allocations and slower processing.
+**Action:** Extract the `.lower()` transformation to a variable outside the `any()` expression to evaluate it only once per item, yielding a measurable speedup.
