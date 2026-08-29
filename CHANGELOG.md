@@ -2,6 +2,96 @@
 
 <!-- version list -->
 
+## v3.8.0 (2026-08-29)
+
+### Bug Fixes
+
+- Align wet retrieval contract ([#1711](https://github.com/n24q02m/wet-mcp/pull/1711),
+  [`80746d3`](https://github.com/n24q02m/wet-mcp/commit/80746d3ff2edc5daaf641d6f08991ad66784a2f0))
+
+- Align wet retrieval contract ([#1710](https://github.com/n24q02m/wet-mcp/pull/1710),
+  [`7257ed2`](https://github.com/n24q02m/wet-mcp/commit/7257ed2ef75cd19e46b958928831648a4b709c85))
+
+- Make benchmark costs evidence-based ([#1711](https://github.com/n24q02m/wet-mcp/pull/1711),
+  [`80746d3`](https://github.com/n24q02m/wet-mcp/commit/80746d3ff2edc5daaf641d6f08991ad66784a2f0))
+
+- Make benchmark costs evidence-based ([#1710](https://github.com/n24q02m/wet-mcp/pull/1710),
+  [`7257ed2`](https://github.com/n24q02m/wet-mcp/commit/7257ed2ef75cd19e46b958928831648a4b709c85))
+
+- Pin workflow actions ([#1706](https://github.com/n24q02m/wet-mcp/pull/1706),
+  [`7b30f24`](https://github.com/n24q02m/wet-mcp/commit/7b30f245ce0eed2b0ba3fa44bcb21b29d2fe8424))
+
+- Refresh fastretrieval slim image comment ([#1693](https://github.com/n24q02m/wet-mcp/pull/1693),
+  [`31132b2`](https://github.com/n24q02m/wet-mcp/commit/31132b2ae4f92e0f61a375378a72b8d4985d90aa))
+
+- Use regex doc assertion in oci sunset contract test
+  ([#1711](https://github.com/n24q02m/wet-mcp/pull/1711),
+  [`80746d3`](https://github.com/n24q02m/wet-mcp/commit/80746d3ff2edc5daaf641d6f08991ad66784a2f0))
+
+- Validate hosted extraction payload ([#1711](https://github.com/n24q02m/wet-mcp/pull/1711),
+  [`80746d3`](https://github.com/n24q02m/wet-mcp/commit/80746d3ff2edc5daaf641d6f08991ad66784a2f0))
+
+- Validate hosted extraction payload ([#1710](https://github.com/n24q02m/wet-mcp/pull/1710),
+  [`7257ed2`](https://github.com/n24q02m/wet-mcp/commit/7257ed2ef75cd19e46b958928831648a4b709c85))
+
+- ⚡ bolt: optimize _doc_dirs matching with frozenset and isdisjoint
+  ([#1720](https://github.com/n24q02m/wet-mcp/pull/1720),
+  [`d5751e0`](https://github.com/n24q02m/wet-mcp/commit/d5751e05ac228d205a2c44091d16023ee4c691d1))
+
+- 🛡️ sentinel: [CRITICAL] Fix Unsafe Dynamic SQL in SQLite PRAGMA calls in tests
+  ([#1718](https://github.com/n24q02m/wet-mcp/pull/1718),
+  [`0aad65a`](https://github.com/n24q02m/wet-mcp/commit/0aad65af69502e7a79b5ea9fdc66d6ec935eea57))
+
+- **deps**: Lock file maintenance ([#1690](https://github.com/n24q02m/wet-mcp/pull/1690),
+  [`1a73591`](https://github.com/n24q02m/wet-mcp/commit/1a735911b2232fc83735afafa2c5997231463500))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest Docker digest to 95f2aa1
+  ([#1689](https://github.com/n24q02m/wet-mcp/pull/1689),
+  [`580f20a`](https://github.com/n24q02m/wet-mcp/commit/580f20a2b2431ab803e042b00dbbd8ca873c788b))
+
+- **deps**: Update minor dependencies ([#1701](https://github.com/n24q02m/wet-mcp/pull/1701),
+  [`c224b8d`](https://github.com/n24q02m/wet-mcp/commit/c224b8d5b64f140e923171496ea8a3974c16630f))
+
+- **deps**: Update patch dependencies ([#1700](https://github.com/n24q02m/wet-mcp/pull/1700),
+  [`fdc0c41`](https://github.com/n24q02m/wet-mcp/commit/fdc0c41be070036070c1966f9721eb83fb848779))
+
+- **deps**: Update python:3.13-slim-bookworm Docker digest to c45a22e
+  ([#1715](https://github.com/n24q02m/wet-mcp/pull/1715),
+  [`bacd235`](https://github.com/n24q02m/wet-mcp/commit/bacd235e27373c862a89cbd9829d5df4ff17d657))
+
+- **deps**: Update step-security/harden-runner action to v2.21.0
+  ([#1694](https://github.com/n24q02m/wet-mcp/pull/1694),
+  [`7fbfd53`](https://github.com/n24q02m/wet-mcp/commit/7fbfd5323726dd2465f05586d44f08d367900ade))
+
+- **release**: Sunset public OCI publishing ([#1711](https://github.com/n24q02m/wet-mcp/pull/1711),
+  [`80746d3`](https://github.com/n24q02m/wet-mcp/commit/80746d3ff2edc5daaf641d6f08991ad66784a2f0))
+
+### Chores
+
+- Bump better-semantic-release to v1.4.0 ([#1714](https://github.com/n24q02m/wet-mcp/pull/1714),
+  [`5fdb947`](https://github.com/n24q02m/wet-mcp/commit/5fdb9479468d16498b8e4efb769640938f75a130))
+
+- **release**: Sunset public OCI publishing ([#1711](https://github.com/n24q02m/wet-mcp/pull/1711),
+  [`80746d3`](https://github.com/n24q02m/wet-mcp/commit/80746d3ff2edc5daaf641d6f08991ad66784a2f0))
+
+### Features
+
+- Add wet quality benchmark runner ([#1711](https://github.com/n24q02m/wet-mcp/pull/1711),
+  [`80746d3`](https://github.com/n24q02m/wet-mcp/commit/80746d3ff2edc5daaf641d6f08991ad66784a2f0))
+
+- Add wet quality benchmark runner ([#1710](https://github.com/n24q02m/wet-mcp/pull/1710),
+  [`7257ed2`](https://github.com/n24q02m/wet-mcp/commit/7257ed2ef75cd19e46b958928831648a4b709c85))
+
+- Add Wet runtime quality benchmark ([#1710](https://github.com/n24q02m/wet-mcp/pull/1710),
+  [`7257ed2`](https://github.com/n24q02m/wet-mcp/commit/7257ed2ef75cd19e46b958928831648a4b709c85))
+
+- Benchmark wet hosted extraction ([#1711](https://github.com/n24q02m/wet-mcp/pull/1711),
+  [`80746d3`](https://github.com/n24q02m/wet-mcp/commit/80746d3ff2edc5daaf641d6f08991ad66784a2f0))
+
+- Benchmark wet hosted extraction ([#1710](https://github.com/n24q02m/wet-mcp/pull/1710),
+  [`7257ed2`](https://github.com/n24q02m/wet-mcp/commit/7257ed2ef75cd19e46b958928831648a4b709c85))
+
+
 ## v3.7.4-beta.1 (2026-08-15)
 
 ### Bug Fixes
