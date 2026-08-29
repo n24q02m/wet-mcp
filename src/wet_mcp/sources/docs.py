@@ -2683,8 +2683,9 @@ def _rst_to_markdown(content: str) -> str:
 # Pattern to extract owner/repo from GitHub URLs
 _GH_REPO_RE = re.compile(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?(?:/|$)")
 
-# Common docs directory names in repos
-_DOC_DIRS = ("docs", "doc", "documentation", "guide", "guides", "wiki")
+# Common docs directory names in repos.
+# Defined as a frozenset to enable fast O(1) membership and intersection lookups via .isdisjoint().
+_DOC_DIRS = frozenset(("docs", "doc", "documentation", "guide", "guides", "wiki"))
 
 # Non-documentation files to skip (case-insensitive stem matching)
 _SKIP_FILES = frozenset(
@@ -3217,7 +3218,7 @@ async def _try_github_raw_docs(
 
                 # Must be in a docs-like directory
                 parts = path.split("/")
-                if any(p.lower() in _DOC_DIRS for p in parts):
+                if not _DOC_DIRS.isdisjoint(p.lower() for p in parts):
                     candidate_paths.append(path)
         except Exception:
             return None
