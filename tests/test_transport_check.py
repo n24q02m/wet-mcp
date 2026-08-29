@@ -230,7 +230,7 @@ async def test_search_actions_rejected_in_uvx_mode(monkeypatch, action):
     )
     assert "TAVILY_API_KEY" in text(result)
     assert "SEARXNG_URL=" in text(result)
-    assert "docker run -i --rm n24q02m/wet-mcp:latest" in text(result)
+    assert "docker build --target stdio -t wet-mcp:local ." in text(result)
 
 
 @pytest.mark.asyncio
@@ -353,7 +353,7 @@ def test_uvx_searxng_blocked_error():
     assert "Error: action 'search' needs a search backend" in result
     assert "TAVILY_API_KEY" in result
     assert "SEARXNG_URL=" in result
-    assert "docker run -i --rm n24q02m/wet-mcp:latest" in result
+    assert "docker build --target stdio -t wet-mcp:local ." in result
     assert "https://github.com/n24q02m/wet-mcp#setup" in result
 
 

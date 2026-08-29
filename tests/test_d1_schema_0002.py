@@ -19,7 +19,12 @@ def _d1_conn():
 
 
 def _cols(conn, table):
-    return {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    return {
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM pragma_table_info(?)", (table,)
+        ).fetchall()
+    }
 
 
 def test_project_context_table_exists_on_d1():

@@ -61,8 +61,8 @@ from pathlib import Path
 # provider keys) -- the maintainer injects them via skret, but any export works.
 DEFAULT_ENDPOINT = os.environ.get("CF_ENDPOINT", "")
 
-# A distinctive query so the search path is exercised against the live web backend.
 SEARCH_QUERY = "cloudflare workers durable objects"
+EXTRACT_URL = "https://example.com"
 
 
 def _password() -> str:
@@ -247,6 +247,48 @@ async def _run_search(s) -> str | None:
     )
 
 
+async def _run_extract(s) -> str | None:
+    return await _call(
+        s,
+        "EXTRACT",
+        "extract",
+        {"action": "extract", "urls": [EXTRACT_URL]},
+    )
+
+
+def _assert_extract_resolved(txt: str | None) -> None:
+    """Assert that extract returned non-empty structured content from a real URL."""
+    assert txt is not None, "extract returned no payload (gave up while not ready)"
+    json_text = txt.strip()
+    opening = "<untrusted_extract_content>"
+    closing = "</untrusted_extract_content>"
+    if json_text.startswith(opening):
+        json_text, separator, _warning = json_text[len(opening) :].partition(closing)
+        assert separator, "extract wrapper is missing its closing boundary"
+        json_text = json_text.strip()
+    try:
+        payload = _json.loads(json_text)
+    except (TypeError, _json.JSONDecodeError) as error:
+        raise AssertionError(f"extract returned invalid JSON: {txt[:300]}") from error
+
+    results = payload.get("results") if isinstance(payload, dict) else None
+    assert isinstance(results, list) and results, (
+        f"extract returned no result records: {txt[:300]}"
+    )
+    resolved = any(
+        isinstance(result, dict)
+        and isinstance(result.get("url"), str)
+        and result["url"].startswith(("http://", "https://"))
+        and any(
+            isinstance(result.get(field), str) and result[field].strip()
+            for field in ("markdown", "clean_text")
+        )
+        for result in results
+    )
+    assert resolved, f"extract returned no resolved page content: {txt[:300]}"
+    print("ASSERT OK: extract resolved real page content over the CF deployment.")
+
+
 def _token_file() -> Path:
     return Path(__file__).with_name(".wet_cf_token")
 
@@ -262,6 +304,8 @@ async def run_full(endpoint: str) -> None:
         await _call(s, "CONFIG_STATUS", "config", {"action": "status"})
         txt = await _run_search(s)
         _assert_search_resolved(txt)
+        extract_txt = await _run_extract(s)
+        _assert_extract_resolved(extract_txt)
     print("FULL FLOW PASS.")
 
 
@@ -292,6 +336,8 @@ async def run_auth_only(endpoint: str) -> None:
         await s.initialize()
         txt = await _run_search(s)
         _assert_search_resolved(txt)
+        extract_txt = await _run_extract(s)
+        _assert_extract_resolved(extract_txt)
     print("AUTH-ONLY PASS: sub survived recreate (KV vault resolved, no re-save).")
 
 

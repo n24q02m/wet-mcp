@@ -23,12 +23,7 @@ on:
 
 permissions:
   contents: write
-  packages: write
   id-token: write
-
-env:
-  DOCKERHUB_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/wet-mcp
-  GHCR_IMAGE: ghcr.io/${{ github.repository }}
 
 concurrency:
   group: release
@@ -69,7 +64,7 @@ jobs:
       # so the computed version is identical. Gated the same way as the real step so it
       # is skipped in the publish_existing_tag recovery path (that path deliberately
       # reuses a known tag/version and does not need this guard).
-      - uses: n24q02m/better-semantic-release@c6051539169a3434b4739ddce1a88a56c50f2b53 # v1.3.0
+      - uses: n24q02m/better-semantic-release@087b84e8d2ba75bdec350924d3bf8247088e0b1a # v1.4.0
         id: dryrun
         if: inputs.publish_existing_tag == ''
         with:
@@ -139,7 +134,7 @@ jobs:
           echo "::error::Could not verify whether ${PKG} ${COMPUTED_VERSION} exists on PyPI: ${URL} returned HTTP '${status:-<no response>}' (expected 200 or 404). Refusing to proceed so a genuine collision cannot slip through as a false 'free'. Re-run the release once the registry is reachable."
           exit 1
 
-      - uses: n24q02m/better-semantic-release@c6051539169a3434b4739ddce1a88a56c50f2b53 # v1.3.0
+      - uses: n24q02m/better-semantic-release@087b84e8d2ba75bdec350924d3bf8247088e0b1a # v1.4.0
         id: release
         if: inputs.publish_existing_tag == ''
         with:
@@ -186,123 +181,11 @@ jobs:
       - name: Publish to PyPI
         run: uv publish
 
-  # =================== Build Docker ===================
-  build-docker:
-    name: Build Docker (${{ matrix.platform }})
-    needs: release
-    if: needs.release.outputs.released == 'true'
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-latest
-            artifact: linux-amd64
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
-            artifact: linux-arm64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.release.outputs.tag }}
-      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
-        id: build
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          outputs: type=image,"name=${{ env.DOCKERHUB_IMAGE }},${{ env.GHCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ github.ref_name }}-${{ matrix.artifact }}
-          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-${{ matrix.artifact }}
-      - run: |
-          mkdir -p ${{ runner.temp }}/digests
-          echo "${{ steps.build.outputs.digest }}" > "${{ runner.temp }}/digests/${{ matrix.artifact }}"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: digest-${{ matrix.artifact }}
-          path: ${{ runner.temp }}/digests/*
-          retention-days: 1
-
-  # =================== Merge Docker Manifests ===================
-  merge-docker:
-    name: Merge Docker Manifests
-    needs: [release, build-docker]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Harden Runner
-        uses: step-security/harden-runner@05e31511f85b41b11d1cf0ef85d0992719546e2c # v2.21.0
-        with:
-          egress-policy: audit
-
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: digest-*
-          path: ${{ runner.temp }}/digests
-          merge-multiple: true
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create and push manifests
-        env:
-          VERSION: ${{ needs.release.outputs.version }}
-          IS_PRERELEASE: ${{ needs.release.outputs.is_prerelease }}
-        run: |
-          # Build tag lists based on release type
-          if [ "$IS_PRERELEASE" = "true" ]; then
-            TAGS="beta ${VERSION}"
-          else
-            MAJOR=$(echo "$VERSION" | cut -d. -f1)
-            MINOR=$(echo "$VERSION" | cut -d. -f1-2)
-            TAGS="latest ${VERSION} ${MINOR} ${MAJOR}"
-          fi
-
-          DIGESTS=$(cat ${{ runner.temp }}/digests/*)
-
-          for IMAGE in "$DOCKERHUB_IMAGE" "$GHCR_IMAGE"; do
-            TAG_ARGS=""
-            for TAG in $TAGS; do
-              TAG_ARGS="$TAG_ARGS -t ${IMAGE}:${TAG}"
-            done
-            docker buildx imagetools create $TAG_ARGS \
-              $(echo "$DIGESTS" | xargs -I{} echo "${IMAGE}@{}")
-          done
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          sparse-checkout: README.md
-      - uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5.0.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-          repository: ${{ secrets.DOCKERHUB_USERNAME }}/wet-mcp
-          short-description: ${{ github.event.repository.description }}
-          readme-filepath: ./README.md
 
   # =================== Publish to MCP Registry ===================
   publish-mcp-registry:
     name: Publish to MCP Registry
-    needs: [release, publish-pypi, merge-docker]
+    needs: [release, publish-pypi]
     if: needs.release.outputs.released == 'true' && needs.release.outputs.is_prerelease != 'true'
     runs-on: ubuntu-latest
     steps:
@@ -320,11 +203,7 @@ jobs:
           VERSION="${{ needs.release.outputs.version }}"
           jq --arg v "$VERSION" '
             .version = $v |
-            .packages = [.packages[] |
-              if .registryType == "oci" then del(.version)
-              else .version = $v
-              end
-            ]
+            .packages = [.packages[] | .version = $v]
           ' server.json > server.json.tmp && mv server.json.tmp server.json
 
       - name: Install MCP Publisher
@@ -373,9 +252,10 @@ jobs:
     # Builds the http-slim image on a GitHub Linux runner and deploys it to
     # Cloudflare so any release == CF live on that version — a beta dispatch redeploys
     # the beta, a stable dispatch is maintainer-gated (replaces the
-    # manual local deploy_cf.py step + its Windows Docker OOM). Only needs the
-    # `release` job (deploy_cf.py builds its OWN image, so merge-docker is not a
-    # dependency). Dispatch-only workflow (no fork PRs) => secrets are safe.
+    # manual local deploy_cf.py step + its Windows Docker OOM). It only needs the
+    # `release` job because deploy_cf.py builds and pushes its own
+    # Cloudflare-internal image, so this deploy remains independent of public
+    # artifact publication.
     # NOTE: in CI the template renders the image at the NEW tag, so deploy_cf.py's
     # auto-rollback (prev_ref != new) is inert here; a failed canary still fails
     # this job (exit 1, no silent bad deploy). Live-image prev_ref for true CI

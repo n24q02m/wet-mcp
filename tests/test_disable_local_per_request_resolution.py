@@ -353,6 +353,26 @@ class TestConfigStatusReflectsPerRequestResolution:
         assert status["embedding"]["backend"] == "CloudEmbeddingBackend"
         assert status["embedding"]["available"] is True
 
+    async def test_embedding_status_records_model_and_dimensions(self, monkeypatch):
+        from wet_mcp import embedder
+        from wet_mcp.server import _handle_config_status
+
+        monkeypatch.setattr(embedder, "_backend", None)
+        monkeypatch.setattr("wet_mcp.server._embedding_dims", 768)
+        store_for_sub(
+            "user_a",
+            {
+                "EMBEDDING_MODELS": "jina_ai/jina-embeddings-v5-text-small",
+                "JINA_AI_API_KEY": "jina_a",
+            },
+        )
+        set_current_sub("user_a")
+
+        status = await _handle_config_status()
+
+        assert status["embedding"]["model"] == "jina_ai/jina-embeddings-v5-text-small"
+        assert status["embedding"]["dims"] == 768
+
     async def test_reranker_reads_unavailable_when_the_request_has_no_backend(
         self, local_rerank_disabled, monkeypatch
     ):

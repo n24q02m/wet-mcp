@@ -2107,6 +2107,14 @@ def _active_docs_backend() -> str:
     return os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
 
 
+def _backend_model_identity(backend: Any) -> str | None:
+    """Return the resolved model id without exposing backend internals."""
+    if backend is None:
+        return None
+    model = getattr(backend, "model", None) or getattr(backend, "_model_name", None)
+    return model if isinstance(model, str) else None
+
+
 async def _handle_config_status() -> dict[str, Any]:
     await _wait_for_backend_init()
 
@@ -2157,6 +2165,7 @@ async def _handle_config_status() -> dict[str, Any]:
         },
         "embedding": {
             "backend": (type(embed_backend).__name__ if embed_backend else None),
+            "model": _backend_model_identity(embed_backend),
             "dims": _embedding_dims,
             "available": embed_backend is not None,
             # "available: false" on its own reads as a fault. Most of the time
@@ -2168,6 +2177,7 @@ async def _handle_config_status() -> dict[str, Any]:
         "reranker": {
             "available": reranker is not None,
             "backend": (type(reranker).__name__ if reranker else None),
+            "model": _backend_model_identity(reranker),
         },
         "cache": {
             "enabled": settings.wet_cache,

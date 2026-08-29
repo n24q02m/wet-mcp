@@ -49,6 +49,7 @@ def mock_settings():
         mock.resolve_rerank_backend.return_value = "cloud"
         mock.resolve_embedding_model.return_value = "gemini"
         mock.resolve_rerank_model.return_value = "gemini-rerank"
+        mock.embedding_chain.return_value = ["gemini"]
         mock.wet_auto_searxng = False
         mock.setup_providers.return_value = "sdk"
         # For tests, pretend we don't have timeout so tasks run synchronously

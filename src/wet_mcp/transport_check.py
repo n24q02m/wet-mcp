@@ -136,8 +136,9 @@ UVX_SEARXNG_BLOCKED_ERROR = (
     "     then set SEARCH_BACKENDS=tavily  (or brave / exa)\n"
     "  2. Point at an already-running SearXNG:\n"
     "       SEARXNG_URL=https://your-searxng.example\n"
-    "  3. Run via Docker (bundles SearXNG):\n"
-    "       docker run -i --rm n24q02m/wet-mcp:latest\n"
+    "  3. Build and run from this checkout (bundles SearXNG):\n"
+    "       docker build --target stdio -t wet-mcp:local .\n"
+    "       docker run -i --rm wet-mcp:local\n"
     "See https://github.com/n24q02m/wet-mcp#setup"
 )
 
