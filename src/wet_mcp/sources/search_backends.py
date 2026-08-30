@@ -25,6 +25,8 @@ from wet_mcp.config import settings
 
 
 class SearchBackend(Protocol):
+    name: str
+
     async def search(
         self,
         query: str,
@@ -74,6 +76,8 @@ async def _search_with_rotation(
 
 
 class SearxngBackend:
+    name = "searxng"
+
     def __init__(self, url: str) -> None:
         self.url = url
 
@@ -102,6 +106,8 @@ class SearxngBackend:
 
 
 class TavilyBackend:
+    name = "tavily"
+
     _URL = "https://api.tavily.com/search"
 
     def __init__(self, keys: list[str]) -> None:
@@ -159,6 +165,8 @@ class BraveBackend:
     GET with header ``X-Subscription-Token``; results live at ``web.results[]``
     (verified against current Brave docs 2026-06-19).
     """
+
+    name = "brave"
 
     _URL = "https://api.search.brave.com/res/v1/web/search"
 
@@ -224,6 +232,8 @@ class ExaBackend:
     ``contents.text`` request so each result carries a snippet. Results live at
     ``results[]`` (verified against current Exa docs 2026-06-19).
     """
+
+    name = "exa"
 
     _URL = "https://api.exa.ai/search"
 
@@ -410,29 +420,44 @@ async def run_search_chain(
     categories="general",
     searxng_url: str | None = None,
 ) -> str:
-    """Run the SEARCH_BACKENDS chain with runtime fallback.
+    """Run the configured search chain and report the selected backend.
 
-    Tries each backend in order; on a raised error OR an empty/error result it
-    advances to the next, returning the first non-empty result (the shared
-    ``mcp_core.chains.run_with_fallback`` primitive). Returns an empty-results
-    envelope when every backend is exhausted. ``searxng_url`` is the live
-    auto-started SearXNG URL (when SearXNG is in the chain).
+    Providers are tried in order. Errors and empty results advance the chain.
+    The returned envelope records requested, attempted, selected, and fallback
+    state without exposing provider credentials or endpoints.
     """
+    requested = chain_backend_names()
     backends = search_backends_from_env(searxng_url)
     if not backends:
-        requested = chain_backend_names()
         msg = (
             f"Search backends {requested} are missing API keys; configure a key or add searxng"
             if requested
             else "No search backend configured"
         )
         return json.dumps(
-            {"results": [], "total": 0, "query": query, "error": msg},
+            {
+                "results": [],
+                "total": 0,
+                "query": query,
+                "error": msg,
+                "search_backend": {
+                    "requested": requested,
+                    "attempted": [],
+                    "selected": None,
+                    "fallback": "unavailable",
+                },
+            },
             ensure_ascii=False,
         )
-    thunks = [
-        (
-            lambda b=b: b.search(
+
+    attempted: list[str] = []
+    selected: str | None = None
+
+    def traced_thunk(backend: SearchBackend) -> Callable[[], Awaitable[str]]:
+        async def invoke() -> str:
+            nonlocal selected
+            attempted.append(backend.name)
+            payload = await backend.search(
                 query=query,
                 max_results=max_results,
                 time_range=time_range,
@@ -441,21 +466,36 @@ async def run_search_chain(
                 exclude_domains=exclude_domains,
                 categories=categories,
             )
-        )
-        for b in backends
-    ]
+            if not _search_result_is_empty(payload):
+                selected = backend.name
+            return payload
+
+        return invoke
+
     result = await run_with_fallback(
-        thunks,
+        [traced_thunk(backend) for backend in backends],
         is_empty=_search_result_is_empty,
         on_error=lambda idx, exc: logger.warning(
             f"Search backend #{idx} raised: {type(exc).__name__}"
         ),
     )
-    if result is None:
-        return json.dumps(
-            {"results": [], "total": 0, "query": query}, ensure_ascii=False
-        )
-    return result
+
+    data: dict[str, object] = (
+        json.loads(result)
+        if result is not None
+        else {"results": [], "total": 0, "query": query}
+    )
+    data["search_backend"] = {
+        "requested": requested,
+        "attempted": attempted,
+        "selected": selected,
+        "fallback": (
+            "exhausted"
+            if selected is None
+            else ("none" if requested and selected == requested[0] else "used")
+        ),
+    }
+    return json.dumps(data, ensure_ascii=False)
 
 
 __all__ = [

@@ -9,7 +9,10 @@ Usage:
 
 import json
 import os
+import subprocess
 import warnings
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
 
 import pytest
 from mcp import StdioServerParameters
@@ -37,25 +40,132 @@ def parse_allow_error(r) -> str:
     return r.content[0].text
 
 
+class _SearxngHandler(BaseHTTPRequestHandler):
+    def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
+        if self.path.startswith("/healthz"):
+            payload_data: dict = {"status": "ok"}
+        elif self.path.startswith("/search"):
+            payload_data = {
+                "results": [
+                    {
+                        "url": f"https://example.com/python-testing-{index}",
+                        "title": f"Python testing result {index}",
+                        "content": (
+                            "Deterministic Python testing guidance for the "
+                            f"foundation live protocol fixture {index}."
+                        ),
+                        "engine": "fixture",
+                    }
+                    for index in range(12)
+                ]
+            }
+        else:
+            self.send_error(404)
+            return
+
+        body = json.dumps(payload_data).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format: str, *args: object) -> None:
+        pass
+
+
+@pytest.fixture(scope="module")
+def searxng_server():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _SearxngHandler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host = server.server_address[0]
+        port = server.server_address[1]
+        yield f"http://{host}:{port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-async def mcp_session():
-    """Start real wet-mcp server via stdio, yield ClientSession.
+async def mcp_session(searxng_server: str, tmp_path):
+    """Start a real local-only wet-mcp server via stdio."""
+    from fastretrieval import define_cache_dir
 
-    Suppresses anyio cancel-scope teardown errors that occur when
-    pytest-asyncio tears down the event loop in a different task context.
-    """
+    local_state = tmp_path / "local-state"
+    local_env = {
+        **os.environ,
+        "LOG_LEVEL": "WARNING",
+        "MCP_TRANSPORT": "stdio",
+        "HOME": str(local_state),
+        "USERPROFILE": str(local_state),
+        "XDG_CONFIG_HOME": str(local_state),
+        "LOCALAPPDATA": str(local_state),
+        "APPDATA": str(local_state),
+        "CACHE_DIR": str(tmp_path),
+        "DOCS_DB_PATH": str(tmp_path / "docs.db"),
+        "FASTRETRIEVAL_CACHE_PATH": str(define_cache_dir()),
+        "QWEN3_EMBED_CACHE_PATH": "",
+        "SYNC_ENABLED": "false",
+        "GOOGLE_DRIVE_CLIENT_ID": "",
+        "API_KEYS": "",
+        "JINA_API_KEY": "",
+        "JINA_AI_API_KEY": "",
+        "GEMINI_API_KEY": "",
+        "GOOGLE_API_KEY": "",
+        "OPENAI_API_KEY": "",
+        "COHERE_API_KEY": "",
+        "CO_API_KEY": "",
+        "ANTHROPIC_API_KEY": "",
+        "XAI_API_KEY": "",
+        "GOOGLE_VERTEX_EXPRESS_API_KEY": "",
+        "TAVILY_API_KEY": "",
+        "BRAVE_API_KEY": "",
+        "EXA_API_KEY": "",
+        "EMBEDDING_MODELS": "",
+        "RERANK_MODELS": "",
+        "LLM_MODELS": "",
+        "EMBEDDING_MODEL": "",
+        "RERANK_MODEL": "",
+        "EMBEDDING_BACKEND": "",
+        "RERANK_BACKEND": "",
+        "EMBEDDING_API_BASE": "",
+        "RERANK_API_BASE": "",
+        "LLM_API_BASE": "",
+        "LOCAL_EMBEDDING_MODEL": "",
+        "LOCAL_RERANK_MODEL": "",
+        "EMBEDDING_DIMS": "0",
+        "RERANK_ENABLED": "true",
+        "DISABLE_LOCAL_EMBED": "false",
+        "DISABLE_LOCAL_RERANK": "false",
+        "SEARCH_BACKENDS": "searxng",
+        "SEARXNG_URL": searxng_server,
+        "WET_AUTO_SEARXNG": "false",
+    }
+    subprocess.run(
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            "from mcp_core import set_local_mode; set_local_mode('wet-mcp')",
+        ],
+        env=local_env,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
     server_params = StdioServerParameters(
         command="uv",
         args=["run", "wet-mcp"],
-        env={
-            **os.environ,
-            "LOG_LEVEL": "WARNING",
-        },
+        env=local_env,
     )
     try:
         async with stdio_client(server_params) as (read_stream, write_stream):
@@ -121,6 +231,7 @@ class TestHelp:
 
 
 class TestConfig:
+    @pytest.mark.timeout(300)
     async def test_config_status(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool("config", {"action": "status"})
         text = parse(r)
@@ -156,6 +267,19 @@ class TestConfig:
         assert isinstance(reranker["backend"], (str, type(None)))
         assert isinstance(reranker["model"], (str, type(None)))
         assert isinstance(reranker["available"], bool)
+        assert embedding["available"] is True
+        assert embedding["backend"] == "LocalEmbeddingBackend"
+        assert embedding["model"] in {
+            "n24q02m/Qwen3-Embedding-0.6B-ONNX",
+            "n24q02m/Qwen3-Embedding-0.6B-GGUF",
+        }
+        assert embedding["dims"] == 768
+        assert reranker["available"] is True
+        assert reranker["backend"] == "LocalReranker"
+        assert reranker["model"] in {
+            "n24q02m/Qwen3-Reranker-0.6B-ONNX-YesNo",
+            "n24q02m/Qwen3-Reranker-0.6B-GGUF",
+        }
 
     async def test_config_set(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
@@ -296,18 +420,14 @@ class TestSearch:
         )
         data = payload(r)
         assert data["_untrusted_source"] == "web"
-        results = data.get("results")
-        if isinstance(results, list) and results:
-            return
-
-        error = data.get("error")
-        assert isinstance(error, str) and error.strip()
-        error_lower = error.lower()
-        assert (
-            "needs a search backend" in error_lower
-            or "no search backend configured" in error_lower
-            or ("search backends" in error_lower and "missing api key" in error_lower)
-        ), f"Unexpected search response: {data}"
+        results = data["results"]
+        assert isinstance(results, list) and results
+        assert data["search_backend"] == {
+            "requested": ["searxng"],
+            "attempted": ["searxng"],
+            "selected": "searxng",
+            "fallback": "none",
+        }
 
     async def test_search_research(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
