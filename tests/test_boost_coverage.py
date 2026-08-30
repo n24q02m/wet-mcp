@@ -2273,7 +2273,7 @@ class TestSetupTool:
         cache_dir.mkdir(parents=True)
         (cache_dir / "file.bin").write_bytes(b"data")
 
-        with patch.dict(os.environ, {"QWEN3_EMBED_CACHE_PATH": str(tmp_path)}):
+        with patch.dict(os.environ, {"FASTRETRIEVAL_CACHE_PATH": str(tmp_path)}):
             result = clear_model_cache("test/model")
             assert result is not None
             assert not cache_dir.exists()
@@ -2282,7 +2282,7 @@ class TestSetupTool:
         """Returns None when no cache."""
         from wet_mcp.setup_tool import clear_model_cache
 
-        with patch.dict(os.environ, {"QWEN3_EMBED_CACHE_PATH": str(tmp_path)}):
+        with patch.dict(os.environ, {"FASTRETRIEVAL_CACHE_PATH": str(tmp_path)}):
             result = clear_model_cache("nonexistent/model")
             assert result is None
 

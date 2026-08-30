@@ -2,7 +2,7 @@
 
 mcp-name: io.github.n24q02m/wet-mcp
 
-**Web search, content extraction, and library docs for AI agents -- 5-strategy scraping, runs without API keys.**
+**Open-source MCP server for AI agents: web search, content extraction, and library docs.**
 
 | Phase | Status | Scope |
 |---|---|---|
@@ -162,8 +162,7 @@ matching key (litellm `<PROVIDER>_API_KEY` convention):
 Any other litellm provider works via env passthrough -- see
 [litellm provider docs](https://docs.litellm.ai/docs/providers) for its key name.
 
-`FASTRETRIEVAL_CACHE_PATH` controls the local model cache. The old
-`QWEN3_EMBED_CACHE_PATH` name is still honored when the new name is absent.
+`FASTRETRIEVAL_CACHE_PATH` controls the local model cache.
 
 **Search backends** -- `SEARCH_BACKENDS` (CSV, runtime fallback chain) over
 `searxng` (default, local) plus optional cloud providers `tavily` / `brave` /

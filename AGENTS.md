@@ -74,8 +74,7 @@ mise run dev       # uv run wet-mcp
 
   For any other litellm provider (used via env passthrough), see https://docs.litellm.ai/docs/providers/<provider> for its `<PROVIDER>_API_KEY` name.
  - Custom endpoint (SSRF-guarded): `LLM_API_BASE`, `EMBEDDING_API_BASE`, `RERANK_API_BASE`
- - Local model cache: `FASTRETRIEVAL_CACHE_PATH` (preferred); the old
-   `QWEN3_EMBED_CACHE_PATH` name is still honored when the new name is absent.
+ - Local model cache: `FASTRETRIEVAL_CACHE_PATH`.
 - X/Twitter search (`search` action `x`): `XAI_API_KEY` (from skret `/wet-mcp/prod`), `X_SEARCH_MODEL` (default `grok-4.3` ~$0.032/query; `grok-4.5` ~$0.12/query). Transport = `litellm.aresponses` (OpenAI Responses API shape), NOT `mcp_core.llm.acompletion`: xAI's `x_search` server-side tool is only accepted on `/v1/responses` — the chat-completions endpoint rejects `tools=[{"type":"x_search"}]` with `unknown variant 'x_search'`. litellm forwards the server tool and returns the same `AnnotationURLCitation` shape as the raw openai SDK, so no direct provider-SDK dep is added. Citations gotcha: `response.citations` is absent on this path — parse them from the `output_text` block's `annotations`. See `sources/x_search.py`.
 - Deprecated (honored mot release voi warning): singular `EMBEDDING_MODEL`/`RERANK_MODEL` + `EMBEDDING_BACKEND`/`RERANK_BACKEND` (backend gio suy ra tu chain rong hay khong). Priority-router cu "Jina > Gemini > OpenAI > Cohere" da bo.
 - SearXNG: `WET_AUTO_SEARXNG` (default true), `SEARXNG_URL` (external mode)

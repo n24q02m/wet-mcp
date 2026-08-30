@@ -784,7 +784,7 @@ server = [
 
 [[package]]
 name = "fastretrieval"
-version = "1.1.0b2"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "huggingface-hub" },
@@ -795,9 +795,9 @@ dependencies = [
     { name = "tokenizers" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c3/bf/7e16cba2cd2a3cb8f1eeec013b2ee55ba2ec9cd88c4edadfb872f0ffaa35/fastretrieval-1.1.0b2.tar.gz", hash = "sha256:439adebaaec715447d2c108382b5b8826a7d2065af77eadd8cc01a7914ad6236", size = 331046, upload-time = "2026-08-24T15:25:24.915Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/be/00314cfc1aafdf3089e4384e319f32f106ca6dd63184c4583bb3e92114b2/fastretrieval-1.1.0.tar.gz", hash = "sha256:53b958b7b29a18c4ff6982bfd74c3d2b71f5e213c2ef794bbd89a0672361cdc8", size = 316103, upload-time = "2026-08-29T12:43:06.098Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/42/39afed64b4181da8d1fee647e77ad82c57742704933f1a75398f8be0fc25/fastretrieval-1.1.0b2-py3-none-any.whl", hash = "sha256:9d3bcd6c161680b1165b4029a2e05d3cfb24c3549d67d7ee37f78e654908a0d6", size = 144565, upload-time = "2026-08-24T15:25:23.549Z" },
+    { url = "https://files.pythonhosted.org/packages/95/de/3e05f7c5cd33dd5716233a87e15a99c95fa8cc2c3dae53e3b0d60bc85977/fastretrieval-1.1.0-py3-none-any.whl", hash = "sha256:3c371d3fb8f76d1e029c9bd99adf8118cf0d49259c6a50649027324ba320e4ec", size = 144628, upload-time = "2026-08-29T12:43:04.505Z" },
 ]
 
 [[package]]
@@ -1818,7 +1818,7 @@ wheels = [
 
 [[package]]
 name = "n24q02m-mcp-core"
-version = "1.23.0"
+version = "1.23.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "authlib" },
@@ -1830,12 +1830,13 @@ dependencies = [
     { name = "loguru" },
     { name = "platformdirs" },
     { name = "pydantic" },
+    { name = "pydantic-settings" },
     { name = "starlette" },
     { name = "tomli-w" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/86/14/31d9b330fd59e891f73ad0b06e38a15f620325ef46b5cab5b6e3fd64fd83/n24q02m_mcp_core-1.23.0.tar.gz", hash = "sha256:cf6010adc23d433634d901ce550fd26f8c8fb754097a5a6e9d920ef3d48ac936", size = 358930, upload-time = "2026-08-07T22:48:12.82Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/ea/060df6d5c00c13a7e5ffe7bf04536bcbbc5577d68180d0533be3b8096f27/n24q02m_mcp_core-1.23.1.tar.gz", hash = "sha256:4408b14f73c16163048988e8b429fd73a02ffe83a4b4b8ffeef312ab843606a9", size = 364418, upload-time = "2026-08-29T12:46:36.993Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cf/2e/7d7a275171a6455b45df7468d0232484b68973f8e255c71696be56f70e7b/n24q02m_mcp_core-1.23.0-py3-none-any.whl", hash = "sha256:cc738b004299056419247e53da2824bd3745dc84a8cd49bf401f59e46d9e4933", size = 195465, upload-time = "2026-08-07T22:48:11.507Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/63/5ab34cca3f47402314622bd61e755d3c19ea4433676433a8536d6c7507df/n24q02m_mcp_core-1.23.1-py3-none-any.whl", hash = "sha256:8feac38084817544a1f9b9d256ec1b1d78584e971ab9967ba5a9526a6bbf01e6", size = 196653, upload-time = "2026-08-29T12:46:35.66Z" },
 ]
 
 [package.optional-dependencies]
@@ -1845,7 +1846,7 @@ llm = [
 
 [[package]]
 name = "n24q02m-web-core"
-version = "2.4.0"
+version = "2.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "browserforge" },
@@ -1859,9 +1860,9 @@ dependencies = [
     { name = "pillow" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/72/d9/1554544a6a5e1230d57116ffd2aebac7b28d97007fc36cbe56a5be150ba9/n24q02m_web_core-2.4.0.tar.gz", hash = "sha256:7b9e0db5a74e608a2c317f74c996cf3d69be7e895bcacfa81123eb833c7f80c3", size = 258028, upload-time = "2026-08-07T22:48:00.834Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/1b/0d/b314381dc0c4cc43e2fac0f4655d36beb9a19f4e2b5e73025e7525432529/n24q02m_web_core-2.5.0.tar.gz", hash = "sha256:744076ff555c5ba2f8683f438273190ae34be77e1ca723c75c58464101c24478", size = 262506, upload-time = "2026-08-29T12:44:47.892Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bd/70/ad4d44476c028b984d9d8827b7a636cb586686e9f4d35e6664abe4d81414/n24q02m_web_core-2.4.0-py3-none-any.whl", hash = "sha256:2b3c91dde86eb6010755e99bd58bf32141486c9ccc4a3ca04f81296d5f0bbc2a", size = 73415, upload-time = "2026-08-07T22:47:59.785Z" },
+    { url = "https://files.pythonhosted.org/packages/d5/ab/02f691a6620d3bde03738064eb97b88614206691579dde71975a43961725/n24q02m_web_core-2.5.0-py3-none-any.whl", hash = "sha256:60c83e42d231057a5638e51162b6e416d7b3fc68473a38b7c33989ccce68a016", size = 73770, upload-time = "2026-08-29T12:44:46.936Z" },
 ]
 
 [[package]]
@@ -2412,16 +2413,16 @@ wheels = [
 
 [[package]]
 name = "pydantic-settings"
-version = "2.15.0"
+version = "2.14.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/ca/31c57507b13119d7d3cfa1576dad2911a4861e3be07b579395f4e9d393f9/pydantic_settings-2.15.0.tar.gz", hash = "sha256:694b793e84f766ba76a90ebdefc01d0a9a045dab0382bee70393da93712ad117", size = 261253, upload-time = "2026-08-07T09:24:57.419Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/b5/8f48e906c3e0205276e8bd8cb7512217a87b2685304d64be27cad5b3019f/pydantic_settings-2.14.2.tar.gz", hash = "sha256:c19dd64b19097f1de80184f0cc7b0272a13ae6e170cbf240a3e27e381ed14a5f", size = 237700, upload-time = "2026-06-19T13:44:56.324Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/30/a4/2bffa9f8e804325a09867f0e9d30795c80ea9f8d62560bd1b6ad6220eb2f/pydantic_settings-2.15.0-py3-none-any.whl", hash = "sha256:0ba092c291c94baceb5eff768aa0d56400a457585bc0175925a5a5510303da42", size = 69413, upload-time = "2026-08-07T09:24:55.839Z" },
+    { url = "https://files.pythonhosted.org/packages/77/c1/6e422f34e569cf8e18df68d1939c81c099d2b61e4f7d9621c8a77560799c/pydantic_settings-2.14.2-py3-none-any.whl", hash = "sha256:a20c97b37910b6550d5ea50fbcc2d4187defe58cd57070b73863d069419c9440", size = 61715, upload-time = "2026-06-19T13:44:55.02Z" },
 ]
 
 [[package]]
@@ -3420,7 +3421,7 @@ wheels = [
 
 [[package]]
 name = "wet-mcp"
-version = "3.7.4b1"
+version = "3.8.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiolimiter" },
@@ -3471,7 +3472,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "diskcache", specifier = ">=5.6.3" },
     { name = "fastmcp", specifier = ">=3.4.4,<4" },
-    { name = "fastretrieval", specifier = ">=1.1.0b1,<2" },
+    { name = "fastretrieval", specifier = ">=1.1.0,<2" },
     { name = "google-api-python-client", specifier = ">=2.198.0" },
     { name = "google-auth", specifier = ">=2.56.2" },
     { name = "greenlet", specifier = "<3.5.6" },
@@ -3482,8 +3483,8 @@ requires-dist = [
     { name = "loguru" },
     { name = "markitdown", extras = ["pdf", "docx", "pptx", "xlsx"] },
     { name = "mcp", extras = ["cli"] },
-    { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.23.0,<2" },
-    { name = "n24q02m-web-core", specifier = ">=2.4.0,<3" },
+    { name = "n24q02m-mcp-core", extras = ["llm"], specifier = ">=1.23.1,<2" },
+    { name = "n24q02m-web-core", specifier = ">=2.5.0,<3" },
     { name = "pillow", specifier = ">=12.3.0" },
     { name = "pydantic", specifier = ">=2.13.4,<2.14" },
     { name = "pydantic-settings" },

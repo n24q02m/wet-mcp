@@ -15,18 +15,10 @@ from wet_mcp.config import settings
 
 
 def _resolve_cache_dir() -> Path:
-    """Resolve the fastretrieval cache path with an intentional old alias."""
-    new = os.getenv("FASTRETRIEVAL_CACHE_PATH")
-    if new:
-        return Path(new)
-
-    old = os.getenv("QWEN3_EMBED_CACHE_PATH")
-    if old:
-        logger.warning(
-            "QWEN3_EMBED_CACHE_PATH is deprecated; use "
-            "FASTRETRIEVAL_CACHE_PATH instead. Still honoring it."
-        )
-        return Path(old)
+    """Resolve the fastretrieval cache path."""
+    explicit = os.getenv("FASTRETRIEVAL_CACHE_PATH")
+    if explicit:
+        return Path(explicit)
 
     xdg_cache_home = os.getenv("XDG_CACHE_HOME")
     base_path = Path(xdg_cache_home) if xdg_cache_home else Path.home() / ".cache"

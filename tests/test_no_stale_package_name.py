@@ -8,8 +8,6 @@ TEST_FILE = Path(__file__).resolve().relative_to(ROOT).as_posix()
 
 # CHANGELOG ghi lại lịch sử; tên gói cũ ở đó là đúng và phải giữ nguyên.
 ALLOWED = {"CHANGELOG.md"}
-# Tên biến cũ được đọc có chủ ý để không làm vỡ cấu hình người dùng cũ.
-ALLOWED_LINES = ("QWEN3_EMBED_CACHE_PATH",)
 
 
 def _tracked_hits(pattern: str) -> list[str]:
@@ -26,7 +24,6 @@ def _tracked_hits(pattern: str) -> list[str]:
         if line
         and not line.startswith(f"{TEST_FILE}:")
         and not any(line.startswith(f"{name}:") for name in ALLOWED)
-        and not any(token in line for token in ALLOWED_LINES)
     ]
 
 
