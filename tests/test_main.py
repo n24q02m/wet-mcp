@@ -36,7 +36,7 @@ class TestClearModelCache:
         (model_dir / "blobs").mkdir()
         (model_dir / "blobs" / "abc.incomplete").touch()
 
-        with patch.dict("os.environ", {"QWEN3_EMBED_CACHE_PATH": str(tmp_path)}):
+        with patch.dict("os.environ", {"FASTRETRIEVAL_CACHE_PATH": str(tmp_path)}):
             result = clear_model_cache("org/model")
 
         assert not model_dir.exists()
@@ -45,33 +45,33 @@ class TestClearModelCache:
     def test_noop_when_cache_missing(self, tmp_path):
         from wet_mcp.setup_tool import clear_model_cache
 
-        with patch.dict("os.environ", {"QWEN3_EMBED_CACHE_PATH": str(tmp_path)}):
+        with patch.dict("os.environ", {"FASTRETRIEVAL_CACHE_PATH": str(tmp_path)}):
             result = clear_model_cache("nonexistent/model")
 
         assert result is None
 
-    def test_new_cache_env_wins_over_old_alias(self, tmp_path):
+    def test_explicit_cache_env_wins_over_xdg_default(self, tmp_path):
         from wet_mcp.setup_tool import clear_model_cache
 
-        old_dir = tmp_path / "old"
-        new_dir = tmp_path / "new"
-        old_model = old_dir / "models--org--model"
-        new_model = new_dir / "models--org--model"
-        old_model.mkdir(parents=True)
-        new_model.mkdir(parents=True)
+        xdg_dir = tmp_path / "xdg"
+        explicit_dir = tmp_path / "explicit"
+        xdg_model = xdg_dir / "fastretrieval" / "models--org--model"
+        explicit_model = explicit_dir / "models--org--model"
+        xdg_model.mkdir(parents=True)
+        explicit_model.mkdir(parents=True)
 
         with patch.dict(
             "os.environ",
             {
-                "FASTRETRIEVAL_CACHE_PATH": str(new_dir),
-                "QWEN3_EMBED_CACHE_PATH": str(old_dir),
+                "FASTRETRIEVAL_CACHE_PATH": str(explicit_dir),
+                "XDG_CACHE_HOME": str(xdg_dir),
             },
         ):
             result = clear_model_cache("org/model")
 
-        assert result == str(new_model)
-        assert not new_model.exists()
-        assert old_model.exists()
+        assert result == str(explicit_model)
+        assert not explicit_model.exists()
+        assert xdg_model.exists()
 
 
 class TestDownloadLocalEmbedding:
