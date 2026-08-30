@@ -15,6 +15,7 @@ import pytest
 from mcp import StdioServerParameters
 from mcp.client.session import ClientSession
 from mcp.client.stdio import stdio_client
+from structured import payload
 
 pytestmark = [pytest.mark.live, pytest.mark.timeout(60)]
 
@@ -127,6 +128,34 @@ class TestConfig:
         assert "database" in data and "embedding" in data, (
             f"Missing expected keys: {list(data.keys())}"
         )
+        embedding = data["embedding"]
+        assert isinstance(embedding, dict)
+        assert {
+            "backend",
+            "model",
+            "dims",
+            "available",
+            "unavailable_reason",
+        } <= embedding.keys()
+        assert isinstance(embedding["backend"], (str, type(None)))
+        assert isinstance(embedding["model"], (str, type(None)))
+        assert isinstance(embedding["dims"], int)
+        assert embedding["dims"] >= 0
+        assert isinstance(embedding["available"], bool)
+        if embedding["available"]:
+            assert isinstance(embedding["model"], str) and embedding["model"]
+            assert embedding["dims"] > 0
+            assert embedding["unavailable_reason"] is None
+        else:
+            assert isinstance(embedding["unavailable_reason"], str)
+            assert embedding["unavailable_reason"]
+
+        reranker = data["reranker"]
+        assert isinstance(reranker, dict)
+        assert {"backend", "model", "available"} <= reranker.keys()
+        assert isinstance(reranker["backend"], (str, type(None)))
+        assert isinstance(reranker["model"], (str, type(None)))
+        assert isinstance(reranker["available"], bool)
 
     async def test_config_set(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
@@ -265,8 +294,20 @@ class TestSearch:
         r = await mcp_session.call_tool(
             "search", {"action": "search", "query": "python testing"}
         )
-        text = parse(r)
-        assert "result" in text.lower() or "http" in text.lower(), text[:80]
+        data = payload(r)
+        assert data["_untrusted_source"] == "web"
+        results = data.get("results")
+        if isinstance(results, list) and results:
+            return
+
+        error = data.get("error")
+        assert isinstance(error, str) and error.strip()
+        error_lower = error.lower()
+        assert (
+            "needs a search backend" in error_lower
+            or "no search backend configured" in error_lower
+            or ("search backends" in error_lower and "missing api key" in error_lower)
+        ), f"Unexpected search response: {data}"
 
     async def test_search_research(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
@@ -293,6 +334,15 @@ class TestExtract:
         )
         text = parse(r)
         assert len(text) > 100, f"Extract result too short: {len(text)} chars"
+        data = payload(r)
+        assert data["_untrusted_source"] == "web"
+        pages = data.get("results")
+        assert isinstance(pages, list) and pages
+        assert isinstance(pages[0], dict)
+        metadata = pages[0].get("metadata")
+        assert isinstance(metadata, dict)
+        strategy = metadata.get("scrape_strategy_used")
+        assert isinstance(strategy, str) and strategy
 
     async def test_extract_crawl(self, mcp_session: ClientSession):
         r = await mcp_session.call_tool(
