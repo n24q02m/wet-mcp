@@ -206,6 +206,7 @@ def test_search_result_is_empty_predicate():
 
 
 async def test_run_search_chain_falls_back_on_empty(monkeypatch):
+    monkeypatch.setenv("SEARCH_BACKENDS", "searxng,brave")
     # First backend returns empty, second returns a hit -> second wins.
     empty = unittest.mock.AsyncMock(
         return_value='{"results": [], "total": 0, "query": "q"}'
@@ -214,8 +215,10 @@ async def test_run_search_chain_falls_back_on_empty(monkeypatch):
         return_value='{"results": [{"url": "https://h/1"}], "total": 1, "query": "q"}'
     )
     b0 = unittest.mock.Mock()
+    b0.name = "searxng"
     b0.search = empty
     b1 = unittest.mock.Mock()
+    b1.name = "brave"
     b1.search = hit
     with unittest.mock.patch(
         "wet_mcp.sources.search_backends.search_backends_from_env",
@@ -223,8 +226,41 @@ async def test_run_search_chain_falls_back_on_empty(monkeypatch):
     ):
         out = json.loads(await run_search_chain("q"))
         assert out["results"][0]["url"] == "https://h/1"
+        assert out["search_backend"] == {
+            "requested": ["searxng", "brave"],
+            "attempted": ["searxng", "brave"],
+            "selected": "brave",
+            "fallback": "used",
+        }
         empty.assert_awaited()
         hit.assert_awaited()
+
+
+async def test_run_search_chain_reports_skipped_configured_backend_as_fallback(
+    monkeypatch,
+):
+    monkeypatch.setenv("SEARCH_BACKENDS", "brave,searxng")
+
+    async def hit(**_kwargs):
+        return json.dumps(
+            {"results": [{"url": "https://h/1"}], "total": 1, "query": "q"}
+        )
+
+    backend = unittest.mock.Mock()
+    backend.name = "searxng"
+    backend.search = hit
+    with unittest.mock.patch(
+        "wet_mcp.sources.search_backends.search_backends_from_env",
+        return_value=[backend],
+    ):
+        out = json.loads(await run_search_chain("q"))
+
+    assert out["search_backend"] == {
+        "requested": ["brave", "searxng"],
+        "attempted": ["searxng"],
+        "selected": "searxng",
+        "fallback": "used",
+    }
 
 
 async def test_run_search_chain_empty_when_no_backends(monkeypatch):
@@ -237,3 +273,9 @@ async def test_run_search_chain_empty_when_no_backends(monkeypatch):
     out = json.loads(await run_search_chain("q"))
     assert out["results"] == []
     assert "brave" in out["error"]
+    assert out["search_backend"] == {
+        "requested": ["brave"],
+        "attempted": [],
+        "selected": None,
+        "fallback": "unavailable",
+    }

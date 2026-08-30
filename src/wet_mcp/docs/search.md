@@ -5,7 +5,7 @@ Search the web, academic papers, or library documentation.
 ## Actions
 
 ### search
-Web search via SearXNG metasearch engine.
+Web search via the configured `SEARCH_BACKENDS` chain (for example, `searxng,jina`).
 
 **Parameters:**
 - `query` (required): Search query string
@@ -20,6 +20,10 @@ Web search via SearXNG metasearch engine.
 - `enrich`: Fetch actual page content for better snippets (default: false, adds 2-5s latency)
 
 Results are semantically reranked for better relevance. Duplicate URLs are normalized (tracking params stripped) and limited to 3 per domain.
+
+Every response includes a `search_backend` trace with the requested and attempted
+backend names, the selected backend, and a `fallback` result (`none`, `used`,
+`exhausted`, or `unavailable`).
 
 **Example:**
 ```json
