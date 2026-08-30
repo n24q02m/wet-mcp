@@ -71,3 +71,7 @@ closed pull request.
 ## 2026-08-05 - Fast Iterable Intersection with frozenset.isdisjoint()
 **Learning:** Python generator expressions inside `any()` checking against a static collection (e.g., `any(p.lower() in _DOC_DIRS for p in parts)`) are slowed down by Python-level iteration overhead.
 **Action:** Define the static collection as a `frozenset` and use `not _DOC_DIRS.isdisjoint(...)`. The `isdisjoint()` method iterates through the generator in optimized C code and short-circuits, yielding a ~10-15% speedup over `any()` with a generator.
+
+## 2025-01-20 - Extract redundant string transformations from generator expressions
+**Learning:** When using redundant string transformations like `.lower()` inside generator expressions such as `any(skip in u.lower() for skip in skip_patterns)`, Python evaluates the transformation repeatedly for each item in the generator. This causes significant overhead (calling `.lower()` multiple times).
+**Action:** Always extract the transformation to a variable outside the expression (e.g., `u_lower = u.lower()`). If this occurs inside a list comprehension, safely convert it to a standard `for` loop.
