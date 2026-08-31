@@ -23,7 +23,7 @@ dependencies = [
     # wet consumes web-core's SSRF surface (is_safe_url / safe_httpx_client) AND, since 2.3.0,
     # the remote render backends (CFBrowserRenderingClient / BrowserlessClient /
     # RemoteRenderStrategy) for the browser provider chain + the under-rendered escalation fix.
-    "n24q02m-web-core>=2.5.0,<3",
+    "n24q02m-web-core>=2.5.1,<3",
     # MCP Server
     "mcp[cli]",
     # HTTP Client
