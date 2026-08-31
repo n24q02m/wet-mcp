@@ -57,9 +57,9 @@ def test_dependency_specs_and_lock_use_stable_migrations():
     dependencies = project["dependencies"]
 
     assert "fastretrieval>=1.1.0,<2" in dependencies
-    assert "n24q02m-mcp-core[llm]>=1.23.1,<2" in dependencies
+    assert "n24q02m-mcp-core[llm]==1.23.2" in dependencies
     assert _locked_package("fastretrieval")["version"] == "1.1.0"
-    assert _locked_package("n24q02m-mcp-core")["version"] == "1.23.1"
+    assert _locked_package("n24q02m-mcp-core")["version"] == "1.23.2"
 
 
 async def test_local_embedding_uses_fastretrieval_output_contract(monkeypatch):
