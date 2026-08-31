@@ -2,6 +2,31 @@
 
 <!-- version list -->
 
+## v3.9.0-beta.1 (2026-08-31)
+
+### Bug Fixes
+
+- Avoid repeated URL lowercase transformations
+  ([`1cb975e`](https://github.com/n24q02m/wet-mcp/commit/1cb975e8ad8e96eec7989478092fd012a381f447))
+
+- Cover live retrieval metadata ([#1726](https://github.com/n24q02m/wet-mcp/pull/1726),
+  [`29cfe96`](https://github.com/n24q02m/wet-mcp/commit/29cfe96921aab62558c9f81240154a7a4ebe2c77))
+
+- Repair registry release and stable retrieval pins
+  ([`1ea6a86`](https://github.com/n24q02m/wet-mcp/commit/1ea6a86f00c0504be001166b8977bab7164fb334))
+
+- **deps**: Lock file maintenance ([#1727](https://github.com/n24q02m/wet-mcp/pull/1727),
+  [`d772c28`](https://github.com/n24q02m/wet-mcp/commit/d772c287b0e97c13a4253491912f89dda246ebcb))
+
+### Features
+
+- Expose search backend selection metadata ([#1728](https://github.com/n24q02m/wet-mcp/pull/1728),
+  [`fc127a9`](https://github.com/n24q02m/wet-mcp/commit/fc127a9588c9a56107341d1531616436308a0ece))
+
+- ⚡ bolt: optimize readthedocs host checking ([#1729](https://github.com/n24q02m/wet-mcp/pull/1729),
+  [`2490b0a`](https://github.com/n24q02m/wet-mcp/commit/2490b0ab99a1fb68486a73ddc621e1a336b2544f))
+
+
 ## v3.8.0 (2026-08-29)
 
 ### Bug Fixes
