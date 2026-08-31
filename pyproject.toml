@@ -65,7 +65,7 @@ dependencies = [
     # mcp_core.storage.d1 / mcp_core.storage.vectorize, the shared D1 +
     # Vectorize HTTP clients this server now imports instead of keeping its
     # own copy under wet_mcp.backends.
-    "n24q02m-mcp-core[llm]>=1.23.1,<2",
+    "n24q02m-mcp-core[llm]==1.23.2",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.5",
     # fastmcp arrives transitively via mcp-core; both bounds are pinned here,
