@@ -22,6 +22,7 @@ otherwise; values past half the action's TTL are flagged ``stale``.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 from urllib.parse import urlparse
@@ -151,3 +152,36 @@ def search_ttl_seconds(time_range: str | None) -> int:
     aggressively because the user is asking for recent content.
     """
     return 300 if time_range else 3600
+
+
+# Refinement (refine=true) quality gate: a round whose mean rerank score
+# falls below this floor counts as low quality and triggers one more
+# LLM-rewritten round (bounded). Chosen to sit above the point where a
+# reranked list is mostly noise; rounds without scores (reranker
+# unavailable) are judged on non-emptiness only.
+_REFINE_MIN_MEAN_SCORE = 0.35
+
+
+def round_quality(results: list[dict[str, Any]]) -> float:
+    """Mean rerank score of a round's results.
+
+    Empty -> 0.0 (worst). Results carrying no finite numeric ``score`` (the
+    reranker was unavailable) -> 1.0: with no quality signal, non-emptiness
+    is success and refinement would only burn tokens. Finite guarantee: a
+    NaN/inf score is ignored rather than poisoning the mean.
+    """
+    if not results:
+        return 0.0
+    scores = [
+        float(s)
+        for s in (r.get("score") for r in results)
+        if isinstance(s, (int, float)) and not isinstance(s, bool) and math.isfinite(s)
+    ]
+    if not scores:
+        return 1.0
+    return sum(scores) / len(scores)
+
+
+def refine_needed(results: list[dict[str, Any]]) -> bool:
+    """Whether a round failed the quality gate (empty or low mean score)."""
+    return round_quality(results) < _REFINE_MIN_MEAN_SCORE
