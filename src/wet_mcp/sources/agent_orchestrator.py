@@ -18,6 +18,7 @@ from typing import Any
 from loguru import logger
 
 from wet_mcp.credential_state import LLM_PROVIDER_KEYS
+from wet_mcp.sources.search_backends import run_search_chain
 
 # LLM-provider key env names, in spec-section-5.6 fallback priority. The
 # canonical list now lives in ``credential_state.LLM_PROVIDER_KEYS`` so the
@@ -179,32 +180,34 @@ async def run_agent(
 
     max_urls = _clamp_max_urls(max_urls)
 
-    # 1. Search round.
-    from wet_mcp.config import settings
-    from wet_mcp.sources.searxng import search as searxng_search
-
+    # 1. Search round through the canonical provider chain.
     try:
-        raw_search = await searxng_search(
-            settings.searxng_url, query, max_results=max_urls
-        )
+        raw_search = await run_search_chain(query, max_results=max_urls)
         search_payload = json.loads(raw_search)
+        if not isinstance(search_payload, dict):
+            raise ValueError("search returned a non-object payload")
     except Exception as exc:
-        logger.error(f"agent_orchestrator search failed: {exc}")
-        return f"Error: search failed: {exc}"
+        error_type = type(exc).__name__
+        logger.error(f"agent_orchestrator search failed: {error_type}")
+        return f"Error: search failed: {error_type}"
 
-    raw_results = (
-        search_payload.get("results", [])
-        if isinstance(search_payload, dict)
-        else search_payload
-    )
-    urls = [r.get("url") for r in raw_results if isinstance(r, dict) and r.get("url")][
-        :max_urls
-    ]
+    if search_payload.get("error"):
+        return f"Error: search failed: {search_payload['error']}"
+
+    raw_results = search_payload.get("results", [])
+    if not isinstance(raw_results, list):
+        return "Error: search failed: results is not a list"
+    selected_results = [
+        result
+        for result in raw_results
+        if isinstance(result, dict) and result.get("url")
+    ][:max_urls]
+    urls = [str(result["url"]) for result in selected_results]
     if not urls:
         return {
             "markdown": (
                 f"No results found for query: {query!r}. Try a different "
-                "phrasing or use search(action='research') for academic queries."
+                f"phrasing or use search(action='research') for academic queries."
             ),
             "sources": [],
             "per_url_metadata": [],
@@ -223,32 +226,42 @@ async def run_agent(
         logger.error(f"agent_orchestrator synthesis failed: {exc}")
         return f"Error: synthesis failed: {exc}"
 
-    sources = [
-        {
-            "index": i + 1,
-            "url": extract.get("url", urls[i] if i < len(urls) else ""),
-            "title": (extract.get("metadata") or {}).get("title")
-            or extract.get("title", ""),
-        }
-        for i, extract in enumerate(extracts)
-    ]
-    per_url_metadata = [
-        {
-            "url": extract.get("url", urls[i] if i < len(urls) else ""),
-            "extract_strategy": (extract.get("metadata") or {}).get(
-                "scrape_strategy_used", ""
-            ),
-            "tokens": len(
-                extract.get("markdown")
-                or extract.get("clean_text")
-                or extract.get("content")
-                or ""
-            )
-            // _CHARS_PER_TOKEN,
-            "error": extract.get("error"),
-        }
-        for i, extract in enumerate(extracts)
-    ]
+    sources = []
+    for i, extract in enumerate(extracts):
+        search_result = selected_results[i] if i < len(selected_results) else {}
+        search_provider = str(search_result.get("source") or "")
+        sources.append(
+            {
+                "index": i + 1,
+                "url": extract.get("url", urls[i] if i < len(urls) else ""),
+                "title": (extract.get("metadata") or {}).get("title")
+                or extract.get("title")
+                or search_result.get("title", ""),
+                "search_provider": search_provider,
+            }
+        )
+
+    per_url_metadata = []
+    for i, extract in enumerate(extracts):
+        search_result = selected_results[i] if i < len(selected_results) else {}
+        search_provider = str(search_result.get("source") or "")
+        per_url_metadata.append(
+            {
+                "url": extract.get("url", urls[i] if i < len(urls) else ""),
+                "extract_strategy": (extract.get("metadata") or {}).get(
+                    "scrape_strategy_used", ""
+                ),
+                "tokens": len(
+                    extract.get("markdown")
+                    or extract.get("clean_text")
+                    or extract.get("content")
+                    or ""
+                )
+                // _CHARS_PER_TOKEN,
+                "error": extract.get("error"),
+                "search_provider": search_provider,
+            }
+        )
 
     return {
         "markdown": markdown,

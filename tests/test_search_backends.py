@@ -236,6 +236,72 @@ async def test_run_search_chain_falls_back_on_empty(monkeypatch):
         hit.assert_awaited()
 
 
+async def test_run_search_chain_all_empty_is_legitimate_empty(monkeypatch):
+    monkeypatch.setenv("SEARCH_BACKENDS", "searxng,brave")
+    empty = unittest.mock.AsyncMock(
+        return_value='{"results": [], "total": 0, "query": "q"}'
+    )
+    b0 = unittest.mock.Mock()
+    b0.name = "searxng"
+    b0.search = empty
+    b1 = unittest.mock.Mock()
+    b1.name = "brave"
+    b1.search = empty
+    with unittest.mock.patch(
+        "wet_mcp.sources.search_backends.search_backends_from_env",
+        return_value=[b0, b1],
+    ):
+        out = json.loads(await run_search_chain("q"))
+
+    assert out["results"] == []
+    assert "error" not in out
+    assert out["search_backend"]["fallback"] == "exhausted"
+
+
+async def test_run_search_chain_reports_error_when_all_backends_fail(monkeypatch):
+    monkeypatch.setenv("SEARCH_BACKENDS", "searxng,brave")
+    failed = unittest.mock.AsyncMock(side_effect=RuntimeError("provider down"))
+    b0 = unittest.mock.Mock()
+    b0.name = "searxng"
+    b0.search = failed
+    b1 = unittest.mock.Mock()
+    b1.name = "brave"
+    b1.search = failed
+    with unittest.mock.patch(
+        "wet_mcp.sources.search_backends.search_backends_from_env",
+        return_value=[b0, b1],
+    ):
+        out = json.loads(await run_search_chain("q"))
+
+    assert out["results"] == []
+    assert out["error"] == "Search backend chain exhausted after provider failure"
+
+
+async def test_run_search_chain_advances_past_non_list_results(monkeypatch):
+    monkeypatch.setenv("SEARCH_BACKENDS", "searxng,brave")
+    malformed = unittest.mock.AsyncMock(
+        return_value='{"results": "not-a-list", "total": 1, "query": "q"}'
+    )
+    hit = unittest.mock.AsyncMock(
+        return_value='{"results": [{"url": "https://h/1"}], "total": 1, "query": "q"}'
+    )
+    b0 = unittest.mock.Mock()
+    b0.name = "searxng"
+    b0.search = malformed
+    b1 = unittest.mock.Mock()
+    b1.name = "brave"
+    b1.search = hit
+    with unittest.mock.patch(
+        "wet_mcp.sources.search_backends.search_backends_from_env",
+        return_value=[b0, b1],
+    ):
+        out = json.loads(await run_search_chain("q"))
+
+    assert out["results"][0]["url"] == "https://h/1"
+    assert out["search_backend"]["selected"] == "brave"
+    assert out["search_backend"]["fallback"] == "used"
+
+
 async def test_run_search_chain_reports_skipped_configured_backend_as_fallback(
     monkeypatch,
 ):

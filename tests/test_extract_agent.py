@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -25,8 +25,368 @@ def _gemini_env(monkeypatch):
 
 def _make_search_payload(urls: list[str]) -> str:
     return json.dumps(
-        {"results": [{"url": u, "title": f"Title for {u}"} for u in urls]}
+        {
+            "results": [
+                {
+                    "url": u,
+                    "title": f"Title for {u}",
+                    "snippet": f"Snippet for {u}",
+                    "source": "searxng",
+                }
+                for u in urls
+            ]
+        }
     )
+
+
+@pytest.mark.asyncio
+async def test_agent_uses_later_search_backend_and_keeps_provenance(
+    _gemini_env,
+) -> None:
+    first = MagicMock(name="searxng")
+    first.name = "searxng"
+    first.search = AsyncMock(
+        return_value=json.dumps({"results": [], "total": 0, "query": "q"})
+    )
+    second = MagicMock(name="brave")
+    second.name = "brave"
+    second.search = AsyncMock(
+        return_value=json.dumps(
+            {
+                "results": [
+                    {
+                        "url": "https://example.com/hit",
+                        "title": "Selected title",
+                        "snippet": "Selected snippet",
+                        "source": "brave",
+                    }
+                ],
+                "total": 1,
+                "query": "q",
+            }
+        )
+    )
+    with (
+        patch(
+            "wet_mcp.sources.search_backends.search_backends_from_env",
+            return_value=[first, second],
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(side_effect=AssertionError("direct SearXNG call")),
+        ),
+        patch(
+            "wet_mcp.sources.crawler.extract",
+            new=AsyncMock(
+                return_value=_make_extract_payload("https://example.com/hit")
+            ),
+        ),
+        patch.object(ao, "_llm_synthesize", new=AsyncMock(return_value="answer [1]")),
+    ):
+        result = await ao.run_agent("q", max_urls=1)
+
+    assert isinstance(result, dict)
+    assert result["sources"] == [
+        {
+            "index": 1,
+            "url": "https://example.com/hit",
+            "title": "Title for https://example.com/hit",
+            "search_provider": "brave",
+        }
+    ]
+    assert result["per_url_metadata"][0]["search_provider"] == "brave"
+
+
+@pytest.mark.asyncio
+async def test_agent_uses_later_search_backend_after_error(_gemini_env) -> None:
+    first = MagicMock(name="searxng")
+    first.name = "searxng"
+    first.search = AsyncMock(side_effect=RuntimeError("first backend down"))
+    second = MagicMock(name="brave")
+    second.name = "brave"
+    second.search = AsyncMock(
+        return_value=json.dumps(
+            {
+                "results": [
+                    {
+                        "url": "https://example.com/hit",
+                        "title": "Selected title",
+                        "snippet": "Selected snippet",
+                        "source": "brave",
+                    }
+                ],
+                "total": 1,
+                "query": "q",
+            }
+        )
+    )
+    with (
+        patch(
+            "wet_mcp.sources.search_backends.search_backends_from_env",
+            return_value=[first, second],
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(side_effect=AssertionError("direct SearXNG call")),
+        ),
+        patch(
+            "wet_mcp.sources.crawler.extract",
+            new=AsyncMock(
+                return_value=_make_extract_payload("https://example.com/hit")
+            ),
+        ),
+        patch.object(ao, "_llm_synthesize", new=AsyncMock(return_value="answer [1]")),
+    ):
+        result = await ao.run_agent("q", max_urls=1)
+
+    assert isinstance(result, dict)
+    assert result["sources"][0]["search_provider"] == "brave"
+    assert result["per_url_metadata"][0]["search_provider"] == "brave"
+
+
+@pytest.mark.asyncio
+async def test_agent_all_empty_search_keeps_no_results_contract(_gemini_env):
+    first = MagicMock(name="searxng")
+    first.name = "searxng"
+    first.search = AsyncMock(
+        return_value=json.dumps({"results": [], "total": 0, "query": "q"})
+    )
+    second = MagicMock(name="brave")
+    second.name = "brave"
+    second.search = AsyncMock(
+        return_value=json.dumps({"results": [], "total": 0, "query": "q"})
+    )
+    with (
+        patch(
+            "wet_mcp.sources.search_backends.search_backends_from_env",
+            return_value=[first, second],
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(side_effect=AssertionError("direct SearXNG call")),
+        ),
+    ):
+        result = await ao.run_agent("q")
+
+    assert isinstance(result, dict)
+    assert result["sources"] == []
+    assert result["per_url_metadata"] == []
+    assert "No results found" in result["markdown"]
+
+
+@pytest.mark.asyncio
+async def test_agent_all_failed_search_is_hard_failure(_gemini_env):
+    first = MagicMock(name="searxng")
+    first.name = "searxng"
+    first.search = AsyncMock(side_effect=RuntimeError("first backend down"))
+    second = MagicMock(name="brave")
+    second.name = "brave"
+    second.search = AsyncMock(side_effect=RuntimeError("second backend down"))
+    with (
+        patch(
+            "wet_mcp.sources.search_backends.search_backends_from_env",
+            return_value=[first, second],
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(side_effect=AssertionError("direct SearXNG call")),
+        ),
+    ):
+        result = await ao.run_agent("q")
+
+    assert result == (
+        "Error: search failed: Search backend chain exhausted after provider failure"
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_uses_later_search_backend_after_malformed_results(_gemini_env):
+    first = MagicMock(name="searxng")
+    first.name = "searxng"
+    first.search = AsyncMock(
+        return_value=json.dumps({"results": "not-a-list", "total": 1, "query": "q"})
+    )
+    second = MagicMock(name="brave")
+    second.name = "brave"
+    second.search = AsyncMock(
+        return_value=json.dumps(
+            {
+                "results": [
+                    {
+                        "url": "https://example.com/hit",
+                        "title": "Selected title",
+                        "snippet": "Selected snippet",
+                        "source": "brave",
+                    }
+                ],
+                "total": 1,
+                "query": "q",
+            }
+        )
+    )
+    with (
+        patch(
+            "wet_mcp.sources.search_backends.search_backends_from_env",
+            return_value=[first, second],
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(side_effect=AssertionError("direct SearXNG call")),
+        ),
+        patch(
+            "wet_mcp.sources.crawler.extract",
+            new=AsyncMock(
+                return_value=_make_extract_payload("https://example.com/hit")
+            ),
+        ),
+        patch.object(ao, "_llm_synthesize", new=AsyncMock(return_value="answer [1]")),
+    ):
+        result = await ao.run_agent("q", max_urls=1)
+
+    assert isinstance(result, dict)
+    assert result["sources"][0]["search_provider"] == "brave"
+    assert result["per_url_metadata"][0]["search_provider"] == "brave"
+
+
+@pytest.mark.asyncio
+async def test_agent_preserves_multi_result_order_and_search_title_fallback(
+    _gemini_env,
+):
+    first_url = "https://example.com/first"
+    second_url = "https://example.com/second"
+    first = MagicMock(name="brave")
+    first.name = "brave"
+    first.search = AsyncMock(
+        return_value=json.dumps(
+            {
+                "results": [
+                    {
+                        "url": first_url,
+                        "title": "Search title one",
+                        "snippet": "Search snippet one",
+                        "source": "brave",
+                    },
+                    {
+                        "url": second_url,
+                        "title": "Search title two",
+                        "snippet": "Search snippet two",
+                        "source": "exa",
+                    },
+                ],
+                "total": 2,
+                "query": "q",
+            }
+        )
+    )
+    with (
+        patch(
+            "wet_mcp.sources.search_backends.search_backends_from_env",
+            return_value=[first],
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(side_effect=AssertionError("direct SearXNG call")),
+        ),
+        patch(
+            "wet_mcp.sources.crawler.extract",
+            new=AsyncMock(
+                side_effect=[
+                    _make_extract_payload(first_url, "First body"),
+                    json.dumps(
+                        [
+                            {
+                                "url": second_url,
+                                "markdown": "Second body",
+                                "metadata": {"scrape_strategy_used": "basic_http"},
+                            }
+                        ]
+                    ),
+                ]
+            ),
+        ),
+        patch.object(
+            ao, "_llm_synthesize", new=AsyncMock(return_value="answer [1] [2]")
+        ),
+    ):
+        result = await ao.run_agent("q", max_urls=2)
+
+    assert isinstance(result, dict)
+    assert result["sources"] == [
+        {
+            "index": 1,
+            "url": first_url,
+            "title": f"Title for {first_url}",
+            "search_provider": "brave",
+        },
+        {
+            "index": 2,
+            "url": second_url,
+            "title": "Search title two",
+            "search_provider": "exa",
+        },
+    ]
+    assert [
+        (row["url"], row["search_provider"]) for row in result["per_url_metadata"]
+    ] == [(first_url, "brave"), (second_url, "exa")]
+
+
+@pytest.mark.asyncio
+async def test_agent_search_error_envelope_is_hard_failure(_gemini_env) -> None:
+    error_payload = json.dumps({"results": [], "error": "unavailable"})
+    with (
+        patch.object(
+            ao,
+            "run_search_chain",
+            new=AsyncMock(return_value=error_payload),
+            create=True,
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(return_value=error_payload),
+        ),
+    ):
+        result = await ao.run_agent("q")
+    assert result == "Error: search failed: unavailable"
+
+
+@pytest.mark.asyncio
+async def test_agent_invalid_search_payload_is_hard_failure(_gemini_env) -> None:
+    with (
+        patch.object(
+            ao,
+            "run_search_chain",
+            new=AsyncMock(return_value="not json"),
+            create=True,
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(return_value="not json"),
+        ),
+    ):
+        result = await ao.run_agent("q")
+    assert result == "Error: search failed: JSONDecodeError"
+
+
+@pytest.mark.asyncio
+async def test_agent_legitimate_empty_search_keeps_no_results_contract(_gemini_env):
+    empty_payload = json.dumps({"results": [], "total": 0, "query": "q"})
+    with (
+        patch.object(
+            ao,
+            "run_search_chain",
+            new=AsyncMock(return_value=empty_payload),
+            create=True,
+        ),
+        patch(
+            "wet_mcp.sources.searxng.search",
+            new=AsyncMock(return_value=empty_payload),
+        ),
+    ):
+        result = await ao.run_agent("q")
+    assert isinstance(result, dict)
+    assert result["sources"] == []
+    assert result["per_url_metadata"] == []
+    assert "No results found" in result["markdown"]
 
 
 def _make_extract_payload(url: str, body: str = "Body content") -> str:
@@ -64,8 +424,9 @@ async def test_empty_query_returns_error(_gemini_env) -> None:
 async def test_pipeline_search_then_extract_then_synthesize(_gemini_env) -> None:
     urls = [f"https://example.com/{i}" for i in range(5)]
     with (
-        patch(
-            "wet_mcp.sources.searxng.search",
+        patch.object(
+            ao,
+            "run_search_chain",
             new_callable=AsyncMock,
             return_value=_make_search_payload(urls),
         ),
@@ -134,10 +495,11 @@ async def test_synthesis_prompt_includes_numbered_citations(_gemini_env) -> None
 
 @pytest.mark.asyncio
 async def test_search_failure_returns_error_string(_gemini_env) -> None:
-    with patch(
-        "wet_mcp.sources.searxng.search",
+    with patch.object(
+        ao,
+        "run_search_chain",
         new_callable=AsyncMock,
-        side_effect=RuntimeError("searxng down"),
+        return_value=json.dumps({"results": [], "error": "unavailable"}),
     ):
         result = await ao.run_agent(query="x")
     assert isinstance(result, str)
@@ -146,8 +508,9 @@ async def test_search_failure_returns_error_string(_gemini_env) -> None:
 
 @pytest.mark.asyncio
 async def test_no_search_results_returns_empty_synthesis(_gemini_env) -> None:
-    with patch(
-        "wet_mcp.sources.searxng.search",
+    with patch.object(
+        ao,
+        "run_search_chain",
         new_callable=AsyncMock,
         return_value=json.dumps({"results": []}),
     ):
@@ -161,8 +524,9 @@ async def test_no_search_results_returns_empty_synthesis(_gemini_env) -> None:
 async def test_synthesis_failure_returns_error_string(_gemini_env) -> None:
     urls = ["https://example.com/1"]
     with (
-        patch(
-            "wet_mcp.sources.searxng.search",
+        patch.object(
+            ao,
+            "run_search_chain",
             new_callable=AsyncMock,
             return_value=_make_search_payload(urls),
         ),
@@ -186,8 +550,9 @@ async def test_synthesis_failure_returns_error_string(_gemini_env) -> None:
 async def test_extract_error_propagates_to_per_url_metadata(_gemini_env) -> None:
     urls = ["https://broken.com/1"]
     with (
-        patch(
-            "wet_mcp.sources.searxng.search",
+        patch.object(
+            ao,
+            "run_search_chain",
             new_callable=AsyncMock,
             return_value=_make_search_payload(urls),
         ),

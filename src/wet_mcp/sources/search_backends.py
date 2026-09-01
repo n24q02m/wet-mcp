@@ -398,7 +398,7 @@ def search_backends_from_env(searxng_url: str | None = None) -> list[SearchBacke
 
 def _search_result_is_empty(payload: str) -> bool:
     """A search result JSON string counts as empty (advance the chain) when it
-    is an error envelope or carries no results."""
+    is an error envelope, malformed, or carries no results."""
     try:
         data = json.loads(payload)
     except (json.JSONDecodeError, TypeError):
@@ -407,7 +407,23 @@ def _search_result_is_empty(payload: str) -> bool:
         return True
     if data.get("error"):
         return True
-    return not data.get("results")
+    results = data.get("results")
+    if not isinstance(results, list):
+        return True
+    return not results
+
+
+def _search_result_has_failure(payload: str) -> bool:
+    """Return whether a provider outcome is an error or malformed payload."""
+    try:
+        data = json.loads(payload)
+    except (json.JSONDecodeError, TypeError):
+        return True
+    return not (
+        isinstance(data, dict)
+        and not data.get("error")
+        and isinstance(data.get("results"), list)
+    )
 
 
 async def run_search_chain(
@@ -452,21 +468,28 @@ async def run_search_chain(
 
     attempted: list[str] = []
     selected: str | None = None
+    had_provider_failure = False
 
     def traced_thunk(backend: SearchBackend) -> Callable[[], Awaitable[str]]:
         async def invoke() -> str:
-            nonlocal selected
+            nonlocal had_provider_failure, selected
             attempted.append(backend.name)
-            payload = await backend.search(
-                query=query,
-                max_results=max_results,
-                time_range=time_range,
-                language=language,
-                include_domains=include_domains,
-                exclude_domains=exclude_domains,
-                categories=categories,
-            )
-            if not _search_result_is_empty(payload):
+            try:
+                payload = await backend.search(
+                    query=query,
+                    max_results=max_results,
+                    time_range=time_range,
+                    language=language,
+                    include_domains=include_domains,
+                    exclude_domains=exclude_domains,
+                    categories=categories,
+                )
+            except Exception:
+                had_provider_failure = True
+                raise
+            if _search_result_has_failure(payload):
+                had_provider_failure = True
+            elif not _search_result_is_empty(payload):
                 selected = backend.name
             return payload
 
@@ -485,6 +508,8 @@ async def run_search_chain(
         if result is not None
         else {"results": [], "total": 0, "query": query}
     )
+    if selected is None and had_provider_failure:
+        data["error"] = "Search backend chain exhausted after provider failure"
     data["search_backend"] = {
         "requested": requested,
         "attempted": attempted,
