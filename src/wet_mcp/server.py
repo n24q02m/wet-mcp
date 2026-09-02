@@ -3543,7 +3543,7 @@ async def run_http_server(port: int = 0) -> None:
     auth_scope = _per_request_sub_scope if public_url else None
 
     await _run_http(
-        mcp,
+        mcp,  # ty: ignore[invalid-argument-type]
         server_name="wet-mcp",
         relay_schema=RELAY_SCHEMA,
         host=host,
