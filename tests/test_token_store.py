@@ -121,7 +121,7 @@ def test_load_non_dict_payload(token_dir):
     # Encrypt a non-dict payload through the store, then read via load_token.
     store = PerPluginStore("wet", None, backend=mem, sub_key="tokens/drive")
     non_dict_payload: object = [1, 2, 3]
-    store.save(non_dict_payload)
+    store.save(non_dict_payload)  # type: ignore
     assert load_token("drive", backend=mem) is None
 
 
@@ -210,7 +210,7 @@ def test_load_token_for_sub_non_dict(token_dir):
     mem = InMemoryBackend()
     store = PerPluginStore("wet", "user1", backend=mem, sub_key="tokens/drive")
     non_dict_payload: object = [1, 2, 3]
-    store.save(non_dict_payload)
+    store.save(non_dict_payload)  # type: ignore
     assert load_token_for_sub("user1", "drive", backend=mem) is None
 
 

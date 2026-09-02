@@ -105,7 +105,7 @@ async def ensure_config(
 
         from .relay_schema import RELAY_SCHEMA
 
-        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)
+        session = await create_session(relay_url, SERVER_NAME, RELAY_SCHEMA)  # ty: ignore[invalid-argument-type]
 
         timeout_msg = f", {int(timeout)}s timeout" if timeout else ""
         print(
@@ -116,7 +116,7 @@ async def ensure_config(
             flush=True,
         )
 
-        config = await poll_for_result(relay_url, session, timeout_s=timeout)
+        config = await poll_for_result(relay_url, session, timeout_s=timeout)  # ty: ignore[invalid-argument-type]
 
         # Save to per-plugin store for future use (~/.wet-mcp/config.json)
         PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).save(config)

@@ -513,8 +513,8 @@ async def crawl(
 
             async with sem:
                 try:
-                    result = await crawler.arun(
-                        url,  # type: ignore[invalid-argument-type]
+                    result = await crawler.arun(  # ty: ignore[missing-argument]
+                        url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                         config=_crawler_run_config(),
                     )
 
@@ -603,8 +603,8 @@ async def sitemap(
 
             async with sem:
                 try:
-                    result = await crawler.arun(
-                        url,  # type: ignore[invalid-argument-type]
+                    result = await crawler.arun(  # ty: ignore[missing-argument]
+                        url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
                         config=_crawler_run_config(),
                     )
 
@@ -654,8 +654,8 @@ async def list_media(
     sem = _get_semaphore()
 
     async with sem:
-        result = await crawler.arun(
-            url,  # type: ignore[invalid-argument-type]
+        result = await crawler.arun(  # ty: ignore[missing-argument]
+            url,  # type: ignore[invalid-argument-type]  # ty: ignore[invalid-argument-type]
             config=_crawler_run_config(),
         )
 
