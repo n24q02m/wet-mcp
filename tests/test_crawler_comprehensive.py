@@ -616,7 +616,7 @@ async def test_shutdown_crawler_exception_handled():
     mock_crawler.__aexit__.side_effect = Exception("Shutdown error")
 
     with patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler):
-        crawler._crawler_instance = mock_crawler  # type: ignore
+        crawler._crawler_instance = mock_crawler
         await crawler.shutdown_crawler()
         assert crawler._crawler_instance is None
 
@@ -659,7 +659,7 @@ async def test_get_crawler_recycle_exception():
     mock_crawler.__aexit__.side_effect = Exception("aexit failed")
     with patch("wet_mcp.sources.crawler.AsyncWebCrawler", return_value=mock_crawler):
         # We need to manually set it so recycle logic triggers
-        crawler._crawler_instance = mock_crawler  # type: ignore
+        crawler._crawler_instance = mock_crawler
         crawler._crawler_stealth = True
         await crawler._get_crawler(stealth=False)
         mock_crawler.__aexit__.assert_called()

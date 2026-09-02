@@ -398,7 +398,7 @@ async def test_relay_all_tools(request, tmp_path):
     capture = StderrCapture()
 
     try:
-        async with stdio_client(params, errlog=capture) as (read_stream, write_stream):  # ty: ignore[invalid-argument-type]
+        async with stdio_client(params, errlog=capture) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as s:
                 await s.initialize()
 
