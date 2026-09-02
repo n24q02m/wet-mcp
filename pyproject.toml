@@ -81,7 +81,7 @@ dependencies = [
     # that major bump on its own. Lift it deliberately, alongside mcp-core,
     # after re-checking the SDK surfaces this server touches directly — the
     # ToolAnnotations built at each tool definition in server.py above all.
-    "fastmcp>=3.4.4,<4",
+    "fastmcp>=3.4.4,<5",
     # Google Drive sync
     "google-api-python-client>=2.198.0",
     "google-auth>=2.56.2",
