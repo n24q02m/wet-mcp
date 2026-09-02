@@ -11,6 +11,7 @@ legitimate and never triggers rotation — only the PROVIDER chain advances on e
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -672,6 +673,7 @@ async def run_search_chain(
     categories="general",
     searxng_url: str | None = None,
     region: str | None = None,
+    parallel: bool = False,
 ) -> str:
     """Run the configured search chain and report the selected backend.
 
@@ -767,6 +769,71 @@ async def run_search_chain(
     attempted: list[str] = []
     selected: str | None = None
     had_provider_failure = False
+
+    if parallel and len(backends) > 1:
+        attempted = [b.name for b in backends]
+        tasks = [
+            backend.search(
+                query=query,
+                max_results=max_results,
+                time_range=time_range,
+                language=language,
+                include_domains=include_domains,
+                exclude_domains=exclude_domains,
+                categories=categories,
+            )
+            for backend in backends
+        ]
+        outcomes = await asyncio.gather(*tasks, return_exceptions=True)
+        merged_results: list[dict] = []
+        seen_urls: set[str] = set()
+        successful_backends: list[str] = []
+        had_failure = False
+
+        for backend, outcome in zip(backends, outcomes, strict=False):
+            if isinstance(outcome, BaseException):
+                logger.warning(
+                    f"Search backend '{backend.name}' raised: {type(outcome).__name__}"
+                )
+                had_failure = True
+                continue
+            try:
+                parsed = json.loads(outcome)
+                if (
+                    isinstance(parsed, dict)
+                    and isinstance(parsed.get("results"), list)
+                    and parsed["results"]
+                ):
+                    successful_backends.append(backend.name)
+                    for item in parsed["results"]:
+                        if isinstance(item, dict):
+                            url = item.get("url")
+                            if url and url not in seen_urls:
+                                seen_urls.add(url)
+                                item_copy = dict(item)
+                                if "source" not in item_copy:
+                                    item_copy["source"] = backend.name
+                                merged_results.append(item_copy)
+                elif isinstance(parsed, dict) and parsed.get("error"):
+                    had_failure = True
+            except Exception:
+                had_failure = True
+
+        data: dict[str, object] = {
+            "results": merged_results[:max_results],
+            "total": len(merged_results),
+            "query": query,
+        }
+        if not merged_results and had_failure:
+            data["error"] = "Search backend chain exhausted after provider failure"
+
+        data["search_backend"] = {
+            "requested": requested,
+            "attempted": attempted,
+            "selected": "+".join(successful_backends) if successful_backends else None,
+            "fallback": "parallel_fanout" if successful_backends else "exhausted",
+        }
+        return json.dumps(data, ensure_ascii=False)
 
     def traced_thunk(backend: SearchBackend) -> Callable[[], Awaitable[str]]:
         async def invoke() -> str:

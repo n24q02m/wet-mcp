@@ -1136,6 +1136,7 @@ async def search(  # noqa: PLR0913
     video: bool = False,
     region: str | None = None,
     refine: bool = False,
+    parallel: bool = False,
 ) -> dict[str, Any]:
     """Find information across web, academic sources, X/Twitter, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
 
@@ -1229,6 +1230,7 @@ async def search(  # noqa: PLR0913
                 "region": region_normalized,
                 "include_domains": include_domains,
                 "exclude_domains": exclude_domains,
+                "parallel": parallel,
             }
             if _web_cache:
                 cache_hit = await asyncio.to_thread(
@@ -1317,6 +1319,7 @@ async def search(  # noqa: PLR0913
                         include_domains=include_domains,
                         exclude_domains=exclude_domains,
                         searxng_url=live_searxng_url,
+                        parallel=parallel,
                     ),
                     "search",
                 )
@@ -1498,6 +1501,7 @@ async def search(  # noqa: PLR0913
                 "language": language,
                 "include_domains": include_domains,
                 "exclude_domains": exclude_domains,
+                "parallel": parallel,
             }
             if _web_cache:
                 cached = await asyncio.to_thread(

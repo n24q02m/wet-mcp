@@ -125,6 +125,24 @@ def standardize_citation(
     if published_at:
         out["published_at"] = published_at
 
+    # Attach finite confidence if available in raw result (e.g. rerank/similarity score)
+    score_keys = (
+        "score",
+        "confidence",
+        "relevance",
+        "similarity",
+        "similarity_score",
+        "rerank_score",
+    )
+    for k in score_keys:
+        val = raw.get(k)
+        if isinstance(val, (int, float)) and not isinstance(val, bool):
+            import math
+
+            if not (math.isnan(val) or math.isinf(val)):
+                out["confidence"] = round(float(val), 4)
+                break
+
     return out
 
 
