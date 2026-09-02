@@ -42,7 +42,7 @@ def _patched_install_searxng() -> bool:
     return result
 
 
-_wc_runner._install_searxng = _patched_install_searxng  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+_wc_runner._install_searxng = _patched_install_searxng  # type: ignore[assignment]
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ def _find_available_port(start_port: int, max_tries: int = 100) -> int:
     raise RuntimeError(msg)
 
 
-_wc_runner._find_available_port = _find_available_port  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+_wc_runner._find_available_port = _find_available_port  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Re-export internal functions from web-core for backward compatibility.
