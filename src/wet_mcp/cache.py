@@ -138,6 +138,32 @@ class WebCache:
         logger.debug(f"Cache MISS: {action} ({key[:12]}...)")
         return None
 
+    def get_stale_with_age(self, action: str, params: dict) -> tuple[str, int] | None:
+        """Serve a TTL-expired entry for stale-while-revalidate reads.
+
+        Returns ``(content, age)`` even when ``expires_at`` has passed, as
+        long as the entry is still within the stale window (one extra TTL
+        past expiry, so total staleness never exceeds 2x the entry's own
+        TTL); ``None`` on miss or once the stale window is exhausted. The
+        caller decides freshness: the existing per-result freshness signal
+        already flags ``"stale"`` once ``age > ttl / 2``.
+        """
+        key = _cache_key(action, params)
+        now = time.time()
+
+        row = self._conn.execute(
+            """SELECT content, created_at, expires_at FROM web_cache
+               WHERE key = ? AND expires_at + (expires_at - created_at) > ?""",
+            (key, now),
+        ).fetchone()
+        if row is None:
+            logger.debug(f"Cache STALE-MISS: {action} ({key[:12]}...)")
+            return None
+
+        age = max(0, int(now - row["created_at"]))
+        logger.debug(f"Cache STALE-HIT: {action} ({key[:12]}...) age={age}s")
+        return row["content"], age
+
     def set(
         self, action: str, params: dict, content: str, ttl_override: int | None = None
     ) -> None:
