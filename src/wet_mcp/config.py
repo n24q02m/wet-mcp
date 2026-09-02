@@ -202,6 +202,11 @@ class Settings(BaseSettings):
 
     # Cache (web operations)
     wet_cache: bool = True  # Enable/disable web cache
+    # Per-provider query budget for the web-search chain (env
+    # WET_SEARCH_BUDGET). Counts attempts per provider per process; when a
+    # provider reaches the cap the chain advances past it with a structured
+    # error naming it. 0 (default) = unlimited.
+    wet_search_budget: int = 0
     cache_dir: str = ""  # Cache database directory, default: ~/.wet-mcp
 
     # Docs storage

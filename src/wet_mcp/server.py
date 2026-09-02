@@ -27,6 +27,7 @@ from loguru import logger
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
+from wet_mcp import search_metrics
 from wet_mcp.cache import WebCache
 from wet_mcp.config import settings
 from wet_mcp.db import (
@@ -1235,7 +1236,6 @@ async def search(  # noqa: PLR0913
                 )
                 if cache_hit:
                     cached_content, cache_age = cache_hit
-                    # Re-stamp freshness signal based on current age.
                     try:
                         cached_data = json.loads(cached_content)
                         if isinstance(cached_data, dict) and cached_data.get("results"):
@@ -1244,6 +1244,30 @@ async def search(  # noqa: PLR0913
                                 cache_age_seconds=cache_age,
                                 ttl_seconds=ttl,
                             )
+                            return cached_data
+                    except json.JSONDecodeError:
+                        pass
+                    return _payload(cached_content)
+
+                # Stale-While-Revalidate: serve stale if within 2x TTL window
+                try:
+                    stale_hit = await asyncio.to_thread(
+                        _web_cache.get_stale_with_age, "search", cache_params
+                    )
+                except Exception:
+                    stale_hit = None
+
+                if stale_hit and isinstance(stale_hit, tuple) and len(stale_hit) == 2:
+                    cached_content, cache_age = stale_hit
+                    try:
+                        cached_data = json.loads(cached_content)
+                        if isinstance(cached_data, dict) and cached_data.get("results"):
+                            cached_data["results"] = standardize_results(
+                                cached_data["results"],
+                                cache_age_seconds=cache_age,
+                                ttl_seconds=ttl,
+                            )
+                            cached_data["stale"] = True
                             return cached_data
                     except json.JSONDecodeError:
                         pass
@@ -2278,6 +2302,7 @@ async def _handle_config_status() -> dict[str, Any]:
         # surface whether the key is set and which model (cheap vs expensive)
         # will be charged before the operator spends anything.
         "x_search": x_search_status(),
+        "search_metrics": search_metrics.snapshot(),
     }
     return status
 
@@ -2292,6 +2317,7 @@ def _handle_config_set(key: str | None, value: str | None) -> dict[str, Any]:
         "sync_enabled",
         "sync_folder",
         "sync_interval",
+        "wet_search_budget",
     }
     if key not in valid_keys:
         import difflib
@@ -2310,7 +2336,7 @@ def _handle_config_set(key: str | None, value: str | None) -> dict[str, Any]:
         settings.log_level = value.upper()
         logger.remove()
         logger.add(sys.stderr, level=settings.log_level)
-    elif key in ("tool_timeout", "sync_interval"):
+    elif key in ("tool_timeout", "sync_interval", "wet_search_budget"):
         setattr(settings, key, int(value))
     elif key in ("wet_cache", "sync_enabled"):
         setattr(settings, key, value.lower() in ("true", "1", "yes"))

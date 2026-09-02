@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Awaitable, Callable
 from typing import Protocol
 
@@ -21,6 +22,7 @@ from loguru import logger
 from mcp_core.chains import run_with_fallback
 from mcp_core.llm.key_rotation import rotate_keys, split_keys
 
+from wet_mcp import search_metrics
 from wet_mcp.config import settings
 
 
@@ -714,6 +716,32 @@ async def run_search_chain(
                 },
                 ensure_ascii=False,
             )
+
+    budget = getattr(settings, "wet_search_budget", 0) or 0
+    if budget > 0 and backends:
+        exhausted = [
+            b.name for b in backends if search_metrics.query_count(b.name) >= budget
+        ]
+        if len(exhausted) == len(backends):
+            return json.dumps(
+                {
+                    "results": [],
+                    "total": 0,
+                    "query": query,
+                    "error": (
+                        "search query budget exhausted for provider(s): "
+                        + ", ".join(exhausted)
+                        + f" (WET_SEARCH_BUDGET={budget})"
+                    ),
+                    "search_backend": {
+                        "requested": requested,
+                        "attempted": [],
+                        "selected": None,
+                        "fallback": "unavailable",
+                    },
+                },
+                ensure_ascii=False,
+            )
     if not backends:
         msg = (
             f"Search backends {requested} are missing API keys; configure a key or add searxng"
@@ -743,7 +771,26 @@ async def run_search_chain(
     def traced_thunk(backend: SearchBackend) -> Callable[[], Awaitable[str]]:
         async def invoke() -> str:
             nonlocal had_provider_failure, selected
+            if budget > 0 and search_metrics.query_count(backend.name) >= budget:
+                # Per-provider cap reached: a structured error naming the
+                # provider, which advances the chain (fallback semantics
+                # unchanged) instead of a silent drop.
+                logger.warning(
+                    f"Search backend {backend.name!r} at query budget "
+                    f"({budget}); advancing chain"
+                )
+                return json.dumps(
+                    {
+                        "error": (
+                            f"search query budget exhausted for provider "
+                            f"'{backend.name}' (WET_SEARCH_BUDGET={budget})"
+                        )
+                    },
+                    ensure_ascii=False,
+                )
             attempted.append(backend.name)
+            search_metrics.record_query(backend.name)
+            started = time.perf_counter()
             try:
                 payload = await backend.search(
                     query=query,
@@ -758,6 +805,10 @@ async def run_search_chain(
             except Exception:
                 had_provider_failure = True
                 raise
+            finally:
+                search_metrics.record_latency(
+                    backend.name, time.perf_counter() - started
+                )
             if _search_result_has_failure(payload):
                 had_provider_failure = True
             elif not _search_result_is_empty(payload):
