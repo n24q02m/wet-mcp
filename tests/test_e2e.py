@@ -398,7 +398,7 @@ async def test_relay_all_tools(request, tmp_path):
     capture = StderrCapture()
 
     try:
-        async with stdio_client(params, errlog=capture) as (read_stream, write_stream):
+        async with stdio_client(params, errlog=capture) as (read_stream, write_stream):  # ty: ignore[invalid-argument-type]
             async with ClientSession(read_stream, write_stream) as s:
                 await s.initialize()
 
@@ -732,8 +732,10 @@ async def test_http_oauth_full_flow(request, tmp_path):
             try:
                 async with streamable_http_client(
                     f"{base_url}/mcp",
-                    http_client=authed_client,
-                ) as (read_stream, write_stream, _get_session_id):
+                    http_client=authed_client,  # ty: ignore[invalid-argument-type]
+                ) as streams:  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+                    read_stream = streams[0]  # type: ignore
+                    write_stream = streams[1]  # type: ignore
                     async with ClientSession(read_stream, write_stream) as s:
                         await s.initialize()
                         print("  MCP session initialized via HTTP", flush=True)
