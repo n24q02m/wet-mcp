@@ -7,6 +7,7 @@ import functools
 import io
 import json
 import os
+import re
 import sys
 import time
 
@@ -62,6 +63,10 @@ logger.add(sys.stderr, level=settings.log_level)
 # yields an incompatible vector space -- DocsDB's embedding-model identity
 # guard (B2) catches that. Override via EMBEDDING_DIMS env var.
 _DEFAULT_EMBEDDING_DIMS = 768
+
+
+# ``region`` (search action): 2-letter ISO 3166-1 alpha-2 geo code.
+_REGION_RE = re.compile(r"^[A-Za-z]{2}$")
 
 # Reranking: retrieve more candidates than final limit, then rerank.
 _RERANK_CANDIDATE_MULTIPLIER = 3
@@ -1128,6 +1133,8 @@ async def search(  # noqa: PLR0913
     from_date: str | None = None,
     to_date: str | None = None,
     video: bool = False,
+    region: str | None = None,
+    refine: bool = False,
 ) -> dict[str, Any]:
     """Find information across web, academic sources, X/Twitter, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
 
@@ -1153,6 +1160,8 @@ async def search(  # noqa: PLR0913
     - handles / exclude_handles (x only): Restrict to / exclude up to 20 X handles (mutually exclusive), e.g. handles=["nasa"]
     - from_date / to_date (x only): ISO8601 date bounds; override time_range for precise windows
     - video (x only): Enable video understanding of linked X media (default: false)
+    - region (search only): 2-letter ISO 3166-1 country code (e.g. "US", "vn") geo filter. Backends without region support are skipped (named in a warning); a chain with no region-capable backend returns a structured error naming them.
+    - refine (search only): Opt-in iterative refinement. When results are empty or low-relevance, re-queries up to 2 times with LLM-rewritten terms and returns the best round (adds LLM latency/cost per round).
 
     Use `help` tool with tool_name="search" for full parameter documentation.
     """
@@ -1193,18 +1202,30 @@ async def search(  # noqa: PLR0913
                 }
             from wet_mcp.sources._search_polish import (
                 normalize_query,
+                refine_needed,
+                round_quality,
                 search_ttl_seconds,
                 standardize_results,
             )
 
             normalized_query = normalize_query(query)
             ttl = search_ttl_seconds(time_range)
+            region_normalized = region.strip() if isinstance(region, str) else ""
+            if region_normalized and not _REGION_RE.fullmatch(region_normalized):
+                return {
+                    "error": (
+                        f"Invalid region={region!r} for search action: expected "
+                        "a 2-letter ISO 3166-1 code (e.g. 'US', 'vn')."
+                    )
+                }
+            region_normalized = region_normalized.upper() or None
             cache_params = {
                 "query": normalized_query,
                 "categories": categories,
                 "max_results": max_results,
                 "time_range": time_range,
                 "language": language,
+                "region": region_normalized,
                 "include_domains": include_domains,
                 "exclude_domains": exclude_domains,
             }
@@ -1254,110 +1275,165 @@ async def search(  # noqa: PLR0913
                 except (SystemExit, Exception) as exc:
                     return {"error": f"Error: SearXNG startup failed: {exc}"}
 
-            result = await _with_timeout(
-                search_backends.run_search_chain(
-                    query=search_query,
-                    categories=categories,
-                    max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
-                    time_range=time_range,
-                    language=language,
-                    include_domains=include_domains,
-                    exclude_domains=exclude_domains,
-                    searxng_url=live_searxng_url,
-                ),
-                "search",
-            )
-            if not result.startswith("Error"):
+            async def _round(round_query: str) -> tuple[str, dict[str, Any] | None]:
+                """One chain round: run the chain, sanity-filter, rerank.
+
+                Returns ``(raw_payload, parsed_envelope)``; ``data`` is
+                ``None`` when the chain itself failed (tool timeout or
+                unparseable payload) and the raw text must pass through.
+                """
+                result = await _with_timeout(
+                    search_backends.run_search_chain(
+                        query=round_query,
+                        categories=categories,
+                        max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
+                        time_range=time_range,
+                        language=language,
+                        region=region_normalized,
+                        include_domains=include_domains,
+                        exclude_domains=exclude_domains,
+                        searxng_url=live_searxng_url,
+                    ),
+                    "search",
+                )
+                if result.startswith("Error"):
+                    return result, None
                 try:
                     data = json.loads(result)
-                    modified = False
-
-                    # Rerank by semantic relevance (same as research/docs)
-                    try:
-                        raw_results = data.get("results", [])
-                        results_list = [
-                            r
-                            for r in raw_results
-                            if any(
-                                isinstance(value, str) and value.strip()
-                                for value in (r.get("content"), r.get("snippet"))
-                            )
-                        ]
-                        if len(results_list) != len(raw_results):
-                            data["results"] = results_list[:max_results]
-                            data["total"] = len(data["results"])
-                            modified = True
-                        if results_list:
-                            # Normalize the usable body for reranking and output.
-                            for r in results_list:
-                                content = r.get("content")
-                                snippet = r.get("snippet")
-                                if not isinstance(content, str) or not content.strip():
-                                    r["content"] = snippet
-                                if not isinstance(snippet, str) or not snippet.strip():
-                                    r["snippet"] = r["content"]
-                            reranked = await _rerank_results(
-                                query, results_list, top_n=max_results
-                            )
-                            if reranked:
-                                data["results"] = reranked
-                                data["total"] = len(data["results"])
-                                modified = True
-                    except Exception as e:
-                        logger.warning(
-                            f"Search reranking step failed for query {query!r}, "
-                            f"returning backend order: {type(e).__name__}: {e}"
-                        )
-
-                    # Optional snippet enrichment
-                    if enrich:
-                        try:
-                            results_list = data.get("results", [])
-                            if results_list:
-                                from wet_mcp.sources.search_strategies import (
-                                    enrich_snippets,
-                                )
-
-                                enriched = await enrich_snippets(
-                                    results_list, query, top_n=5
-                                )
-                                data["results"] = enriched
-                                modified = True
-                        except Exception as e:
-                            # enrich=True is an explicit opt-in the caller pays
-                            # latency for. Dropping it at debug level returns
-                            # plain snippets that look like a successful
-                            # enrichment.
-                            logger.warning(
-                                f"Snippet enrichment (enrich=True) failed for "
-                                f"query {query!r}; returning unenriched "
-                                f"snippets: {type(e).__name__}: {e}"
-                            )
-
-                    # Citation standardization (always on -- cheap pure-python).
-                    try:
-                        results_list = data.get("results", [])
-                        if results_list:
-                            data["results"] = standardize_results(
-                                results_list,
-                                cache_age_seconds=None,
-                                ttl_seconds=ttl,
-                            )
-                            modified = True
-                    except Exception as e:
-                        # Pure-python and always on, so a failure here is our
-                        # own bug, not an upstream outage.
-                        logger.warning(
-                            f"Citation standardization failed for query "
-                            f"{query!r}; results ship without freshness / "
-                            f"citation metadata: {type(e).__name__}: {e}"
-                        )
-
-                    if modified:
-                        result = json.dumps(data, ensure_ascii=False, indent=2)
                 except json.JSONDecodeError:
-                    pass
-            if _web_cache and not result.startswith("Error"):
+                    return result, None
+                # Rerank by semantic relevance (same as research/docs). The
+                # rerank anchor is the query actually sent to the chain for
+                # this round (with expand=True the original behavior reranked
+                # against the pre-expansion query).
+                try:
+                    raw_results = data.get("results", [])
+                    results_list = [
+                        r
+                        for r in raw_results
+                        if any(
+                            isinstance(value, str) and value.strip()
+                            for value in (r.get("content"), r.get("snippet"))
+                        )
+                    ]
+                    if len(results_list) != len(raw_results):
+                        data["results"] = results_list[:max_results]
+                        data["total"] = len(data["results"])
+                    if results_list:
+                        # Normalize the usable body for reranking and output.
+                        for r in results_list:
+                            content = r.get("content")
+                            snippet = r.get("snippet")
+                            if not isinstance(content, str) or not content.strip():
+                                r["content"] = snippet
+                            if not isinstance(snippet, str) or not snippet.strip():
+                                r["snippet"] = r["content"]
+                        reranked = await _rerank_results(
+                            round_query, results_list, top_n=max_results
+                        )
+                        if reranked:
+                            data["results"] = reranked
+                            data["total"] = len(data["results"])
+                except Exception as e:
+                    logger.warning(
+                        f"Search reranking step failed for query {round_query!r}, "
+                        f"returning backend order: {type(e).__name__}: {e}"
+                    )
+                return json.dumps(data, ensure_ascii=False, indent=2), data
+
+            raw, data = await _round(search_query)
+            if data is None:
+                if raw.startswith("Error"):
+                    return _payload(raw)
+                if _web_cache:
+                    await asyncio.to_thread(
+                        _web_cache.set, "search", cache_params, raw, ttl
+                    )
+                return _payload(raw)
+
+            # Quality-tracked rounds. With refine=True a round that fails the
+            # quality gate (all-empty or mean rerank score below the floor)
+            # triggers at most 2 re-queries with LLM-rewritten terms; the
+            # best round by quality wins (ties keep the original query).
+            rounds: list[tuple[float, dict[str, Any]]] = [
+                (round_quality(data.get("results", [])), data)
+            ]
+            if refine:
+                tried: list[str] = [search_query]
+                current = search_query
+                for _ in range(2):  # hard bound: max 2 review rounds
+                    if not refine_needed(rounds[-1][1].get("results", [])):
+                        break
+                    from wet_mcp.sources.search_strategies import rewrite_query
+
+                    results_now = rounds[-1][1].get("results", [])
+                    if results_now:
+                        scored = [
+                            r["score"]
+                            for r in results_now
+                            if isinstance(r.get("score"), (int, float))
+                            and not isinstance(r.get("score"), bool)
+                        ]
+                        reason = (
+                            f"low relevance (mean score {sum(scored) / len(scored):.2f})"
+                            if scored
+                            else "irrelevant results"
+                        )
+                    else:
+                        reason = "no results at all"
+                    rewritten = await rewrite_query(current, avoid=tried, reason=reason)
+                    if not rewritten:
+                        break  # no LLM available or nothing new to try
+                    tried.append(rewritten)
+                    _r_raw, r_data = await _round(rewritten)
+                    if r_data is None:
+                        break  # a failed round never poisons the best-round pick
+                    rounds.append((round_quality(r_data.get("results", [])), r_data))
+                    current = rewritten
+            _, data = max(rounds, key=lambda pair: pair[0])
+
+            # Optional snippet enrichment
+            if enrich:
+                try:
+                    results_list = data.get("results", [])
+                    if results_list:
+                        from wet_mcp.sources.search_strategies import (
+                            enrich_snippets,
+                        )
+
+                        enriched = await enrich_snippets(results_list, query, top_n=5)
+                        data["results"] = enriched
+                except Exception as e:
+                    # enrich=True is an explicit opt-in the caller pays
+                    # latency for. Dropping it at debug level returns
+                    # plain snippets that look like a successful
+                    # enrichment.
+                    logger.warning(
+                        f"Snippet enrichment (enrich=True) failed for "
+                        f"query {query!r}; returning unenriched "
+                        f"snippets: {type(e).__name__}: {e}"
+                    )
+
+            # Citation standardization (always on -- cheap pure-python).
+            try:
+                results_list = data.get("results", [])
+                if results_list:
+                    data["results"] = standardize_results(
+                        results_list,
+                        cache_age_seconds=None,
+                        ttl_seconds=ttl,
+                    )
+            except Exception as e:
+                # Pure-python and always on, so a failure here is our
+                # own bug, not an upstream outage.
+                logger.warning(
+                    f"Citation standardization failed for query "
+                    f"{query!r}; results ship without freshness / "
+                    f"citation metadata: {type(e).__name__}: {e}"
+                )
+
+            result = json.dumps(data, ensure_ascii=False, indent=2)
+            if _web_cache:
                 await asyncio.to_thread(
                     _web_cache.set, "search", cache_params, result, ttl
                 )

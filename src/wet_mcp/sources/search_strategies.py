@@ -53,6 +53,59 @@ async def expand_query(query: str) -> list[str]:
         return [query]
 
 
+async def rewrite_query(
+    query: str,
+    avoid: list[str] | None = None,
+    reason: str = "",
+) -> str | None:
+    """LLM-rewrite one search query for a refinement round.
+
+    Returns a single rewritten query, or ``None`` when refinement cannot
+    proceed (local mode, LLM unavailable/empty, or a rewrite that merely
+    repeats a query already tried). Token cost is bounded by ``max_tokens``;
+    callers bound the number of rounds.
+    """
+    mode = settings.resolve_provider_mode()
+    if mode == "local":
+        return None
+    avoid = avoid or []
+    try:
+        config = get_llm_config()
+        prompt = (
+            f"Rewrite this web search query to find better results: '{query}'\n"
+            "Return ONLY the rewritten query on one line. "
+            "Fix vagueness, add discriminating keywords, drop noise."
+        )
+        if reason:
+            prompt += f"\nThe problem with the previous results: {reason}"
+        if avoid:
+            prompt += (
+                "\nDo NOT restate any of these already-tried queries: "
+                + "; ".join(avoid[:5])
+            )
+        response = await acompletion(
+            model=config["model"],
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
+            max_tokens=60,
+            **{
+                k: v
+                for k, v in config.items()
+                if k not in ("model", "fallbacks", "temperature")
+            },
+        )
+        rewritten = (
+            (response.choices[0].message.content or "").strip().strip('"').strip("'")
+        )
+        rewritten = rewritten.splitlines()[0].strip() if rewritten else ""
+        if not rewritten or rewritten.lower() == query.lower() or rewritten in avoid:
+            return None
+        return rewritten
+    except Exception as e:
+        logger.debug(f"Query rewrite failed, refinement stops: {e}")
+        return None
+
+
 async def find_similar(
     url: str,
     max_results: int = 10,

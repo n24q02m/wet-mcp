@@ -36,6 +36,7 @@ class SearchBackend(Protocol):
         include_domains: list[str] | None = None,
         exclude_domains: list[str] | None = None,
         categories: str = "general",
+        region: str | None = None,
     ) -> str: ...
 
 
@@ -75,6 +76,203 @@ async def _search_with_rotation(
         return json.dumps({"error": f"{provider} search failed: {type(exc).__name__}"})
 
 
+# Backends with native geo/region support. ``region`` is an ISO 3166-1 alpha-2
+# code (``"US"``, ``"vn"``). A backend outside this set never receives the
+# value silently: the chain skips it with a warning naming it, and when no
+# configured backend supports it the caller gets a structured error naming
+# them. The region is never silently dropped.
+_REGION_SUPPORTED_BACKENDS = frozenset({"searxng", "brave", "tavily"})
+
+
+def _searxng_locale(language: str | None, region: str | None) -> str | None:
+    """Map ``language`` + ``region`` onto SearXNG's single ``language`` locale.
+
+    SearXNG takes one ``language`` parameter in ``<lang>-<REGION>`` form, so
+    ``language="vi", region="vn"`` -> ``"vi-VN"``; a bare region passes
+    through as-is.
+    """
+    if region and language:
+        return f"{language}-{region.upper()}"
+    if region:
+        return region.upper()
+    return language
+
+
+# Tavily's ``country`` parameter is a closed enum of lowercase country names
+# (docs.tavily.com API reference, enum extracted 2026-09-02), so an ISO
+# 3166-1 alpha-2 ``region`` must map through this table. A code Tavily does
+# not carry yields an explicit error naming the backend -- never a silent
+# drop of the geo filter.
+_TAVILY_COUNTRY_BY_ISO: dict[str, str] = {
+    "af": "afghanistan",
+    "al": "albania",
+    "dz": "algeria",
+    "ad": "andorra",
+    "ao": "angola",
+    "ar": "argentina",
+    "am": "armenia",
+    "au": "australia",
+    "at": "austria",
+    "az": "azerbaijan",
+    "bs": "bahamas",
+    "bh": "bahrain",
+    "bd": "bangladesh",
+    "bb": "barbados",
+    "by": "belarus",
+    "be": "belgium",
+    "bz": "belize",
+    "bj": "benin",
+    "bt": "bhutan",
+    "bo": "bolivia",
+    "ba": "bosnia and herzegovina",
+    "bw": "botswana",
+    "br": "brazil",
+    "bn": "brunei",
+    "bg": "bulgaria",
+    "bf": "burkina faso",
+    "bi": "burundi",
+    "kh": "cambodia",
+    "cm": "cameroon",
+    "ca": "canada",
+    "cv": "cape verde",
+    "cf": "central african republic",
+    "td": "chad",
+    "cl": "chile",
+    "cn": "china",
+    "co": "colombia",
+    "km": "comoros",
+    "cg": "congo",
+    "cr": "costa rica",
+    "hr": "croatia",
+    "cu": "cuba",
+    "cy": "cyprus",
+    "cz": "czech republic",
+    "dk": "denmark",
+    "dj": "djibouti",
+    "do": "dominican republic",
+    "ec": "ecuador",
+    "eg": "egypt",
+    "sv": "el salvador",
+    "gq": "equatorial guinea",
+    "er": "eritrea",
+    "ee": "estonia",
+    "et": "ethiopia",
+    "fj": "fiji",
+    "fi": "finland",
+    "fr": "france",
+    "ga": "gabon",
+    "gm": "gambia",
+    "ge": "georgia",
+    "de": "germany",
+    "gh": "ghana",
+    "gr": "greece",
+    "gt": "guatemala",
+    "gn": "guinea",
+    "ht": "haiti",
+    "hn": "honduras",
+    "hu": "hungary",
+    "is": "iceland",
+    "in": "india",
+    "id": "indonesia",
+    "ir": "iran",
+    "iq": "iraq",
+    "ie": "ireland",
+    "il": "israel",
+    "it": "italy",
+    "jm": "jamaica",
+    "jp": "japan",
+    "jo": "jordan",
+    "kz": "kazakhstan",
+    "ke": "kenya",
+    "kw": "kuwait",
+    "kg": "kyrgyzstan",
+    "lv": "latvia",
+    "lb": "lebanon",
+    "ls": "lesotho",
+    "lr": "liberia",
+    "ly": "libya",
+    "li": "liechtenstein",
+    "lt": "lithuania",
+    "lu": "luxembourg",
+    "mg": "madagascar",
+    "mw": "malawi",
+    "my": "malaysia",
+    "mv": "maldives",
+    "ml": "mali",
+    "mt": "malta",
+    "mr": "mauritania",
+    "mu": "mauritius",
+    "mx": "mexico",
+    "md": "moldova",
+    "mc": "monaco",
+    "mn": "mongolia",
+    "me": "montenegro",
+    "ma": "morocco",
+    "mz": "mozambique",
+    "mm": "myanmar",
+    "na": "namibia",
+    "np": "nepal",
+    "nl": "netherlands",
+    "nz": "new zealand",
+    "ni": "nicaragua",
+    "ne": "niger",
+    "ng": "nigeria",
+    "kp": "north korea",
+    "mk": "north macedonia",
+    "no": "norway",
+    "om": "oman",
+    "pk": "pakistan",
+    "pa": "panama",
+    "pg": "papua new guinea",
+    "py": "paraguay",
+    "pe": "peru",
+    "ph": "philippines",
+    "pl": "poland",
+    "pt": "portugal",
+    "qa": "qatar",
+    "ro": "romania",
+    "ru": "russia",
+    "rw": "rwanda",
+    "sa": "saudi arabia",
+    "sn": "senegal",
+    "rs": "serbia",
+    "sg": "singapore",
+    "sk": "slovakia",
+    "si": "slovenia",
+    "so": "somalia",
+    "za": "south africa",
+    "kr": "south korea",
+    "ss": "south sudan",
+    "es": "spain",
+    "lk": "sri lanka",
+    "sd": "sudan",
+    "se": "sweden",
+    "ch": "switzerland",
+    "sy": "syria",
+    "tw": "taiwan",
+    "tj": "tajikistan",
+    "tz": "tanzania",
+    "th": "thailand",
+    "tg": "togo",
+    "tt": "trinidad and tobago",
+    "tn": "tunisia",
+    "tr": "turkey",
+    "tm": "turkmenistan",
+    "ug": "uganda",
+    "ua": "ukraine",
+    "ae": "united arab emirates",
+    "gb": "united kingdom",
+    "us": "united states",
+    "uy": "uruguay",
+    "uz": "uzbekistan",
+    "ve": "venezuela",
+    "vn": "vietnam",
+    "ye": "yemen",
+    "zm": "zambia",
+    "zw": "zimbabwe",
+}
+
+
 class SearxngBackend:
     name = "searxng"
 
@@ -90,6 +288,7 @@ class SearxngBackend:
         include_domains=None,
         exclude_domains=None,
         categories="general",
+        region=None,
     ) -> str:
         from wet_mcp.sources.searxng import search as searxng_search
 
@@ -99,7 +298,7 @@ class SearxngBackend:
             categories=categories,
             max_results=max_results,
             time_range=time_range,
-            language=language,
+            language=_searxng_locale(language, region),
             include_domains=include_domains,
             exclude_domains=exclude_domains,
         )
@@ -113,7 +312,7 @@ class TavilyBackend:
     def __init__(self, keys: list[str]) -> None:
         self.keys = keys
 
-    async def _search_one(self, key, query, max_results) -> str:
+    async def _search_one(self, key, query, max_results, country=None) -> str:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
                 self._URL,
@@ -122,6 +321,7 @@ class TavilyBackend:
                     "query": query,
                     "max_results": max_results,
                     "search_depth": "basic",
+                    **({"country": country} if country else {}),
                 },
             )
             if resp.status_code != 200:
@@ -151,10 +351,27 @@ class TavilyBackend:
         include_domains=None,
         exclude_domains=None,
         categories="general",
+        region=None,
     ) -> str:
+        if region:
+            country = _TAVILY_COUNTRY_BY_ISO.get(region.lower())
+            if country is None:
+                # Explicit, structured, backend-named: never silently drop
+                # the requested geo filter.
+                return json.dumps(
+                    {
+                        "error": (
+                            f"tavily does not support region={region!r}: "
+                            "not a code in Tavily's country list"
+                        )
+                    },
+                    ensure_ascii=False,
+                )
+        else:
+            country = None
         return await _search_with_rotation(
             self.keys,
-            lambda key: self._search_one(key, query, max_results),
+            lambda key: self._search_one(key, query, max_results, country),
             "Tavily",
         )
 
@@ -173,7 +390,9 @@ class BraveBackend:
     def __init__(self, keys: list[str]) -> None:
         self.keys = keys
 
-    async def _search_one(self, key, query, max_results, time_range, language) -> str:
+    async def _search_one(
+        self, key, query, max_results, time_range, language, region=None
+    ) -> str:
         params: dict[str, str | int] = {
             "q": query,
             "count": min(max(max_results, 1), 20),
@@ -187,6 +406,9 @@ class BraveBackend:
                 params["freshness"] = freshness
         if language:
             params["search_lang"] = language
+        if region:
+            # Brave expects a 2-char ISO 3166-1 alpha-2 country code.
+            params["country"] = region.upper()
         headers = {"X-Subscription-Token": key, "Accept": "application/json"}
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(self._URL, params=params, headers=headers)
@@ -217,10 +439,13 @@ class BraveBackend:
         include_domains=None,
         exclude_domains=None,
         categories="general",
+        region=None,
     ) -> str:
         return await _search_with_rotation(
             self.keys,
-            lambda key: self._search_one(key, query, max_results, time_range, language),
+            lambda key: self._search_one(
+                key, query, max_results, time_range, language, region
+            ),
             "Brave",
         )
 
@@ -282,7 +507,16 @@ class ExaBackend:
         include_domains=None,
         exclude_domains=None,
         categories="general",
+        region=None,
     ) -> str:
+        if region:
+            # Exa's /search API has no geo parameter. Structured error naming
+            # the backend so the chain advances (or the caller sees) instead
+            # of silently searching without the requested region.
+            return json.dumps(
+                {"error": f"exa does not support region filtering (region={region!r})"},
+                ensure_ascii=False,
+            )
         return await _search_with_rotation(
             self.keys,
             lambda key: self._search_one(
@@ -435,15 +669,51 @@ async def run_search_chain(
     exclude_domains=None,
     categories="general",
     searxng_url: str | None = None,
+    region: str | None = None,
 ) -> str:
     """Run the configured search chain and report the selected backend.
 
     Providers are tried in order. Errors and empty results advance the chain.
     The returned envelope records requested, attempted, selected, and fallback
     state without exposing provider credentials or endpoints.
+
+    ``region`` (ISO 3166-1 alpha-2) is forwarded only to backends with native
+    geo support (searxng / brave / tavily). A backend without support is
+    skipped with a warning naming it; when no configured backend supports it,
+    a structured error naming them is returned -- the geo filter is never
+    silently dropped.
     """
     requested = chain_backend_names()
     backends = search_backends_from_env(searxng_url)
+    if region and backends:
+        unsupported = [
+            b.name for b in backends if b.name not in _REGION_SUPPORTED_BACKENDS
+        ]
+        if unsupported:
+            logger.warning(
+                f"region={region!r} not supported by search backend(s): "
+                f"{', '.join(unsupported)}; skipping them"
+            )
+            backends = [b for b in backends if b.name in _REGION_SUPPORTED_BACKENDS]
+        if not backends:
+            return json.dumps(
+                {
+                    "results": [],
+                    "total": 0,
+                    "query": query,
+                    "error": (
+                        f"region={region!r} is not supported by search "
+                        f"backend(s): {', '.join(unsupported)}"
+                    ),
+                    "search_backend": {
+                        "requested": requested,
+                        "attempted": [],
+                        "selected": None,
+                        "fallback": "unavailable",
+                    },
+                },
+                ensure_ascii=False,
+            )
     if not backends:
         msg = (
             f"Search backends {requested} are missing API keys; configure a key or add searxng"
@@ -483,6 +753,7 @@ async def run_search_chain(
                     include_domains=include_domains,
                     exclude_domains=exclude_domains,
                     categories=categories,
+                    region=region,
                 )
             except Exception:
                 had_provider_failure = True
