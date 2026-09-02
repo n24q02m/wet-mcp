@@ -2,6 +2,93 @@
 
 <!-- version list -->
 
+## v3.10.0-beta.1 (2026-09-02)
+
+### Bug Fixes
+
+- Bump mcp-core to 1.23.2 ([#1732](https://github.com/n24q02m/wet-mcp/pull/1732),
+  [`6e59588`](https://github.com/n24q02m/wet-mcp/commit/6e59588b1ae93f13dd6ac32afa4160fefca6f3b3))
+
+- Bump n24q02m-web-core to 2.5.1 ([#1733](https://github.com/n24q02m/wet-mcp/pull/1733),
+  [`440b1bf`](https://github.com/n24q02m/wet-mcp/commit/440b1bfcd5dca9af97363d848f88d8492eeee082))
+
+- Remove stale ty suppression comments after uv.lock regeneration
+  ([#1743](https://github.com/n24q02m/wet-mcp/pull/1743),
+  [`c10b8ae`](https://github.com/n24q02m/wet-mcp/commit/c10b8aefef73a975d4cb813e5ab2eefba42b9826))
+
+- Reuse search chain in agent extraction ([#1736](https://github.com/n24q02m/wet-mcp/pull/1736),
+  [`51db4b4`](https://github.com/n24q02m/wet-mcp/commit/51db4b4b4fead96106390ff7cec1def37a1ea144))
+
+- **deps**: Lock file maintenance ([#1734](https://github.com/n24q02m/wet-mcp/pull/1734),
+  [`59fa1c6`](https://github.com/n24q02m/wet-mcp/commit/59fa1c6c896a22f2a08f3d8fab806a1087e521fa))
+
+- **deps**: Pin mcp<2 to maintain FastMCP compatibility with MCP v1 SDK
+  ([#1748](https://github.com/n24q02m/wet-mcp/pull/1748),
+  [`fe9c60f`](https://github.com/n24q02m/wet-mcp/commit/fe9c60feffb6cbd4854cdf11720129ef65c9fa2e))
+
+- **deps**: Pin mcp<2 to maintain FastMCP compatibility with MCP v1 SDK
+  ([#1747](https://github.com/n24q02m/wet-mcp/pull/1747),
+  [`298eb42`](https://github.com/n24q02m/wet-mcp/commit/298eb424d81ad70e466b2d838fcbc189b6f7bf11))
+
+- **deps**: Pin mcp<2 to maintain FastMCP compatibility with MCP v1 SDK
+  ([#1746](https://github.com/n24q02m/wet-mcp/pull/1746),
+  [`70fb381`](https://github.com/n24q02m/wet-mcp/commit/70fb3817228777ee41d5d61b016c1abc9fd2cc4f))
+
+- **deps**: Regenerate uv.lock to resolve httpx2 duplicate entry
+  ([#1742](https://github.com/n24q02m/wet-mcp/pull/1742),
+  [`a5ff80e`](https://github.com/n24q02m/wet-mcp/commit/a5ff80e875d3c3a81605cd53e09083c6a603706e))
+
+- **deps**: Update fastmcp to v4 ([#1735](https://github.com/n24q02m/wet-mcp/pull/1735),
+  [`80e905f`](https://github.com/n24q02m/wet-mcp/commit/80e905f28ddfa33865ed2ee884fc8015923acfc4))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest Docker digest to 8b940d3
+  ([#1737](https://github.com/n24q02m/wet-mcp/pull/1737),
+  [`3d2db81`](https://github.com/n24q02m/wet-mcp/commit/3d2db81be70f9cb8cb5af0313b157acf9be0a418))
+
+- **tool.ty**: Ignore pydantic-discarded-extra-argument and unused-ignore diagnostics
+  ([#1745](https://github.com/n24q02m/wet-mcp/pull/1745),
+  [`fa23f08`](https://github.com/n24q02m/wet-mcp/commit/fa23f087b264ad9884ba6efed9d49d15c803ba19))
+
+- **types**: Restore CI-required ty suppressions and fix streamable_http_client types
+  ([#1745](https://github.com/n24q02m/wet-mcp/pull/1745),
+  [`fa23f08`](https://github.com/n24q02m/wet-mcp/commit/fa23f087b264ad9884ba6efed9d49d15c803ba19))
+
+- **types**: Restore CI-required ty suppressions and fix streamable_http_client types
+  ([#1744](https://github.com/n24q02m/wet-mcp/pull/1744),
+  [`32f336f`](https://github.com/n24q02m/wet-mcp/commit/32f336f38cdea347a35af6e9e82f7bf96d7a758a))
+
+- **types**: Suppress FastMCP nominal type mismatch in _run_http call
+  ([#1748](https://github.com/n24q02m/wet-mcp/pull/1748),
+  [`fe9c60f`](https://github.com/n24q02m/wet-mcp/commit/fe9c60feffb6cbd4854cdf11720129ef65c9fa2e))
+
+- **types**: Suppress FastMCP nominal type mismatch in _run_http call
+  ([#1747](https://github.com/n24q02m/wet-mcp/pull/1747),
+  [`298eb42`](https://github.com/n24q02m/wet-mcp/commit/298eb424d81ad70e466b2d838fcbc189b6f7bf11))
+
+### Features
+
+- Opt-in parallel search fan-out and confidence score exposure
+  ([#1741](https://github.com/n24q02m/wet-mcp/pull/1741),
+  [`5049736`](https://github.com/n24q02m/wet-mcp/commit/5049736a227e429e09d9f7498216eb9910581629))
+
+- Optional region filter and bounded refine loop for web search
+  ([#1739](https://github.com/n24q02m/wet-mcp/pull/1739),
+  [`83526e6`](https://github.com/n24q02m/wet-mcp/commit/83526e6cad79310f8b40d5024fa16609a4de6048))
+
+- Stale-while-revalidate cache, per-provider latency EMA, and query budget
+  ([#1740](https://github.com/n24q02m/wet-mcp/pull/1740),
+  [`ba9eed3`](https://github.com/n24q02m/wet-mcp/commit/ba9eed3e112e7938ee2abbe624ad28cbea33e425))
+
+### Testing
+
+- Align mcp-core pin guards ([#1732](https://github.com/n24q02m/wet-mcp/pull/1732),
+  [`6e59588`](https://github.com/n24q02m/wet-mcp/commit/6e59588b1ae93f13dd6ac32afa4160fefca6f3b3))
+
+- **manifest**: Allow fastretrieval 1.2.0 in locked package assertion
+  ([#1748](https://github.com/n24q02m/wet-mcp/pull/1748),
+  [`fe9c60f`](https://github.com/n24q02m/wet-mcp/commit/fe9c60feffb6cbd4854cdf11720129ef65c9fa2e))
+
+
 ## v3.9.0 (2026-08-31)
 
 
