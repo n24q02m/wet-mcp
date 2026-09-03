@@ -791,6 +791,15 @@ def start_auto_sync(db: DocsDB) -> None:
     if not settings.sync_enabled or settings.sync_interval <= 0:
         return
 
+    # On CF (DOCS_DB_BACKEND=cf-d1) the docs DB lives in D1 + Vectorize and
+    # there is no local file to delta-sync, so the GDrive loop is redundant.
+    # Same deployment-level gate as the device-code trigger in
+    # credential_state._trigger_gdrive_device_code (see F9 tests).
+    from wet_mcp.credential_state import _sync_redundant_on_cf
+
+    if _sync_redundant_on_cf():
+        return
+
     if _sync_task and not _sync_task.done():
         return  # Already running
 
