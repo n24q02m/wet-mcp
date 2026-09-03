@@ -46,7 +46,6 @@
     // Model, endpoint, and provider key are selected per authenticated subject
     // through the relay (per-sub); keep no model/provider lock in Worker vars.
     // Standard chains: cohere/embed-v4.0 + cohere/rerank-v4.0-fast via CF AI Gateway.
-    "LLM_MODELS": "openrouter/minimax/minimax-m3:free,openrouter/z-ai/glm-5.2:free",
     "SEARCH_BACKEND": "searxng",
     "WET_AUTO_SEARXNG": "false"
   },
