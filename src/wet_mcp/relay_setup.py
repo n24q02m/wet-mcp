@@ -141,9 +141,10 @@ async def ensure_config(
 
         # Trigger GDrive OAuth Device Code using default client ID from settings
         from wet_mcp.config import settings as _settings
+        from wet_mcp.credential_state import _sync_redundant_on_cf
 
         gdrive_ok = False
-        if _settings.google_drive_client_id:
+        if _settings.google_drive_client_id and not _sync_redundant_on_cf():
             logger.info("Starting Google Drive OAuth setup...")
             try:
                 from wet_mcp.sync import setup_google_auth

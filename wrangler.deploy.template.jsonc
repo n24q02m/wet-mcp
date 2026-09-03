@@ -48,9 +48,9 @@
     "MCP_D1_BASE_URL": "http://d1.internal",
     "MCP_VECTORIZE_BASE_URL": "http://vectorize.internal",
     "MCP_VECTORIZE_IDX": "${CF_VECTORIZE_ID}",
-    "EMBEDDING_MODELS": "jina_ai/jina-embeddings-v5-text-small",
-    "RERANK_MODELS": "jina_ai/jina-reranker-v3",
-    "LLM_MODELS": "openrouter/minimax/minimax-m3",
+    // Model, endpoint, and provider key are selected per authenticated subject
+    // through the relay (per-sub); keep no model/provider lock in Worker vars.
+    // Standard chains: cohere/embed-v4.0 + cohere/rerank-v4.0-fast via CF AI Gateway.
     "SEARCH_BACKEND": "searxng",
     "WET_AUTO_SEARXNG": "false"
   },
