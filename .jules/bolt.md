@@ -76,6 +76,12 @@ closed pull request.
 **Learning:** When using redundant string transformations like `.lower()` inside generator expressions such as `any(skip in u.lower() for skip in skip_patterns)`, Python evaluates the transformation repeatedly for each item in the generator. This causes significant overhead (calling `.lower()` multiple times).
 **Action:** Always extract the transformation to a variable outside the expression (e.g., `u_lower = u.lower()`). If this occurs inside a list comprehension, safely convert it to a standard `for` loop.
 
+<<<<<<< HEAD
 ## 2025-01-20 - Precompile regex and use .split() for HTML cleanup
 **Learning:** Repeatedly compiling regexes (like `<[^>]*>`) inside functions such as `_html_text` and using `re.sub(r"\s+", " ")` for whitespace replacement introduces unnecessary overhead in hot paths like text extraction from search backends.
 **Action:** Always precompile frequently used regexes at the module level (e.g., `_HTML_TAG_RE = re.compile(r"<[^>]*>")`) and use `" ".join(text.split())` instead of regex substitution for collapsing multiple whitespace characters.
+=======
+## 2026-08-10 - Fast-path early returns in text processing
+**Learning:** In text processing functions that search for specific patterns across large documents (e.g., extracting template macros like `{{`), if the pattern is typically absent in most inputs, implement a fast-path early return (e.g., `if "{{" not in content: return content`) using Python's C-optimized string search. This avoids expensive memory allocations and loops associated with `splitlines()` or `split()`.
+**Action:** Always consider an early exit based on a simple string containment check (`in`) before performing heavy string manipulations like `splitlines()` on large text bodies.
+>>>>>>> 083e56d (feat: ⚡ bolt: fast path for macro stripping)
