@@ -42,16 +42,17 @@ export interface Env {
   EMBEDDING_MODELS: string
   RERANK_MODELS: string
   LLM_MODELS: string
-  SEARCH_BACKEND: string
-  WET_AUTO_SEARXNG: string
+  SEARCH_BACKEND?: string
+  WET_AUTO_SEARXNG?: string
   PUBLIC_URL: string
   CREDENTIAL_SECRET: string
+  MCP_JWT_SIGNING_SECRET?: string
   JINA_AI_API_KEY: string
   GOOGLE_VERTEX_EXPRESS_API_KEY: string
   XAI_API_KEY: string
   MCP_RELAY_PASSWORD: string
   MCP_DCR_SERVER_SECRET: string
-  // search secrets — exactly one set depending on SEARCH_BACKEND
+  // Optional search provider credentials.
   SEARXNG_URL?: string
   TAVILY_API_KEY?: string
   // Capability provider chains (search/browser) + per-task disable-local toggles.
@@ -79,7 +80,7 @@ const CONTAINER_ENV_KEYS = [
   'MCP_D1_BASE_URL', 'MCP_VECTORIZE_BASE_URL', 'MCP_VECTORIZE_IDX',
   'EMBEDDING_MODELS', 'RERANK_MODELS', 'LLM_MODELS',
   'SEARCH_BACKEND', 'WET_AUTO_SEARXNG', 'SEARXNG_URL', 'TAVILY_API_KEY',
-  'PUBLIC_URL', 'CREDENTIAL_SECRET', 'JINA_AI_API_KEY',
+  'PUBLIC_URL', 'CREDENTIAL_SECRET', 'MCP_JWT_SIGNING_SECRET', 'JINA_AI_API_KEY',
   'GOOGLE_VERTEX_EXPRESS_API_KEY', 'XAI_API_KEY',
   'MCP_RELAY_PASSWORD', 'MCP_DCR_SERVER_SECRET',
   // capability provider chains + disable-local toggles (WS-2/3/4/5)

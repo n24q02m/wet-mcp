@@ -1129,21 +1129,15 @@ async def search(  # noqa: PLR0913
     exclude_domains: list[str] | None = None,
     expand: bool = False,
     enrich: bool = False,
-    handles: list[str] | None = None,
-    exclude_handles: list[str] | None = None,
-    from_date: str | None = None,
-    to_date: str | None = None,
-    video: bool = False,
     region: str | None = None,
     refine: bool = False,
     parallel: bool = False,
 ) -> dict[str, Any]:
-    """Find information across web, academic sources, X/Twitter, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
+    """Find information across web, academic sources, or library docs. Returns search result listings (titles, URLs, snippets) -- NOT full page content. To read full content from a URL, use the `extract` tool instead.
 
     Actions:
     - search: Web search via SearXNG. Example: search(action="search", query="python async patterns")
     - research: Academic/scientific search (Google Scholar, arXiv, PubMed). Example: search(action="research", query="transformer attention mechanism")
-    - x: X/Twitter search via xAI. Returns a SYNTHESIZED answer with citations (NOT a link list for extract() -- X blocks direct extraction). Bills ~$0.032/query (grok-4.3). Requires XAI_API_KEY. Example: search(action="x", query="latest reactions to the GPT-5 launch", handles=["OpenAI"], time_range="week")
     - docs: Search library documentation with auto-indexing. Example: search(action="docs", query="how to create routes", library="fastapi")
     - docs_resolve: Free-form library name to ranked library_id list. Example: search(action="docs_resolve", query="react")
     - docs_query: Version-aware library docs query honoring project lock + token cap. Example: search(action="docs_query", library="react", version="latest", topic="useState", query="how to set initial state")
@@ -1159,22 +1153,14 @@ async def search(  # noqa: PLR0913
     - max_results: Number of results (default: 10)
     - time_range: Recency filter -- day, week, month, year
     - include_domains / exclude_domains: Domain filters
-    - handles / exclude_handles (x only): Restrict to / exclude up to 20 X handles (mutually exclusive), e.g. handles=["nasa"]
-    - from_date / to_date (x only): ISO8601 date bounds; override time_range for precise windows
-    - video (x only): Enable video understanding of linked X media (default: false)
     - region (search only): 2-letter ISO 3166-1 country code (e.g. "US", "vn") geo filter. Backends without region support are skipped (named in a warning); a chain with no region-capable backend returns a structured error naming them.
     - refine (search only): Opt-in iterative refinement. When results are empty or low-relevance, re-queries up to 2 times with LLM-rewritten terms and returns the best round (adds LLM latency/cost per round).
 
     Use `help` tool with tool_name="search" for full parameter documentation.
     """
-    # The x action authenticates against XAI_API_KEY (read inside run_x_search),
-    # not the embedding/rerank provider keys the generic gate checks -- so it
-    # skips _require_credentials and surfaces its own "XAI_API_KEY not set"
-    # error, which is far more actionable than the generic setup prompt.
-    if action != "x":
-        blocked = _require_credentials()
-        if blocked:
-            return blocked
+    blocked = _require_credentials()
+    if blocked:
+        return blocked
 
     # Stdio uvx tool venv lacks pip, so the web-core SearXNG runner cannot
     # install/start a local SearXNG instance, and its hardcoded
@@ -1187,7 +1173,8 @@ async def search(  # noqa: PLR0913
     # docs_resolve and docs_lock_project do not need SearXNG (pure DB ops);
     # docs_query falls back to local FTS even without SearXNG, so allow it.
     # Only block when NO configured backend can run under uvx: a cloud key
-    # (tavily/brave/exa) or an external SEARXNG_URL both work without the
+    # (tavily/brave/exa/kagi/firecrawl), the credential-free duckduckgo or
+    # startpage backends, or an external SEARXNG_URL all work without the
     # local SearXNG auto-spawn that uvx tool venvs cannot start.
     if (
         action in ("search", "research", "docs", "similar")
@@ -1465,29 +1452,6 @@ async def search(  # noqa: PLR0913
                     _web_cache.set, "search", cache_params, result, ttl
                 )
             return _payload(result)
-
-        case "x":
-            if not query:
-                return {
-                    "error": 'Error: query is required for x action. Example: search(action="x", query="latest reactions to the GPT-5 launch")'
-                }
-            from wet_mcp.sources.x_search import run_x_search
-
-            return _payload(
-                await _with_timeout(
-                    run_x_search(
-                        query=query,
-                        handles=handles,
-                        exclude_handles=exclude_handles,
-                        time_range=time_range,
-                        from_date=from_date,
-                        to_date=to_date,
-                        max_results=max_results,
-                        video=video,
-                    ),
-                    "x",
-                )
-            )
 
         case "research":
             if not query:
@@ -2227,7 +2191,6 @@ async def _handle_config_status() -> dict[str, Any]:
         resolve_embed_backend_for_request,
     )
     from wet_mcp.reranker import resolve_rerank_backend_for_request
-    from wet_mcp.sources.x_search import x_search_status
 
     # Same principle as _active_docs_backend above, one layer up -- with the
     # part that makes it easier: there is nothing to mirror here, so these call
@@ -2302,10 +2265,6 @@ async def _handle_config_status() -> dict[str, Any]:
             "log_level": settings.log_level,
             "tool_timeout": settings.tool_timeout,
         },
-        # X/Twitter search (search action="x") bills real money per query, so
-        # surface whether the key is set and which model (cheap vs expensive)
-        # will be charged before the operator spends anything.
-        "x_search": x_search_status(),
         "search_metrics": search_metrics.snapshot(),
     }
     return status

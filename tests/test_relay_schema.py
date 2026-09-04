@@ -40,6 +40,10 @@ def test_model_chain_fields_have_no_hardcoded_suggestions():
         "tavily",
         "brave",
         "exa",
+        "kagi",
+        "firecrawl",
+        "duckduckgo",
+        "startpage",
     ]
 
 

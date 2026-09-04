@@ -20,6 +20,11 @@ on:
         required: false
         type: boolean
         default: false
+      incident_no_canary:
+        description: "Security incident only: skip the public post-deploy canary while an exact-host edge block is active; verify manually after unblocking."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -300,5 +305,8 @@ jobs:
           extra_args=()
           if [[ "${{ inputs.recreate_container }}" == "true" ]]; then
             extra_args+=(--recreate-container)
+          fi
+          if [[ "${{ inputs.incident_no_canary }}" == "true" ]]; then
+            extra_args+=(--no-canary)
           fi
           python scripts/deploy_cf.py --from-template --tag "${IMAGE_TAG}" "${extra_args[@]}"

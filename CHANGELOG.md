@@ -2,6 +2,39 @@
 
 <!-- version list -->
 
+## v3.11.0-beta.2 (2026-09-04)
+
+### Bug Fixes
+
+- Add blocked-incident deploy path ([#1756](https://github.com/n24q02m/wet-mcp/pull/1756),
+  [`b44e266`](https://github.com/n24q02m/wet-mcp/commit/b44e2666cf2d280690c388b00078ea575b26f9a0))
+
+- Isolate OAuth JWT signing from vault encryption
+  ([#1756](https://github.com/n24q02m/wet-mcp/pull/1756),
+  [`b44e266`](https://github.com/n24q02m/wet-mcp/commit/b44e2666cf2d280690c388b00078ea575b26f9a0))
+
+- Isolate wet JWT signing secret ([#1756](https://github.com/n24q02m/wet-mcp/pull/1756),
+  [`b44e266`](https://github.com/n24q02m/wet-mcp/commit/b44e2666cf2d280690c388b00078ea575b26f9a0))
+
+- Test OAuth rotation contract ([#1756](https://github.com/n24q02m/wet-mcp/pull/1756),
+  [`b44e266`](https://github.com/n24q02m/wet-mcp/commit/b44e2666cf2d280690c388b00078ea575b26f9a0))
+
+
+## v3.11.0-beta.1 (2026-09-04)
+
+### Bug Fixes
+
+- **deploy**: Use Browser Run as sole renderer
+  ([#1755](https://github.com/n24q02m/wet-mcp/pull/1755),
+  [`34894f7`](https://github.com/n24q02m/wet-mcp/commit/34894f74e96bc139e3dd703fda3880d332c7f04b))
+
+### Features
+
+- **search**: Drop x_search, add kagi/firecrawl backends + credential-free duckduckgo/startpage tier
+  ([#1754](https://github.com/n24q02m/wet-mcp/pull/1754),
+  [`84956b3`](https://github.com/n24q02m/wet-mcp/commit/84956b3f313df255b3a629b8aec80662e7cd4c73))
+
+
 ## v3.10.0 (2026-09-02)
 
 
