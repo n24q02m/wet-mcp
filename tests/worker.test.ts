@@ -42,6 +42,18 @@ describe('container environment forwarding', () => {
 
     expect(pickContainerEnv(env as never)).toEqual({ RESPECT_ROBOTS_TXT: 'true' })
   })
+
+  it('forwards the dedicated JWT signing secret independently of the vault key', () => {
+    const env = {
+      CREDENTIAL_SECRET: 'vault-secret',
+      MCP_JWT_SIGNING_SECRET: 'jwt-secret',
+    }
+
+    expect(pickContainerEnv(env as never)).toEqual({
+      CREDENTIAL_SECRET: 'vault-secret',
+      MCP_JWT_SIGNING_SECRET: 'jwt-secret',
+    })
+  })
 })
 
 describe('outbound handlers', () => {

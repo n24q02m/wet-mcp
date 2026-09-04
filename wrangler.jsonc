@@ -29,9 +29,10 @@
   ],
   "vectorize": [{ "binding": "VECTORIZE", "index_name": "wet-docs-vectors" }],
   // Non-secret container config (forwarded into the container by WetContainer.envVars).
-  // Secrets via `wrangler secret put`: CREDENTIAL_SECRET, JINA_AI_API_KEY,
-  // GOOGLE_VERTEX_EXPRESS_API_KEY, XAI_API_KEY, MCP_RELAY_PASSWORD, MCP_DCR_SERVER_SECRET,
-  // TAVILY_API_KEY, and CF_BROWSER_RENDERING_TOKEN.
+  // Secrets via `wrangler secret put`: CREDENTIAL_SECRET, MCP_JWT_SIGNING_SECRET,
+  // JINA_AI_API_KEY, GOOGLE_VERTEX_EXPRESS_API_KEY, XAI_API_KEY,
+  // MCP_RELAY_PASSWORD, MCP_DCR_SERVER_SECRET, TAVILY_API_KEY, and
+  // CF_BROWSER_RENDERING_TOKEN.
   "vars": {
     "DISABLE_LOCAL_SEARCH": "true",
     "DISABLE_LOCAL_BROWSER": "true",
