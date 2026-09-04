@@ -3004,6 +3004,8 @@ def _has_excessive_macros(content: str, threshold: float = 0.15) -> bool:
     Returns True if >15% of non-empty lines contain ``{{...}}`` patterns,
     indicating unrendered Jinja2/mkdocs-macros content.
     """
+    if "{{" not in content:
+        return False
     lines = [ln for ln in content.splitlines() if ln.strip()]
     if len(lines) < 5:
         return False
@@ -3021,6 +3023,8 @@ def _strip_template_macros(content: str) -> str:
     Removes lines with ``{{...}}`` patterns (Jinja2/mkdocs-macros) that
     produce noise in raw markdown. Keeps the rest of the content intact.
     """
+    if "{{" not in content:
+        return content
     lines = content.splitlines()
     cleaned = []
     for ln in lines:
