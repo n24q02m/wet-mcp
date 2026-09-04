@@ -222,7 +222,7 @@ exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 # Drop the fork so exactly one litellm is installed. crawl4ai imports litellm
 # only inside its LLM helper functions, which this project never calls (it uses
 # AsyncWebCrawler/BrowserConfig/CrawlerRunConfig), and mcp_core.llm needs the
-# upstream 1.9x API (litellm.aresponses backs the x_search transport).
+# upstream 1.9x API.
 override-dependencies = ["unclecode-litellm ; sys_platform == 'unreachable'"]
 
 [tool.uv.sources]
