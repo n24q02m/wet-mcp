@@ -1,18 +1,27 @@
-"""Guard: wet-mcp must depend on the stable mcp-core storage and LLM APIs."""
+"""Guard the mcp-core OAuth rotation contract consumed by wet-mcp."""
 
-import re
-import tomllib
 from pathlib import Path
 
+import jwt
+import pytest
+from mcp_core.auth.local_oauth_app import create_local_oauth_app
 
-def test_mcp_core_pin_is_exact_stable_1_23_2():
-    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-    deps = pyproject["project"]["dependencies"]
-    core = next(d for d in deps if d.startswith("n24q02m-mcp-core"))
 
-    match = re.fullmatch(r"n24q02m-mcp-core\[llm\]==([0-9][0-9A-Za-z.\-]*)", core)
-    assert match, f"must use exact stable pin: {core}"
-    assert match.group(1) == "1.23.2", f"wrong mcp-core version: {core}"
+def test_mcp_core_rotates_jwts_without_changing_the_vault_key(monkeypatch):
+    monkeypatch.setenv("CREDENTIAL_SECRET", "unchanged-vault-key")
+    monkeypatch.setenv("MCP_JWT_SIGNING_SECRET", "jwt-signing-key-a")
+    _old_app, old_issuer = create_local_oauth_app(
+        server_name="wet-mcp", relay_schema={"fields": []}
+    )
+    old_token = old_issuer.issue_access_token(sub="existing-sub")
+
+    monkeypatch.setenv("MCP_JWT_SIGNING_SECRET", "jwt-signing-key-b")
+    _new_app, new_issuer = create_local_oauth_app(
+        server_name="wet-mcp", relay_schema={"fields": []}
+    )
+
+    with pytest.raises(jwt.InvalidSignatureError):
+        new_issuer.verify_access_token(old_token)
 
 
 def test_no_uv_path_source_for_mcp_core():
