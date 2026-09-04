@@ -16,7 +16,16 @@ from typing import Any
 # from mcp-core). Only the search-chain below keeps a curated list, since its
 # named backends are not litellm models and have no catalog to search.
 # Named search backends (no model-prefix inference; resolved via providerKeys).
-_SEARCH_BACKENDS = ["searxng", "tavily", "brave", "exa"]
+_SEARCH_BACKENDS = [
+    "searxng",
+    "tavily",
+    "brave",
+    "exa",
+    "kagi",
+    "firecrawl",
+    "duckduckgo",
+    "startpage",
+]
 
 
 def _key_field(key: str, label: str, ph: str, url: str) -> dict[str, Any]:
@@ -109,6 +118,8 @@ RELAY_SCHEMA: dict[str, Any] = {
                 "tavily": "TAVILY_API_KEY",
                 "brave": "BRAVE_API_KEY",
                 "exa": "EXA_API_KEY",
+                "kagi": "KAGI_API_KEY",
+                "firecrawl": "FIRECRAWL_API_KEY",
             },
             "hasLocal": True,
             "noun": "providers",

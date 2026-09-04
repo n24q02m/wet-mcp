@@ -12,11 +12,14 @@ legitimate and never triggers rotation — only the PROVIDER chain advances on e
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import os
+import re
 import time
 from collections.abc import Awaitable, Callable
 from typing import Protocol
+from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 from loguru import logger
@@ -75,7 +78,22 @@ async def _search_with_rotation(
         httpx.HTTPError
     ) as exc:  # transport — type name only (never echo, may carry the key)
         return json.dumps({"error": f"{provider} request failed: {type(exc).__name__}"})
-    except Exception as exc:  # tool contract: error string, never raise; type name only
+
+
+async def _search_keyless(
+    attempt: Callable[[], Awaitable[str]],
+    provider: str,
+) -> str:
+    """Run a credential-free search attempt with the same tool-contract error
+    envelopes as ``_search_with_rotation`` — error string, never raise; type
+    name only for transport errors (an httpx error may carry request content)."""
+    try:
+        return await attempt()
+    except _SearchHTTPError as exc:
+        return json.dumps({"error": str(exc)})
+    except httpx.HTTPError as exc:
+        return json.dumps({"error": f"{provider} request failed: {type(exc).__name__}"})
+    except Exception as exc:  # tool contract: error string, never raise
         return json.dumps({"error": f"{provider} search failed: {type(exc).__name__}"})
 
 
@@ -274,6 +292,24 @@ _TAVILY_COUNTRY_BY_ISO: dict[str, str] = {
     "zm": "zambia",
     "zw": "zimbabwe",
 }
+
+
+def _html_text(raw: str) -> str:
+    """Strip tags + decode entities (stdlib only — no external HTML parser,
+    so the credential-free backends stay runnable inside a uvx tool venv)."""
+    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]*>", " ", raw))).strip()
+
+
+def _decode_ddg_href(href: str) -> str:
+    """DuckDuckGo wraps result links in ``/l/?uddg=<encoded>&rut=...`` jumps —
+    unwrap the real target. Protocol-relative hrefs get https-prefixed."""
+    if "uddg=" in href:
+        target = parse_qs(urlparse(html.unescape(href)).query).get("uddg", [""])[0]
+        if target:
+            return unquote(target)
+    if href.startswith("//"):
+        return f"https:{href}"
+    return href
 
 
 class SearxngBackend:
@@ -529,6 +565,353 @@ class ExaBackend:
         )
 
 
+class DuckDuckGoBackend:
+    """Credential-free DuckDuckGo HTML search (https://html.duckduckgo.com/html/).
+
+    POST form ``q`` (+ ``df`` recency code); result blocks parsed with regex
+    (stdlib only, uvx-safe — no external HTML parser). DuckDuckGo throttles
+    automated HTML searches from datacenter/shared-egress IPs with an
+    ``anomaly`` challenge; surfaced as HTTP 429 so the chain advances to the
+    next backend. Single page (~25 results) — no pagination.
+    Pattern ported from the OMP websearch provider (2026-09-04).
+    """
+
+    name = "duckduckgo"
+
+    _URL = "https://html.duckduckgo.com/html/"
+
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        time_range=None,
+        language=None,
+        include_domains=None,
+        exclude_domains=None,
+        categories="general",
+        region=None,
+    ) -> str:
+        return await _search_keyless(
+            lambda: self._search_one(query, max_results, time_range), "DuckDuckGo"
+        )
+
+    async def _search_one(self, query: str, max_results: int, time_range) -> str:
+        form: dict[str, str] = {"q": query, "kl": "us-en", "b": ""}
+        if time_range:
+            code = {"day": "d", "week": "w", "month": "m", "year": "y"}.get(time_range)
+            if code:
+                form["df"] = code
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                self._URL,
+                data=form,
+                headers={"Referer": "https://html.duckduckgo.com/"},
+            )
+            if resp.status_code != 200:
+                raise _SearchHTTPError("DuckDuckGo", resp.status_code)
+            page = resp.text
+        if "anomaly-modal" in page or "anomaly.js" in page:
+            logger.warning(
+                "DuckDuckGo bot-challenge received (datacenter/shared-egress IPs are "
+                "throttled) — configure a credentialed backend for reliable search."
+            )
+            raise _SearchHTTPError("DuckDuckGo", 429)
+        return self._parse(page, query, max_results)
+
+    @staticmethod
+    def _parse(page: str, query: str, max_results: int) -> str:
+        blocks = re.findall(
+            r'<div\b[^>]*\bclass="[^"]*\bresult\b[^"]*"[^>]*>'
+            r"(.*?)(?=<div\b[^>]*\bclass=\"[^\"]*\bresult\b"
+            r'|<div\b[^>]*\bclass="[^"]*\bnav-link\b|$)',
+            page,
+            re.S,
+        )
+        link_re = re.compile(
+            r'<a\b(?=[^>]*\bclass="[^"]*\bresult__a\b)[^>]*\bhref="([^"]+)"[^>]*>'
+            r"(.*?)</a>",
+            re.S,
+        )
+        snippet_re = re.compile(
+            r'<(?:a|div|span)\b[^>]*\bclass="[^"]*\bresult__snippet\b[^"]*"[^>]*>'
+            r"(.*?)</(?:a|div|span)>",
+            re.S,
+        )
+        mapped: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for block in blocks:
+            link = link_re.search(block)
+            if not link:
+                continue
+            url = _decode_ddg_href(link.group(1))
+            title = _html_text(link.group(2))
+            if not url or not title or url in seen:
+                continue
+            seen.add(url)
+            snippet_match = snippet_re.search(block)
+            mapped.append(
+                {
+                    "url": url,
+                    "title": title,
+                    "snippet": (
+                        _html_text(snippet_match.group(1)) if snippet_match else title
+                    ),
+                    "source": "duckduckgo",
+                }
+            )
+            if len(mapped) >= min(max(max_results, 1), 30):
+                break
+        return json.dumps(
+            {"results": mapped, "total": len(mapped), "query": query},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+class StartpageBackend:
+    """Credential-free Startpage search (Google-backed,
+    https://www.startpage.com/sp/search).
+
+    GET ``query`` (+ ``with_date`` recency code) with a browser-like Referer;
+    anchors (``a.result-link``) paired with the following ``p.description``.
+    Startpage serves a CAPTCHA page to datacenter/shared-egress IPs — surfaced
+    as HTTP 429 so the chain advances. Pattern ported from the OMP websearch
+    provider (2026-09-04).
+    """
+
+    name = "startpage"
+
+    _URL = "https://www.startpage.com/sp/search"
+
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        time_range=None,
+        language=None,
+        include_domains=None,
+        exclude_domains=None,
+        categories="general",
+        region=None,
+    ) -> str:
+        return await _search_keyless(
+            lambda: self._search_one(query, max_results, time_range), "Startpage"
+        )
+
+    async def _search_one(self, query: str, max_results: int, time_range) -> str:
+        params: dict[str, str] = {"query": query}
+        if time_range:
+            code = {"day": "d", "week": "w", "month": "m", "year": "y"}.get(time_range)
+            if code:
+                params["with_date"] = code
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(
+                self._URL,
+                params=params,
+                headers={
+                    "Referer": "https://www.startpage.com/",
+                    "Accept-Language": "en",
+                },
+            )
+            if resp.status_code != 200:
+                raise _SearchHTTPError("Startpage", resp.status_code)
+            page = resp.text
+        if "captcha" in page.lower():
+            logger.warning(
+                "Startpage CAPTCHA received — chain should advance to the next backend."
+            )
+            raise _SearchHTTPError("Startpage", 429)
+        return self._parse(page, query, max_results)
+
+    @staticmethod
+    def _parse(page: str, query: str, max_results: int) -> str:
+        link_re = re.compile(
+            r'<a\b(?=[^>]*\bclass="[^"]*\bresult-link\b)[^>]*\bhref="([^"]+)"[^>]*>'
+            r"(.*?)</a>",
+            re.S,
+        )
+        desc_re = re.compile(
+            r'<p\b[^>]*\bclass="[^"]*\bdescription\b[^"]*"[^>]*>(.*?)</p>', re.S
+        )
+        links = list(link_re.finditer(page))
+        descs = list(desc_re.finditer(page))
+        mapped: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for idx, link in enumerate(links):
+            href = html.unescape(link.group(1))
+            host = urlparse(href).hostname or ""
+            if host == "startpage.com" or host.endswith(".startpage.com"):
+                continue
+            url = href
+            title = _html_text(link.group(2))
+            if not url or not title or url in seen:
+                continue
+            seen.add(url)
+            next_start = links[idx + 1].start() if idx + 1 < len(links) else len(page)
+            desc = next((d for d in descs if link.end() < d.start() < next_start), None)
+            mapped.append(
+                {
+                    "url": url,
+                    "title": title,
+                    "snippet": _html_text(desc.group(1)) if desc else title,
+                    "source": "startpage",
+                }
+            )
+            if len(mapped) >= min(max(max_results, 1), 20):
+                break
+        return json.dumps(
+            {"results": mapped, "total": len(mapped), "query": query},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+class FirecrawlBackend:
+    """Firecrawl Search API (https://api.firecrawl.dev/v2/search).
+
+    POST ``{query, limit, sources:[{type:"web"}]}`` (+ ``tbs`` recency code);
+    results live at ``data.search[]`` (``data.web`` legacy fallback) with
+    ``{url|href|link, title|name, snippet|description|summary}``. With
+    ``FIRECRAWL_API_KEY`` set the request carries ``Authorization: Bearer``;
+    without a key the request is attempted keyless (the server may reject it,
+    which surfaces as an error envelope and the chain advances). Pattern
+    ported from the OMP websearch provider (2026-09-04).
+    """
+
+    name = "firecrawl"
+
+    _URL = "https://api.firecrawl.dev/v2/search"
+
+    def __init__(self, keys: list[str]) -> None:
+        self.keys = keys
+
+    async def _search_one(self, key, query: str, max_results: int, time_range) -> str:
+        body: dict[str, object] = {
+            "query": query,
+            "limit": min(max(max_results, 1), 100),
+            "sources": [{"type": "web"}],
+        }
+        if time_range:
+            tbs = {
+                "day": "qdr:d",
+                "week": "qdr:w",
+                "month": "qdr:m",
+                "year": "qdr:y",
+            }.get(time_range)
+            if tbs:
+                body["tbs"] = tbs
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(self._URL, json=body, headers=headers)
+            if resp.status_code != 200:
+                raise _SearchHTTPError("Firecrawl", resp.status_code)
+            data = resp.json().get("data") or {}
+        rows = data.get("search") or data.get("web") or []
+        mapped = [
+            {
+                "url": r.get("url") or r.get("href") or r.get("link") or "",
+                "title": r.get("title") or r.get("name") or "",
+                "snippet": (
+                    r.get("snippet") or r.get("description") or r.get("summary") or ""
+                ),
+                "source": "firecrawl",
+            }
+            for r in rows
+            if isinstance(r, dict) and (r.get("url") or r.get("href") or r.get("link"))
+        ]
+        return json.dumps(
+            {"results": mapped, "total": len(mapped), "query": query},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        time_range=None,
+        language=None,
+        include_domains=None,
+        exclude_domains=None,
+        categories="general",
+        region=None,
+    ) -> str:
+        if self.keys:
+            return await _search_with_rotation(
+                self.keys,
+                lambda key: self._search_one(key, query, max_results, time_range),
+                "Firecrawl",
+            )
+        return await _search_keyless(
+            lambda: self._search_one(None, query, max_results, time_range), "Firecrawl"
+        )
+
+
+class KagiBackend:
+    """Kagi Search API (https://kagi.com/api/v1/search).
+
+    POST JSON ``{query, limit}`` with ``Authorization: Bearer <key>`` (endpoint
+    and shape verified against the OMP websearch provider, 2026-09-04);
+    results live at ``data.search[]`` with ``{title, url, snippet, time}``.
+    """
+
+    name = "kagi"
+
+    _URL = "https://kagi.com/api/v1/search"
+
+    def __init__(self, keys: list[str]) -> None:
+        self.keys = keys
+
+    async def _search_one(self, key, query: str, max_results: int) -> str:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                self._URL,
+                json={"query": query, "limit": min(max(max_results, 1), 20)},
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+            )
+            if resp.status_code != 200:
+                raise _SearchHTTPError("Kagi", resp.status_code)
+            rows = (resp.json().get("data") or {}).get("search") or []
+        mapped = [
+            {
+                "url": r.get("url", ""),
+                "title": r.get("title", ""),
+                "snippet": r.get("snippet") or r.get("description") or "",
+                "source": "kagi",
+            }
+            for r in rows
+            if isinstance(r, dict) and r.get("url")
+        ]
+        return json.dumps(
+            {"results": mapped, "total": len(mapped), "query": query},
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    async def search(
+        self,
+        query: str,
+        max_results: int = 10,
+        time_range=None,
+        language=None,
+        include_domains=None,
+        exclude_domains=None,
+        categories="general",
+        region=None,
+    ) -> str:
+        return await _search_with_rotation(
+            self.keys,
+            lambda key: self._search_one(key, query, max_results),
+            "Kagi",
+        )
+
+
 def _make_backend(name: str, searxng_url: str | None = None) -> SearchBackend:
     """Construct a single backend by name. Raises ValueError on missing key/unknown.
 
@@ -554,6 +937,21 @@ def _make_backend(name: str, searxng_url: str | None = None) -> SearchBackend:
         if not keys:
             raise ValueError("EXA_API_KEY required for the exa search backend")
         return ExaBackend(keys)
+    if name == "kagi":
+        keys = split_keys(os.getenv("KAGI_API_KEY", settings.kagi_api_key))
+        if not keys:
+            raise ValueError("KAGI_API_KEY required for the kagi search backend")
+        return KagiBackend(keys)
+    if name == "firecrawl":
+        # Key optional: without one the request is attempted keyless (the
+        # server may reject it — the chain advances on the error envelope).
+        return FirecrawlBackend(
+            split_keys(os.getenv("FIRECRAWL_API_KEY", settings.firecrawl_api_key))
+        )
+    if name == "duckduckgo":
+        return DuckDuckGoBackend()
+    if name == "startpage":
+        return StartpageBackend()
     raise ValueError(f"Unknown search backend: {name}")
 
 
@@ -592,6 +990,13 @@ def has_uvx_runnable_backend() -> bool:
         ):
             return True
         if name == "exa" and split_keys(os.getenv("EXA_API_KEY", settings.exa_api_key)):
+            return True
+        if name in ("duckduckgo", "startpage", "firecrawl"):
+            # credential-free / keyless-capable: plain httpx, no local spawn
+            return True
+        if name == "kagi" and split_keys(
+            os.getenv("KAGI_API_KEY", settings.kagi_api_key)
+        ):
             return True
         if name == "searxng":
             url = os.getenv("SEARXNG_URL", settings.searxng_url)
@@ -915,6 +1320,10 @@ async def run_search_chain(
 __all__ = [
     "BraveBackend",
     "ExaBackend",
+    "DuckDuckGoBackend",
+    "FirecrawlBackend",
+    "KagiBackend",
+    "StartpageBackend",
     "SearchBackend",
     "SearxngBackend",
     "TavilyBackend",

@@ -5,7 +5,7 @@ Search the web, academic papers, or library documentation.
 ## Actions
 
 ### search
-Web search via the configured `SEARCH_BACKENDS` chain (for example, `searxng,jina`).
+Web search via the `SEARCH_BACKENDS` provider chain with runtime fallback: `searxng` (self-host) | `tavily` | `brave` | `exa` | `kagi` (cloud, keyed) | `firecrawl` (key optional — keyless attempt) | `duckduckgo` | `startpage` (credential-free HTML scrape, uvx-safe; may be bot-challenged on datacenter IPs — the chain then advances to the next backend).
 
 **Parameters:**
 - `query` (required): Search query string
@@ -55,29 +55,6 @@ Academic and scientific search using SearXNG science engines (Google Scholar, Se
 
 ---
 
-### x
-X/Twitter search via xAI's Agent Tools. Unlike the other actions, `x` returns a **synthesized answer with citations** — NOT a list of links to feed to `extract()`, because X blocks direct extraction. X is data no scraper or general web-search backend can reach reliably.
-
-**Parameters:**
-- `query` (required): What to find on X
-- `handles`: Restrict to these X handles (max 20), e.g. ["nasa", "esa"]
-- `exclude_handles`: Exclude these X handles (max 20). Mutually exclusive with `handles`.
-- `time_range`: Recency window — day, week, month, year (mapped to a from/to date range)
-- `from_date` / `to_date`: ISO8601 date bounds (e.g. "2025-06-01"); override `time_range` for a precise window
-- `max_results`: Soft cap on posts the model searches (default: 10)
-- `video`: Enable video understanding of linked X media (default: false)
-
-**Cost:** Bills real money per query — approx **$0.032** with the default `grok-4.3`, or **$0.12** with `grok-4.5` (set via `X_SEARCH_MODEL`). Requires `XAI_API_KEY` (get one at console.x.ai); a call without it returns a clear error, never crashes. `config(action="status")` reports whether the key is set and which model is active.
-
-**Example:**
-```json
-{"action": "x", "query": "reactions to the latest SpaceX launch", "time_range": "week"}
-{"action": "x", "query": "AI safety takes", "handles": ["AnthropicAI", "OpenAI"], "from_date": "2025-06-01", "to_date": "2025-07-01"}
-```
-
-**Returns:** `{answer, citations: [{url, title, start_index, end_index}], model, usage: {input_tokens, output_tokens, tool_calls, estimated_cost_usd}}`. The answer embeds inline `[[N]](url)` citations. As external content, the result is wrapped in the XPIA envelope (`_untrusted_source: "x"`).
-
----
 
 ### docs
 Search library/framework documentation with auto-indexing. First call indexes docs into local FTS5 database; subsequent calls use cached index for instant results.
