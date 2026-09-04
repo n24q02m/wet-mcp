@@ -42,8 +42,8 @@ export interface Env {
   EMBEDDING_MODELS: string
   RERANK_MODELS: string
   LLM_MODELS: string
-  SEARCH_BACKEND: string
-  WET_AUTO_SEARXNG: string
+  SEARCH_BACKEND?: string
+  WET_AUTO_SEARXNG?: string
   PUBLIC_URL: string
   CREDENTIAL_SECRET: string
   JINA_AI_API_KEY: string
@@ -51,7 +51,7 @@ export interface Env {
   XAI_API_KEY: string
   MCP_RELAY_PASSWORD: string
   MCP_DCR_SERVER_SECRET: string
-  // search secrets — exactly one set depending on SEARCH_BACKEND
+  // Optional search provider credentials.
   SEARXNG_URL?: string
   TAVILY_API_KEY?: string
   // Capability provider chains (search/browser) + per-task disable-local toggles.

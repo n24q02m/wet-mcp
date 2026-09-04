@@ -31,7 +31,7 @@
   // Non-secret container config (forwarded into the container by WetContainer.envVars).
   // Secrets via `wrangler secret put`: CREDENTIAL_SECRET, JINA_AI_API_KEY,
   // GOOGLE_VERTEX_EXPRESS_API_KEY, XAI_API_KEY, MCP_RELAY_PASSWORD, MCP_DCR_SERVER_SECRET,
-  // and SEARXNG_URL (with basic-auth userinfo) — or TAVILY_API_KEY if SEARCH_BACKEND=tavily.
+  // TAVILY_API_KEY, and CF_BROWSER_RENDERING_TOKEN.
   "vars": {
     "DISABLE_LOCAL_SEARCH": "true",
     "DISABLE_LOCAL_BROWSER": "true",
@@ -44,7 +44,7 @@
     // order. The deploy-level RERANK_MODELS below does not cover that case; it
     // is process env, and per-sub chains resolve from the sub's bucket.
     "DISABLE_LOCAL_RERANK": "true",
-    "BROWSER_BACKENDS": "browserless,cf-browser-rendering",
+    "BROWSER_BACKENDS": "cf-browser-rendering",
     "CF_ACCOUNT_ID": "<YOUR_ACCOUNT_ID>",
     "PUBLIC_URL": "<YOUR_PUBLIC_URL>",
     "MCP_STORAGE_BACKEND": "cf-kv",
@@ -57,8 +57,7 @@
     "EMBEDDING_MODELS": "jina_ai/jina-embeddings-v5-text-small",
     "RERANK_MODELS": "jina_ai/jina-reranker-v3",
     "LLM_MODELS": "openrouter/minimax/minimax-m3",
-    "SEARCH_BACKEND": "searxng",
-    "WET_AUTO_SEARXNG": "false"
+    "SEARCH_BACKENDS": "tavily,duckduckgo,startpage"
   },
   "routes": [{ "pattern": "<YOUR_WORKER_DOMAIN>", "custom_domain": true }],
   "observability": { "enabled": true }

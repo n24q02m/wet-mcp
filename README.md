@@ -336,8 +336,8 @@ Run your own single-user wet instance serverless on Cloudflare (Containers + D1 
    docker build --target http --build-arg SLIM=1 -t wet-mcp:beta .
    wrangler containers push wet-mcp:beta   # prints registry.cloudflare.com/<ACCOUNT_ID>/wet-mcp:beta
    ```
-5. Set secrets (use `SEARXNG_URL` with basic-auth userinfo, e.g.
-   `https://user:pass@searxng.example.com`, or `TAVILY_API_KEY` if you set `SEARCH_BACKEND=tavily`):
+5. Set secrets (`TAVILY_API_KEY` is required when `SEARCH_BACKENDS` includes
+   `tavily`; Cloudflare Browser Run is the default headless render backend):
    ```
    wrangler secret put CREDENTIAL_SECRET
    wrangler secret put JINA_AI_API_KEY
@@ -345,17 +345,16 @@ Run your own single-user wet instance serverless on Cloudflare (Containers + D1 
    wrangler secret put XAI_API_KEY
    wrangler secret put MCP_RELAY_PASSWORD
    wrangler secret put MCP_DCR_SERVER_SECRET
-   wrangler secret put SEARXNG_URL
-   wrangler secret put BROWSERLESS_URL          # render backend (BROWSER_BACKENDS default = browserless,cf-browser-rendering)
-   wrangler secret put BROWSERLESS_TOKEN
+   wrangler secret put TAVILY_API_KEY
    wrangler secret put CF_BROWSER_RENDERING_TOKEN
    ```
 6. `wrangler deploy` and complete setup in the browser relay form at your Worker domain.
 
 Storage maps to Cloudflare via `MCP_STORAGE_BACKEND=cf-kv` (credentials/tokens, encrypted),
-`DOCS_DB_BACKEND=cf-d1` (docs + BM25 full-text), and Vectorize (embeddings). Web search uses
-a SearXNG instance (`SEARCH_BACKEND=searxng`, `SEARXNG_URL`) or Tavily (`SEARCH_BACKEND=tavily`);
-embed/rerank are forced cloud via `EMBEDDING_MODELS`/`RERANK_MODELS`.
+`DOCS_DB_BACKEND=cf-d1` (docs + BM25 full-text), and Vectorize (embeddings). The
+example Worker uses `SEARCH_BACKENDS=tavily,duckduckgo,startpage` and
+`BROWSER_BACKENDS=cf-browser-rendering`; embed/rerank are forced cloud via
+`EMBEDDING_MODELS`/`RERANK_MODELS`.
 
 ## Smithery
 
