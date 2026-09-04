@@ -54,18 +54,13 @@ dependencies = [
     "jsonschema>=4.26.0",
     # Per-domain rate limiting for batch operations
     "aiolimiter>=1.2.1",
-    # 1.19.0 ships mcp_core.cli's argument-spec extra subcommand
-    # support ((configure, handler) tuples) this repo's cli.py
-    # auth/docs subcommands consume; 1.20.0b2 keys build_cli's credential
-    # store by plugin slug (not console name) so `wet-mcp config status`
-    # reads the right per-plugin bucket (core #666). 1.21.0 returns `iss` in the
-    # authorization response (RFC 9207) and stops minting an authorization code
-    # when the credential save fails (core #688, #689) — both land in the OAuth
-    # AS this server exposes at <PUBLIC_URL>/authorize. 1.22.0 ships
-    # mcp_core.storage.d1 / mcp_core.storage.vectorize, the shared D1 +
-    # Vectorize HTTP clients this server now imports instead of keeping its
-    # own copy under wet_mcp.backends.
-    "n24q02m-mcp-core[llm]==1.23.2",
+    # 1.19.0 ships mcp_core.cli's argument-spec extra subcommand support;
+    # 1.20.0b2 keys build_cli's credential store by plugin slug; 1.21.0 adds
+    # RFC 9207 `iss` and fail-closed authorization-code minting; 1.22.0 ships
+    # the shared D1 + Vectorize clients; 1.24.0b1 separates OAuth JWT signing
+    # from CREDENTIAL_SECRET so tokens can be revoked without rekeying per-user
+    # vault data or changing stable subject IDs.
+    "n24q02m-mcp-core[llm]==1.24.0b1",
     # Schema migrations (auto-migrate-on-startup with backup)
     "alembic>=1.18.5",
     # fastmcp arrives transitively via mcp-core; both bounds are pinned here,

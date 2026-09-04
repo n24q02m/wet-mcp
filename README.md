@@ -194,8 +194,9 @@ backends only): `DISABLE_LOCAL_BROWSER`, `DISABLE_LOCAL_SEARCH`,
 redirect).
 
 **HTTP self-host** -- `MCP_TRANSPORT=http`, `PUBLIC_URL=<your-domain>`. The setup
-form is gated by `MCP_RELAY_PASSWORD`; multi-user deployments also require
-`CREDENTIAL_SECRET` (per-user vault key) and `MCP_DCR_SERVER_SECRET`.
+form is gated by `MCP_RELAY_PASSWORD`; multi-user deployments require
+`CREDENTIAL_SECRET` (per-user vault key), `MCP_JWT_SIGNING_SECRET` (rotatable
+OAuth JWT key), and `MCP_DCR_SERVER_SECRET`.
 
 Example stdio config (cloud chains):
 
@@ -340,6 +341,7 @@ Run your own single-user wet instance serverless on Cloudflare (Containers + D1 
    `tavily`; Cloudflare Browser Run is the default headless render backend):
    ```
    wrangler secret put CREDENTIAL_SECRET
+   wrangler secret put MCP_JWT_SIGNING_SECRET
    wrangler secret put JINA_AI_API_KEY
    wrangler secret put GOOGLE_VERTEX_EXPRESS_API_KEY
    wrangler secret put XAI_API_KEY
