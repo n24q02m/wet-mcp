@@ -36,6 +36,11 @@ _VALID_ACTION_TYPES = {"click", "fill", "submit", "wait"}
 _DEFAULT_TIMEOUT_MS = 10000
 _MAX_ACTIONS_PER_CALL = 20
 
+_NOISE_RE = re.compile(
+    r"<script[\s\S]*?</script>|<style[\s\S]*?</style>|<[^>]+>",
+    flags=re.IGNORECASE,
+)
+
 
 def _interact_dir() -> Path:
     """Resolve the screenshot output directory; matches existing layout."""
@@ -120,9 +125,7 @@ def _strip_html_to_markdown(html: str) -> str:
     interact call. This snapshot is a lightweight orientation aid.
     """
     # Collapse whitespace + drop obvious script/style blocks.
-    html = re.sub(r"<script[\s\S]*?</script>", "", html, flags=re.IGNORECASE)
-    html = re.sub(r"<style[\s\S]*?</style>", "", html, flags=re.IGNORECASE)
-    text = re.sub(r"<[^>]+>", " ", html)
+    text = _NOISE_RE.sub(" ", html)
     # Performance Optimization: Use highly optimized C-level string methods
     # rather than regex for stripping whitespace; results in ~6x speedup.
     text = " ".join(text.split())
