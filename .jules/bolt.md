@@ -75,3 +75,7 @@ closed pull request.
 ## 2025-01-20 - Extract redundant string transformations from generator expressions
 **Learning:** When using redundant string transformations like `.lower()` inside generator expressions such as `any(skip in u.lower() for skip in skip_patterns)`, Python evaluates the transformation repeatedly for each item in the generator. This causes significant overhead (calling `.lower()` multiple times).
 **Action:** Always extract the transformation to a variable outside the expression (e.g., `u_lower = u.lower()`). If this occurs inside a list comprehension, safely convert it to a standard `for` loop.
+
+## 2025-01-20 - Use str.split() for multi-whitespace replacement
+**Learning:** `re.sub(r"\s+", " ", text).strip()` is generally slower than `" ".join(text.split())` for collapsing multiple whitespace characters into single spaces, as the latter avoids regex engine overhead and is executed entirely in optimized C code.
+**Action:** Use `" ".join(text.split())` instead of regex substitution when the goal is simply to replace continuous whitespace characters with a single space.

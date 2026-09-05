@@ -297,7 +297,8 @@ _TAVILY_COUNTRY_BY_ISO: dict[str, str] = {
 def _html_text(raw: str) -> str:
     """Strip tags + decode entities (stdlib only — no external HTML parser,
     so the credential-free backends stay runnable inside a uvx tool venv)."""
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]*>", " ", raw))).strip()
+    # Use split() for multi-whitespace replacement to avoid regex overhead
+    return " ".join(html.unescape(re.sub(r"<[^>]*>", " ", raw)).split())
 
 
 def _decode_ddg_href(href: str) -> str:
