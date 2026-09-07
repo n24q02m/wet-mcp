@@ -294,10 +294,16 @@ _TAVILY_COUNTRY_BY_ISO: dict[str, str] = {
 }
 
 
+# Pre-compile regex for HTML tag stripping
+_TAG_RE = re.compile(r"<[^>]*>")
+
+
 def _html_text(raw: str) -> str:
     """Strip tags + decode entities (stdlib only — no external HTML parser,
     so the credential-free backends stay runnable inside a uvx tool venv)."""
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]*>", " ", raw))).strip()
+    # Using split() avoids regex engine overhead for collapsing whitespace
+    # and is significantly faster than re.sub(r"\s+", " ", text).strip().
+    return " ".join(html.unescape(_TAG_RE.sub(" ", raw)).split())
 
 
 def _decode_ddg_href(href: str) -> str:
