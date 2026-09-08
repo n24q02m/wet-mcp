@@ -1,6 +1,7 @@
 """Search strategies: query expansion, find similar, snippet enrichment."""
 
 import json
+import os
 from urllib.parse import urlparse
 
 from loguru import logger
@@ -116,7 +117,7 @@ async def find_similar(
     Pipeline:
     1. Extract source page content
     2. Extract keywords via LLM (or title fallback)
-    3. Search SearXNG with keywords, excluding source domain
+    3. Search the configured provider chain, excluding source domain
     4. Return results as JSON string
     """
     # Step 1: Extract source content
@@ -134,16 +135,22 @@ async def find_similar(
     keywords = await _extract_keywords(content, title)
 
     # Step 3: Search with domain exclusion
-    from wet_mcp.sources.searxng import search as searxng_search
+    from wet_mcp.credential_state import get_current_sub
+    from wet_mcp.sources.search_backends import chain_backend_names, run_search_chain
 
-    if not searxng_url:
+    if (
+        not searxng_url
+        and get_current_sub() is None
+        and not os.getenv("PUBLIC_URL")
+        and "searxng" in chain_backend_names()
+    ):
         from wet_mcp.searxng_runner import ensure_searxng
 
         searxng_url = await ensure_searxng()
 
     search_query = f"{keywords} -site:{source_domain}"
-    result = await searxng_search(
-        searxng_url=searxng_url,
+    result = await run_search_chain(
+        searxng_url=searxng_url or None,
         query=search_query,
         max_results=max_results,
     )

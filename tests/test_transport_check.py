@@ -235,23 +235,22 @@ async def test_search_actions_rejected_in_uvx_mode(monkeypatch, action):
 
 @pytest.mark.asyncio
 async def test_search_action_proceeds_when_not_uvx(monkeypatch):
-    """In a normal venv, ``search`` reaches ``ensure_searxng`` as before."""
+    """In a normal venv, ``search`` reaches the configured provider chain."""
     srv = _force_uvx(monkeypatch, False)
 
-    with (
-        patch.object(srv, "ensure_searxng", new_callable=AsyncMock) as mock_ensure,
-        patch("wet_mcp.sources.searxng.search", new_callable=AsyncMock) as mock_search,
-    ):
-        mock_ensure.return_value = "http://localhost:8080"
-        mock_search.return_value = (
+    with patch.object(
+        srv,
+        "_run_configured_search",
+        new_callable=AsyncMock,
+        return_value=(
             '{"results": [{"url": "https://e", "title": "T", "snippet": "Search Results"}], '
             '"total": 1, "query": "hello world"}'
-        )
-
+        ),
+    ) as mock_search:
         result = await srv.search(action="search", query="hello world")
 
         assert "Search Results" in text(result)
-        mock_ensure.assert_called_once()
+        mock_search.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,8 @@
 """TTL-based cache for web operations (search, extract, crawl, map).
 
 Uses SQLite for persistence across restarts. Cache entries expire based
-on configurable TTL per action type. Thread-safe via WAL mode.
+on configurable TTL per action type. A re-entrant lock serializes access to
+the shared SQLite connection; WAL mode provides persistence-friendly reads.
 
 Cache is transparent — callers use ``get``/``set`` and the cache handles
 expiry automatically. Old entries are purged periodically.
@@ -12,6 +13,7 @@ import json
 import sqlite3
 import time
 from pathlib import Path
+from threading import RLock
 
 from loguru import logger
 
@@ -45,6 +47,7 @@ class WebCache:
         self._db_path = db_path
         self._ttls = {**_DEFAULT_TTLS, **(ttls or {})}
         self._op_count = 0
+        self._lock = RLock()
 
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
@@ -101,14 +104,16 @@ class WebCache:
         key = _cache_key(action, params)
         now = time.time()
 
-        # ⚡ Bolt: Optimize cache lookup into a single atomic query (halves DB ops)
-        row = self._conn.execute(
-            "UPDATE web_cache SET hit_count = hit_count + 1 WHERE key = ? AND expires_at > ? RETURNING content",
-            (key, now),
-        ).fetchone()
+        # One connection is shared by asyncio worker threads, so the update
+        # and transaction close must remain one serialized operation.
+        with self._lock:
+            row = self._conn.execute(
+                "UPDATE web_cache SET hit_count = hit_count + 1 WHERE key = ? AND expires_at > ? RETURNING content",
+                (key, now),
+            ).fetchone()
+            self._conn.commit()
 
         if row:
-            self._conn.commit()
             logger.debug(f"Cache HIT: {action} ({key[:12]}...)")
             return row["content"]
 
@@ -124,13 +129,14 @@ class WebCache:
         key = _cache_key(action, params)
         now = time.time()
 
-        row = self._conn.execute(
-            "UPDATE web_cache SET hit_count = hit_count + 1 WHERE key = ? AND expires_at > ? RETURNING content, created_at",
-            (key, now),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "UPDATE web_cache SET hit_count = hit_count + 1 WHERE key = ? AND expires_at > ? RETURNING content, created_at",
+                (key, now),
+            ).fetchone()
+            self._conn.commit()
 
         if row:
-            self._conn.commit()
             age = max(0, int(now - row["created_at"]))
             logger.debug(f"Cache HIT: {action} ({key[:12]}...) age={age}s")
             return row["content"], age
@@ -151,11 +157,12 @@ class WebCache:
         key = _cache_key(action, params)
         now = time.time()
 
-        row = self._conn.execute(
-            """SELECT content, created_at, expires_at FROM web_cache
-               WHERE key = ? AND expires_at + (expires_at - created_at) > ?""",
-            (key, now),
-        ).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                """SELECT content, created_at, expires_at FROM web_cache
+                   WHERE key = ? AND expires_at + (expires_at - created_at) > ?""",
+                (key, now),
+            ).fetchone()
         if row is None:
             logger.debug(f"Cache STALE-MISS: {action} ({key[:12]}...)")
             return None
@@ -178,20 +185,28 @@ class WebCache:
         ttl = ttl_override if ttl_override is not None else self._ttls.get(action, 3600)
         expires_at = now + ttl
 
-        self._conn.execute(
-            """INSERT OR REPLACE INTO web_cache
-               (key, action, params, content, created_at, expires_at, hit_count)
-               VALUES (?, ?, ?, ?, ?, ?, 0)""",
-            (key, action, json.dumps(params, sort_keys=True), content, now, expires_at),
-        )
-        self._conn.commit()
-        logger.debug(f"Cache SET: {action} ({key[:12]}...) TTL={ttl}s")
+        with self._lock:
+            self._conn.execute(
+                """INSERT OR REPLACE INTO web_cache
+                   (key, action, params, content, created_at, expires_at, hit_count)
+                   VALUES (?, ?, ?, ?, ?, ?, 0)""",
+                (
+                    key,
+                    action,
+                    json.dumps(params, sort_keys=True),
+                    content,
+                    now,
+                    expires_at,
+                ),
+            )
+            self._conn.commit()
 
-        # Periodic purge
-        self._op_count += 1
-        if self._op_count >= _PURGE_INTERVAL:
-            self._purge_expired()
-            self._op_count = 0
+            self._op_count += 1
+            if self._op_count >= _PURGE_INTERVAL:
+                self._purge_expired()
+                self._op_count = 0
+
+        logger.debug(f"Cache SET: {action} ({key[:12]}...) TTL={ttl}s")
 
     def record_snapshot(self, url: str, content: str) -> None:
         """Append a content snapshot for ``url``, pruning to the last N.
@@ -201,23 +216,24 @@ class WebCache:
         most ``_SNAPSHOT_RETENTION`` rows per URL.
         """
         now = time.time()
-        self._conn.execute(
-            "INSERT INTO snapshots (url, fetched_at, content) VALUES (?, ?, ?)",
-            (url, now, content),
-        )
-        self._conn.execute(
-            """
-            DELETE FROM snapshots
-            WHERE url = ? AND id NOT IN (
-                SELECT id FROM snapshots
-                WHERE url = ?
-                ORDER BY fetched_at DESC, id DESC
-                LIMIT ?
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO snapshots (url, fetched_at, content) VALUES (?, ?, ?)",
+                (url, now, content),
             )
-            """,
-            (url, url, _SNAPSHOT_RETENTION),
-        )
-        self._conn.commit()
+            self._conn.execute(
+                """
+                DELETE FROM snapshots
+                WHERE url = ? AND id NOT IN (
+                    SELECT id FROM snapshots
+                    WHERE url = ?
+                    ORDER BY fetched_at DESC, id DESC
+                    LIMIT ?
+                )
+                """,
+                (url, url, _SNAPSHOT_RETENTION),
+            )
+            self._conn.commit()
         logger.debug(f"Snapshot recorded for {url}")
 
     def latest_snapshots(self, url: str, n: int = 2) -> list[dict]:
@@ -225,54 +241,59 @@ class WebCache:
 
         Each item is ``{"fetched_at": float, "content": str}``.
         """
-        rows = self._conn.execute(
-            """
-            SELECT fetched_at, content FROM snapshots
-            WHERE url = ?
-            ORDER BY fetched_at DESC, id DESC
-            LIMIT ?
-            """,
-            (url, n),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT fetched_at, content FROM snapshots
+                WHERE url = ?
+                ORDER BY fetched_at DESC, id DESC
+                LIMIT ?
+                """,
+                (url, n),
+            ).fetchall()
         return [
             {"fetched_at": row["fetched_at"], "content": row["content"]} for row in rows
         ]
 
     def _purge_expired(self) -> None:
         """Remove expired cache entries."""
-        cursor = self._conn.execute(
-            "DELETE FROM web_cache WHERE expires_at <= ?",
-            (time.time(),),
-        )
-        if cursor.rowcount > 0:
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM web_cache WHERE expires_at <= ?",
+                (time.time(),),
+            )
             self._conn.commit()
-            logger.debug(f"Purged {cursor.rowcount} expired cache entries")
+            purged = cursor.rowcount
+        if purged > 0:
+            logger.debug(f"Purged {purged} expired cache entries")
 
     def clear(self, action: str | None = None) -> int:
         """Clear cache entries. If action specified, only clear that action."""
-        if action:
-            cursor = self._conn.execute(
-                "DELETE FROM web_cache WHERE action = ?", (action,)
-            )
-        else:
-            cursor = self._conn.execute("DELETE FROM web_cache")
-        self._conn.commit()
-        return cursor.rowcount
+        with self._lock:
+            if action:
+                cursor = self._conn.execute(
+                    "DELETE FROM web_cache WHERE action = ?", (action,)
+                )
+            else:
+                cursor = self._conn.execute("DELETE FROM web_cache")
+            self._conn.commit()
+            return cursor.rowcount
 
     def stats(self) -> dict:
         """Get cache statistics."""
         now = time.time()
-        rows = self._conn.execute(
-            """
-            SELECT action,
-                   COUNT(*) as total,
-                   SUM(CASE WHEN expires_at > ? THEN 1 ELSE 0 END) as active,
-                   SUM(hit_count) as total_hits
-            FROM web_cache
-            GROUP BY action
-        """,
-            (now,),
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT action,
+                       COUNT(*) as total,
+                       SUM(CASE WHEN expires_at > ? THEN 1 ELSE 0 END) as active,
+                       SUM(hit_count) as total_hits
+                FROM web_cache
+                GROUP BY action
+                """,
+                (now,),
+            ).fetchall()
 
         return {
             row["action"]: {
@@ -286,6 +307,7 @@ class WebCache:
     def close(self) -> None:
         """Close database connection."""
         try:
-            self._conn.close()
+            with self._lock:
+                self._conn.close()
         except Exception as e:
             logger.debug(f"Failed to close cache database connection: {e}")

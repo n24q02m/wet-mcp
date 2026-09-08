@@ -575,8 +575,17 @@ async def test_research_cache_hit(_mock_web_cache):
 # ---------------------------------------------------------------------------
 
 
-async def test_search_searxng_timeout():
+def _force_local_searxng_startup(monkeypatch):
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    monkeypatch.setattr(server.credential_state, "get_current_sub", lambda: None)
+    monkeypatch.setattr(
+        server.search_backends, "chain_backend_names", lambda: ["searxng"]
+    )
+
+
+async def test_search_searxng_timeout(monkeypatch):
     """Lines 516-517: SearXNG startup timeout."""
+    _force_local_searxng_startup(monkeypatch)
     with patch(
         "wet_mcp.server.ensure_searxng",
         new_callable=AsyncMock,
@@ -586,8 +595,9 @@ async def test_search_searxng_timeout():
         assert "timed out" in text(result)
 
 
-async def test_search_searxng_startup_failed():
+async def test_search_searxng_startup_failed(monkeypatch):
     """Lines 518-519: SearXNG startup exception."""
+    _force_local_searxng_startup(monkeypatch)
     with patch(
         "wet_mcp.server.ensure_searxng",
         new_callable=AsyncMock,
@@ -860,7 +870,7 @@ async def test_background_index_fetch_timeout():
             return_value="http://searxng",
         ),
         patch(
-            "wet_mcp.server.searxng_search",
+            "wet_mcp.sources.search_backends.run_search_chain",
             new_callable=AsyncMock,
             return_value=json.dumps({"results": []}),
         ),
@@ -911,7 +921,7 @@ async def test_background_index_with_fallback_alt_url():
             return_value="http://searxng",
         ),
         patch(
-            "wet_mcp.server.searxng_search",
+            "wet_mcp.sources.search_backends.run_search_chain",
             new_callable=AsyncMock,
             return_value=json.dumps(
                 {"results": [{"url": "http://alt-docs.com/guide"}]}
@@ -1022,7 +1032,9 @@ async def test_background_index_with_language_fallback():
             new_callable=AsyncMock,
             return_value="http://searxng",
         ),
-        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+        patch(
+            "wet_mcp.sources.search_backends.run_search_chain", new_callable=AsyncMock
+        ) as mock_search,
         patch("wet_mcp.server._embed_batch", new_callable=AsyncMock, return_value=None),
     ):
         mock_search.return_value = json.dumps({"results": []})
@@ -1161,7 +1173,7 @@ async def test_discover_docs_url_searxng_json_decode_error():
             return_value="http://searxng",
         ),
         patch(
-            "wet_mcp.server.searxng_search",
+            "wet_mcp.sources.search_backends.run_search_chain",
             new_callable=AsyncMock,
             return_value="not json",
         ),
@@ -1185,7 +1197,9 @@ async def test_discover_docs_url_with_language():
             new_callable=AsyncMock,
             return_value="http://searxng",
         ),
-        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+        patch(
+            "wet_mcp.sources.search_backends.run_search_chain", new_callable=AsyncMock
+        ) as mock_search,
     ):
         mock_search.return_value = json.dumps(
             {"results": [{"url": "http://docs.redis.io"}]}
@@ -1265,7 +1279,9 @@ async def test_do_research_reranking_filters_low_scores():
             new_callable=AsyncMock,
             return_value="http://searxng",
         ),
-        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+        patch(
+            "wet_mcp.sources.search_backends.run_search_chain", new_callable=AsyncMock
+        ) as mock_search,
         patch("wet_mcp.server._rerank_results", new_callable=AsyncMock) as mock_rerank,
     ):
         mock_search.return_value = json.dumps(
@@ -1301,7 +1317,9 @@ async def test_do_research_rerank_exception():
             new_callable=AsyncMock,
             return_value="http://searxng",
         ),
-        patch("wet_mcp.server.searxng_search", new_callable=AsyncMock) as mock_search,
+        patch(
+            "wet_mcp.sources.search_backends.run_search_chain", new_callable=AsyncMock
+        ) as mock_search,
         patch(
             "wet_mcp.server._rerank_results",
             new_callable=AsyncMock,
@@ -1337,7 +1355,7 @@ async def test_background_index_alt_url_fetch_timeout():
             return_value="http://searxng",
         ),
         patch(
-            "wet_mcp.server.searxng_search",
+            "wet_mcp.sources.search_backends.run_search_chain",
             new_callable=AsyncMock,
             return_value=json.dumps(
                 {"results": [{"url": "http://alt-docs.com/guide"}]}
@@ -1391,7 +1409,7 @@ async def test_background_index_skip_same_netloc():
             return_value="http://searxng",
         ),
         patch(
-            "wet_mcp.server.searxng_search",
+            "wet_mcp.sources.search_backends.run_search_chain",
             new_callable=AsyncMock,
             return_value=json.dumps({"results": [{"url": "http://docs.x/other-page"}]}),
         ),

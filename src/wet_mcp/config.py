@@ -683,6 +683,20 @@ class Settings(BaseSettings):
 
         Returns 'sdk' if any API keys are configured, 'local' otherwise.
         """
+        from wet_mcp.credential_state import (
+            credentials_for_current_request,
+            get_current_sub,
+        )
+
+        if get_current_sub() is not None or os.getenv("PUBLIC_URL"):
+            creds = credentials_for_current_request()
+            return (
+                "sdk"
+                if any(
+                    value for key, value in creds.items() if key.endswith("_API_KEY")
+                )
+                else "local"
+            )
         if self.api_keys:
             return "sdk"
         # Check for direct env var keys
@@ -692,6 +706,7 @@ class Settings(BaseSettings):
                 "GEMINI_API_KEY",
                 "GOOGLE_API_KEY",
                 "OPENAI_API_KEY",
+                "OPENROUTER_API_KEY",
                 "COHERE_API_KEY",
                 "XAI_API_KEY",
                 "JINA_AI_API_KEY",

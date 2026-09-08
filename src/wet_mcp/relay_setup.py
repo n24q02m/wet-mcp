@@ -19,17 +19,11 @@ from loguru import logger
 from mcp_core.storage.backends import backend_from_env
 from mcp_core.storage.per_plugin_store import PerPluginStore
 
+from wet_mcp.credential_state import CLOUD_KEYS, has_persisted_config
+
 SERVER_NAME = "wet-mcp"
 PLUGIN_NAME = "wet"
 
-CLOUD_KEYS = [
-    "JINA_AI_API_KEY",
-    "GEMINI_API_KEY",
-    "OPENAI_API_KEY",
-    "COHERE_API_KEY",
-    "XAI_API_KEY",
-    "GOOGLE_VERTEX_EXPRESS_API_KEY",
-]
 
 # 5 minutes: user needs time to copy URL, open browser, fill 4 keys
 RELAY_TIMEOUT_S = 300.0
@@ -43,7 +37,7 @@ def load_config_from_file() -> dict[str, str] | None:
     """
     try:
         saved = PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).load()
-        if saved and any(saved.get(k) for k in CLOUD_KEYS):
+        if has_persisted_config(saved):
             logger.info("Config loaded from per-plugin store (~/.wet-mcp/config.json)")
             return saved
         return None
@@ -74,16 +68,16 @@ async def ensure_config(
         Config dict with API keys, or None if skipped/failed (local mode).
     """
     if not force:
-        # 1. Check if env vars already provide cloud keys (highest priority)
-        if any(os.environ.get(k) for k in CLOUD_KEYS):
-            logger.info("Cloud API keys found in environment, skipping relay")
-            return None  # env vars take priority, no relay needed
-
-        # 2. Check saved relay config file
+        # Existing env values have highest priority, but still load the saved
+        # config to restore any recognized fields absent from env.
+        env_configured = any(os.environ.get(key) for key in CLOUD_KEYS)
         config = load_config_from_file()
         if config is not None:
             apply_config(config)
             return config
+        if env_configured:
+            logger.info("Configuration found in environment, skipping relay")
+            return None
 
     # 3. No local credentials found (or forced) -- trigger relay setup.
     # Per mode-matrix 2.5, wet-mcp default is `http local relay`; `remote-relay`
@@ -124,6 +118,14 @@ async def ensure_config(
 
         apply_config(config)
 
+        from wet_mcp.config import settings as _settings
+        from wet_mcp.sync import resolve_active_backend
+
+        gdrive_enabled = (
+            bool(_settings.google_drive_client_id)
+            and resolve_active_backend() == "gdrive"
+        )
+
         # Notify relay page: config saved (info, NOT complete — GDrive OAuth may follow)
         try:
             import httpx
@@ -133,17 +135,19 @@ async def ensure_config(
                     f"{relay_url}/api/sessions/{session.session_id}/messages",
                     json={
                         "type": "info",
-                        "text": "API keys saved. Starting Google Drive sync setup...",
+                        "text": (
+                            "API keys saved. Starting Google Drive sync setup..."
+                            if gdrive_enabled
+                            else "API keys saved."
+                        ),
                     },
                 )
         except Exception:
             pass
 
         # Trigger GDrive OAuth Device Code using default client ID from settings
-        from wet_mcp.config import settings as _settings
-
         gdrive_ok = False
-        if _settings.google_drive_client_id:
+        if gdrive_enabled:
             logger.info("Starting Google Drive OAuth setup...")
             try:
                 from wet_mcp.sync import setup_google_auth
@@ -160,7 +164,7 @@ async def ensure_config(
             async with httpx.AsyncClient() as http:
                 msg = (
                     "Setup complete!"
-                    if gdrive_ok
+                    if gdrive_ok or not gdrive_enabled
                     else "API keys saved. Google Drive sync can be configured later via config tool."
                 )
                 await http.post(

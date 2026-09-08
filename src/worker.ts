@@ -39,26 +39,14 @@ export interface Env {
   MCP_D1_BASE_URL: string
   MCP_VECTORIZE_BASE_URL: string
   MCP_VECTORIZE_IDX: string
-  EMBEDDING_MODELS: string
-  RERANK_MODELS: string
-  LLM_MODELS: string
-  SEARCH_BACKEND?: string
+  SYNC_ENABLED?: string
   WET_AUTO_SEARXNG?: string
   PUBLIC_URL: string
   CREDENTIAL_SECRET: string
   MCP_JWT_SIGNING_SECRET?: string
-  JINA_AI_API_KEY: string
-  GOOGLE_VERTEX_EXPRESS_API_KEY: string
-  XAI_API_KEY: string
   MCP_RELAY_PASSWORD: string
   MCP_DCR_SERVER_SECRET: string
-  // Optional search provider credentials.
-  SEARXNG_URL?: string
-  TAVILY_API_KEY?: string
-  // Capability provider chains (search/browser) + per-task disable-local toggles.
-  SEARCH_BACKENDS?: string
-  BRAVE_API_KEY?: string
-  EXA_API_KEY?: string
+  // Operator-owned browser service and per-task disable-local policies.
   BROWSER_BACKENDS?: string
   CF_ACCOUNT_ID?: string
   CF_BROWSER_RENDERING_TOKEN?: string
@@ -73,25 +61,20 @@ export interface Env {
 }
 
 // Keys forwarded from the Worker env (wrangler vars + secrets) into the container
-// process. Unset/empty values are dropped so an unused optional secret (tavily vs
-// searxng) never injects a blank.
+// process. Subject-owned search/model chains, provider keys and custom endpoints
+// are deliberately excluded: they come from the per-sub relay vault.
 const CONTAINER_ENV_KEYS = [
   'MCP_STORAGE_BACKEND', 'MCP_KV_BASE_URL', 'DOCS_DB_BACKEND',
   'MCP_D1_BASE_URL', 'MCP_VECTORIZE_BASE_URL', 'MCP_VECTORIZE_IDX',
-  'EMBEDDING_MODELS', 'RERANK_MODELS', 'LLM_MODELS',
-  'SEARCH_BACKEND', 'WET_AUTO_SEARXNG', 'SEARXNG_URL', 'TAVILY_API_KEY',
-  'PUBLIC_URL', 'CREDENTIAL_SECRET', 'MCP_JWT_SIGNING_SECRET', 'JINA_AI_API_KEY',
-  'GOOGLE_VERTEX_EXPRESS_API_KEY', 'XAI_API_KEY',
+  'SYNC_ENABLED', 'WET_AUTO_SEARXNG',
+  'PUBLIC_URL', 'CREDENTIAL_SECRET', 'MCP_JWT_SIGNING_SECRET',
   'MCP_RELAY_PASSWORD', 'MCP_DCR_SERVER_SECRET',
   // capability provider chains + disable-local toggles (WS-2/3/4/5)
-  'SEARCH_BACKENDS', 'BRAVE_API_KEY', 'EXA_API_KEY',
   'BROWSER_BACKENDS', 'CF_ACCOUNT_ID', 'CF_BROWSER_RENDERING_TOKEN',
   'BROWSERLESS_URL', 'BROWSERLESS_TOKEN', 'CAPSOLVER_API_KEY',
   'DISABLE_LOCAL_EMBED', 'DISABLE_LOCAL_RERANK',
   'DISABLE_LOCAL_SEARCH', 'DISABLE_LOCAL_BROWSER',
   'RESPECT_ROBOTS_TXT',
-  // CF AI Gateway (llm-main) litellm routing
-  'OPENROUTER_API_BASE', 'OPENROUTER_API_KEY', 'JINA_AI_API_BASE',
 ] as const
 
 export function pickContainerEnv(env: Env): Record<string, string> {

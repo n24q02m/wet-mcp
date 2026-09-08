@@ -64,8 +64,8 @@ RELAY_SCHEMA: dict[str, Any] = {
         "Pick models per task (order = fallback). Leave a task empty for "
         "local ONNX (embedding/rerank) — LLM features need at least one model. "
         "Key fields appear automatically for the providers your models use. "
-        "Search runs local SearXNG by default; add cloud providers "
-        "(Tavily/Brave/Exa) for a fallback chain. Extraction is always local."
+        "Search runs local SearXNG by default in single-user mode; hosted users "
+        "configure their own chain. Keyless DuckDuckGo/Startpage are available."
     ),
     "fields": [
         {
@@ -142,6 +142,12 @@ RELAY_SCHEMA: dict[str, Any] = {
             "https://platform.openai.com/api-keys",
         ),
         _key_field(
+            "OPENROUTER_API_KEY",
+            "OpenRouter API Key",
+            "",
+            "https://openrouter.ai/settings/keys",
+        ),
+        _key_field(
             "COHERE_API_KEY",
             "Cohere API Key",
             "co-...",
@@ -174,6 +180,15 @@ RELAY_SCHEMA: dict[str, Any] = {
         ),
         _key_field(
             "EXA_API_KEY", "Exa API Key", "exa_...", "https://dashboard.exa.ai/api-keys"
+        ),
+        _key_field(
+            "KAGI_API_KEY", "Kagi API Key", "", "https://kagi.com/settings?p=api"
+        ),
+        _key_field(
+            "FIRECRAWL_API_KEY",
+            "Firecrawl API Key (optional)",
+            "",
+            "https://www.firecrawl.dev/app/api-keys",
         ),
         {
             # SearXNG is a named backend (not a model-prefix provider): selecting
@@ -216,8 +231,8 @@ RELAY_SCHEMA: dict[str, Any] = {
             "label": "Search",
             "priority": "configurable",
             "description": (
-                "Web search. Local SearXNG auto-starts by default (no key); add "
-                "cloud providers (Tavily/Brave/Exa) above for a fallback chain."
+                "Web search. Public single-user mode supports local SearXNG. "
+                "Hosted chains and provider keys are isolated per subject."
             ),
         },
         {

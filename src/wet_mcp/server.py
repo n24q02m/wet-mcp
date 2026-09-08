@@ -27,7 +27,7 @@ from loguru import logger
 from mcp.server.fastmcp import FastMCP
 from mcp.types import ToolAnnotations
 
-from wet_mcp import search_metrics
+from wet_mcp import credential_state, search_metrics
 from wet_mcp.cache import WebCache
 from wet_mcp.config import settings
 from wet_mcp.db import (
@@ -52,7 +52,6 @@ from wet_mcp.sources.crawler import (
 from wet_mcp.sources.crawler import (
     sitemap as _sitemap,
 )
-from wet_mcp.sources.searxng import search as searxng_search
 from wet_mcp.transport_check import is_uvx_tool_venv, uvx_searxng_blocked_error
 
 # Configure logging
@@ -1100,6 +1099,28 @@ async def _with_timeout(coro, action: str) -> Any:
     )
 
 
+async def _run_configured_search(*, timeout: float | None = None, **kwargs: Any) -> str:
+    """Run the subject's chain, starting SearXNG only for local public use."""
+    searxng_url = None
+    if (
+        credential_state.get_current_sub() is None
+        and not os.getenv("PUBLIC_URL")
+        and "searxng" in search_backends.chain_backend_names()
+    ):
+        try:
+            searxng_url = await asyncio.wait_for(
+                ensure_searxng(), timeout=_SEARXNG_TIMEOUT
+            )
+        except TimeoutError:
+            return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
+        except (SystemExit, Exception) as exc:
+            return f"Error: SearXNG startup failed: {exc}"
+    search_call = search_backends.run_search_chain(searxng_url=searxng_url, **kwargs)
+    if timeout is not None:
+        return await asyncio.wait_for(search_call, timeout=timeout)
+    return await search_call
+
+
 # ---------------------------------------------------------------------------
 # search tool: search, research, docs
 # ---------------------------------------------------------------------------
@@ -1209,6 +1230,7 @@ async def search(  # noqa: PLR0913
                 }
             region_normalized = region_normalized.upper() or None
             cache_params = {
+                "subject": credential_state.get_current_sub(),
                 "query": normalized_query,
                 "categories": categories,
                 "max_results": max_results,
@@ -1270,24 +1292,6 @@ async def search(  # noqa: PLR0913
                 if len(expanded) > 1:
                     search_query = " OR ".join(expanded)
 
-            # When the SearXNG backend is in the chain, resolve its live URL via
-            # ensure_searxng (which itself honors DISABLE_LOCAL_SEARCH /
-            # WET_AUTO_SEARXNG: it auto-starts the embedded instance only when
-            # enabled, else returns the configured external URL). Pass it to the
-            # chain so its SearxngBackend hits the right (possibly dynamic) port.
-            live_searxng_url: str | None = None
-            if "searxng" in search_backends.chain_backend_names():
-                try:
-                    live_searxng_url = await asyncio.wait_for(
-                        ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                    )
-                except TimeoutError:
-                    return {
-                        "error": f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
-                    }
-                except (SystemExit, Exception) as exc:
-                    return {"error": f"Error: SearXNG startup failed: {exc}"}
-
             async def _round(round_query: str) -> tuple[str, dict[str, Any] | None]:
                 """One chain round: run the chain, sanity-filter, rerank.
 
@@ -1296,7 +1300,7 @@ async def search(  # noqa: PLR0913
                 unparseable payload) and the raw text must pass through.
                 """
                 result = await _with_timeout(
-                    search_backends.run_search_chain(
+                    _run_configured_search(
                         query=round_query,
                         categories=categories,
                         max_results=max_results * _RERANK_CANDIDATE_MULTIPLIER,
@@ -1305,7 +1309,6 @@ async def search(  # noqa: PLR0913
                         region=region_normalized,
                         include_domains=include_domains,
                         exclude_domains=exclude_domains,
-                        searxng_url=live_searxng_url,
                         parallel=parallel,
                     ),
                     "search",
@@ -1459,6 +1462,7 @@ async def search(  # noqa: PLR0913
                     "error": 'Error: query is required for research action. Example: search(action="research", query="transformer attention mechanism")'
                 }
             cache_params = {
+                "subject": credential_state.get_current_sub(),
                 "query": query,
                 "max_results": max_results,
                 "time_range": time_range,
@@ -1521,19 +1525,11 @@ async def search(  # noqa: PLR0913
                 return {
                     "error": 'Error: query must be a full URL starting with http:// or https://. Example: search(action="similar", query="https://example.com/article"). If you want to search by keywords instead, use action="search".'
                 }
-            try:
-                searxng_url = await asyncio.wait_for(
-                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                )
-            except (TimeoutError, SystemExit, Exception) as exc:
-                return {"error": f"Error: SearXNG startup failed: {exc}"}
             from wet_mcp.sources.search_strategies import find_similar
 
             return _payload(
                 await _with_timeout(
-                    find_similar(
-                        url=query, max_results=max_results, searxng_url=searxng_url
-                    ),
+                    find_similar(url=query, max_results=max_results),
                     "similar",
                 )
             )
@@ -2545,7 +2541,7 @@ async def config(
 
 
 # ---------------------------------------------------------------------------
-# Research (academic search via SearXNG science category)
+# Research (configured search chain; SearXNG retains its science category)
 # ---------------------------------------------------------------------------
 async def _do_research(
     query: str,
@@ -2555,16 +2551,8 @@ async def _do_research(
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
 ) -> str:
-    """Academic/scientific search using SearXNG science engines."""
-    try:
-        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
-    except TimeoutError:
-        return f"Error: SearXNG startup timed out ({_SEARXNG_TIMEOUT}s). Try again or check logs."
-    except (SystemExit, Exception) as exc:
-        return f"Error: SearXNG startup failed: {exc}"
-
-    result_str = await searxng_search(
-        searxng_url=searxng_url,
+    """Academic/scientific search through the configured provider chain."""
+    result_str = await _run_configured_search(
         query=query,
         categories="science",
         max_results=max_results * 3,
@@ -2881,7 +2869,7 @@ async def _background_index_and_search(
             )
             all_chunks, page_count = [], 0
 
-        # Fallback SearXNG
+        # Fallback through the configured search chain.
         if page_count <= 2 and len(all_chunks) < 100:
             fallback_query = (
                 f"{library} {language} documentation"
@@ -2889,16 +2877,10 @@ async def _background_index_and_search(
                 else f"{library} documentation"
             )
             try:
-                searxng_url = await asyncio.wait_for(
-                    ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-                )
-                fallback_result = await asyncio.wait_for(
-                    searxng_search(
-                        searxng_url=searxng_url,
-                        query=fallback_query,
-                        categories="general",
-                        max_results=3,
-                    ),
+                fallback_result = await _run_configured_search(
+                    query=fallback_query,
+                    categories="general",
+                    max_results=3,
                     timeout=15,
                 )
                 import json
@@ -2939,7 +2921,7 @@ async def _background_index_and_search(
                             break
             except Exception as e:
                 logger.warning(
-                    f"SearXNG docs fallback failed for '{library}' "
+                    f"Configured search docs fallback failed for '{library}' "
                     f"(query {fallback_query!r}); staying with "
                     f"{len(all_chunks)} chunks from {page_count} pages: "
                     f"{type(e).__name__}: {e}"
@@ -3187,7 +3169,7 @@ async def _discover_docs_url(
 ) -> tuple[str, str, str, str]:
     """Auto-discover documentation URL for a library.
 
-    Tries registry discovery first, then falls back to SearXNG web search.
+    Tries registry discovery first, then the configured web-search chain.
 
     Returns:
         Tuple of (docs_url, repo_url, registry, description). Any field
@@ -3220,25 +3202,21 @@ async def _discover_docs_url(
         registry = discovery.get("registry", "")
         description = discovery.get("description", "")
     else:
-        # Fallback: use SearXNG to find docs
+        # Fallback: use the configured search chain to find docs.
         # Include language context for better results
         search_query = (
             f"{library} {language} documentation"
             if language
             else f"{library} official documentation"
         )
-        logger.info(f"Registry lookup failed, trying SearXNG for '{library}'...")
+        logger.info(
+            f"Registry lookup failed, trying configured search for '{library}'..."
+        )
         try:
-            searxng_url = await asyncio.wait_for(
-                ensure_searxng(), timeout=_SEARXNG_TIMEOUT
-            )
-            search_result = await asyncio.wait_for(
-                searxng_search(
-                    searxng_url=searxng_url,
-                    query=search_query,
-                    categories="general",
-                    max_results=3,
-                ),
+            search_result = await _run_configured_search(
+                query=search_query,
+                categories="general",
+                max_results=3,
                 timeout=15,
             )
             search_data = json.loads(search_result)
@@ -3246,13 +3224,12 @@ async def _discover_docs_url(
             if top_results:
                 docs_url = top_results[0].get("url", "")
         except TimeoutError:
-            logger.warning("SearXNG discovery fallback timed out")
+            logger.warning("Configured search discovery fallback timed out")
         except json.JSONDecodeError:
-            # searxng_search reports failure by returning an "Error: ..."
-            # string, which lands here. Swallowing it made a dead SearXNG
-            # indistinguishable from "this library has no docs page".
+            # Startup failures return an "Error: ..." string. Keep a failed
+            # search distinguishable from a library without a docs page.
             logger.warning(
-                f"SearXNG discovery fallback for '{library}' returned "
+                f"Configured search discovery fallback for '{library}' returned "
                 f"non-JSON output, so no docs URL was found: "
                 f"{search_result[:200]!r}"
             )
@@ -3385,14 +3362,10 @@ async def _do_immediate_fallback_search(
     )
     fallback_data = {"results": []}
     try:
-        searxng_url = await asyncio.wait_for(ensure_searxng(), timeout=_SEARXNG_TIMEOUT)
-        fallback_result = await asyncio.wait_for(
-            searxng_search(
-                searxng_url=searxng_url,
-                query=fallback_search_query,
-                categories="general",
-                max_results=limit,
-            ),
+        fallback_result = await _run_configured_search(
+            query=fallback_search_query,
+            categories="general",
+            max_results=limit,
             timeout=15,
         )
         fallback_data = json.loads(fallback_result)
@@ -3428,7 +3401,10 @@ async def _per_request_sub_scope(
     """
     from wet_mcp.credential_state import _current_sub
 
-    token = _current_sub.set(claims.get("sub"))
+    sub = claims.get("sub")
+    if not isinstance(sub, str) or not sub.strip():
+        raise RuntimeError("multi-user mode: authenticated subject required")
+    token = _current_sub.set(sub)
     try:
         await next_()
     finally:

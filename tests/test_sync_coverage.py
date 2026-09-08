@@ -12,6 +12,14 @@ from wet_mcp.sync import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _gdrive_sync_backend(monkeypatch):
+    """This module exercises GDrive internals, not backend selection."""
+    from wet_mcp import sync as sync_module
+
+    monkeypatch.setattr(sync_module, "resolve_active_backend", lambda: "gdrive")
+
+
 class TestHasTokenAvailable:
     """Cover _has_token_available function."""
 

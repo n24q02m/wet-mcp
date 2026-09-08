@@ -74,18 +74,22 @@ Hardened for E.1 + E.2 (PR series cf-p3-01); do not re-solve those per server.
    the app is deleted+recreated. `wrangler kv` needs `--remote`.
 
 ## Sync mode-gating (servers with a docs/memory DB: wet, mnemo)
-- On CF (`DOCS_DB_BACKEND=cf-d1`) the GDrive/S3 DB-sync is REDUNDANT (D1+Vectorize is
-  the durable store) -> gate it OFF explicitly on the backend selector. Keep it ON for
-  local / self-host (`sqlite` + disk) for backup/portability. See overview §6.5.
+- Wet uses `DOCS_DB_BACKEND=cf-d1`; Mnemo uses `MEMORY_DB_BACKEND=cf-d1`.
+  D1 + Vectorize is durable, so legacy GDrive/S3 file sync is disabled by the
+  effective backend resolver even when old bucket/client settings remain.
+- Startup, relay wizard and device-code entry points must all honor that
+  resolver. `SYNC_ENABLED=false` disables both backends independently of CF.
+- Non-CF SQLite deployments retain GDrive backup/portability, or S3 when
+  `SYNC_S3_BUCKET` is configured; the backends remain mutually exclusive.
 
 ## Per-server success criteria (work-order-v3 DONE gate)
 - Deploy to CF managed registry; `/.well-known/oauth-protected-resource` -> 200;
   `GET /mcp` (no token) -> 401 + www-authenticate.
 - Full OAuth password flow self-test PASS (replicate `cf_full_flow.py`): login ->
   save credential (retry-on-500) -> authenticated tool call via relay.
-  Verify needs `MCP_RELAY_PASSWORD` from `/oci-vm-prod/prod` (infra-shared login gate),
-  NOT the per-server `/<server>/prod` (runtime-only) -> compose 2 skret namespaces:
-  `skret run -e prod --path=/oci-vm-prod/prod -- bash -c 'export RELAY_PW=$MCP_RELAY_PASSWORD; skret run -e prod --path=/<server>/prod -- <verify>'`.
+  Supply `MCP_RELAY_PASSWORD` from the approved MCP-owned secret source and
+  server runtime credentials separately. Never use a VM-hosted service or
+  VM-named namespace as a deployment, verification, or rollback dependency.
   E.1 residual: <=1 `save 500 (interception race)` retry on a truly-cold instance is PASS
   (the readiness probe reduces but cannot fully eliminate it; client retry is the backstop).
 - STATE SURVIVES delete+recreate (the key gate; first boot is not enough). Strong test:

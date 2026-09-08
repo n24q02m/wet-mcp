@@ -185,32 +185,19 @@ def test_maybe_register_custom_rerank_registers_public_spec(monkeypatch):
 @pytest.mark.asyncio
 async def test_search_success():
     """Test search action success path."""
-    with (
-        patch("wet_mcp.server.ensure_searxng", new_callable=AsyncMock) as mock_ensure,
-        patch("wet_mcp.sources.searxng.search", new_callable=AsyncMock) as mock_search,
-    ):
-        mock_ensure.return_value = "http://localhost:8080"
-        mock_search.return_value = (
+    with patch(
+        "wet_mcp.server._run_configured_search",
+        new_callable=AsyncMock,
+        return_value=(
             '{"results": [{"url": "https://e", "title": "T", "snippet": "Search Results"}], '
             '"total": 1, "query": "test query"}'
-        )
-
+        ),
+    ):
         result = await search(action="search", query="test query")
 
         assert "Search Results" in text(result)
         assert "<untrusted_search_content>" in text(result)
         assert "[SECURITY:" in text(result)
-        mock_ensure.assert_called_once()
-        mock_search.assert_called_once_with(
-            searxng_url="http://localhost:8080",
-            query="test query",
-            categories="general",
-            max_results=30,  # 10 * _RERANK_CANDIDATE_MULTIPLIER (3)
-            time_range=None,
-            language=None,
-            include_domains=None,
-            exclude_domains=None,
-        )
 
 
 @pytest.mark.asyncio
@@ -416,12 +403,7 @@ async def test_search_applies_reranking():
 
     with (
         patch(
-            "wet_mcp.server.ensure_searxng",
-            new_callable=AsyncMock,
-            return_value="http://localhost:41592",
-        ),
-        patch(
-            "wet_mcp.sources.searxng.search",
+            "wet_mcp.server._run_configured_search",
             new_callable=AsyncMock,
             return_value=mock_results,
         ),
@@ -461,12 +443,7 @@ async def test_search_reranking_failure_falls_back():
 
     with (
         patch(
-            "wet_mcp.server.ensure_searxng",
-            new_callable=AsyncMock,
-            return_value="http://localhost:41592",
-        ),
-        patch(
-            "wet_mcp.sources.searxng.search",
+            "wet_mcp.server._run_configured_search",
             new_callable=AsyncMock,
             return_value=mock_results,
         ),
@@ -548,29 +525,21 @@ async def test_extract_batch_requires_urls():
 # ---------------------------------------------------------------------------
 
 
-async def test_search_similar_action():
-    """Test similar action delegates to find_similar."""
-    with (
-        patch(
-            "wet_mcp.server.ensure_searxng",
-            new_callable=AsyncMock,
-            return_value="http://localhost:8080",
-        ),
-        patch(
-            "wet_mcp.sources.search_strategies.find_similar",
-            new_callable=AsyncMock,
-            return_value='{"results": []}',
-        ) as mock_fn,
-    ):
+async def test_search_similar_action_uses_configured_chain():
+    """The similar action delegates without forcing a SearXNG URL."""
+    with patch(
+        "wet_mcp.sources.search_strategies.find_similar",
+        new_callable=AsyncMock,
+        return_value='{"results": []}',
+    ) as mock_fn:
         result = await search(action="similar", query="https://example.com")
 
-        assert payload(result)["results"] == []
-        assert "<untrusted_search_content>" in text(result)
-        mock_fn.assert_called_once_with(
-            url="https://example.com",
-            max_results=10,
-            searxng_url="http://localhost:8080",
-        )
+    assert payload(result)["results"] == []
+    assert "<untrusted_search_content>" in text(result)
+    mock_fn.assert_awaited_once_with(
+        url="https://example.com",
+        max_results=10,
+    )
 
 
 async def test_search_similar_requires_url():
@@ -596,12 +565,7 @@ async def test_search_expand_flag():
     """Test expand=True calls expand_query and uses expanded query."""
     with (
         patch(
-            "wet_mcp.server.ensure_searxng",
-            new_callable=AsyncMock,
-            return_value="http://localhost:8080",
-        ),
-        patch(
-            "wet_mcp.sources.searxng.search",
+            "wet_mcp.server._run_configured_search",
             new_callable=AsyncMock,
             return_value=(
                 '{"results": [{"url": "https://e", "title": "T", "snippet": "Search Results"}], '
@@ -621,9 +585,8 @@ async def test_search_expand_flag():
         result = await search(action="search", query="python web scraping", expand=True)
 
         assert "Search Results" in text(result)
-        # Verify expanded query was passed to searxng_search
-        call_args = mock_search.call_args
-        assert "OR" in call_args.kwargs.get("query", call_args[1].get("query", ""))
+        # Verify expanded query was passed to the configured chain.
+        assert "OR" in mock_search.await_args.kwargs["query"]
 
 
 # ---------------------------------------------------------------------------
@@ -658,12 +621,7 @@ async def test_search_enrich_flag():
 
     with (
         patch(
-            "wet_mcp.server.ensure_searxng",
-            new_callable=AsyncMock,
-            return_value="http://localhost:8080",
-        ),
-        patch(
-            "wet_mcp.sources.searxng.search",
+            "wet_mcp.server._run_configured_search",
             new_callable=AsyncMock,
             return_value=mock_results,
         ),

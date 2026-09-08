@@ -6,6 +6,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _gdrive_sync_backend(monkeypatch):
+    """This module exercises GDrive internals, not backend selection."""
+    from wet_mcp import sync as sync_module
+
+    monkeypatch.setattr(sync_module, "resolve_active_backend", lambda: "gdrive")
+
+
 # ---------------------------------------------------------------------------
 # sync.py coverage gaps
 # ---------------------------------------------------------------------------
@@ -134,7 +143,8 @@ class TestStartAutoSyncDisabled:
         mock_settings.sync_interval = 60
         wet_mcp.sync._sync_task = None
 
-        start_auto_sync(MagicMock())
+        with patch("wet_mcp.sync.resolve_active_backend", return_value="disabled"):
+            start_auto_sync(MagicMock())
         mock_create.assert_not_called()
 
 
@@ -311,6 +321,7 @@ class TestCachePurgeAndClose:
 
         cache = WebCache.__new__(WebCache)
         cache._conn = MagicMock()
+        cache._lock = MagicMock()
         cache._conn.close.side_effect = Exception("already closed")
 
         cache.close()  # Should not raise

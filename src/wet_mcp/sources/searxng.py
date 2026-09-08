@@ -24,6 +24,7 @@ from web_core.search.client import (  # noqa: F401
 )
 
 from wet_mcp.config import settings
+from wet_mcp.security import is_safe_url
 
 # Default health check timeout
 _HEALTH_CHECK_TIMEOUT = 5.0
@@ -38,7 +39,7 @@ def _searxng_auth() -> tuple[str, str] | None:
     return (user, pwd) if user and pwd else None
 
 
-async def _check_health(searxng_url: str) -> bool:
+async def _check_health(searxng_url: str, *, use_settings_auth: bool = True) -> bool:
     """Whether the SearXNG instance is REACHABLE (not whether /healthz is 200).
 
     Any HTTP response means the instance is up: 200 = ready, and 401/403 = up but
@@ -49,7 +50,7 @@ async def _check_health(searxng_url: str) -> bool:
     pointless restart→spawn of a local SearXNG when an external one is configured.
     """
     try:
-        auth = _searxng_auth()
+        auth = _searxng_auth() if use_settings_auth else None
         extra = {"auth": auth} if auth else {}
         async with httpx.AsyncClient(timeout=_HEALTH_CHECK_TIMEOUT) as client:
             response = await client.get(
@@ -65,14 +66,18 @@ async def _check_health(searxng_url: str) -> bool:
         return False
 
 
-async def _ensure_searxng_healthy(searxng_url: str) -> str:
-    """Verify SearXNG is healthy; restart if needed.
+async def _ensure_searxng_healthy(
+    searxng_url: str,
+    *,
+    allow_local_restart: bool = True,
+    use_settings_auth: bool = True,
+) -> str:
+    """Verify SearXNG is reachable and restart only managed local instances."""
+    if await _check_health(searxng_url, use_settings_auth=use_settings_auth):
+        return searxng_url
 
-    Imports ensure_searxng lazily to avoid circular imports.
-    If the current instance is unhealthy, triggers a restart
-    and returns the (potentially new) URL.
-    """
-    if await _check_health(searxng_url):
+    if not allow_local_restart:
+        logger.warning("Hosted SearXNG is unhealthy; local restart is disabled")
         return searxng_url
 
     logger.warning(f"SearXNG at {searxng_url} is unhealthy, attempting restart...")
@@ -81,7 +86,7 @@ async def _ensure_searxng_healthy(searxng_url: str) -> str:
 
     new_url = await ensure_searxng()
 
-    if await _check_health(new_url):
+    if await _check_health(new_url, use_settings_auth=use_settings_auth):
         logger.info(f"SearXNG restarted successfully at {new_url}")
         return new_url
 
@@ -100,12 +105,13 @@ async def search(
     language: str | None = None,
     include_domains: list[str] | None = None,
     exclude_domains: list[str] | None = None,
+    hosted: bool = False,
 ) -> str:
     """Search via SearXNG API — delegates to web-core, returns JSON string.
 
-    Adds health check + auto-restart before each search (MCP-specific).
-    web-core's search returns ``list[SearchResult]``; this wrapper converts
-    to a JSON string for MCP tool response format.
+    Managed local/single-user instances retain health-check restart and optional
+    operator basic auth. Hosted subject URLs are SSRF-vetted, never inherit
+    process-global auth, and never fall back to a local SearXNG.
 
     Args:
         searxng_url: SearXNG instance URL
@@ -116,14 +122,27 @@ async def search(
         language: Language filter (e.g. en, vi, zh)
         include_domains: Only search these domains (max 5)
         exclude_domains: Exclude these domains (max 10)
+        hosted: Treat ``searxng_url`` as untrusted per-subject configuration.
 
     Returns:
         JSON string with search results
     """
     logger.info(f"Searching SearXNG: {query}")
 
+    if hosted and not is_safe_url(searxng_url):
+        return json.dumps({"error": "Security Alert: unsafe SearXNG URL blocked"})
+
+    auth = None if hosted else _searxng_auth()
+
     # Pre-search health check + auto-restart if needed
-    active_url = await _ensure_searxng_healthy(searxng_url)
+    if hosted:
+        active_url = await _ensure_searxng_healthy(
+            searxng_url,
+            allow_local_restart=False,
+            use_settings_auth=False,
+        )
+    else:
+        active_url = await _ensure_searxng_healthy(searxng_url)
 
     try:
         import dataclasses
@@ -137,7 +156,7 @@ async def search(
             language=language,
             include_domains=include_domains,
             exclude_domains=exclude_domains,
-            auth=_searxng_auth(),
+            auth=auth,
         )
 
         output = {
@@ -156,7 +175,14 @@ async def search(
         # On connection errors, try restart + one more attempt
         if "Request error" in error_msg:
             logger.info("Attempting SearXNG restart before final retry...")
-            active_url = await _ensure_searxng_healthy(active_url)
+            if hosted:
+                active_url = await _ensure_searxng_healthy(
+                    active_url,
+                    allow_local_restart=False,
+                    use_settings_auth=False,
+                )
+            else:
+                active_url = await _ensure_searxng_healthy(active_url)
             try:
                 results = await _wc_search(
                     active_url,
@@ -167,6 +193,7 @@ async def search(
                     language=language,
                     include_domains=include_domains,
                     exclude_domains=exclude_domains,
+                    auth=auth,
                 )
                 output = {
                     "results": [dataclasses.asdict(r) for r in results],

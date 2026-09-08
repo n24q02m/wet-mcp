@@ -162,13 +162,26 @@ async def acompletion(
 
 
 def get_llm_config() -> dict:
-    """Build LLM configuration from the key-gated chain.
+    """Build the completion chain from the current subject, or local settings.
 
-    Uses ``settings.llm_chain()`` so an unconfigured default never emits a
-    keyless cloud model. When the chain is empty (no provider key configured)
-    ``model`` is ``None`` and callers degrade gracefully (LLM feature off).
+    Remote requests never inherit a process-wide model/fallback chain. An empty
+    subject chain disables the LLM capability instead of spending another
+    user's provider credentials.
     """
-    models = settings.llm_chain()
+    from wet_mcp.credential_state import (
+        credentials_for_current_request,
+        get_current_sub,
+    )
+
+    if get_current_sub() is not None or os.environ.get("PUBLIC_URL"):
+        creds = credentials_for_current_request()
+        models = (
+            settings.llm_chain_for_creds(creds)
+            if creds.get("LLM_MODELS", "").strip()
+            else []
+        )
+    else:
+        models = settings.llm_chain()
     primary = models[0] if models else None
     fallbacks = models[1:] if len(models) > 1 else None
 

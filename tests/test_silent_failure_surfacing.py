@@ -297,13 +297,7 @@ async def test_background_index_alternate_source_failure_is_reported():
         ),
         patch.object(
             server,
-            "ensure_searxng",
-            new_callable=AsyncMock,
-            return_value="http://localhost:41592",
-        ),
-        patch.object(
-            server,
-            "searxng_search",
+            "_run_configured_search",
             new_callable=AsyncMock,
             return_value=searx_payload,
         ),
@@ -330,8 +324,8 @@ async def test_background_index_alternate_source_failure_is_reported():
     ), warned
 
 
-async def test_background_index_searxng_fallback_failure_is_reported():
-    """The last-resort docs fallback logged its own death at debug level."""
+async def test_background_index_configured_search_fallback_failure_is_reported():
+    """The last-resort configured search fallback reports its own failure."""
     with (
         patch("wet_mcp.sources.docs._normalize_docs_url", return_value="http://docs"),
         patch.object(
@@ -342,9 +336,9 @@ async def test_background_index_searxng_fallback_failure_is_reported():
         ),
         patch.object(
             server,
-            "ensure_searxng",
+            "_run_configured_search",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("searxng container is down"),
+            side_effect=RuntimeError("configured search is down"),
         ),
         captured_logs() as records,
     ):
@@ -362,7 +356,7 @@ async def test_background_index_searxng_fallback_failure_is_reported():
 
     warned = messages(records, "WARNING")
     assert any(
-        "SearXNG docs fallback failed" in m
+        "Configured search docs fallback failed" in m
         and "testlib" in m
         and "testlib python documentation" in m
         for m in warned
@@ -477,8 +471,8 @@ async def test_background_index_crash_keeps_the_traceback():
     assert "_background_index_and_search" in message
 
 
-async def test_discover_docs_url_non_json_searxng_is_reported():
-    """searxng_search reports failure as an "Error: ..." string, not an exception."""
+async def test_discover_docs_url_non_json_configured_search_is_reported():
+    """A configured search failure string is logged, not mistaken for no result."""
     with (
         patch(
             "wet_mcp.sources.docs.discover_library",
@@ -487,15 +481,9 @@ async def test_discover_docs_url_non_json_searxng_is_reported():
         ),
         patch.object(
             server,
-            "ensure_searxng",
+            "_run_configured_search",
             new_callable=AsyncMock,
-            return_value="http://localhost:41592",
-        ),
-        patch.object(
-            server,
-            "searxng_search",
-            new_callable=AsyncMock,
-            return_value="Error: SearXNG unreachable",
+            return_value="Error: configured search unreachable",
         ),
         captured_logs() as records,
     ):
@@ -506,9 +494,9 @@ async def test_discover_docs_url_non_json_searxng_is_reported():
     assert docs_url == ""
     warned = messages(records, "WARNING")
     assert any(
-        "SearXNG discovery fallback" in m
+        "Configured search discovery fallback" in m
         and "ghostlib" in m
-        and "SearXNG unreachable" in m
+        and "configured search unreachable" in m
         for m in warned
     ), warned
 
@@ -518,9 +506,9 @@ async def test_immediate_fallback_search_failure_is_reported():
     with (
         patch.object(
             server,
-            "ensure_searxng",
+            "_run_configured_search",
             new_callable=AsyncMock,
-            side_effect=RuntimeError("searxng container is down"),
+            side_effect=RuntimeError("configured search is down"),
         ),
         captured_logs() as records,
     ):

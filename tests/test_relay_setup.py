@@ -26,16 +26,14 @@ class TestRelaySchema:
 
     def test_schema_has_provider_and_chain_fields(self):
         fields = RELAY_SCHEMA["fields"]
-        # 3 model-chain tasks + 1 search-chain + 12 password keys (10 derived
-        # model/search provider keys jina/gemini/openai/cohere/anthropic/xai/
-        # vertex-express/tavily/brave/exa + plain GITHUB_TOKEN + plain
-        # CAPSOLVER_API_KEY).
-        chains = [f for f in fields if f.get("type") == "model-chain"]
-        search_chains = [f for f in fields if f.get("type") == "search-chain"]
-        keys = [f for f in fields if f.get("type") == "password"]
-        assert len(chains) == 3
-        assert len(search_chains) == 1
-        assert len(keys) == 12
+        model_tasks = {
+            field["task"] for field in fields if field.get("type") == "model-chain"
+        }
+        search_tasks = [
+            field["key"] for field in fields if field.get("type") == "search-chain"
+        ]
+        assert model_tasks == {"embedding", "rerank", "chat"}
+        assert search_tasks == ["SEARCH_BACKENDS"]
 
     def test_schema_field_keys(self):
         field_keys = [f["key"] for f in RELAY_SCHEMA["fields"]]
@@ -46,6 +44,10 @@ class TestRelaySchema:
         assert "ANTHROPIC_API_KEY" in field_keys
         assert "XAI_API_KEY" in field_keys
         assert "GITHUB_TOKEN" in field_keys
+        assert "OPENROUTER_API_KEY" in field_keys
+        assert "KAGI_API_KEY" in field_keys
+        assert "FIRECRAWL_API_KEY" in field_keys
+        assert "SEARXNG_URL" in field_keys
 
     def test_schema_server_name(self):
         assert RELAY_SCHEMA["server"] == "wet-mcp"

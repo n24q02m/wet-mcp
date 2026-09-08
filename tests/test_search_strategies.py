@@ -202,10 +202,10 @@ async def test_find_similar_success():
             return_value="python web scraping beautifulsoup",
         ),
         patch(
-            "wet_mcp.sources.searxng.search",
+            "wet_mcp.sources.search_backends.run_search_chain",
             new_callable=AsyncMock,
             return_value=SEARCH_RESULTS,
-        ),
+        ) as mock_search,
     ):
         result = await find_similar(
             url="https://example.com/page",
@@ -215,6 +215,11 @@ async def test_find_similar_success():
         parsed = json.loads(result)
         assert parsed["total"] == 1
         assert parsed["results"][0]["url"] == "https://other.com/similar"
+        mock_search.assert_awaited_once_with(
+            searxng_url="http://localhost:8080",
+            query="python web scraping beautifulsoup -site:example.com",
+            max_results=10,
+        )
 
 
 async def test_find_similar_extract_failure():
@@ -245,8 +250,14 @@ async def test_find_similar_empty_pages():
         assert "error" in parsed
 
 
-async def test_find_similar_auto_searxng_url():
-    """When no searxng_url provided, calls ensure_searxng."""
+async def test_find_similar_auto_searxng_url(monkeypatch):
+    """A local single-user SearXNG chain is started before similar search."""
+    monkeypatch.delenv("PUBLIC_URL", raising=False)
+    monkeypatch.setattr("wet_mcp.credential_state.get_current_sub", lambda: None)
+    monkeypatch.setattr(
+        "wet_mcp.sources.search_backends.chain_backend_names",
+        lambda: ["searxng"],
+    )
     with (
         patch(
             "wet_mcp.sources.search_strategies.raw_extract",
@@ -259,20 +270,26 @@ async def test_find_similar_auto_searxng_url():
             return_value="keywords",
         ),
         patch(
-            "wet_mcp.sources.searxng.search",
+            "wet_mcp.sources.search_backends.run_search_chain",
             new_callable=AsyncMock,
             return_value=SEARCH_RESULTS,
-        ),
+        ) as mock_search,
         patch(
             "wet_mcp.searxng_runner.ensure_searxng",
             new_callable=AsyncMock,
             return_value="http://localhost:41592",
-        ),
+        ) as mock_ensure,
     ):
         result = await find_similar(url="https://example.com/page")
 
         parsed = json.loads(result)
         assert "results" in parsed
+        mock_ensure.assert_awaited_once_with()
+        mock_search.assert_awaited_once_with(
+            searxng_url="http://localhost:41592",
+            query="keywords -site:example.com",
+            max_results=10,
+        )
 
 
 # ---------------------------------------------------------------------------
