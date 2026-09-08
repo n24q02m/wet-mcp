@@ -29,6 +29,8 @@ from mcp_core.llm.key_rotation import rotate_keys, split_keys
 from wet_mcp import search_metrics
 from wet_mcp.config import settings
 
+_RE_TAGS = re.compile(r"<[^>]*>")
+
 
 class SearchBackend(Protocol):
     name: str
@@ -297,7 +299,9 @@ _TAVILY_COUNTRY_BY_ISO: dict[str, str] = {
 def _html_text(raw: str) -> str:
     """Strip tags + decode entities (stdlib only — no external HTML parser,
     so the credential-free backends stay runnable inside a uvx tool venv)."""
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]*>", " ", raw))).strip()
+    # Use pre-compiled regex for tags and str.split() for fast whitespace collapse
+    # avoiding regex engine overhead for multiple spaces.
+    return " ".join(html.unescape(_RE_TAGS.sub(" ", raw)).split())
 
 
 def _decode_ddg_href(href: str) -> str:

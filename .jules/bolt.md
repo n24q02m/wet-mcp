@@ -75,3 +75,7 @@ closed pull request.
 ## 2025-01-20 - Extract redundant string transformations from generator expressions
 **Learning:** When using redundant string transformations like `.lower()` inside generator expressions such as `any(skip in u.lower() for skip in skip_patterns)`, Python evaluates the transformation repeatedly for each item in the generator. This causes significant overhead (calling `.lower()` multiple times).
 **Action:** Always extract the transformation to a variable outside the expression (e.g., `u_lower = u.lower()`). If this occurs inside a list comprehension, safely convert it to a standard `for` loop.
+
+## 2026-09-08 - Fast HTML stripping and whitespace collapse
+**Learning:** Using `re.sub(r"\s+", " ", text).strip()` is slower than `" ".join(text.split())` for collapsing whitespace. Additionally, pre-compiling regular expressions (like HTML tag strippers) at the module level avoids regex compilation overhead on every call.
+**Action:** Pre-compile frequently used regexes at the module level and prefer `" ".join(text.split())` for collapsing multiple whitespace characters.
