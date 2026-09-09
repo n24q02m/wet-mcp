@@ -75,3 +75,7 @@ closed pull request.
 ## 2025-01-20 - Extract redundant string transformations from generator expressions
 **Learning:** When using redundant string transformations like `.lower()` inside generator expressions such as `any(skip in u.lower() for skip in skip_patterns)`, Python evaluates the transformation repeatedly for each item in the generator. This causes significant overhead (calling `.lower()` multiple times).
 **Action:** Always extract the transformation to a variable outside the expression (e.g., `u_lower = u.lower()`). If this occurs inside a list comprehension, safely convert it to a standard `for` loop.
+
+## 2025-01-20 - Precompile regex and use .split() for HTML cleanup
+**Learning:** Repeatedly compiling regexes (like `<[^>]*>`) inside functions such as `_html_text` and using `re.sub(r"\s+", " ")` for whitespace replacement introduces unnecessary overhead in hot paths like text extraction from search backends.
+**Action:** Always precompile frequently used regexes at the module level (e.g., `_HTML_TAG_RE = re.compile(r"<[^>]*>")`) and use `" ".join(text.split())` instead of regex substitution for collapsing multiple whitespace characters.
