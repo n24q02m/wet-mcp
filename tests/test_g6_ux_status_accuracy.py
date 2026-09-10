@@ -16,6 +16,14 @@ import pytest
 from structured import payload
 
 
+@pytest.fixture(autouse=True)
+def _isolate_cloud_key_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    from wet_mcp.credential_state import CLOUD_KEYS
+
+    for key in CLOUD_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+
 def _call_config_setup_status_sync() -> dict[str, Any]:
     """Invoke the async server config action and return parsed dict."""
     import asyncio
@@ -33,10 +41,6 @@ class TestSetupStatusLiveDerivedState:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """setup_status returns configured when PerPluginStore has cloud keys."""
-        monkeypatch.delenv("JINA_AI_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("COHERE_API_KEY", raising=False)
 
         with patch(
             "mcp_core.storage.per_plugin_store.PerPluginStore.load",
@@ -51,10 +55,6 @@ class TestSetupStatusLiveDerivedState:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """setup_status returns awaiting_setup when store empty and no env vars."""
-        monkeypatch.delenv("JINA_AI_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("COHERE_API_KEY", raising=False)
 
         # Force module-level state to CONFIGURED (stale) to reproduce the bug
         import wet_mcp.credential_state as cs
@@ -77,9 +77,6 @@ class TestSetupStatusLiveDerivedState:
     def test_env_vars_take_precedence(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """setup_status includes env-var keys in providers_configured."""
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-        monkeypatch.delenv("JINA_AI_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        monkeypatch.delenv("COHERE_API_KEY", raising=False)
 
         with patch(
             "mcp_core.storage.per_plugin_store.PerPluginStore.load",
@@ -95,10 +92,6 @@ class TestSetupStatusLiveDerivedState:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """setup_status always includes providers_configured key in response."""
-        monkeypatch.delenv("JINA_AI_API_KEY", raising=False)
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-        monkeypatch.delenv("COHERE_API_KEY", raising=False)
 
         with patch(
             "mcp_core.storage.per_plugin_store.PerPluginStore.load",

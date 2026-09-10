@@ -25,6 +25,12 @@ from wet_mcp.sync import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _gdrive_sync_backend(monkeypatch):
+    """This module exercises GDrive internals, not backend selection."""
+    monkeypatch.setattr(wet_mcp.sync, "resolve_active_backend", lambda: "gdrive")
+
+
 @pytest.fixture
 def mock_settings():
     with patch("wet_mcp.sync.settings") as mock_settings:
@@ -420,7 +426,8 @@ async def test_sync_pull_download_fail():
 @pytest.mark.asyncio
 async def test_sync_full_disabled(mock_settings):
     mock_settings.sync_enabled = False
-    res = await sync_full(MagicMock())
+    with patch("wet_mcp.sync.resolve_active_backend", return_value="disabled"):
+        res = await sync_full(MagicMock())
     assert res["status"] == "disabled"
 
 
@@ -538,6 +545,7 @@ def test_start_auto_sync(mock_create, mock_settings):
     wet_mcp.sync._sync_task = None
     start_auto_sync(MagicMock())
     mock_create.assert_called_once()
+    mock_create.call_args.args[0].close()
 
     # Should not create again when already running
     mock_create.reset_mock()

@@ -320,8 +320,9 @@ def _decode_ddg_href(href: str) -> str:
 class SearxngBackend:
     name = "searxng"
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, *, hosted: bool = False) -> None:
         self.url = url
+        self.hosted = hosted
 
     async def search(
         self,
@@ -345,6 +346,7 @@ class SearxngBackend:
             language=_searxng_locale(language, region),
             include_domains=include_domains,
             exclude_domains=exclude_domains,
+            hosted=self.hosted,
         )
 
 
@@ -917,33 +919,60 @@ class KagiBackend:
         )
 
 
+def _request_search_config() -> dict[str, str] | None:
+    from wet_mcp.credential_state import (
+        credentials_for_current_request,
+        get_current_sub,
+    )
+
+    if get_current_sub() is not None or os.getenv("PUBLIC_URL"):
+        return credentials_for_current_request()
+    return None
+
+
+def _config_value(config: dict[str, str] | None, key: str, default: str = "") -> str:
+    # None means single-user mode; an empty subject bucket must stay empty.
+    return config.get(key, "") if config is not None else os.getenv(key, default)
+
+
 def _make_backend(name: str, searxng_url: str | None = None) -> SearchBackend:
     """Construct a single backend by name. Raises ValueError on missing key/unknown.
 
     ``searxng_url`` overrides ``settings.searxng_url`` for the SearXNG backend
     (the live auto-started URL, which may use a dynamic port) without mutating
-    the global settings. Cloud backends read a CSV of keys (``split_keys``): a
-    single key is unchanged, multiple keys rotate on rate-limit/auth failure.
+    the global settings. Cloud backends read the current subject's key CSV in
+    hosted mode; only single-user mode consults process env/settings. Multiple
+    keys rotate on rate-limit/auth failure.
     """
+    config = _request_search_config()
     if name == "searxng":
-        return SearxngBackend(searxng_url or settings.searxng_url)
+        url = _config_value(config, "SEARXNG_URL", settings.searxng_url)
+        if config is None:
+            url = searxng_url or url
+        if not url:
+            raise ValueError("SEARXNG_URL required for a hosted searxng search backend")
+        return SearxngBackend(url, hosted=config is not None)
     if name == "tavily":
-        keys = split_keys(os.getenv("TAVILY_API_KEY", settings.tavily_api_key))
+        keys = split_keys(
+            _config_value(config, "TAVILY_API_KEY", settings.tavily_api_key)
+        )
         if not keys:
             raise ValueError("TAVILY_API_KEY required for the tavily search backend")
         return TavilyBackend(keys)
     if name == "brave":
-        keys = split_keys(os.getenv("BRAVE_API_KEY", settings.brave_api_key))
+        keys = split_keys(
+            _config_value(config, "BRAVE_API_KEY", settings.brave_api_key)
+        )
         if not keys:
             raise ValueError("BRAVE_API_KEY required for the brave search backend")
         return BraveBackend(keys)
     if name == "exa":
-        keys = split_keys(os.getenv("EXA_API_KEY", settings.exa_api_key))
+        keys = split_keys(_config_value(config, "EXA_API_KEY", settings.exa_api_key))
         if not keys:
             raise ValueError("EXA_API_KEY required for the exa search backend")
         return ExaBackend(keys)
     if name == "kagi":
-        keys = split_keys(os.getenv("KAGI_API_KEY", settings.kagi_api_key))
+        keys = split_keys(_config_value(config, "KAGI_API_KEY", settings.kagi_api_key))
         if not keys:
             raise ValueError("KAGI_API_KEY required for the kagi search backend")
         return KagiBackend(keys)
@@ -951,7 +980,9 @@ def _make_backend(name: str, searxng_url: str | None = None) -> SearchBackend:
         # Key optional: without one the request is attempted keyless (the
         # server may reject it — the chain advances on the error envelope).
         return FirecrawlBackend(
-            split_keys(os.getenv("FIRECRAWL_API_KEY", settings.firecrawl_api_key))
+            split_keys(
+                _config_value(config, "FIRECRAWL_API_KEY", settings.firecrawl_api_key)
+            )
         )
     if name == "duckduckgo":
         return DuckDuckGoBackend()
@@ -962,7 +993,9 @@ def _make_backend(name: str, searxng_url: str | None = None) -> SearchBackend:
 
 def search_backend_from_env() -> SearchBackend:
     """Single-backend resolver (back-compat). Raises on missing key/unknown name."""
-    name = (os.getenv("SEARCH_BACKEND", settings.search_backend) or "searxng").lower()
+    name = _config_value(
+        _request_search_config(), "SEARCH_BACKEND", settings.search_backend or "searxng"
+    ).lower()
     return _make_backend(name)
 
 
@@ -980,32 +1013,35 @@ def has_uvx_runnable_backend() -> bool:
 
     ``tavily``/``brave``/``exa`` are runnable whenever their API key is
     present -- they call out via ``httpx`` directly, no SearXNG needed (same
-    live-env-first key lookup ``_make_backend`` uses). ``searxng`` is
+    subject-aware key lookup ``_make_backend`` uses). ``searxng`` is
     runnable under uvx only when ``SEARXNG_URL`` points at an already-running
     external instance; the default local URL implies the auto-spawn, which
     uvx tool venvs cannot start.
     """
+    config = _request_search_config()
     for name in chain_backend_names():
         if name == "tavily" and split_keys(
-            os.getenv("TAVILY_API_KEY", settings.tavily_api_key)
+            _config_value(config, "TAVILY_API_KEY", settings.tavily_api_key)
         ):
             return True
         if name == "brave" and split_keys(
-            os.getenv("BRAVE_API_KEY", settings.brave_api_key)
+            _config_value(config, "BRAVE_API_KEY", settings.brave_api_key)
         ):
             return True
-        if name == "exa" and split_keys(os.getenv("EXA_API_KEY", settings.exa_api_key)):
+        if name == "exa" and split_keys(
+            _config_value(config, "EXA_API_KEY", settings.exa_api_key)
+        ):
             return True
         if name in ("duckduckgo", "startpage", "firecrawl"):
             # credential-free / keyless-capable: plain httpx, no local spawn
             return True
         if name == "kagi" and split_keys(
-            os.getenv("KAGI_API_KEY", settings.kagi_api_key)
+            _config_value(config, "KAGI_API_KEY", settings.kagi_api_key)
         ):
             return True
         if name == "searxng":
-            url = os.getenv("SEARXNG_URL", settings.searxng_url)
-            if url != _DEFAULT_LOCAL_SEARXNG_URL:
+            url = _config_value(config, "SEARXNG_URL", settings.searxng_url)
+            if url and url != _DEFAULT_LOCAL_SEARXNG_URL:
                 return True
     return False
 
@@ -1017,10 +1053,11 @@ def chain_backend_names() -> list[str]:
     (back-compat). Used to decide whether the embedded SearXNG must be started
     before running the chain.
     """
-    raw = (os.getenv("SEARCH_BACKENDS", settings.search_backends) or "").strip()
+    config = _request_search_config()
+    raw = _config_value(config, "SEARCH_BACKENDS", settings.search_backends).strip()
     if not raw:
-        raw = (
-            os.getenv("SEARCH_BACKEND", settings.search_backend) or "searxng"
+        raw = _config_value(
+            config, "SEARCH_BACKEND", settings.search_backend or "searxng"
         ).strip()
     return [n.strip().lower() for n in raw.split(",") if n.strip()]
 

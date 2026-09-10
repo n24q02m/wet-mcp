@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -507,9 +506,9 @@ async def sync_full(db: DocsDB) -> dict:
         Dict with sync results.
     """
     from wet_mcp.db import DocsDB
+    from wet_mcp.sync import resolve_active_backend
 
-    docs_backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
-    if not settings.sync_enabled or docs_backend.strip().lower() == "cf-d1":
+    if resolve_active_backend() != "gdrive":
         return {"status": "disabled", "message": "Sync not configured"}
 
     if not settings.google_drive_client_id:
@@ -629,6 +628,12 @@ async def setup_google_auth(
     Returns True on success, False on failure.
     """
     import sys
+
+    from wet_mcp.sync import resolve_active_backend
+
+    if resolve_active_backend() != "gdrive":
+        logger.info("Google Drive setup disabled by the effective sync backend")
+        return False
 
     client_id = client_id or settings.google_drive_client_id
     client_secret = client_secret or settings.google_drive_client_secret
@@ -790,12 +795,9 @@ def start_auto_sync(db: DocsDB) -> None:
     """Start background auto-sync task."""
     global _sync_task
 
-    docs_backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
-    if (
-        not settings.sync_enabled
-        or docs_backend.strip().lower() == "cf-d1"
-        or settings.sync_interval <= 0
-    ):
+    from wet_mcp.sync import resolve_active_backend
+
+    if resolve_active_backend() != "gdrive" or settings.sync_interval <= 0:
         return
 
     if _sync_task and not _sync_task.done():

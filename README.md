@@ -155,6 +155,7 @@ matching key (litellm `<PROVIDER>_API_KEY` convention):
 | `gemini/` | `GEMINI_API_KEY` | aistudio.google.com/apikey |
 | `vertex_express/` | `GOOGLE_VERTEX_EXPRESS_API_KEY` | cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode/overview |
 | `openai/` (or bare) | `OPENAI_API_KEY` | platform.openai.com |
+| `openrouter/` | `OPENROUTER_API_KEY` | openrouter.ai/settings/keys |
 | `cohere/` | `COHERE_API_KEY` | dashboard.cohere.com |
 | `xai/` | `XAI_API_KEY` | console.x.ai |
 | `anthropic/` | `ANTHROPIC_API_KEY` | console.anthropic.com |
@@ -164,10 +165,18 @@ Any other litellm provider works via env passthrough -- see
 
 `FASTRETRIEVAL_CACHE_PATH` controls the local model cache.
 
-**Search backends** -- `SEARCH_BACKENDS` (CSV, runtime fallback chain) over
-`searxng` (default, local) plus optional cloud providers `tavily` / `brave` /
-`exa`. Point at an external SearXNG with `SEARXNG_URL`. Cloud providers need
-`TAVILY_API_KEY` / `BRAVE_API_KEY` / `EXA_API_KEY`.
+**Search backends** -- `SEARCH_BACKENDS` is an ordered runtime fallback chain:
+`searxng` (default, local or external via `SEARXNG_URL`), keyed `tavily` / `brave` /
+`exa` / `kagi`, optional-key `firecrawl`, and credential-free `duckduckgo` /
+`startpage`. Keyed providers use `TAVILY_API_KEY`, `BRAVE_API_KEY`, `EXA_API_KEY`,
+or `KAGI_API_KEY`. Firecrawl attempts a keyless request when `FIRECRAWL_API_KEY`
+is absent; rejection or a DuckDuckGo/Startpage bot challenge advances the chain.
+The same chain serves web search, research, similar-page search, agent search,
+and docs discovery/indexing fallbacks. SearXNG retains its science-category
+filter for research; other providers use their own search capabilities.
+Hosted users configure the chain and keys in their own relay record. An empty
+hosted record never inherits an operator's provider key or local SearXNG URL;
+single-user stdio still uses env/settings and preserves the public local path.
 
 **Browser render backends** -- `BROWSER_BACKENDS` (CSV, escalation chain) picks
 the headless render leg of `extract`: `native` (in-process chromium, the
@@ -192,6 +201,10 @@ backends only): `DISABLE_LOCAL_BROWSER`, `DISABLE_LOCAL_SEARCH`,
 (required for sync), `SYNC_FOLDER` (default `wet-mcp`), `SYNC_INTERVAL` (default
 `300`s). Sync uses Google Drive over the OAuth Device Code flow (no browser
 redirect).
+`DOCS_DB_BACKEND=cf-d1` disables GDrive/S3 file sync, including automatic
+startup, relay wizard and device-code setup, even if legacy sync settings remain.
+Non-CF SQLite deployments retain GDrive sync; `SYNC_S3_BUCKET` selects S3
+instead, and `SYNC_ENABLED=false` disables both.
 
 **HTTP self-host** -- `MCP_TRANSPORT=http`, `PUBLIC_URL=<your-domain>`. The setup
 form is gated by `MCP_RELAY_PASSWORD`; multi-user deployments require
@@ -337,26 +350,44 @@ Run your own single-user wet instance serverless on Cloudflare (Containers + D1 
    docker build --target http --build-arg SLIM=1 -t wet-mcp:beta .
    wrangler containers push wet-mcp:beta   # prints registry.cloudflare.com/<ACCOUNT_ID>/wet-mcp:beta
    ```
-5. Set secrets (`TAVILY_API_KEY` is required when `SEARCH_BACKENDS` includes
-   `tavily`; Cloudflare Browser Run is the default headless render backend):
+5. Set operator auth/storage and Browser Run secrets:
    ```
    wrangler secret put CREDENTIAL_SECRET
    wrangler secret put MCP_JWT_SIGNING_SECRET
-   wrangler secret put JINA_AI_API_KEY
-   wrangler secret put GOOGLE_VERTEX_EXPRESS_API_KEY
-   wrangler secret put XAI_API_KEY
    wrangler secret put MCP_RELAY_PASSWORD
    wrangler secret put MCP_DCR_SERVER_SECRET
-   wrangler secret put TAVILY_API_KEY
    wrangler secret put CF_BROWSER_RENDERING_TOKEN
    ```
 6. `wrangler deploy` and complete setup in the browser relay form at your Worker domain.
 
 Storage maps to Cloudflare via `MCP_STORAGE_BACKEND=cf-kv` (credentials/tokens, encrypted),
 `DOCS_DB_BACKEND=cf-d1` (docs + BM25 full-text), and Vectorize (embeddings). The
-example Worker uses `SEARCH_BACKENDS=tavily,duckduckgo,startpage` and
-`BROWSER_BACKENDS=cf-browser-rendering`; embed/rerank are forced cloud via
-`EMBEDDING_MODELS`/`RERANK_MODELS`.
+default headless renderer is `BROWSER_BACKENDS=cf-browser-rendering`. Local
+ONNX fallbacks are disabled in the slim image; configure search and cloud
+retrieval through each authenticated subject's relay record. Worker-wide
+search/model chains and provider keys are not forwarded to the container.
+
+For a Cloudflare AI Gateway route, enter the following values in that subject's
+relay form (`<CF_AIG_BASE>` is the account/gateway base URL):
+
+| Relay field | Value |
+|---|---|
+| `SEARCH_BACKENDS` | `tavily,duckduckgo,startpage` |
+| `LLM_MODELS` | `openrouter/minimax/minimax-m3:free` |
+| `LLM_API_BASE` | `<CF_AIG_BASE>/openrouter/v1` |
+| `EMBEDDING_MODELS` | `cohere/embed-v4.0` |
+| `EMBEDDING_API_BASE` | `<CF_AIG_BASE>/cohere/v2/embed` |
+| `RERANK_MODELS` | `cohere/rerank-v4.0-fast` |
+| `RERANK_API_BASE` | `<CF_AIG_BASE>/cohere` |
+
+Store the matching OpenRouter/Cohere credentials and any keyed search-provider
+credentials (such as `TAVILY_API_KEY`) in the same subject record.
+All Wet synthesis and summaries use `LLM_MODELS`; there is no separate
+`SUMMARY_MODELS` field. This completion chain has no paid or alternate-model
+fallback. Cohere embedding/reranking and Browser Run may incur charges; obtain
+the required budget authorization before exercising them. Provision Vectorize
+and `EMBEDDING_DIMS` for a dimension supported by the selected embedding model.
+The earlier 768-dimension example is not a Cohere v4 compatibility guarantee.
 
 ## Smithery
 

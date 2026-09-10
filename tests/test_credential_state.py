@@ -1,5 +1,6 @@
 """Tests for wet_mcp.credential_state -- non-blocking credential state machine."""
 
+import importlib
 import os
 from unittest.mock import MagicMock, patch
 
@@ -20,6 +21,9 @@ from wet_mcp.credential_state import (
 @pytest.fixture(autouse=True)
 def _reset_module_state():
     """Reset module-level state before each test."""
+    # Load sync while the real Settings singleton is bound; individual tests
+    # replace config.settings and must not poison gdrive's module-level alias.
+    importlib.import_module("wet_mcp.sync")
     import wet_mcp.credential_state as mod
 
     mod._state = CredentialState.AWAITING_SETUP
@@ -93,6 +97,26 @@ class TestResolveCredentialState:
             assert result == CredentialState.CONFIGURED
             assert os.environ.get("GEMINI_API_KEY") == "from-file"
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    def test_keyless_search_config_file_is_configured(self, monkeypatch):
+        """A saved keyless HTTP search chain survives process restart."""
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.delenv("SEARCH_BACKENDS", raising=False)
+        monkeypatch.setenv("GITHUB_TOKEN", "ambient-token")
+        monkeypatch.setenv("MCP_TRANSPORT", "http")
+
+        saved = {"SEARCH_BACKENDS": "duckduckgo,startpage"}
+        with patch(
+            "mcp_core.storage.per_plugin_store.PerPluginStore.load",
+            return_value=saved,
+        ):
+            result = resolve_credential_state()
+
+        assert result == CredentialState.CONFIGURED
+        from wet_mcp.sources.search_backends import chain_backend_names
+
+        assert chain_backend_names() == ["duckduckgo", "startpage"]
 
     def test_config_file_no_cloud_keys(self, monkeypatch):
         """Config file without cloud keys does NOT set CONFIGURED."""
@@ -391,6 +415,12 @@ class TestRequireCredentials:
 class TestSaveCredentialsGdriveNextStep:
     """Cover the GDrive Device Code branch in save_credentials, including
     the best-effort try_open_browser launch at the verification URL."""
+
+    @pytest.fixture(autouse=True)
+    def _active_gdrive_backend(self, monkeypatch):
+        from wet_mcp import sync as sync_module
+
+        monkeypatch.setattr(sync_module, "resolve_active_backend", lambda: "gdrive")
 
     def test_returns_device_code_and_opens_browser(self):
         from wet_mcp.credential_state import save_credentials

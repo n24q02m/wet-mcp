@@ -25,7 +25,10 @@ CRITICAL multi-user invariant: per-sub creds NEVER touch the process-global
 
 from __future__ import annotations
 
+import asyncio
 import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -44,7 +47,7 @@ def _isolate(monkeypatch, tmp_path):
     set_current_sub(None)
     for k in (*CLOUD_KEYS, "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
         monkeypatch.delenv(k, raising=False)
-    for k in ("EMBEDDING_MODELS", "RERANK_MODELS", "LLM_MODELS"):
+    for k in ("EMBEDDING_MODELS", "RERANK_MODELS", "LLM_MODELS", "PUBLIC_URL"):
         monkeypatch.delenv(k, raising=False)
     yield
     set_current_sub(None)
@@ -590,3 +593,379 @@ class TestLiveDispatchWiring:
         vec = await server._embed("hi")
         assert vec == [0.5] * 4
         assert calls == ["hi"]
+
+
+async def test_completion_uses_each_subject_model_endpoint_and_key(monkeypatch):
+    from wet_mcp.config import settings
+    from wet_mcp.credential_state import has_llm_provider
+    from wet_mcp.sources.agent_orchestrator import _llm_synthesize
+
+    model = "openrouter/minimax/minimax-m3:free"
+    monkeypatch.setenv("PUBLIC_URL", "https://wet.example.com")
+    monkeypatch.setattr(settings, "llm_models", "openai/operator-model")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "operator-key")
+    for subject in ("a", "b"):
+        store_for_sub(
+            subject,
+            {
+                "LLM_MODELS": model,
+                "LLM_API_BASE": f"https://gateway.example/{subject}/openrouter/v1",
+                "OPENROUTER_API_KEY": f"subject-{subject}",
+            },
+        )
+
+    async def provider(**kwargs):
+        subject = kwargs["api_key"].removeprefix("subject-")
+        assert subject in ("a", "b")
+        assert kwargs["model"] == model
+        assert kwargs["api_base"] == f"https://gateway.example/{subject}/openrouter/v1"
+        await asyncio.sleep(0)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content=f"answer-{subject}"))
+            ]
+        )
+
+    monkeypatch.setattr("mcp_core.llm.acompletion", provider)
+
+    async def synthesize(subject):
+        set_current_sub(subject)
+        assert has_llm_provider()
+        return await _llm_synthesize("Summarize the cited fixture.", None)
+
+    assert await asyncio.gather(synthesize("a"), synthesize("b")) == [
+        "answer-a",
+        "answer-b",
+    ]
+
+
+async def test_missing_subject_key_cannot_spend_operator_key(monkeypatch):
+    from wet_mcp.llm import acompletion
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "operator-key")
+    store_for_sub(
+        "unconfigured",
+        {"LLM_MODELS": "openrouter/minimax/minimax-m3:free"},
+    )
+    set_current_sub("unconfigured")
+    provider = AsyncMock()
+    monkeypatch.setattr("mcp_core.llm.acompletion", provider)
+
+    with pytest.raises(RuntimeError, match="not configured for this subject"):
+        await acompletion(
+            model="openrouter/minimax/minimax-m3:free",
+            messages=[{"role": "user", "content": "fixture"}],
+        )
+    provider.assert_not_awaited()
+
+
+def test_hosted_request_without_subject_has_no_operator_configuration(monkeypatch):
+    from wet_mcp.config import settings
+    from wet_mcp.credential_state import (
+        credentials_for_current_request,
+        has_llm_provider,
+    )
+    from wet_mcp.llm import get_llm_config
+    from wet_mcp.sources.search_backends import chain_backend_names
+
+    monkeypatch.setenv("PUBLIC_URL", "https://wet.example.com")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "operator-key")
+    monkeypatch.setattr(settings, "llm_models", "openrouter/minimax/minimax-m3:free")
+    monkeypatch.setenv("SEARCH_BACKENDS", "tavily")
+    monkeypatch.setenv("TAVILY_API_KEY", "operator-key")
+    assert credentials_for_current_request() == {}
+    assert not has_llm_provider()
+    assert get_llm_config()["model"] is None
+    assert chain_backend_names() == []
+
+
+async def test_search_provider_keys_and_cache_are_subject_isolated(
+    monkeypatch, tmp_path
+):
+    import httpx
+
+    from wet_mcp import server
+    from wet_mcp.cache import WebCache
+    from wet_mcp.config import settings
+
+    monkeypatch.setenv("PUBLIC_URL", "https://wet.example.com")
+    monkeypatch.setenv("SEARCH_BACKENDS", "brave")
+    monkeypatch.setenv("BRAVE_API_KEY", "operator-key")
+    monkeypatch.setenv("TAVILY_API_KEY", "operator-key")
+    monkeypatch.setattr(settings, "wet_search_budget", 0)
+    for subject in ("a", "b"):
+        store_for_sub(
+            subject,
+            {"SEARCH_BACKENDS": "tavily", "TAVILY_API_KEY": f"subject-{subject}"},
+        )
+    requested_keys = []
+
+    async def post(_client, url, *, json):
+        assert url == "https://api.tavily.com/search"
+        key = json["api_key"]
+        assert key in ("subject-a", "subject-b")
+        requested_keys.append(key)
+        await asyncio.sleep(0)
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "url": f"https://example.com/{key}",
+                        "title": key,
+                        "content": "Subject-specific search fixture with useful context.",
+                    }
+                ],
+            },
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", post)
+    monkeypatch.setattr(
+        httpx.AsyncClient,
+        "get",
+        AsyncMock(side_effect=AssertionError("unexpected provider")),
+    )
+    monkeypatch.setattr(server, "_require_credentials", lambda: None)
+    monkeypatch.setattr(server, "is_uvx_tool_venv", lambda: False)
+    monkeypatch.setattr(
+        "wet_mcp.reranker.resolve_rerank_backend_for_request", lambda: None
+    )
+    monkeypatch.setattr(server, "_backend_init_task", None)
+    cache = WebCache(tmp_path / "search-cache.db")
+    monkeypatch.setattr(server, "_web_cache", cache)
+
+    async def search_as(subject, query):
+        set_current_sub(subject)
+        response = await server.search("search", query=query, max_results=1)
+        return response.structuredContent["results"][0]["title"]
+
+    try:
+        assert await asyncio.gather(
+            search_as("a", "concurrent fixture"),
+            search_as("b", "concurrent fixture"),
+        ) == ["subject-a", "subject-b"]
+        assert await search_as("a", "cached fixture") == "subject-a"
+        assert await search_as("b", "cached fixture") == "subject-b"
+        assert await search_as("a", "cached fixture") == "subject-a"
+        assert requested_keys.count("subject-a") == 2
+        assert requested_keys.count("subject-b") == 2
+    finally:
+        cache.close()
+
+
+async def test_search_missing_subject_key_never_uses_operator_key(monkeypatch):
+    from wet_mcp.sources.search_backends import run_search_chain
+
+    monkeypatch.setenv("TAVILY_API_KEY", "operator-key")
+    store_for_sub("unconfigured", {"SEARCH_BACKENDS": "tavily"})
+    set_current_sub("unconfigured")
+    provider = AsyncMock(side_effect=AssertionError("operator spend attempted"))
+    monkeypatch.setattr("httpx.AsyncClient.post", provider)
+    result = json.loads(await run_search_chain("fixture"))
+    assert result["search_backend"]["attempted"] == []
+    assert result["search_backend"]["selected"] is None
+    assert result["error"]
+    provider.assert_not_awaited()
+
+
+async def test_hosted_searxng_is_ssrf_vetted_without_operator_auth_or_restart(
+    monkeypatch,
+):
+    from web_core.search import SearchResult
+
+    from wet_mcp.sources import searxng
+    from wet_mcp.sources.search_backends import run_search_chain
+
+    monkeypatch.setenv("PUBLIC_URL", "https://wet.example.com")
+    monkeypatch.setattr(searxng.settings, "searxng_auth_user", "operator-user")
+    monkeypatch.setattr(searxng.settings, "searxng_auth_pass", "operator-pass")
+    store_for_sub(
+        "reader",
+        {
+            "SEARCH_BACKENDS": "searxng",
+            "SEARXNG_URL": "https://search.example",
+        },
+    )
+    set_current_sub("reader")
+
+    checked_urls = []
+    monkeypatch.setattr(
+        searxng,
+        "is_safe_url",
+        lambda url: checked_urls.append(url) or True,
+        raising=False,
+    )
+    monkeypatch.setattr(searxng, "_check_health", AsyncMock(return_value=False))
+    restart = AsyncMock(return_value="http://localhost:41592")
+    monkeypatch.setattr("wet_mcp.searxng_runner.ensure_searxng", restart)
+    provider = AsyncMock(
+        return_value=[
+            SearchResult(
+                url="https://result.example",
+                title="Fixture",
+                snippet="Hosted SearXNG result",
+                source="fixture",
+            )
+        ]
+    )
+    monkeypatch.setattr(searxng, "_wc_search", provider)
+
+    result = json.loads(await run_search_chain("fixture", max_results=1))
+
+    assert result["results"][0]["title"] == "Fixture"
+    assert checked_urls == ["https://search.example"]
+    restart.assert_not_awaited()
+    assert provider.await_args.kwargs["auth"] is None
+
+
+async def test_hosted_searxng_rejects_unsafe_subject_url_before_network(
+    monkeypatch,
+):
+    from wet_mcp.sources import searxng
+    from wet_mcp.sources.search_backends import run_search_chain
+
+    monkeypatch.setenv("PUBLIC_URL", "https://wet.example.com")
+    store_for_sub(
+        "reader",
+        {
+            "SEARCH_BACKENDS": "searxng",
+            "SEARXNG_URL": "http://127.0.0.1:8080",
+        },
+    )
+    set_current_sub("reader")
+
+    checked_urls = []
+    monkeypatch.setattr(
+        searxng,
+        "is_safe_url",
+        lambda url: checked_urls.append(url) or False,
+        raising=False,
+    )
+    health = AsyncMock(side_effect=AssertionError("unsafe network request attempted"))
+    provider = AsyncMock(
+        side_effect=AssertionError("unsafe provider request attempted")
+    )
+    monkeypatch.setattr(searxng, "_check_health", health)
+    monkeypatch.setattr(searxng, "_wc_search", provider)
+
+    result = json.loads(await run_search_chain("fixture"))
+
+    assert result["search_backend"]["selected"] is None
+    assert checked_urls == ["http://127.0.0.1:8080"]
+    health.assert_not_awaited()
+    provider.assert_not_awaited()
+
+
+async def test_query_expansion_uses_subject_completion_without_operator_keys(
+    monkeypatch,
+):
+    from wet_mcp.sources.search_strategies import expand_query
+
+    store_for_sub(
+        "expander",
+        {
+            "LLM_MODELS": "openrouter/minimax/minimax-m3:free",
+            "OPENROUTER_API_KEY": "subject-key",
+        },
+    )
+    set_current_sub("expander")
+    provider = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content="async cancellation\nasync task lifecycle"
+                    )
+                )
+            ],
+        )
+    )
+    monkeypatch.setattr("mcp_core.llm.acompletion", provider)
+    assert await expand_query("async tasks") == [
+        "async tasks",
+        "async cancellation",
+        "async task lifecycle",
+    ]
+    assert provider.await_args.kwargs["model"] == "openrouter/minimax/minimax-m3:free"
+    assert provider.await_args.kwargs["api_key"] == "subject-key"
+
+
+@pytest.mark.parametrize(
+    "action", ["research", "similar", "docs-discovery", "docs-fallback"]
+)
+async def test_auxiliary_search_paths_use_subject_chain(action, monkeypatch):
+    import httpx
+
+    from wet_mcp import server
+    from wet_mcp.config import settings
+
+    monkeypatch.setenv("PUBLIC_URL", "https://wet.example.com")
+    monkeypatch.setenv("SEARCH_BACKENDS", "searxng")
+    monkeypatch.setattr(settings, "wet_search_budget", 0)
+    store_for_sub(
+        "reader", {"SEARCH_BACKENDS": "tavily", "TAVILY_API_KEY": "subject-key"}
+    )
+    set_current_sub("reader")
+    forbidden = AsyncMock(side_effect=AssertionError("personal SearXNG path reached"))
+    monkeypatch.setattr(server, "ensure_searxng", forbidden)
+    monkeypatch.setattr("wet_mcp.searxng_runner.ensure_searxng", forbidden)
+    monkeypatch.setattr("wet_mcp.sources.searxng.search", forbidden)
+    monkeypatch.setattr(server, "_require_credentials", lambda: None)
+    monkeypatch.setattr(server, "is_uvx_tool_venv", lambda: False)
+    monkeypatch.setattr(server, "_web_cache", None)
+    monkeypatch.setattr(server, "_backend_init_task", None)
+    monkeypatch.setattr(
+        "wet_mcp.reranker.resolve_rerank_backend_for_request", lambda: None
+    )
+    monkeypatch.setattr(
+        "wet_mcp.sources.docs.discover_library", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        "wet_mcp.sources.search_strategies.raw_extract",
+        AsyncMock(
+            return_value=json.dumps(
+                [{"title": "source fixture", "content": "fixture text"}]
+            )
+        ),
+    )
+    provider = AsyncMock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "url": "https://fixture.example/docs",
+                        "title": "fixture-result",
+                        "content": "Useful configured-chain documentation.",
+                    }
+                ]
+            },
+        )
+    )
+    monkeypatch.setattr(httpx.AsyncClient, "post", provider)
+
+    if action == "docs-discovery":
+        docs_url, _, _, _ = await server._discover_docs_url("fixture", "python")
+        assert docs_url == "https://fixture.example/docs"
+    elif action == "docs-fallback":
+        result = await server._do_immediate_fallback_search(
+            "https://source.example/docs", "fixture", "python", "routing", 1
+        )
+        assert result["results"][0]["title"] == "fixture-result"
+    else:
+        query = (
+            "https://source.example/docs" if action == "similar" else "fixture research"
+        )
+        response = await server.search(action, query=query, max_results=1)
+        assert response.structuredContent["results"][0]["title"] == "fixture-result"
+    assert provider.await_args.kwargs["json"]["api_key"] == "subject-key"
+    forbidden.assert_not_awaited()
+
+
+def test_subject_without_completion_chain_cannot_infer_a_paid_model():
+    from wet_mcp.llm import get_llm_config
+
+    store_for_sub("no-model", {"OPENAI_API_KEY": "subject-key"})
+    set_current_sub("no-model")
+    assert get_llm_config()["model"] is None
+    assert get_llm_config()["fallbacks"] is None

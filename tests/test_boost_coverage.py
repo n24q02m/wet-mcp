@@ -30,13 +30,14 @@ class TestEnsureConfig:
 
     @pytest.fixture(autouse=True)
     def _relay_url(self, monkeypatch):
-        """Default MCP_RELAY_URL for all remote-relay-path tests.
+        """Provide an explicit relay URL and isolate every supported cloud key."""
+        from wet_mcp import sync as sync_module
+        from wet_mcp.credential_state import CLOUD_KEYS
 
-        Per mode-matrix 2.5, wet-mcp remote-relay mode requires explicit
-        MCP_RELAY_URL (no DEFAULT_RELAY_URL fallback). Tests that exercise
-        the create_session path need this set. Tests that return early
-        (env vars / config file) are unaffected by this fixture.
-        """
+        monkeypatch.setattr(sync_module, "resolve_active_backend", lambda: "gdrive")
+
+        for key in CLOUD_KEYS:
+            monkeypatch.delenv(key, raising=False)
         monkeypatch.setenv("MCP_RELAY_URL", "https://relay.example.com")
 
     async def test_missing_relay_url_raises(self, monkeypatch):
@@ -353,6 +354,18 @@ class TestLoadConfigFromFile:
         ):
             result = load_config_from_file()
             assert result == saved
+
+    def test_returns_keyless_search_config(self):
+        """A recognized keyless search chain is a complete saved config."""
+        from wet_mcp.relay_setup import load_config_from_file
+
+        saved = {"SEARCH_BACKENDS": "duckduckgo,startpage"}
+        with patch(
+            "mcp_core.storage.per_plugin_store.PerPluginStore.load",
+            return_value=saved,
+        ):
+            result = load_config_from_file()
+        assert result == saved
 
     def test_returns_none_when_no_cloud_keys(self):
         """When saved config has no cloud keys, returns None."""
@@ -748,11 +761,20 @@ class TestAnalyzeMediaExtended:
 class TestSyncFull:
     """Cover sync_full edge cases."""
 
+    @pytest.fixture(autouse=True)
+    def _active_gdrive_backend(self, monkeypatch):
+        from wet_mcp import sync as sync_module
+
+        monkeypatch.setattr(sync_module, "resolve_active_backend", lambda: "gdrive")
+
     async def test_sync_disabled(self):
         """Returns disabled when sync is off."""
         from wet_mcp.sync import sync_full
 
-        with patch("wet_mcp.sync.settings") as mock_settings:
+        with (
+            patch("wet_mcp.sync.settings") as mock_settings,
+            patch("wet_mcp.sync.resolve_active_backend", return_value="disabled"),
+        ):
             mock_settings.sync_enabled = False
             result = await sync_full(MagicMock())
             assert result["status"] == "disabled"
@@ -879,6 +901,12 @@ class TestDriveRequest:
 
 class TestSetupGoogleAuthSuccess:
     """Cover setup_google_auth success path and polling."""
+
+    @pytest.fixture(autouse=True)
+    def _active_gdrive_backend(self, monkeypatch):
+        from wet_mcp import sync as sync_module
+
+        monkeypatch.setattr(sync_module, "resolve_active_backend", lambda: "gdrive")
 
     async def test_success_without_relay(self):
         """Device code flow succeeds without relay."""
@@ -1722,7 +1750,7 @@ class TestServerResearchAction:
                 return_value="http://localhost:8080",
             ),
             patch(
-                "wet_mcp.server.searxng_search",
+                "wet_mcp.sources.search_backends.run_search_chain",
                 new_callable=AsyncMock,
                 return_value=mock_results,
             ),

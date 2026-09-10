@@ -40,6 +40,10 @@ from wet_mcp.sync import gdrive as _gdrive_module
 from wet_mcp.sync.base import SyncBackend, checkpoint_wal
 from wet_mcp.sync.gdrive import GDriveBackend
 
+# Explicit binding keeps the package-level monkeypatch proxy contract intact:
+# patches to ``wet_mcp.sync.settings`` are observed by this module's resolver.
+settings = _gdrive_module.settings
+
 # Mirror every public + private name exported by gdrive.py into this
 # package's namespace. Tests that do ``patch("wet_mcp.sync._refresh_token",
 # mock)`` set the attribute here; the production code inside gdrive.py looks
@@ -175,7 +179,6 @@ def resolve_active_backend() -> str:
     source of truth and gate Google Drive setup / S3 client init behind
     this resolver.
     """
-    from wet_mcp.config import settings
 
     docs_backend = os.environ.get("DOCS_DB_BACKEND", settings.docs_db_backend)
     if docs_backend.strip().lower() == "cf-d1" or not settings.sync_enabled:

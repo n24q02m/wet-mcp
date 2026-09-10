@@ -54,6 +54,32 @@ describe('container environment forwarding', () => {
       MCP_JWT_SIGNING_SECRET: 'jwt-secret',
     })
   })
+
+  it('does not seed subject model routing from operator environment', () => {
+    const env = {
+      PUBLIC_URL: 'https://wet.example.com',
+      SYNC_ENABLED: 'false',
+      SEARCH_BACKENDS: 'tavily',
+      SEARXNG_URL: 'https://operator.example.com',
+      TAVILY_API_KEY: 'operator-key',
+      BRAVE_API_KEY: 'operator-key',
+      EXA_API_KEY: 'operator-key',
+      LLM_MODELS: 'openai/operator-model',
+      EMBEDDING_MODELS: 'openai/operator-embedding',
+      RERANK_MODELS: 'cohere/operator-reranker',
+      OPENROUTER_API_KEY: 'operator-key',
+      OPENROUTER_API_BASE: 'https://operator.example.com',
+      JINA_AI_API_KEY: 'operator-key',
+      JINA_AI_API_BASE: 'https://operator.example.com',
+      GOOGLE_VERTEX_EXPRESS_API_KEY: 'operator-key',
+      XAI_API_KEY: 'operator-key',
+    }
+
+    expect(pickContainerEnv(env as never)).toEqual({
+      PUBLIC_URL: 'https://wet.example.com',
+      SYNC_ENABLED: 'false',
+    })
+  })
 })
 
 describe('outbound handlers', () => {

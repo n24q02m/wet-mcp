@@ -22,7 +22,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from enum import Enum
 from typing import Any
 
@@ -56,6 +56,7 @@ CLOUD_KEYS = [
     "JINA_AI_API_KEY",
     "GEMINI_API_KEY",
     "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
     "COHERE_API_KEY",
     "ANTHROPIC_API_KEY",
     "XAI_API_KEY",
@@ -67,6 +68,21 @@ CLOUD_KEYS = [
     "RERANK_API_BASE",
     "LLM_API_BASE",
 ]
+
+_PERSISTED_CONFIG_KEYS = frozenset(CLOUD_KEYS) | {
+    "SEARCH_BACKENDS",
+    "SEARXNG_URL",
+    "TAVILY_API_KEY",
+    "BRAVE_API_KEY",
+    "EXA_API_KEY",
+    "KAGI_API_KEY",
+    "FIRECRAWL_API_KEY",
+}
+
+
+def has_persisted_config(values: Mapping[str, str] | None) -> bool:
+    """Whether saved values contain a usable, recognized configuration."""
+    return bool(values and any(values.get(key) for key in _PERSISTED_CONFIG_KEYS))
 
 
 class CredentialState(Enum):
@@ -174,10 +190,10 @@ def resolve_credential_state() -> CredentialState:
     """Fast, synchronous credential check. Called during lifespan startup.
 
     Checks (in order):
-    1. ENV VARS -- if any CLOUD_KEYS present, state = CONFIGURED
-    2. CONFIG FILE -- HTTP MODE ONLY -- if saved config has cloud keys,
-       apply to env, state = CONFIGURED. Stdio mode skips this per spec
-       2026-05-01-stdio-pure-http-multiuser.md §4.1 + OQ3 ("Stdio mode
+    1. ENV VARS -- recognized values win over saved values.
+    2. CONFIG FILE -- HTTP MODE ONLY -- apply recognized saved values that are
+       absent from env, then set state = CONFIGURED. Stdio mode skips this per
+       spec 2026-05-01-stdio-pure-http-multiuser.md §4.1 + OQ3 ("Stdio mode
        reads credentials from env vars ONLY"). PerPluginStore is HTTP-mode
        persistence for resilience across server restarts.
     3. LOCAL MODE MARKER -- if user explicitly skipped, state = LOCAL
@@ -187,17 +203,6 @@ def resolve_credential_state() -> CredentialState:
     """
     global _state
 
-    # 1. Check env vars
-    if any(os.environ.get(k) for k in CLOUD_KEYS):
-        logger.info("Cloud API keys found in environment")
-        _state = CredentialState.CONFIGURED
-        return _state
-
-    # 2. Per-plugin store fallback ONLY in HTTP mode (per spec §4.1 + OQ3:
-    # stdio reads env vars ONLY, PerPluginStore is HTTP-mode persistence
-    # for resilience across server restarts). wet-mcp has optional creds
-    # (basic SearXNG search works without env), so AWAITING_SETUP is an
-    # acceptable end state for stdio mode.
     import sys
 
     is_http = (
@@ -205,11 +210,20 @@ def resolve_credential_state() -> CredentialState:
         or os.environ.get("MCP_TRANSPORT") == "http"
         or os.environ.get("TRANSPORT_MODE") == "http"
     )
+    env_configured = any(os.environ.get(key) for key in CLOUD_KEYS)
+
+    # Stdio reads env vars only. HTTP continues to the persisted store so
+    # recognized values missing from env survive restart; existing env values
+    # still win because the merge below never overwrites them.
+    if env_configured and not is_http:
+        logger.info("Recognized configuration found in environment")
+        _state = CredentialState.CONFIGURED
+        return _state
+
     if is_http:
         try:
             saved = PerPluginStore(PLUGIN_NAME, backend=backend_from_env()).load()
-            if saved and any(saved.get(k) for k in CLOUD_KEYS):
-                # Apply to env vars
+            if has_persisted_config(saved):
                 for key, value in saved.items():
                     if value and key not in os.environ:
                         os.environ[key] = value
@@ -220,6 +234,11 @@ def resolve_credential_state() -> CredentialState:
                 return _state
         except Exception:
             logger.opt(exception=True).debug("Failed to read config")
+
+    if env_configured:
+        logger.info("Recognized configuration found in environment")
+        _state = CredentialState.CONFIGURED
+        return _state
 
     # 3. Check local mode marker
     try:
@@ -327,6 +346,8 @@ def credentials_for_current_request() -> dict[str, str]:
     """
     sub = _current_sub.get()
     if sub is None:
+        if os.environ.get("PUBLIC_URL"):
+            return {}
         return {k: v for k, v in os.environ.items() if k in CLOUD_KEYS and v}
     return read_for_sub(sub)
 
@@ -339,6 +360,7 @@ LLM_PROVIDER_KEYS = (
     "GEMINI_API_KEY",
     "GOOGLE_API_KEY",
     "OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
     "ANTHROPIC_API_KEY",
     "XAI_API_KEY",
     "GOOGLE_VERTEX_EXPRESS_API_KEY",
@@ -367,7 +389,7 @@ def detect_llm_provider_key() -> str | None:
         # Single-user only: also honor env vars outside CLOUD_KEYS (the
         # GOOGLE->GEMINI alias). Per-sub mode must NOT fall back to os.environ
         # (that would read another process-global value, not this user's).
-        if sub is None and os.getenv(key):
+        if sub is None and not os.environ.get("PUBLIC_URL") and os.getenv(key):
             return key
     return None
 
@@ -388,18 +410,26 @@ def api_key_for_model(model: str) -> str | None:
     contextvar-isolated).
 
     Single-user / stdio (no sub): return ``None`` so litellm's own provider
-    env fallback applies unchanged — the single-user dispatch contract is
-    untouched (this is the documented "empty api_key -> None -> env" path).
+    env fallback applies unchanged. In multi-user mode a missing provider key
+    raises instead of permitting fallback to an operator-owned credential.
     """
     sub = _current_sub.get()
     if sub is None:
+        if os.environ.get("PUBLIC_URL"):
+            raise RuntimeError("multi-user mode: authenticated subject required")
         return None
     from mcp_core.llm.providers import key_env_for_model
 
     key_env = key_env_for_model(model)
-    if not key_env:
-        return None
-    return read_for_sub(sub).get(key_env) or None
+    creds = read_for_sub(sub)
+    key = creds.get(key_env) if key_env else None
+    if not key and key_env == "GEMINI_API_KEY":
+        key = creds.get("GOOGLE_API_KEY")
+    if not key:
+        raise RuntimeError(
+            f"Provider credential for {model!r} is not configured for this subject"
+        )
+    return key
 
 
 def api_base_for_task(env_key: str) -> str | None:
@@ -424,6 +454,8 @@ def api_base_for_task(env_key: str) -> str | None:
     """
     sub = _current_sub.get()
     if sub is None:
+        if os.environ.get("PUBLIC_URL"):
+            return None
         return os.getenv(env_key) or None
     return read_for_sub(sub).get(env_key) or None
 
@@ -470,25 +502,16 @@ def poll_until_readable(sub: str | None, retries: int = 8, delay: float = 0.5) -
     return False
 
 
-def _sync_redundant_on_cf() -> bool:
-    """Whether Google Drive docs-sync is redundant on this deployment.
-
-    On Cloudflare the docs DB is D1 + Vectorize (durable across container
-    recreate), so the GDrive delta-sync is redundant. Skip the device-code flow
-    there so the relay never offers a non-functional Google Drive setup.
-    """
-    return os.environ.get("DOCS_DB_BACKEND", "").strip().lower() == "cf-d1"
-
-
 def _trigger_gdrive_device_code(sub: str | None = None) -> dict | None:
     """Trigger GDrive OAuth Device Code flow if configured."""
     try:
         from wet_mcp.config import settings as s
+        from wet_mcp.sync import resolve_active_backend
 
         if (
             s.google_drive_client_id
             and s.google_drive_client_secret
-            and not _sync_redundant_on_cf()
+            and resolve_active_backend() == "gdrive"
         ):
             import httpx
 

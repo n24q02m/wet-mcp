@@ -24,6 +24,13 @@ from wet_mcp.sync import (
     stop_auto_sync,
 )
 
+
+@pytest.fixture(autouse=True)
+def _gdrive_sync_backend(monkeypatch):
+    """This module exercises GDrive internals, not backend selection."""
+    monkeypatch.setattr(wet_mcp.sync, "resolve_active_backend", lambda: "gdrive")
+
+
 # -----------------------------------------------------------------------
 # Token management
 # -----------------------------------------------------------------------
@@ -596,7 +603,10 @@ class TestAutoSyncLifecycle:
     @pytest.mark.asyncio
     async def test_start_auto_sync_disabled(self, clean_sync_task):
         db_mock = MagicMock()
-        with patch("wet_mcp.sync.settings.sync_enabled", False):
+        with (
+            patch("wet_mcp.sync.settings.sync_enabled", False),
+            patch("wet_mcp.sync.resolve_active_backend", return_value="disabled"),
+        ):
             start_auto_sync(db_mock)
             assert sync._sync_task is None
 
@@ -780,6 +790,7 @@ class TestStartAutoSync:
         with (
             patch("wet_mcp.sync.settings") as mock_settings,
             patch("wet_mcp.sync.asyncio.create_task") as mock_create_task,
+            patch("wet_mcp.sync.resolve_active_backend", return_value="disabled"),
         ):
             mock_settings.sync_enabled = False
             start_auto_sync(mock_db)

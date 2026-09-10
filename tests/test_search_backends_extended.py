@@ -8,6 +8,7 @@ factory + uvx-runnability). No network access, no key material.
 
 import json
 import unittest.mock
+from urllib.parse import urlsplit
 
 from wet_mcp.sources.search_backends import (
     DuckDuckGoBackend,
@@ -274,7 +275,7 @@ async def test_chain_falls_through_bot_challenge_to_credential_free(monkeypatch)
     monkeypatch.delenv("TAVILY_API_KEY", raising=False)
 
     async def fake_get(self, url, **kwargs):
-        assert "startpage.com" in url
+        assert urlsplit(url).hostname == "www.startpage.com"
         return _resp(text=STARTPAGE_PAGE)
 
     with unittest.mock.patch("httpx.AsyncClient.post") as post:

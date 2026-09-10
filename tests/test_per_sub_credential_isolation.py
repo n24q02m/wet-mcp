@@ -69,13 +69,13 @@ def test_api_key_for_model_resolves_per_sub(monkeypatch, tmp_path):
     try:
         set_current_sub("user_a")
         assert api_key_for_model("jina_ai/jina-embeddings-v5") == "key_a"
-        # user_a has no Gemini key -> None (not a bled value from elsewhere).
-        assert api_key_for_model("gemini/gemini-3-flash-preview") is None
+        with pytest.raises(RuntimeError, match="not configured for this subject"):
+            api_key_for_model("gemini/gemini-3-flash-preview")
 
         set_current_sub("user_b")
         assert api_key_for_model("gemini/gemini-3-flash-preview") == "key_b"
-        # no bleed of user_a's Jina key into user_b's request.
-        assert api_key_for_model("jina_ai/jina-embeddings-v5") is None
+        with pytest.raises(RuntimeError, match="not configured for this subject"):
+            api_key_for_model("jina_ai/jina-embeddings-v5")
     finally:
         set_current_sub(None)
 

@@ -210,16 +210,18 @@ class TestPerRequestSubScopeCallback:
             await _per_request_sub_scope({"sub": "user-x"}, boom)
         assert get_current_sub() is None
 
-    async def test_handles_missing_sub_claim_as_none(self):
-        """If JWT claims somehow lack ``sub``, treat as None (stdio fallback)."""
+    @pytest.mark.parametrize("claims", [{}, {"sub": ""}, {"sub": " "}, {"sub": 7}])
+    async def test_rejects_missing_or_invalid_subject_before_dispatch(self, claims):
         from wet_mcp.server import _per_request_sub_scope
 
-        observed: list[str | None] = []
+        dispatched = False
 
         async def fake_next() -> None:
-            observed.append(get_current_sub())
+            nonlocal dispatched
+            dispatched = True
 
-        await _per_request_sub_scope({}, fake_next)
+        with pytest.raises(RuntimeError, match="authenticated subject required"):
+            await _per_request_sub_scope(claims, fake_next)
 
-        assert observed == [None]
+        assert not dispatched
         assert get_current_sub() is None

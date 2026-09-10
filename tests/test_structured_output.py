@@ -95,12 +95,7 @@ async def test_search_marks_both_channels():
     )
     with (
         patch(
-            "wet_mcp.server.ensure_searxng",
-            new_callable=AsyncMock,
-            return_value="http://localhost:8080",
-        ),
-        patch(
-            "wet_mcp.sources.searxng.search",
+            "wet_mcp.server._run_configured_search",
             new_callable=AsyncMock,
             return_value=chain,
         ),

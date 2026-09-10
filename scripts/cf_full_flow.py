@@ -1,44 +1,41 @@
 """CF wet-mcp live OAuth full-flow self-test harness.
 
 Drives the deployed wet-mcp Cloudflare Worker (Worker + per-sub Container + KV +
-D1 + Vectorize) end-to-end against a public endpoint. wet is a LOCAL-FORM server
-(like mnemo/imagine/email, NOT delegated like notion): the /authorize gate is just
-the relay password, so the whole flow is fully autonomous -- no third-party consent.
+D1 + Vectorize) end-to-end against a named public endpoint. Gate A uses the
+MCP-owned relay password; supply approved credentials before running and do not
+bypass any additional provider/account interaction required by the target.
 
 Flow (authorization_code + PKCE, DCR public client; ported verbatim from the
 mnemo/imagine/email CF harnesses):
   1. DCR register   -- POST /register (RFC 7591) -> client_id
   2. password-grant -- GET /authorize -> POST /login (Gate A relay password) -> form
-  3. save creds     -- POST /authorize?nonce=... {provider key} (retry-on-500 for the
-                       E.1 outbound-interception race). wet's _require_credentials()
-                       gates every tool on the per-sub vault holding >=1 provider key
-                       (JINA/GEMINI/OPENAI/COHERE); it does NOT read the server-side
-                       forwarded JINA from os.environ, so a real user must submit one.
-                       The harness submits whatever key skret /wet-mcp/prod injects.
+  3. save config    -- POST /authorize?nonce=... with an explicit subject search
+                       chain and optional model/API-base/key groups. Keyless
+                       search needs no provider secret. Operator defaults are
+                       never copied into the new subject implicitly.
   4. token          -- POST /token (code + verifier) -> bearer JWT
   5. tool call      -- config(status) + search(action="search"); assert the search
                        path resolves real results (URLs) over the CF deployment.
 
-Secrets from env: Gate A login password MCP_RELAY_PASSWORD (or RELAY_PW) from skret
-/oci-vm-prod/prod (infra-shared); >=1 provider key (JINA_AI_API_KEY preferred) from
-skret /wet-mcp/prod -- compose both namespaces.
+Gate A uses MCP_RELAY_PASSWORD from the MCP-owned /mcp-stack/prod namespace;
+there is no alternate namespace or password fallback. Search/model credentials
+come from the approved MCP-owned subject configuration. This script never
+fetches secrets. Cohere retrieval or Browser Run calls require the campaign's
+explicit capped Provider Spend Gate before execution.
 
 Run modes:
   (default)            full flow: config(status) + search, assert real results.
-  --save-only          configure one sub (submit provider key) + dump the token
+  --save-only          configure one sub + save the token locally
                        (recreate-gate setup half of the state-survives-recreate test).
   --auth-only          replay the SAME token (same sub) and search again WITHOUT
                        re-saving (recreate-gate verify: the sub vault survived KV).
-  --two-sub-isolation  two distinct subs; assert each authorizes to a distinct sub
-                       (the relay-login mints a fresh random sub per /authorize).
+  --two-sub-isolation  two authorization flows; fails as inconclusive if the
+                       current stable-sub policy resolves both to one identity.
 
-Examples:
-  skret run -e prod --path=/oci-vm-prod/prod -- \
-    skret run -e prod --path=/wet-mcp/prod -- \
-      python scripts/cf_full_flow.py
-  ... -- python scripts/cf_full_flow.py --endpoint https://wet.n24q02m.com
-  ... -- python scripts/cf_full_flow.py --save-only
-  ... -- python scripts/cf_full_flow.py --auth-only
+Example (keyless search; omit model/key env groups to avoid retrieval spend):
+  SEARCH_BACKENDS=duckduckgo,startpage python scripts/cf_full_flow.py --endpoint <approved-endpoint>
+The selected endpoint and Gate A credential must already be approved/injected.
+Do not treat distinct token issuance as proof of distinct subject isolation.
 """
 
 from __future__ import annotations
@@ -66,39 +63,73 @@ EXTRACT_URL = "https://example.com"
 
 
 def _password() -> str:
-    pw = os.environ.get("RELAY_PW") or os.environ.get("MCP_RELAY_PASSWORD")
+    pw = os.environ.get("MCP_RELAY_PASSWORD")
     if not pw:
         raise SystemExit(
-            "MCP_RELAY_PASSWORD (or RELAY_PW) is required for the password-grant "
-            "login gate. It lives in skret /oci-vm-prod/prod (infra-shared), NOT "
-            "/wet-mcp/prod -- compose both namespaces."
+            "MCP_RELAY_PASSWORD from the MCP-owned /mcp-stack/prod namespace "
+            "is required for Gate A; no fallback namespace is permitted."
         )
     return pw
 
 
 def _creds() -> dict[str, str]:
-    """Per-sub credential form payload. wet's `_require_credentials()` gates every
-    tool on the per-sub vault holding at least one provider key (JINA / GEMINI /
-    OPENAI / COHERE) -- it does NOT read the server-side forwarded JINA from
-    os.environ. So a real user must submit a key; the harness submits whichever
-    provider key skret /wet-mcp/prod injects (JINA preferred)."""
-    creds: dict[str, str] = {}
-    for env_name in (
-        "JINA_AI_API_KEY",
-        "GEMINI_API_KEY",
-        "OPENAI_API_KEY",
-        "COHERE_API_KEY",
-        "XAI_API_KEY",
-    ):
-        v = os.environ.get(env_name)
-        if v:
-            creds[env_name] = v
-    if not creds:
+    """Collect only the explicitly selected personal subject configuration."""
+    chain = os.environ.get("SEARCH_BACKENDS", "").strip()
+    backends = [name.strip().lower() for name in chain.split(",") if name.strip()]
+    if not backends or "searxng" in backends:
         raise SystemExit(
-            "No provider key in env (JINA_AI_API_KEY / GEMINI_API_KEY / "
-            "OPENAI_API_KEY / COHERE_API_KEY). skret /wet-mcp/prod injects them; "
-            "wet's per-sub gate requires at least one to authorize tool calls."
+            "Set an explicit SEARCH_BACKENDS chain without personal SearXNG."
         )
+    creds = {"SEARCH_BACKENDS": ",".join(backends)}
+    search_keys = {
+        "tavily": "TAVILY_API_KEY",
+        "brave": "BRAVE_API_KEY",
+        "exa": "EXA_API_KEY",
+        "kagi": "KAGI_API_KEY",
+        "firecrawl": "FIRECRAWL_API_KEY",
+    }
+    for backend in backends:
+        key = search_keys.get(backend)
+        if key and (value := os.environ.get(key)):
+            creds[key] = value
+
+    retrieval_fields = ("EMBEDDING_MODELS", "RERANK_MODELS")
+    if any(os.environ.get(field) for field in retrieval_fields) and not all(
+        os.environ.get(field) for field in retrieval_fields
+    ):
+        raise SystemExit("Configure both accepted Cohere retrieval chains explicitly.")
+    for field, expected, key, api_base in (
+        (
+            "LLM_MODELS",
+            "openrouter/minimax/minimax-m3:free",
+            "OPENROUTER_API_KEY",
+            "LLM_API_BASE",
+        ),
+        (
+            "EMBEDDING_MODELS",
+            "cohere/embed-v4.0",
+            "COHERE_API_KEY",
+            "EMBEDDING_API_BASE",
+        ),
+        (
+            "RERANK_MODELS",
+            "cohere/rerank-v4.0-fast",
+            "COHERE_API_KEY",
+            "RERANK_API_BASE",
+        ),
+    ):
+        selected = os.environ.get(field, "").strip()
+        if not selected:
+            continue
+        if selected != expected:
+            raise SystemExit(
+                f"{field} must be exactly {expected}; no alternate fallback."
+            )
+        for name in (field, key, api_base):
+            value = os.environ.get(name, "").strip()
+            if not value:
+                raise SystemExit(f"{name} is required for the selected model route.")
+            creds[name] = value
     return creds
 
 
@@ -357,7 +388,8 @@ async def run_two_sub_isolation(endpoint: str) -> None:
         txt = await _run_search(s)
         _assert_search_resolved(txt)
     print(
-        "TWO-SUB ISOLATION OK: distinct subs, sub B authorizes + searches independently."
+        "TWO-SUB AUTH/SEARCH OBSERVED: distinct subjects and sub-B search succeeded; "
+        "credential-isolation verification remains separate."
     )
 
 
@@ -376,7 +408,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--save-only",
         action="store_true",
-        help="Configure one sub (empty form) + dump the token, then exit (recreate setup).",
+        help="Configure one sub with the explicit env-selected chain and save its token locally.",
     )
     mode.add_argument(
         "--auth-only",
@@ -386,7 +418,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument(
         "--two-sub-isolation",
         action="store_true",
-        help="Two distinct subs; assert sub B authorizes + searches independently.",
+        help="Check distinct subjects and sub-B search; not a credential-bleed proof.",
     )
     return p
 

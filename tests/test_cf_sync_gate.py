@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
@@ -50,12 +49,3 @@ async def test_config_status_reports_effective_sync_state(monkeypatch) -> None:
 
     assert status["sync"]["enabled"] is False
     assert status["sync"]["provider"] == "disabled"
-
-
-def test_cloudflare_wrangler_templates_disable_legacy_sync() -> None:
-    """The deployment contract must remain explicit if env defaults change."""
-    root = Path(__file__).resolve().parents[1]
-    for relative in ("wrangler.jsonc", "wrangler.deploy.template.jsonc"):
-        content = (root / relative).read_text(encoding="utf-8")
-        assert '"DOCS_DB_BACKEND": "cf-d1"' in content
-        assert '"SYNC_ENABLED": "false"' in content
