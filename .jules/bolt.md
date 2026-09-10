@@ -77,6 +77,7 @@ closed pull request.
 **Action:** Always extract the transformation to a variable outside the expression (e.g., `u_lower = u.lower()`). If this occurs inside a list comprehension, safely convert it to a standard `for` loop.
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 ## 2025-01-20 - Precompile regex and use .split() for HTML cleanup
 **Learning:** Repeatedly compiling regexes (like `<[^>]*>`) inside functions such as `_html_text` and using `re.sub(r"\s+", " ")` for whitespace replacement introduces unnecessary overhead in hot paths like text extraction from search backends.
 **Action:** Always precompile frequently used regexes at the module level (e.g., `_HTML_TAG_RE = re.compile(r"<[^>]*>")`) and use `" ".join(text.split())` instead of regex substitution for collapsing multiple whitespace characters.
@@ -85,3 +86,8 @@ closed pull request.
 **Learning:** In text processing functions that search for specific patterns across large documents (e.g., extracting template macros like `{{`), if the pattern is typically absent in most inputs, implement a fast-path early return (e.g., `if "{{" not in content: return content`) using Python's C-optimized string search. This avoids expensive memory allocations and loops associated with `splitlines()` or `split()`.
 **Action:** Always consider an early exit based on a simple string containment check (`in`) before performing heavy string manipulations like `splitlines()` on large text bodies.
 >>>>>>> 083e56d (feat: ⚡ bolt: fast path for macro stripping)
+=======
+## 2024-05-18 - Fast Iterable Intersection with frozenset.isdisjoint()
+**Learning:** Python generator expressions inside `any()` checking against a static collection (e.g., `any(part in sensitive_dirs for part in p.parts)`) are slowed down by Python-level iteration overhead and repeated allocation when the collection is defined inside a hot path function.
+**Action:** Define the static collection as a module-level `frozenset` and use `not collection.isdisjoint(...)`. The `isdisjoint()` method iterates through the sequence in optimized C code and short-circuits, yielding a ~2x speedup over `any()` with a generator.
+>>>>>>> b0ba085 (feat: ⚡ bolt: optimize _is_sensitive_path with frozenset.isdisjoint())
