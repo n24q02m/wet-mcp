@@ -2,6 +2,56 @@
 
 <!-- version list -->
 
+## v3.11.0 (2026-09-11)
+
+### Bug Fixes
+
+- Scope hosted wet routing and sync ([#1765](https://github.com/n24q02m/wet-mcp/pull/1765),
+  [`2663a9e`](https://github.com/n24q02m/wet-mcp/commit/2663a9e77c673558dc2fcdd4ef79cff789555f98))
+
+- ⚡ bolt: optimize html stripping via combined regex
+  ([#1753](https://github.com/n24q02m/wet-mcp/pull/1753),
+  [`a200dc4`](https://github.com/n24q02m/wet-mcp/commit/a200dc47b1c7435a94315e83a1f3118eaee379f6))
+
+- **deps**: Lock file maintenance ([#1758](https://github.com/n24q02m/wet-mcp/pull/1758),
+  [`5304de4`](https://github.com/n24q02m/wet-mcp/commit/5304de43e597e962a56cc5d3e5692fe874e70e84))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest Docker digest to 73d2665
+  ([#1760](https://github.com/n24q02m/wet-mcp/pull/1760),
+  [`0e63311`](https://github.com/n24q02m/wet-mcp/commit/0e633113882dbaf3fafa4ba71bd71e909d685fe2))
+
+- **deps**: Update mcp to v2 ([#1752](https://github.com/n24q02m/wet-mcp/pull/1752),
+  [`212922f`](https://github.com/n24q02m/wet-mcp/commit/212922f1ecbc04d9d6c1f6fc5bca032fab17cdc1))
+
+- **deps**: Update n24q02m/better-semantic-release action to v1.6.0
+  ([#1751](https://github.com/n24q02m/wet-mcp/pull/1751),
+  [`c9ded6f`](https://github.com/n24q02m/wet-mcp/commit/c9ded6fa42ebe7c98e4e939fb3bfbde78c891994))
+
+- **deps**: Update patch dependencies ([#1750](https://github.com/n24q02m/wet-mcp/pull/1750),
+  [`63c3b25`](https://github.com/n24q02m/wet-mcp/commit/63c3b251998f4733ffb1d654fd88f5aa5b5a2795))
+
+- **deps**: Update vitest to v5 ([#1757](https://github.com/n24q02m/wet-mcp/pull/1757),
+  [`dba148e`](https://github.com/n24q02m/wet-mcp/commit/dba148e4ee193bbc38e59f7e1a7ca3fd1b4a3ea8))
+
+### Continuous Integration
+
+- Wire unified merge=release ladder (push staging=beta, main=stable)
+  ([`01e3afb`](https://github.com/n24q02m/wet-mcp/commit/01e3afb7f8417f66c1f36855f2d975930ad6c5a1))
+
+### Features
+
+- ⚡ bolt: fast path for macro stripping ([#1759](https://github.com/n24q02m/wet-mcp/pull/1759),
+  [`4d6829b`](https://github.com/n24q02m/wet-mcp/commit/4d6829b6c18da37c06e28769b508be65da5c2632))
+
+- ⚡ bolt: optimize _html_text with pre-compiled regex and str.split()
+  ([#1766](https://github.com/n24q02m/wet-mcp/pull/1766),
+  [`637381a`](https://github.com/n24q02m/wet-mcp/commit/637381a578d72bfb4ac7f5dba3e125cc14cf9efd))
+
+- ⚡ bolt: optimize _is_sensitive_path with frozenset.isdisjoint()
+  ([#1762](https://github.com/n24q02m/wet-mcp/pull/1762),
+  [`a82fd81`](https://github.com/n24q02m/wet-mcp/commit/a82fd81d3cdc23530db0547253543be5b1885083))
+
+
 ## v3.11.0-beta.2 (2026-09-04)
 
 ### Bug Fixes
