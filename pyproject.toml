@@ -75,7 +75,7 @@ dependencies = [
     # compatible ceiling, so preserve the SDK 1 / FastMCP 3 boundary here.
     # Lift both bounds together only after the shared core and this server's
     # imported FastMCP/ToolAnnotations surfaces migrate.
-    "fastmcp>=3.4.7,<4",
+    "fastmcp>=3.4.7,<5",
     # Google Drive sync
     "google-api-python-client>=2.198.0",
     "google-auth>=2.56.2",
