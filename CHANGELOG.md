@@ -2,6 +2,33 @@
 
 <!-- version list -->
 
+## v3.11.1 (2026-09-12)
+
+### Bug Fixes
+
+- **deps**: Update dawidd6/action-send-mail action to v21
+  ([#1772](https://github.com/n24q02m/wet-mcp/pull/1772),
+  [`e90dda3`](https://github.com/n24q02m/wet-mcp/commit/e90dda3842a93bb009e3dafe2afa25a953ba81db))
+
+- **deps**: Update fastmcp to v4 ([#1773](https://github.com/n24q02m/wet-mcp/pull/1773),
+  [`8a296c8`](https://github.com/n24q02m/wet-mcp/commit/8a296c8047793494fc404680edc5fba839dc84f6))
+
+- **deps**: Update ghcr.io/astral-sh/uv:latest Docker digest to b485bd6
+  ([#1770](https://github.com/n24q02m/wet-mcp/pull/1770),
+  [`22a739d`](https://github.com/n24q02m/wet-mcp/commit/22a739d57f8bb23be08d8b4d23088660e5eb1c3d))
+
+- **deps**: Update minor dependencies ([#1771](https://github.com/n24q02m/wet-mcp/pull/1771),
+  [`8a1a457`](https://github.com/n24q02m/wet-mcp/commit/8a1a45747d2d0352e7515b5274da644a058ff8ac))
+
+### Chores
+
+- Pin BSR action to v1.6.1 stable (6e688489) ([#1767](https://github.com/n24q02m/wet-mcp/pull/1767),
+  [`a906c16`](https://github.com/n24q02m/wet-mcp/commit/a906c16685510c795428fad1d55f062f465eafa3))
+
+- **rulesets**: Align IaC with repo-bootstrap template
+  ([`9a86502`](https://github.com/n24q02m/wet-mcp/commit/9a86502919d6ef552285ccc87ad36ee043adb057))
+
+
 ## v3.11.0 (2026-09-11)
 
 ### Bug Fixes
