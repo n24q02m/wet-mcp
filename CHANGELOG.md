@@ -2,6 +2,26 @@
 
 <!-- version list -->
 
+## v3.11.2 (2026-09-12)
+
+### Bug Fixes
+
+- Re-widen sync task attribute and allow fastretrieval 1.3.2 stable
+  ([#1774](https://github.com/n24q02m/wet-mcp/pull/1774),
+  [`e120652`](https://github.com/n24q02m/wet-mcp/commit/e1206527a465ae5bc44fa4d1040dfa70e4f1bb83))
+
+- **deps**: Lock file maintenance ([#1774](https://github.com/n24q02m/wet-mcp/pull/1774),
+  [`e120652`](https://github.com/n24q02m/wet-mcp/commit/e1206527a465ae5bc44fa4d1040dfa70e4f1bb83))
+
+### Chores
+
+- **release**: Fix stale two-branch comment (single-main lane)
+  ([`3a259b5`](https://github.com/n24q02m/wet-mcp/commit/3a259b5078e6a3e8af284b339521344b055d03ef))
+
+- **release**: Single-main release lane (staging branch retired)
+  ([`09d5650`](https://github.com/n24q02m/wet-mcp/commit/09d5650d258fdaf812a0152ee1f0f979e2f27653))
+
+
 ## v3.11.1 (2026-09-12)
 
 ### Bug Fixes
