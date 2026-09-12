@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v3.12.0 (2026-09-12)
+
+### Features
+
+- ⚡ bolt: optimize DuckDuckGo href unwrapping for speed
+  ([#1775](https://github.com/n24q02m/wet-mcp/pull/1775),
+  [`b541016`](https://github.com/n24q02m/wet-mcp/commit/b54101628cc7ecc75566023ee90f999b1cda964d))
+
+
 ## v3.11.2 (2026-09-12)
 
 ### Bug Fixes
