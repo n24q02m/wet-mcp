@@ -571,8 +571,9 @@ def clean_sync_task():
     initial = sync._sync_task
     sync._sync_task = None
     yield
-    if sync._sync_task and not sync._sync_task.done():
-        sync._sync_task.cancel()
+    task = cast("asyncio.Task | None", sync._sync_task)
+    if task and not task.done():
+        task.cancel()
     sync._sync_task = initial
 
 
