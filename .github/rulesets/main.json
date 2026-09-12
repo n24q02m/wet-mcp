@@ -1,9 +1,19 @@
 {
   "name": "Main Ruleset",
   "target": "branch",
-  "source_type": "Repository",
-  "source": "n24q02m/wet-mcp",
   "enforcement": "active",
+  "bypass_actors": [
+    {
+      "actor_id": 5,
+      "actor_type": "RepositoryRole",
+      "bypass_mode": "always"
+    },
+    {
+      "actor_id": 3200052,
+      "actor_type": "Integration",
+      "bypass_mode": "always"
+    }
+  ],
   "conditions": {
     "ref_name": {
       "exclude": [],
@@ -31,6 +41,7 @@
         "require_code_owner_review": true,
         "require_last_push_approval": false,
         "required_review_thread_resolution": false,
+        "require_extra_approval_for_unattributed_changes": true,
         "allowed_merge_methods": [
           "squash"
         ]
@@ -50,13 +61,6 @@
           }
         ]
       }
-    }
-  ],
-  "bypass_actors": [
-    {
-      "actor_id": 5,
-      "actor_type": "RepositoryRole",
-      "bypass_mode": "always"
     }
   ]
 }
